@@ -1,0 +1,100 @@
+Python API
+==========
+
+High-level API
+--------------
+
+The simplest entry point is :func:`~circuitgenome.synthesizer.synthesizer.synthesize`.
+It loads the built-in YAML configs, applies your filters, and returns a list of
+:class:`~circuitgenome.synthesizer.models.SynthesizedCircuit` objects.
+
+.. code-block:: python
+
+   from circuitgenome import synthesize
+   from circuitgenome.synthesizer import to_flat_spice, to_hierarchical_spice
+
+   # All 2-stage single-ended circuits
+   circuits = synthesize({"stages": 2, "output_type": "single_ended"})
+   print(f"{len(circuits)} circuits")  # 2430
+
+   # Serialize the first circuit
+   print(to_flat_spice(circuits[0], name="my_ota"))
+   print(to_hierarchical_spice(circuits[0], name="my_ota_hier"))
+
+Supported filter keys for ``synthesize(config)``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Key
+     - Type
+     - Description
+   * - ``topology``
+     - str
+     - Exact topology name (e.g. ``"one_stage_opamp"``)
+   * - ``stages``
+     - int
+     - Number of amplifier stages (``1`` or ``2``)
+   * - ``output_type``
+     - str
+     - ``"single_ended"`` or ``"fully_differential"``
+
+Inspecting a circuit
+--------------------
+
+.. code-block:: python
+
+   c = circuits[0]
+
+   print(c.topology)      # "two_stage_opamp_single_ended"
+   print(c.external_ports)  # ["ibias", "in1", "in2", "out", "vdd!", "gnd!"]
+
+   for slot_name, variant in c.variant_map.items():
+       print(f"  {slot_name}: {variant.display_name}")
+
+   # Flat device list (after net substitution)
+   for ref, device in c.devices:
+       print(ref, device.type, device.terminals)
+
+Streaming with ``enumerate_circuits``
+--------------------------------------
+
+For large enumerations, use the iterator API to avoid building the full list
+in memory at once:
+
+.. code-block:: python
+
+   from circuitgenome.synthesizer.loader import load_modules, load_topologies
+   from circuitgenome.synthesizer import enumerate_circuits, to_flat_spice
+   from pathlib import Path
+
+   modules = load_modules()
+   topology = next(
+       t for t in load_topologies()
+       if t.name == "two_stage_opamp_single_ended"
+   )
+
+   out_dir = Path("./circuits")
+   out_dir.mkdir(exist_ok=True)
+
+   for i, circuit in enumerate(enumerate_circuits(topology, modules), start=1):
+       (out_dir / f"circuit_{i:04d}.ckt").write_text(to_flat_spice(circuit))
+
+Using custom YAML definitions
+------------------------------
+
+Pass explicit file paths to load your own module or topology definitions:
+
+.. code-block:: python
+
+   from circuitgenome.synthesizer.loader import load_modules, load_topologies
+   from circuitgenome.synthesizer import enumerate_circuits
+
+   modules = load_modules("my_modules.yaml")
+   topologies = load_topologies("my_topologies.yaml")
+
+   for circuit in enumerate_circuits(topologies[0], modules):
+       print(circuit.name)
+
+See :doc:`../extending` for the YAML schema.

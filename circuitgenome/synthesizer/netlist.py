@@ -1,3 +1,14 @@
+"""
+SPICE netlist serializers.
+
+Two output formats are supported:
+
+- **Flat** (:func:`to_flat_spice`) — all devices inlined into a single
+  ``.subckt`` block.  Maximally portable; every SPICE simulator can read it.
+- **Hierarchical** (:func:`to_hierarchical_spice`) — one ``.subckt`` definition
+  per module variant, instantiated via ``X`` calls in the top-level block.
+  Easier to read and avoids repeating shared subcircuits across many circuits.
+"""
 from __future__ import annotations
 from .models import Device, SynthesizedCircuit
 
@@ -18,12 +29,32 @@ def _device_line(ref: str, dev: Device) -> str:
         p = dev.terminals.get("p", "?")
         m = dev.terminals.get("m", "?")
         return f"{ref} {p} {m} 1p"
-    # Fallback
     terms = " ".join(dev.terminals.values())
     return f"{ref} {terms} {t}"
 
 
 def to_flat_spice(circuit: SynthesizedCircuit, name: str | None = None) -> str:
+    """Serialize *circuit* as a flat SPICE subcircuit.
+
+    All devices from every module slot are inlined into a single ``.subckt``
+    block.  Internal nets are prefixed with the slot name (e.g.
+    ``input_pair_m1``).
+
+    :param circuit: A :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
+                    returned by :func:`~circuitgenome.synthesizer.synthesizer.synthesize`
+                    or :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`.
+    :param name: Override the subcircuit name.  Defaults to ``circuit.name``.
+    :returns: A SPICE netlist string starting with ``.subckt`` and ending with
+              ``.ends``.
+
+    Example::
+
+        from circuitgenome import synthesize
+        from circuitgenome.synthesizer import to_flat_spice
+
+        circuit = synthesize({"topology": "one_stage_opamp"})[0]
+        print(to_flat_spice(circuit, name="my_ota"))
+    """
     subckt_name = name or circuit.name
     ports = " ".join(circuit.external_ports)
     lines = [f".subckt {subckt_name} {ports}"]
@@ -34,14 +65,27 @@ def to_flat_spice(circuit: SynthesizedCircuit, name: str | None = None) -> str:
 
 
 def to_hierarchical_spice(circuit: SynthesizedCircuit, name: str | None = None) -> str:
-    """
-    Emit one .subckt definition per module variant used, then a top-level
-    .subckt that instantiates them with X calls.
+    """Serialize *circuit* as a hierarchical SPICE netlist.
+
+    Emits one ``.subckt`` definition per distinct module variant used, followed
+    by a top-level ``.subckt`` that instantiates them with ``X`` calls.
+    Duplicate module variants (same name) are defined only once.
+
+    :param circuit: A :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`.
+    :param name: Override the top-level subcircuit name.
+    :returns: A multi-block SPICE string.
+
+    Example::
+
+        from circuitgenome import synthesize
+        from circuitgenome.synthesizer import to_hierarchical_spice
+
+        circuit = synthesize({"topology": "one_stage_opamp"})[0]
+        print(to_hierarchical_spice(circuit, name="my_ota_hier"))
     """
     lines: list[str] = []
     seen_variants: set[str] = set()
 
-    # Collect module subcircuit definitions
     for slot_name, variant in circuit.variant_map.items():
         if variant.name in seen_variants:
             continue
@@ -51,38 +95,16 @@ def to_hierarchical_spice(circuit: SynthesizedCircuit, name: str | None = None) 
         ports_str = " ".join(port_names)
         lines.append(f".subckt {variant.name} {ports_str}")
         for dev in variant.devices:
-            # Terminals here are still local names
             lines.append(_device_line(dev.ref, dev))
         lines.append(".ends")
         lines.append("")
 
-    # Top-level subcircuit
     top_name = name or circuit.name
     ext_ports = " ".join(circuit.external_ports)
     lines.append(f".subckt {top_name} {ext_ports}")
 
-    # Build per-slot port→net maps from the flat device list to reconstruct
-    # the X-instance calls. We re-derive the port→net mapping from the topology
-    # slot connections stored implicitly in the SynthesizedCircuit.
-    # Since we don't re-store the raw connection map in SynthesizedCircuit,
-    # we recover it by inspecting the first device of each module variant.
-    # Simpler: just instantiate each module with a comment about its ports.
     for slot_name, variant in circuit.variant_map.items():
         non_optional_ports = [p.name for p in variant.ports if p.role != "optional"]
-        # Gather the resolved nets for this slot from the flat device list.
-        # We map local terminal values back: find devices prefixed with slot_name_
-        slot_prefix = f"{slot_name}_"
-        local_to_global: dict[str, str] = {}
-        for ref, dev in circuit.devices:
-            if ref.startswith(slot_prefix):
-                for term, gnet in dev.terminals.items():
-                    # Reverse-map: terminal → global net. We need port→global net.
-                    # Terminals == local port names for devices whose terminals ARE ports.
-                    pass
-
-        # Reconstruct the port→global_net mapping via a simpler approach:
-        # Re-run _build_port_net_map logic by scanning devices for known patterns.
-        # Since this is complex to recover fully, emit an X-call with a comment.
         nets_for_slot = _recover_port_nets(slot_name, variant, circuit)
         net_vals = [nets_for_slot.get(p, f"<{p}>") for p in non_optional_ports]
         net_str = " ".join(net_vals)
@@ -108,7 +130,6 @@ def _recover_port_nets(
     for ref, dev in circuit.devices:
         if not ref.startswith(slot_prefix):
             continue
-        # Find the original device in the variant
         local_ref = ref[len(slot_prefix):]
         orig_dev = next((d for d in variant.devices if d.ref == local_ref), None)
         if orig_dev is None:
@@ -119,7 +140,6 @@ def _recover_port_nets(
                 if global_net:
                     port_to_global[local_net] = global_net
 
-    # Supply ports default
     for p in variant.ports:
         if p.name not in port_to_global:
             if p.name == "vdd":

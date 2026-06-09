@@ -1,5 +1,11 @@
+"""
+YAML configuration loaders.
+
+Translates human-editable YAML files into :mod:`~circuitgenome.synthesizer.models`
+instances.  Default paths resolve to the ``config/`` directory bundled with the
+package; pass explicit paths to use custom definitions.
+"""
 from __future__ import annotations
-import importlib.resources
 from pathlib import Path
 
 import yaml
@@ -14,6 +20,21 @@ def _config_path(filename: str) -> Path:
 
 
 def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant]]:
+    """Load module variant definitions from a YAML file.
+
+    :param path: Path to a modules YAML file.  Defaults to the built-in
+                 ``opamp_modules.yaml``.
+    :returns: Dictionary mapping category name → list of
+              :class:`~circuitgenome.synthesizer.models.ModuleVariant`.
+
+    Example::
+
+        from circuitgenome.synthesizer.loader import load_modules
+
+        modules = load_modules()
+        for variant in modules["input_pair"]:
+            print(variant.name, variant.display_name)
+    """
     path = Path(path) if path else _config_path("opamp_modules.yaml")
     with open(path) as f:
         data = yaml.safe_load(f)
@@ -41,6 +62,19 @@ def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant
 
 
 def load_topologies(path: str | Path | None = None) -> list[TopologyTemplate]:
+    """Load topology templates from a YAML file.
+
+    :param path: Path to a topologies YAML file.  Defaults to the built-in
+                 ``opamp_topologies.yaml``.
+    :returns: List of :class:`~circuitgenome.synthesizer.models.TopologyTemplate`.
+
+    Example::
+
+        from circuitgenome.synthesizer.loader import load_topologies
+
+        for topo in load_topologies():
+            print(topo.name, topo.config)
+    """
     path = Path(path) if path else _config_path("opamp_topologies.yaml")
     with open(path) as f:
         data = yaml.safe_load(f)
