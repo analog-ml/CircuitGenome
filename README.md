@@ -23,6 +23,21 @@ pip install -e .
 
 Requires Python 3.9+ and PyYAML.
 
+### CLI not found after install?
+
+If you see `zsh: command not found: circuitgenome`, pip installed the script to a directory not on your `PATH`. Fix it by adding that directory once:
+
+```bash
+echo 'export PATH="$HOME/Library/Python/3.9/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Alternatively, run the CLI without changing your PATH:
+
+```bash
+python3 -m circuitgenome.cli synthesize --list-topologies
+```
+
 ---
 
 ## Topology Synthesizer
