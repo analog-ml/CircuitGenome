@@ -1,0 +1,354 @@
+# Op-amp module variant definitions.
+# Each variant implements the canonical port signature for its category.
+#
+# Canonical port signatures by category:
+#   input_pair:       in1, in2, out1, out2, tail, vdd, gnd
+#   load:             in1, in2, out, bias, vdd, gnd
+#   tail_current:     out, bias, vdd, gnd
+#   bias_generation:  ibias, out, vdd, gnd
+#   compensation:     in, out
+#   second_stage:     in, out, bias, vdd, gnd
+#
+# Device terminal keys:
+#   MOSFET: d (drain), g (gate), s (source), b (bulk)
+#   Resistor: t1, t2
+#   Capacitor: p (plus), m (minus)
+
+modules:
+
+  # ─── INPUT PAIRS ───────────────────────────────────────────────────────────
+
+  - name: differential_pair_pmos
+    category: input_pair
+    display_name: "PMOS Differential Pair"
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: out1, role: output}
+      - {name: out2, role: output}
+      - {name: tail, role: supply_in}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: pmos, d: out1, g: in1, s: tail, b: tail}
+      - {ref: m2, type: pmos, d: out2, g: in2, s: tail, b: tail}
+
+  - name: differential_pair_nmos
+    category: input_pair
+    display_name: "NMOS Differential Pair"
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: out1, role: output}
+      - {name: out2, role: output}
+      - {name: tail, role: supply_in}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: nmos, d: out1, g: in1, s: tail, b: tail}
+      - {ref: m2, type: nmos, d: out2, g: in2, s: tail, b: tail}
+
+  - name: differential_pair_pmos_degenerated
+    category: input_pair
+    display_name: "PMOS Differential Pair with Source Degeneration"
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: out1, role: output}
+      - {name: out2, role: output}
+      - {name: tail, role: supply_in}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: pmos, d: out1, g: in1, s: s1,   b: s1}
+      - {ref: m2, type: pmos, d: out2, g: in2, s: s2,   b: s2}
+      - {ref: r1, type: resistor, t1: s1,  t2: tail}
+      - {ref: r2, type: resistor, t1: s2,  t2: tail}
+
+  - name: differential_pair_nmos_degenerated
+    category: input_pair
+    display_name: "NMOS Differential Pair with Source Degeneration"
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: out1, role: output}
+      - {name: out2, role: output}
+      - {name: tail, role: supply_in}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: nmos, d: out1, g: in1, s: s1,   b: s1}
+      - {ref: m2, type: nmos, d: out2, g: in2, s: s2,   b: s2}
+      - {ref: r1, type: resistor, t1: s1,  t2: tail}
+      - {ref: r2, type: resistor, t1: s2,  t2: tail}
+
+  - name: inverter_based_input
+    category: input_pair
+    display_name: "Inverter-Based Input Stage"
+    # Two back-to-back CMOS inverters used as a differential input.
+    # tail port is unused (tied to vdd internally via b of pmos).
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: out1, role: output}
+      - {name: out2, role: output}
+      - {name: tail, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: out1, g: in1, s: vdd, b: vdd}
+      - {ref: mn1, type: nmos, d: out1, g: in1, s: gnd, b: gnd}
+      - {ref: mp2, type: pmos, d: out2, g: in2, s: vdd, b: vdd}
+      - {ref: mn2, type: nmos, d: out2, g: in2, s: gnd, b: gnd}
+
+  # ─── LOADS ────────────────────────────────────────────────────────────────
+
+  - name: resistor_load
+    category: load
+    display_name: "Resistor Load"
+    # in1 = reference-side drain (first diff pair output)
+    # out = output-side drain (second diff pair output = single-ended output)
+    ports:
+      - {name: in1,  role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: r1, type: resistor, t1: vdd, t2: in1}
+      - {ref: r2, type: resistor, t1: vdd, t2: out}
+
+  - name: active_load_pmos
+    category: load
+    display_name: "PMOS Active Load (Current Mirror)"
+    # in1 = diode-connected reference side; out = mirror output side
+    ports:
+      - {name: in1,  role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: pmos, d: in1, g: in1, s: vdd, b: vdd}
+      - {ref: m2, type: pmos, d: out, g: in1, s: vdd, b: vdd}
+
+  - name: active_load_nmos
+    category: load
+    display_name: "NMOS Active Load (Current Mirror)"
+    ports:
+      - {name: in1,  role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: nmos, d: in1, g: in1, s: gnd, b: gnd}
+      - {ref: m2, type: nmos, d: out, g: in1, s: gnd, b: gnd}
+
+  - name: current_source_load
+    category: load
+    display_name: "Current Source Load"
+    ports:
+      - {name: in1,  role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: pmos, d: in1, g: bias, s: vdd, b: vdd}
+      - {ref: m2, type: pmos, d: out, g: bias, s: vdd, b: vdd}
+
+  - name: folded_cascode_load
+    category: load
+    display_name: "Folded-Cascode Load"
+    # PMOS current sources inject into both diff pair drain nodes (in1, out).
+    # NMOS cascode diode stack at in1 provides bias; output cascode at out.
+    ports:
+      - {name: in1,  role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: in1, g: bias, s: vdd, b: vdd}
+      - {ref: mp2, type: pmos, d: out, g: bias, s: vdd, b: vdd}
+      - {ref: mn1, type: nmos, d: in1, g: in1,  s: cs1, b: cs1}
+      - {ref: mn2, type: nmos, d: cs1, g: cs1,  s: gnd, b: gnd}
+      - {ref: mn3, type: nmos, d: out, g: in1,  s: cs2, b: cs2}
+      - {ref: mn4, type: nmos, d: cs2, g: cs1,  s: gnd, b: gnd}
+
+  - name: telescopic_cascode_load
+    category: load
+    display_name: "Telescopic Cascode Load"
+    # Diode-connected stack at in1 (reference); cascode mirror at out.
+    ports:
+      - {name: in1,  role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mn1, type: nmos, d: in1, g: in1, s: cs1, b: cs1}
+      - {ref: mn2, type: nmos, d: cs1, g: cs1, s: gnd, b: gnd}
+      - {ref: mn3, type: nmos, d: out, g: in1, s: cs2, b: cs2}
+      - {ref: mn4, type: nmos, d: cs2, g: cs1, s: gnd, b: gnd}
+
+  # ─── TAIL CURRENT SOURCES ──────────────────────────────────────────────────
+
+  - name: current_mirror_tail
+    category: tail_current
+    display_name: "Current Mirror Tail"
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # PMOS mirror: bias is the reference gate/drain; out is the mirrored drain
+      - {ref: m1, type: pmos, d: bias, g: bias, s: vdd, b: vdd}
+      - {ref: m2, type: pmos, d: out,  g: bias, s: vdd, b: vdd}
+
+  - name: cascode_current_mirror_tail
+    category: tail_current
+    display_name: "Cascode Current Mirror Tail"
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # Cascode PMOS mirror
+      - {ref: mp1, type: pmos, d: bias, g: bias, s: vdd, b: vdd}
+      - {ref: mp2, type: pmos, d: cm1,  g: bias, s: vdd, b: vdd}
+      - {ref: mp3, type: pmos, d: cm1,  g: cm1,  s: out_pre, b: out_pre}
+      - {ref: mp4, type: pmos, d: out,  g: cm1,  s: out,     b: out}
+
+  - name: resistor_tail
+    category: tail_current
+    display_name: "Resistor Tail Current"
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: r1, type: resistor, t1: vdd, t2: out}
+
+  # ─── BIAS GENERATION ──────────────────────────────────────────────────────
+
+  - name: diode_connected_mosfet_bias
+    category: bias_generation
+    display_name: "Diode-Connected MOSFET Bias"
+    ports:
+      - {name: ibias, role: input}
+      - {name: out,   role: output}
+      - {name: vdd,   role: supply}
+      - {name: gnd,   role: supply}
+    devices:
+      # PMOS diode sets VGS reference; NMOS diode mirrors the bias current
+      - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd, b: vdd}
+      - {ref: mn1, type: nmos, d: out,   g: out,   s: gnd, b: gnd}
+
+  - name: magic_battery_bias
+    category: bias_generation
+    display_name: "Magic Battery Current Mirror Bias"
+    # Uses a PMOS + NMOS pair with a self-biasing loop (Widlar-like).
+    ports:
+      - {name: ibias, role: input}
+      - {name: out,   role: output}
+      - {name: vdd,   role: supply}
+      - {name: gnd,   role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd,  b: vdd}
+      - {ref: mp2, type: pmos, d: out,   g: ibias, s: vdd,  b: vdd}
+      - {ref: mn1, type: nmos, d: out,   g: out,   s: gnd,  b: gnd}
+
+  - name: resistor_bias
+    category: bias_generation
+    display_name: "Resistor Bias"
+    ports:
+      - {name: ibias, role: input}
+      - {name: out,   role: output}
+      - {name: vdd,   role: supply}
+      - {name: gnd,   role: supply}
+    devices:
+      - {ref: r1, type: resistor, t1: vdd, t2: out}
+      - {ref: r2, type: resistor, t1: out, t2: gnd}
+
+  # ─── COMPENSATION ─────────────────────────────────────────────────────────
+
+  - name: miller_cap
+    category: compensation
+    display_name: "Miller Capacitor"
+    ports:
+      - {name: in,  role: input}
+      - {name: out, role: output}
+    devices:
+      - {ref: c1, type: capacitor, p: in, m: out}
+
+  - name: miller_cap_with_nulling_resistor
+    category: compensation
+    display_name: "Miller Cap with Nulling Resistor"
+    ports:
+      - {name: in,  role: input}
+      - {name: out, role: output}
+    devices:
+      - {ref: r1, type: resistor,  t1: in,  t2: cn}
+      - {ref: c1, type: capacitor, p: cn,   m: out}
+
+  - name: indirect_compensation
+    category: compensation
+    display_name: "Indirect Compensation"
+    # Compensation via a cascode node (no direct feedforward path).
+    ports:
+      - {name: in,  role: input}
+      - {name: out, role: output}
+    devices:
+      - {ref: c1, type: capacitor, p: in,  m: ind}
+      - {ref: r1, type: resistor,  t1: ind, t2: out}
+
+  # ─── SECOND STAGE ─────────────────────────────────────────────────────────
+
+  - name: common_source
+    category: second_stage
+    display_name: "Common-Source Second Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # NMOS CS amplifier with PMOS current source load
+      - {ref: mn1, type: nmos, d: out,  g: in,   s: gnd, b: gnd}
+      - {ref: mp1, type: pmos, d: out,  g: bias,  s: vdd, b: vdd}
+
+  - name: common_drain
+    category: second_stage
+    display_name: "Common-Drain (Source Follower) Second Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # PMOS source follower
+      - {ref: mp1, type: pmos, d: vdd, g: in,   s: out,  b: vdd}
+      - {ref: mn1, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}
+
+  - name: differential_ota_second_stage
+    category: second_stage
+    display_name: "Differential OTA Second Stage"
+    # A simple folded-cascode OTA used as the second stage.
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: d1,  g: bias, s: vdd, b: vdd}
+      - {ref: mp2, type: pmos, d: out, g: bias, s: vdd, b: vdd}
+      - {ref: mn1, type: nmos, d: d1,  g: in,   s: gnd, b: gnd}
+      - {ref: mn2, type: nmos, d: out, g: d1,   s: gnd, b: gnd}

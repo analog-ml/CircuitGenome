@@ -1,0 +1,23 @@
+.suckt s_2_3 ibias in1 in2 out gnd! vdd!
+c1 net1 out
+m1 net2 net3 gnd! gnd! nmos
+m2 net4 net3 gnd! gnd! nmos
+m3 net3 ibias vdd! vdd! pmos
+m4 net5 net2 net6 net6 pmos
+m5 net1 net2 net7 net7 pmos
+m6 net5 net5 net8 net8 nmos
+m7 net8 net8 gnd! gnd! nmos
+m8 net1 net5 net9 net9 nmos
+m9 net9 net8 gnd! gnd! nmos
+m10 net10 ibias vdd! vdd! pmos
+m11 net6 in1 net10 net10 pmos
+m12 net7 in2 net10 net10 pmos
+c2 out gnd!
+m13 out net1 gnd! gnd! nmos
+m14 out net4 net11 net11 pmos
+m15 net11 ibias vdd! vdd! pmos
+m16 net3 net3 gnd! gnd! nmos
+m17 net2 net2 net10 net10 pmos
+m18 net4 net4 vdd! vdd! pmos
+m19 ibias ibias vdd! vdd! pmos
+.end
