@@ -1,3 +1,17 @@
+"""
+Topology synthesis engine.
+
+Enumerates every valid combination of module variants for a given topology
+template and assembles each combination into a
+:class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`.
+
+The main entry points are:
+
+- :func:`synthesize` — high-level API that loads YAML configs and returns a
+  list of circuits.
+- :func:`enumerate_circuits` — lower-level iterator over circuits for a single
+  topology, useful when you want to stream results or supply custom configs.
+"""
 from __future__ import annotations
 import itertools
 from pathlib import Path
@@ -5,9 +19,6 @@ from typing import Iterator
 
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
-
-_SUPPLY_PORTS = {"vdd", "gnd"}
-_SUPPLY_NETS = {"vdd!": "vdd", "gnd!": "gnd"}  # global net → canonical port name
 
 
 def _resolve_devices(
@@ -31,11 +42,8 @@ def _resolve_devices(
             if local_net in port_net_map:
                 resolved_terminals[term] = port_net_map[local_net]
             elif local_net in port_names and local_net in optional_ports:
-                # Optional port not wired in this topology — skip device if
-                # all terminals referencing it are optional.
                 resolved_terminals[term] = f"{slot_name}_{local_net}_nc"
             else:
-                # Internal net: prefix with slot name for uniqueness
                 resolved_terminals[term] = f"{slot_name}_{local_net}"
         global_ref = f"{slot_name}_{dev.ref}"
         result.append((global_ref, Device(ref=global_ref, type=dev.type, terminals=resolved_terminals)))
@@ -75,9 +83,26 @@ def enumerate_circuits(
     modules: dict[str, list[ModuleVariant]],
     config: dict | None = None,
 ) -> Iterator[SynthesizedCircuit]:
-    """
-    Yield one SynthesizedCircuit for every valid combination of module variants
-    that satisfy the given topology template.
+    """Yield one :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
+    for every valid combination of module variants in *topology*.
+
+    :param topology: The wiring template that defines slots and net connections.
+    :param modules: Module variant pool, keyed by category name.  Typically the
+                    return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
+    :param config: Reserved for future per-enumeration filters (currently unused).
+    :raises ValueError: If a required module category has no available variants.
+
+    Example::
+
+        from circuitgenome.synthesizer.loader import load_modules, load_topologies
+        from circuitgenome.synthesizer.synthesizer import enumerate_circuits
+        from circuitgenome.synthesizer.netlist import to_flat_spice
+
+        modules = load_modules()
+        topology = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+
+        for circuit in enumerate_circuits(topology, modules):
+            print(to_flat_spice(circuit))
     """
     per_slot: list[list[ModuleVariant]] = []
     for slot in topology.slots:
@@ -114,13 +139,32 @@ def synthesize(
     modules_path: str | Path | None = None,
     topologies_path: str | Path | None = None,
 ) -> list[SynthesizedCircuit]:
-    """
-    Public API. Loads YAML configs and returns all synthesized circuits.
+    """Generate all op-amp circuits matching the given configuration.
 
-    config keys (all optional):
-      stages (int): 1 or 2 — filter to topologies with this stage count
-      output_type (str): "single_ended" or "fully_differential"
-      topology (str): exact topology name to use
+    Loads YAML definitions, applies filters, and returns a flat list of
+    :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit` objects.
+
+    :param config: Optional filter dictionary.  Supported keys:
+
+                   - ``topology`` *(str)* — exact topology name.
+                   - ``stages`` *(int)* — ``1`` or ``2``.
+                   - ``output_type`` *(str)* — ``"single_ended"`` or
+                     ``"fully_differential"``.
+
+    :param modules_path: Path to a custom modules YAML file.  Uses the
+                         built-in definitions when omitted.
+    :param topologies_path: Path to a custom topologies YAML file.  Uses the
+                            built-in definitions when omitted.
+    :returns: All synthesized circuits across every matching topology.
+
+    Example::
+
+        from circuitgenome import synthesize
+        from circuitgenome.synthesizer import to_flat_spice
+
+        circuits = synthesize({"stages": 2, "output_type": "single_ended"})
+        print(f"{len(circuits)} circuits generated")
+        print(to_flat_spice(circuits[0]))
     """
     modules = load_modules(modules_path)
     topologies = load_topologies(topologies_path)
