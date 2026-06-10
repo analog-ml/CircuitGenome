@@ -35,10 +35,22 @@ Supported filter keys for ``synthesize(config)``:
      - Exact topology name (e.g. ``"one_stage_opamp"``)
    * - ``stages``
      - int
-     - Number of amplifier stages (``1`` or ``2``)
+     - Number of amplifier stages (``1``, ``2``, or ``3``)
    * - ``output_type``
      - str
      - ``"single_ended"`` or ``"fully_differential"``
+   * - ``compensation_scheme``
+     - str
+     - 3-stage only: ``"nested_miller"`` or ``"reversed_nested_miller"``
+
+.. code-block:: python
+
+   # All 3-stage single-ended circuits using Reversed Nested Miller Compensation
+   circuits = synthesize({
+       "stages": 3,
+       "output_type": "single_ended",
+       "compensation_scheme": "reversed_nested_miller",
+   })
 
 Inspecting a circuit
 --------------------

@@ -25,6 +25,10 @@ Listing available resources
      one_stage_opamp  (stages=1, output=single_ended)
      two_stage_opamp_single_ended  (stages=2, output=single_ended)
      two_stage_opamp_fully_differential  (stages=2, output=fully_differential)
+     three_stage_opamp_nmc_single_ended  (stages=3, output=single_ended, compensation=nested_miller)
+     three_stage_opamp_rnmc_single_ended  (stages=3, output=single_ended, compensation=reversed_nested_miller)
+     three_stage_opamp_nmc_fully_differential  (stages=3, output=fully_differential, compensation=nested_miller)
+     three_stage_opamp_rnmc_fully_differential  (stages=3, output=fully_differential, compensation=reversed_nested_miller)
 
 .. code-block:: bash
 
@@ -59,6 +63,11 @@ Generating circuits
      --format hierarchical \
      --output-dir ./circuits/
 
+   # 3-stage, Reversed Nested Miller Compensation, single-ended
+   circuitgenome synthesize \
+     --topology three_stage_opamp_rnmc_single_ended \
+     --output-dir ./circuits/
+
    # Dry run — count without writing any files
    circuitgenome synthesize --stages 2 --dry-run
 
@@ -82,7 +91,7 @@ Options reference
    * - Flag
      - Description
      - Default
-   * - ``--stages 1|2``
+   * - ``--stages 1|2|3``
      - Filter to topologies with this many stages
      - all
    * - ``--output-type``

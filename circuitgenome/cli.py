@@ -17,8 +17,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     synth = sub.add_parser("synthesize", help="Generate op-amp circuit variants")
     synth.add_argument("--type", default="opamp", choices=["opamp"],
                        help="Circuit type (default: opamp)")
-    synth.add_argument("--stages", type=int, choices=[1, 2],
-                       help="Number of stages (1 or 2)")
+    synth.add_argument("--stages", type=int, choices=[1, 2, 3],
+                       help="Number of stages (1, 2, or 3)")
     synth.add_argument("--output-type", choices=["single_ended", "fully_differential"],
                        dest="output_type", help="Output topology type")
     synth.add_argument("--topology", help="Exact topology name to use")
@@ -42,7 +42,10 @@ def _cmd_synthesize(args: argparse.Namespace) -> None:
 
     if args.list_topologies:
         for t in topologies:
-            print(f"  {t.name}  (stages={t.config.get('stages')}, output={t.config.get('output_type')})")
+            info = f"stages={t.config.get('stages')}, output={t.config.get('output_type')}"
+            if t.config.get("compensation_scheme"):
+                info += f", compensation={t.config['compensation_scheme']}"
+            print(f"  {t.name}  ({info})")
         return
 
     if args.list_modules:
