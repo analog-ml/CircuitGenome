@@ -62,23 +62,72 @@ Topology templates
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 15 20
+   :widths: 40 10 20 30
 
    * - Template name
      - Stages
      - Output type
+     - Compensation
    * - ``one_stage_opamp``
      - 1
      - Single-ended
+     - —
    * - ``two_stage_opamp_single_ended``
      - 2
      - Single-ended
+     - —
    * - ``two_stage_opamp_fully_differential``
      - 2
      - Fully differential
+     - —
+   * - ``three_stage_opamp_nmc_single_ended``
+     - 3
+     - Single-ended
+     - Nested Miller (NMC)
+   * - ``three_stage_opamp_rnmc_single_ended``
+     - 3
+     - Single-ended
+     - Reversed Nested Miller (RNMC)
+   * - ``three_stage_opamp_nmc_fully_differential``
+     - 3
+     - Fully differential
+     - Nested Miller (NMC)
+   * - ``three_stage_opamp_rnmc_fully_differential``
+     - 3
+     - Fully differential
+     - Reversed Nested Miller (RNMC)
 
 With no filters, the 2-stage single-ended template alone produces
-**2 430 distinct circuits** (5 × 6 × 3 × 3 × 3 × 3).
+**2 430 distinct circuits** (5 × 6 × 3 × 3 × 3 × 3). Each 3-stage
+single-ended template adds two more ``second_stage`` slots (gm2, gm3) and
+two ``compensation`` slots (Cm1, Cm2), producing **21 870 circuits**
+(5 × 6 × 3 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential template
+duplicates those four slots per output path, producing **1 771 470
+circuits** (5 × 6 × 3 × 3 × 3\ :sup:`8`).
+
+Three-stage compensation schemes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The 3-stage templates reuse the existing ``second_stage`` modules for the
+second (gm2) and third (gm3) gain stages, and the existing ``compensation``
+modules for the two Miller capacitors Cm1/Cm2 — no new module variants are
+required.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Scheme
+     - Cm1 / Cm2 connections
+   * - Nested Miller (NMC)
+     - Cm1 spans gm2+gm3 (gm1's output → final output, the outer loop);
+       Cm2 spans gm3 only (gm2's output → final output, the inner loop).
+       Both capacitors return to the final output node.
+   * - Reversed Nested Miller (RNMC)
+     - Cm1 spans gm3 only (gm2's output → final output); Cm2 spans gm2 only
+       (gm1's output → gm2's output) instead of returning to the final
+       output. This reduces loading on the output node, which is useful
+       when gm3 is a low-gain buffer stage.
 
 Modular interface contract
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

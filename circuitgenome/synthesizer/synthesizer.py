@@ -147,9 +147,12 @@ def synthesize(
     :param config: Optional filter dictionary.  Supported keys:
 
                    - ``topology`` *(str)* — exact topology name.
-                   - ``stages`` *(int)* — ``1`` or ``2``.
+                   - ``stages`` *(int)* — ``1``, ``2``, or ``3``.
                    - ``output_type`` *(str)* — ``"single_ended"`` or
                      ``"fully_differential"``.
+                   - ``compensation_scheme`` *(str)* — for 3-stage
+                     topologies, ``"nested_miller"`` or
+                     ``"reversed_nested_miller"``.
 
     :param modules_path: Path to a custom modules YAML file.  Uses the
                          built-in definitions when omitted.
@@ -176,6 +179,8 @@ def synthesize(
         topologies = [t for t in topologies if t.config.get("stages") == cfg["stages"]]
     if "output_type" in cfg:
         topologies = [t for t in topologies if t.config.get("output_type") == cfg["output_type"]]
+    if "compensation_scheme" in cfg:
+        topologies = [t for t in topologies if t.config.get("compensation_scheme") == cfg["compensation_scheme"]]
 
     circuits: list[SynthesizedCircuit] = []
     for topology in topologies:

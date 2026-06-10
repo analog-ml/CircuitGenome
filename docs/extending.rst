@@ -118,8 +118,9 @@ Required fields:
    * - ``name``
      - Unique identifier.
    * - ``config``
-     - Dict with ``stages`` (int) and ``output_type`` (str).  Used for
-       filtering via ``synthesize(config=...)``.
+     - Dict with ``stages`` (int), ``output_type`` (str), and optionally
+       ``compensation_scheme`` (str).  Used for filtering via
+       ``synthesize(config=...)``.
    * - ``external_ports``
      - Ordered list of top-level subcircuit port names (SPICE order).
    * - ``slots``
@@ -131,15 +132,26 @@ Required fields:
 Supply ports (``vdd`` / ``gnd``) on every slot auto-connect to ``vdd!`` /
 ``gnd!`` even if not listed in ``connections``.
 
-Example — 3-stage op-amp skeleton
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. note::
+
+   Standard 3-stage op-amps using Nested Miller (NMC) and Reversed Nested
+   Miller (RNMC) compensation already ship as built-in templates —
+   ``three_stage_opamp_nmc_single_ended``,
+   ``three_stage_opamp_rnmc_single_ended``, and their fully-differential
+   counterparts.  See :doc:`overview` for details.  The example below shows
+   a third compensation arrangement (one Miller cap per stage, in cascade)
+   to illustrate the general schema for adding your own variants.
+
+Example — 3-stage op-amp with cascade (single-Miller-per-stage) compensation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: yaml
 
-   - name: three_stage_opamp
+   - name: three_stage_opamp_cascade_miller
      config:
        output_type: single_ended
        stages: 3
+       compensation_scheme: cascade_miller
      external_ports: [ibias, in1, in2, out, vdd!, gnd!]
      slots:
        - {name: input_pair,    category: input_pair}

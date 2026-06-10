@@ -22,6 +22,10 @@ def test_load_topologies():
     names = [t.name for t in topologies]
     assert "two_stage_opamp_single_ended" in names
     assert "one_stage_opamp" in names
+    assert "three_stage_opamp_nmc_single_ended" in names
+    assert "three_stage_opamp_rnmc_single_ended" in names
+    assert "three_stage_opamp_nmc_fully_differential" in names
+    assert "three_stage_opamp_rnmc_fully_differential" in names
 
 
 def test_enumerate_circuits_nonempty():
@@ -119,3 +123,95 @@ def test_synthesize_topology_filter():
     assert len(circuits) > 0
     for c in circuits:
         assert c.topology == "two_stage_opamp_single_ended"
+
+
+def test_enumerate_three_stage_single_ended_count():
+    """3-stage single-ended (NMC/RNMC): 5 input pairs x 6 loads x 3 tails x 3 bias
+    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 21870."""
+    modules = load_modules()
+    topologies = load_topologies()
+    for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
+        topo = next(t for t in topologies if t.name == name)
+        circuits = list(enumerate_circuits(topo, modules))
+        assert len(circuits) == 21870
+
+
+def test_enumerate_three_stage_fully_differential_nonempty():
+    """FD 3-stage topologies enumerate ~1.77M circuits (5x6x3x3 x 3^8); just
+    check the iterator yields a valid first circuit without materializing
+    the full set."""
+    modules = load_modules()
+    topologies = load_topologies()
+    for name in ("three_stage_opamp_nmc_fully_differential", "three_stage_opamp_rnmc_fully_differential"):
+        topo = next(t for t in topologies if t.name == name)
+        circuit = next(enumerate_circuits(topo, modules))
+        assert circuit.topology == name
+        assert circuit.external_ports == ["ibias", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
+
+
+def test_synthesize_three_stage_single_ended_filters():
+    """Filtering by stages=3 + output_type + compensation_scheme selects exactly
+    one of the new 3-stage single-ended topologies."""
+    nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
+    rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
+
+    assert len(nmc) == 21870
+    assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
+
+    assert len(rnmc) == 21870
+    assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
+
+
+def test_three_stage_nmc_flat_spice_structure():
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "three_stage_opamp_nmc_single_ended")
+
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    spice = to_flat_spice(circuit, name="test_3stage")
+
+    assert spice.startswith(".subckt test_3stage")
+    assert spice.endswith(".ends")
+    for port in topo.external_ports:
+        assert port in spice.split("\n")[0]
+
+    lines = spice.split("\n")
+    assert sum(1 for l in lines if l.startswith("comp1_")) == 1
+    assert sum(1 for l in lines if l.startswith("comp2_")) == 1
+    assert any(l.startswith("second_stage_") for l in lines)
+    assert any(l.startswith("third_stage_") for l in lines)
+
+
+def test_three_stage_rnmc_hierarchical_spice():
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "three_stage_opamp_rnmc_single_ended")
+
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "active_load_pmos"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_drain"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap_with_nulling_resistor"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    spice = to_hierarchical_spice(circuit, name="test_3stage_rnmc_hier")
+
+    assert ".subckt common_drain" in spice
+    assert ".subckt miller_cap_with_nulling_resistor" in spice
+    assert ".subckt test_3stage_rnmc_hier" in spice
+    assert "Xsecond_stage" in spice
+    assert "Xthird_stage" in spice
+    assert "Xcomp1" in spice
+    assert "Xcomp2" in spice
