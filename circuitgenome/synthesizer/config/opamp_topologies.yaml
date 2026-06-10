@@ -7,8 +7,12 @@
 # Nets named "vdd!" and "gnd!" are power rails; they are wired automatically
 # to any slot port named "vdd" or "gnd" by the synthesizer.
 #
-# Load canonical interface: in1 (reference-side drain), out (output-side drain).
-# input_pair.out1 → net_diff1 (reference side), input_pair.out2 → net_mid (output side).
+# Load canonical interface: in1, out1 (the two differential signal nodes).
+# input_pair.out1 → net_diff1 (in1 side), input_pair.out2 → net_mid (out1 side).
+# bias1/bias2/bias3 are optional bias inputs used by cascode-style loads; all
+# three are wired to the single net_bias rail produced by bias_gen (this
+# synthesizer's bias_generation category currently produces one rail, so
+# distinct cascode bias voltages are not yet modeled separately).
 #
 # config.compensation_scheme (3-stage templates only) – "nested_miller" (NMC)
 # or "reversed_nested_miller" (RNMC). Filterable via synthesize(config=...).
@@ -33,8 +37,10 @@ topologies:
       - {slot: input_pair,   port: out2,  net: out}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,   net: net_diff1}
-      - {slot: load,         port: out,   net: out}
-      - {slot: load,         port: bias,  net: net_bias}
+      - {slot: load,         port: out1,  net: out}
+      - {slot: load,         port: bias1, net: net_bias}
+      - {slot: load,         port: bias2, net: net_bias}
+      - {slot: load,         port: bias3, net: net_bias}
       - {slot: tail_current, port: out,   net: net_tail}
       - {slot: tail_current, port: bias,  net: net_tail_bias}
       - {slot: bias_gen,     port: ibias, net: ibias}
@@ -60,8 +66,10 @@ topologies:
       - {slot: input_pair,   port: out2,  net: net_mid}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,   net: net_diff1}
-      - {slot: load,         port: out,   net: net_mid}
-      - {slot: load,         port: bias,  net: net_bias}
+      - {slot: load,         port: out1,  net: net_mid}
+      - {slot: load,         port: bias1, net: net_bias}
+      - {slot: load,         port: bias2, net: net_bias}
+      - {slot: load,         port: bias3, net: net_bias}
       - {slot: tail_current, port: out,   net: net_tail}
       - {slot: tail_current, port: bias,  net: net_tail_bias}
       - {slot: bias_gen,     port: ibias, net: ibias}
@@ -94,8 +102,10 @@ topologies:
       - {slot: input_pair,      port: out2,  net: net_diff2}
       - {slot: input_pair,      port: tail,  net: net_tail}
       - {slot: load,            port: in1,   net: net_diff1}
-      - {slot: load,            port: out,   net: net_diff2}
-      - {slot: load,            port: bias,  net: net_bias}
+      - {slot: load,            port: out1,  net: net_diff2}
+      - {slot: load,            port: bias1, net: net_bias}
+      - {slot: load,            port: bias2, net: net_bias}
+      - {slot: load,            port: bias3, net: net_bias}
       - {slot: tail_current,    port: out,   net: net_tail}
       - {slot: tail_current,    port: bias,  net: net_tail_bias}
       - {slot: bias_gen,        port: ibias, net: ibias}
@@ -140,8 +150,10 @@ topologies:
       - {slot: input_pair,   port: out2,  net: net_mid1}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,   net: net_diff1}
-      - {slot: load,         port: out,   net: net_mid1}
-      - {slot: load,         port: bias,  net: net_bias}
+      - {slot: load,         port: out1,  net: net_mid1}
+      - {slot: load,         port: bias1, net: net_bias}
+      - {slot: load,         port: bias2, net: net_bias}
+      - {slot: load,         port: bias3, net: net_bias}
       - {slot: tail_current, port: out,   net: net_tail}
       - {slot: tail_current, port: bias,  net: net_tail_bias}
       - {slot: bias_gen,     port: ibias, net: ibias}
@@ -183,8 +195,10 @@ topologies:
       - {slot: input_pair,   port: out2,  net: net_mid1}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,   net: net_diff1}
-      - {slot: load,         port: out,   net: net_mid1}
-      - {slot: load,         port: bias,  net: net_bias}
+      - {slot: load,         port: out1,  net: net_mid1}
+      - {slot: load,         port: bias1, net: net_bias}
+      - {slot: load,         port: bias2, net: net_bias}
+      - {slot: load,         port: bias3, net: net_bias}
       - {slot: tail_current, port: out,   net: net_tail}
       - {slot: tail_current, port: bias,  net: net_tail_bias}
       - {slot: bias_gen,     port: ibias, net: ibias}
@@ -229,8 +243,10 @@ topologies:
       - {slot: input_pair,      port: out2,  net: net_diff2}
       - {slot: input_pair,      port: tail,  net: net_tail}
       - {slot: load,            port: in1,   net: net_diff1}
-      - {slot: load,            port: out,   net: net_diff2}
-      - {slot: load,            port: bias,  net: net_bias}
+      - {slot: load,            port: out1,  net: net_diff2}
+      - {slot: load,            port: bias1, net: net_bias}
+      - {slot: load,            port: bias2, net: net_bias}
+      - {slot: load,            port: bias3, net: net_bias}
       - {slot: tail_current,    port: out,   net: net_tail}
       - {slot: tail_current,    port: bias,  net: net_tail_bias}
       - {slot: bias_gen,        port: ibias, net: ibias}
@@ -287,8 +303,10 @@ topologies:
       - {slot: input_pair,      port: out2,  net: net_diff2}
       - {slot: input_pair,      port: tail,  net: net_tail}
       - {slot: load,            port: in1,   net: net_diff1}
-      - {slot: load,            port: out,   net: net_diff2}
-      - {slot: load,            port: bias,  net: net_bias}
+      - {slot: load,            port: out1,  net: net_diff2}
+      - {slot: load,            port: bias1, net: net_bias}
+      - {slot: load,            port: bias2, net: net_bias}
+      - {slot: load,            port: bias3, net: net_bias}
       - {slot: tail_current,    port: out,   net: net_tail}
       - {slot: tail_current,    port: bias,  net: net_tail_bias}
       - {slot: bias_gen,        port: ibias, net: ibias}

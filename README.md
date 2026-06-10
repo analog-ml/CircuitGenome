@@ -34,7 +34,7 @@ The synthesizer works by combining **module variants** according to a **topology
 | Category | Variants |
 |---|---|
 | Input pair | PMOS/NMOS differential pair, with/without source degeneration, inverter-based |
-| Load | Resistor, PMOS/NMOS active (current mirror), current source, folded cascode, telescopic cascode |
+| Load | Resistor, PMOS/NMOS active (current mirror), current source, folded cascode (PMOS/NMOS-input, standard & wide-swing), telescopic cascode (PMOS/NMOS) |
 | Tail current | Current mirror, cascode current mirror, resistor |
 | Bias generation | Diode-connected MOSFET, magic battery, resistor |
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
@@ -52,12 +52,12 @@ The synthesizer works by combining **module variants** according to a **topology
 | `three_stage_opamp_nmc_fully_differential` | 3 | Fully differential | Nested Miller (NMC) |
 | `three_stage_opamp_rnmc_fully_differential` | 3 | Fully differential | Reversed Nested Miller (RNMC) |
 
-A 2-stage single-ended topology with no filters yields **2430 unique circuits**
-(5 × 6 × 3 × 3 × 3 × 3 module combinations). Each 3-stage single-ended topology
+A 2-stage single-ended topology with no filters yields **4050 unique circuits**
+(5 × 10 × 3 × 3 × 3 × 3 module combinations). Each 3-stage single-ended topology
 adds two more `second_stage` slots (gm2, gm3) and two `compensation` slots
-(Cm1, Cm2), yielding **21 870 circuits** (5 × 6 × 3 × 3 × 3 × 3 × 3 × 3). Each
+(Cm1, Cm2), yielding **36 450 circuits** (5 × 10 × 3 × 3 × 3 × 3 × 3 × 3). Each
 3-stage fully-differential topology duplicates those four slots per output
-path, yielding **1 771 470 circuits** (5 × 6 × 3 × 3 × 3⁸).
+path, yielding **2 952 450 circuits** (5 × 10 × 3 × 3 × 3⁸).
 
 ### Three-stage compensation schemes
 
@@ -164,7 +164,7 @@ m1 out1 in1 tail tail pmos
 m2 out2 in2 tail tail pmos
 .ends
 
-.subckt resistor_load in1 out vdd gnd
+.subckt resistor_load in1 out1 vdd gnd
 r1 vdd in1 1k
 r2 vdd out 1k
 .ends

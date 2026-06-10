@@ -17,6 +17,95 @@ def test_load_modules():
     assert "differential_pair_pmos" in names
 
 
+def test_load_variant_names():
+    """The load category exposes 10 variants: PMOS/NMOS-input pairs for
+    folded-cascode (standard and wide-swing) and telescopic-cascode loads,
+    plus the original simple loads."""
+    modules = load_modules()
+    names = {v.name for v in modules["load"]}
+    assert names == {
+        "resistor_load",
+        "active_load_pmos",
+        "active_load_nmos",
+        "current_source_load",
+        "folded_cascode_load_nmos_input",
+        "folded_cascode_load_pmos_input",
+        "folded_cascode_load_nmos_input_wide_swing",
+        "folded_cascode_load_pmos_input_wide_swing",
+        "telescopic_cascode_load_pmos",
+        "telescopic_cascode_load_nmos",
+    }
+
+
+def test_cascode_loads_do_not_use_signal_nodes_as_bias():
+    """Folded-cascode and telescopic-cascode loads must not reuse the in1/out1
+    signal nodes as gate/bias references (the bug in the old
+    folded_cascode_load/telescopic_cascode_load variants)."""
+    modules = load_modules()
+    cascode_variants = [
+        v for v in modules["load"]
+        if v.name.startswith(("folded_cascode_load", "telescopic_cascode_load"))
+    ]
+    assert len(cascode_variants) == 6
+    for variant in cascode_variants:
+        for device in variant.devices:
+            gate = device.terminals.get("g")
+            assert gate not in ("in1", "out1"), (
+                f"{variant.name}.{device.ref}: gate tied to signal node {gate!r}"
+            )
+
+
+def test_folded_cascode_bias_port_roles():
+    """Standard folded/telescopic cascode loads require bias1+bias2; wide-swing
+    folded cascode loads additionally require bias3."""
+    modules = load_modules()
+    by_name = {v.name: v for v in modules["load"]}
+
+    for name in (
+        "folded_cascode_load_nmos_input",
+        "folded_cascode_load_pmos_input",
+        "telescopic_cascode_load_pmos",
+        "telescopic_cascode_load_nmos",
+    ):
+        roles = {p.name: p.role for p in by_name[name].ports}
+        assert roles["bias1"] == "input"
+        assert roles["bias2"] == "input"
+        assert roles["bias3"] == "optional"
+
+    for name in (
+        "folded_cascode_load_nmos_input_wide_swing",
+        "folded_cascode_load_pmos_input_wide_swing",
+    ):
+        roles = {p.name: p.role for p in by_name[name].ports}
+        assert roles["bias1"] == "input"
+        assert roles["bias2"] == "input"
+        assert roles["bias3"] == "input"
+
+
+def test_synthesize_wide_swing_folded_cascode_wires_all_bias_ports():
+    """bias1/bias2/bias3 of a wide-swing folded-cascode load all resolve to
+    the shared net_bias rail (no floating gates)."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_wide_swing"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
+
+    assert len(load_devices) == 6
+    for ref, dev in load_devices.items():
+        assert dev.terminals["g"] == "net_bias", f"{ref} gate not wired to net_bias: {dev.terminals}"
+
+
 def test_load_topologies():
     topologies = load_topologies()
     names = [t.name for t in topologies]
@@ -37,12 +126,12 @@ def test_enumerate_circuits_nonempty():
 
 
 def test_enumerate_circuits_count():
-    """2-stage single-ended: 5 input pairs × 6 loads × 3 tails × 3 bias × 3 comp × 3 second = 2430."""
+    """2-stage single-ended: 5 input pairs × 10 loads × 3 tails × 3 bias × 3 comp × 3 second = 4050."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 2430
+    assert len(circuits) == 4050
 
 
 def test_flat_spice_structure():
@@ -126,18 +215,18 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 5 input pairs x 6 loads x 3 tails x 3 bias
-    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 21870."""
+    """3-stage single-ended (NMC/RNMC): 5 input pairs x 10 loads x 3 tails x 3 bias
+    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 36450."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 21870
+        assert len(circuits) == 36450
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~1.77M circuits (5x6x3x3 x 3^8); just
+    """FD 3-stage topologies enumerate ~2.95M circuits (5x10x3x3 x 3^8); just
     check the iterator yields a valid first circuit without materializing
     the full set."""
     modules = load_modules()
@@ -155,10 +244,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 21870
+    assert len(nmc) == 36450
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 21870
+    assert len(rnmc) == 36450
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
