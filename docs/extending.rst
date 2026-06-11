@@ -168,23 +168,30 @@ Example — 3-stage op-amp with cascade (single-Miller-per-stage) compensation
        - {slot: input_pair,   port: out1, net: net_diff1}
        - {slot: input_pair,   port: out2, net: net_mid1}
        - {slot: input_pair,   port: tail, net: net_tail}
-       - {slot: load,         port: in1,   net: net_diff1}
-       - {slot: load,         port: out1,  net: net_mid1}
-       - {slot: load,         port: bias1, net: net_bias}
-       - {slot: load,         port: bias2, net: net_bias}
-       - {slot: load,         port: bias3, net: net_bias}
+       - {slot: load,         port: in1,       net: net_diff1}
+       - {slot: load,         port: in2,       net: net_mid1}
+       - {slot: load,         port: out1,      net: net_diff1}
+       - {slot: load,         port: out2,      net: net_mid1}
+       - {slot: load,         port: out,       net: net_mid1}
+       - {slot: load,         port: bias1,     net: net_bias1}
+       - {slot: load,         port: bias2,     net: net_bias2}
+       - {slot: load,         port: bias3,     net: net_bias3}
+       - {slot: load,         port: bias_cmfb, net: net_bias4}
        - {slot: tail_current, port: out,  net: net_tail}
        - {slot: tail_current, port: bias, net: net_tail_bias}
        - {slot: bias_gen,     port: ibias, net: ibias}
-       - {slot: bias_gen,     port: out,   net: net_bias}
+       - {slot: bias_gen,     port: out1,  net: net_bias1}
+       - {slot: bias_gen,     port: out2,  net: net_bias2}
+       - {slot: bias_gen,     port: out3,  net: net_bias3}
+       - {slot: bias_gen,     port: out4,  net: net_bias4}
        - {slot: second_stage, port: in,   net: net_mid1}
        - {slot: second_stage, port: out,  net: net_mid2}
-       - {slot: second_stage, port: bias, net: net_bias}
+       - {slot: second_stage, port: bias, net: net_bias1}
        - {slot: comp_1,       port: in,   net: net_mid1}
        - {slot: comp_1,       port: out,  net: net_mid2}
        - {slot: third_stage,  port: in,   net: net_mid2}
        - {slot: third_stage,  port: out,  net: out}
-       - {slot: third_stage,  port: bias, net: net_bias}
+       - {slot: third_stage,  port: bias, net: net_bias1}
        - {slot: comp_2,       port: in,   net: net_mid2}
        - {slot: comp_2,       port: out,  net: out}
 

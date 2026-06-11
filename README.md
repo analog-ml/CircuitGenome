@@ -34,7 +34,7 @@ The synthesizer works by combining **module variants** according to a **topology
 | Category | Variants |
 |---|---|
 | Input pair | PMOS/NMOS differential pair, with/without source degeneration, inverter-based |
-| Load | Resistor, PMOS/NMOS active (current mirror), current source, folded cascode (PMOS/NMOS-input, standard & wide-swing), telescopic cascode (PMOS/NMOS) |
+| Load | Resistor, PMOS/NMOS active (current mirror), current source, folded cascode (PMOS/NMOS-input, single-output & differential-output), telescopic cascode (PMOS/NMOS) |
 | Tail current | Current mirror, cascode current mirror, resistor |
 | Bias generation | Diode-connected MOSFET, magic battery, resistor |
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
@@ -149,10 +149,13 @@ load_r2 vdd! net_mid 1k
 tail_current_m1 net_tail_bias net_tail_bias vdd! vdd! pmos
 tail_current_m2 net_tail net_tail_bias vdd! vdd! pmos
 bias_gen_mp1 ibias ibias vdd! vdd! pmos
-bias_gen_mn1 net_bias net_bias gnd! gnd! nmos
+bias_gen_mn1 net_bias1 net_bias1 gnd! gnd! nmos
+bias_gen_mn2 net_bias2 net_bias2 gnd! gnd! nmos
+bias_gen_mn3 net_bias3 net_bias3 gnd! gnd! nmos
+bias_gen_mn4 net_bias4 net_bias4 gnd! gnd! nmos
 compensation_c1 net_mid out 1p
 second_stage_mn1 out net_mid gnd! gnd! nmos
-second_stage_mp1 out net_bias vdd! vdd! pmos
+second_stage_mp1 out net_bias1 vdd! vdd! pmos
 .ends
 ```
 
@@ -164,20 +167,20 @@ m1 out1 in1 tail tail pmos
 m2 out2 in2 tail tail pmos
 .ends
 
-.subckt resistor_load in1 out1 vdd gnd
+.subckt resistor_load in1 in2 out1 out2 vdd gnd
 r1 vdd in1 1k
-r2 vdd out 1k
+r2 vdd in2 1k
 .ends
 
 * ... (one block per module variant used)
 
 .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
 Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
-Xload net_diff1 net_mid vdd! gnd! resistor_load
+Xload net_diff1 net_mid net_diff1 net_mid vdd! gnd! resistor_load
 Xtail_current net_tail net_tail_bias vdd! gnd! current_mirror_tail
-Xbias_gen ibias net_bias vdd! gnd! diode_connected_mosfet_bias
+Xbias_gen ibias net_bias1 net_bias2 net_bias3 net_bias4 vdd! gnd! diode_connected_mosfet_bias
 Xcompensation net_mid out miller_cap
-Xsecond_stage net_mid out net_bias vdd! gnd! common_source
+Xsecond_stage net_mid out net_bias1 vdd! gnd! common_source
 .ends
 ```
 

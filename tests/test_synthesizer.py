@@ -18,9 +18,9 @@ def test_load_modules():
 
 
 def test_load_variant_names():
-    """The load category exposes 10 variants: PMOS/NMOS-input pairs for
-    folded-cascode (standard and wide-swing) and telescopic-cascode loads,
-    plus the original simple loads."""
+    """The load category exposes 10 variants: alias-based simple loads, plus
+    PMOS/NMOS-input single-output and differential-output folded-cascode
+    loads, plus PMOS/NMOS telescopic-cascode loads."""
     modules = load_modules()
     names = {v.name for v in modules["load"]}
     assert names == {
@@ -28,19 +28,18 @@ def test_load_variant_names():
         "active_load_pmos",
         "active_load_nmos",
         "current_source_load",
-        "folded_cascode_load_nmos_input",
-        "folded_cascode_load_pmos_input",
-        "folded_cascode_load_nmos_input_wide_swing",
-        "folded_cascode_load_pmos_input_wide_swing",
+        "folded_cascode_load_nmos_input_single_output",
+        "folded_cascode_load_pmos_input_single_output",
+        "folded_cascode_load_nmos_input_differential_output",
+        "folded_cascode_load_pmos_input_differential_output",
         "telescopic_cascode_load_pmos",
         "telescopic_cascode_load_nmos",
     }
 
 
 def test_cascode_loads_do_not_use_signal_nodes_as_bias():
-    """Folded-cascode and telescopic-cascode loads must not reuse the in1/out1
-    signal nodes as gate/bias references (the bug in the old
-    folded_cascode_load/telescopic_cascode_load variants)."""
+    """Folded-cascode and telescopic-cascode loads must not reuse the
+    in1/in2/out/out1/out2 signal nodes as gate/bias references."""
     modules = load_modules()
     cascode_variants = [
         v for v in modules["load"]
@@ -50,22 +49,22 @@ def test_cascode_loads_do_not_use_signal_nodes_as_bias():
     for variant in cascode_variants:
         for device in variant.devices:
             gate = device.terminals.get("g")
-            assert gate not in ("in1", "out1"), (
+            assert gate not in ("in1", "in2", "out", "out1", "out2"), (
                 f"{variant.name}.{device.ref}: gate tied to signal node {gate!r}"
             )
 
 
 def test_folded_cascode_bias_port_roles():
-    """Standard folded/telescopic cascode loads require bias1+bias2; wide-swing
-    folded cascode loads additionally require bias3."""
+    """Single-output folded-cascode loads require bias1+bias2 (bias3
+    optional); telescopic-cascode loads require only bias1 (bias2/bias3
+    optional); differential-output folded-cascode loads require
+    bias1+bias2+bias3+bias_cmfb."""
     modules = load_modules()
     by_name = {v.name: v for v in modules["load"]}
 
     for name in (
-        "folded_cascode_load_nmos_input",
-        "folded_cascode_load_pmos_input",
-        "telescopic_cascode_load_pmos",
-        "telescopic_cascode_load_nmos",
+        "folded_cascode_load_nmos_input_single_output",
+        "folded_cascode_load_pmos_input_single_output",
     ):
         roles = {p.name: p.role for p in by_name[name].ports}
         assert roles["bias1"] == "input"
@@ -73,25 +72,36 @@ def test_folded_cascode_bias_port_roles():
         assert roles["bias3"] == "optional"
 
     for name in (
-        "folded_cascode_load_nmos_input_wide_swing",
-        "folded_cascode_load_pmos_input_wide_swing",
+        "telescopic_cascode_load_pmos",
+        "telescopic_cascode_load_nmos",
+    ):
+        roles = {p.name: p.role for p in by_name[name].ports}
+        assert roles["bias1"] == "input"
+        assert roles["bias2"] == "optional"
+        assert roles["bias3"] == "optional"
+
+    for name in (
+        "folded_cascode_load_nmos_input_differential_output",
+        "folded_cascode_load_pmos_input_differential_output",
     ):
         roles = {p.name: p.role for p in by_name[name].ports}
         assert roles["bias1"] == "input"
         assert roles["bias2"] == "input"
         assert roles["bias3"] == "input"
+        assert roles["bias_cmfb"] == "input"
 
 
-def test_synthesize_wide_swing_folded_cascode_wires_all_bias_ports():
-    """bias1/bias2/bias3 of a wide-swing folded-cascode load all resolve to
-    the shared net_bias rail (no floating gates)."""
+def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails():
+    """bias1/bias2/bias3/bias_cmfb of a differential-output folded-cascode
+    load each resolve to a distinct net_bias rail (no floating gates, no
+    accidental rail sharing)."""
     modules = load_modules()
     topologies = load_topologies()
-    topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
 
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
-        "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_wide_swing"],
+        "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
@@ -101,9 +111,9 @@ def test_synthesize_wide_swing_folded_cascode_wires_all_bias_ports():
     circuit = next(enumerate_circuits(topo, simple_modules))
     load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
 
-    assert len(load_devices) == 6
-    for ref, dev in load_devices.items():
-        assert dev.terminals["g"] == "net_bias", f"{ref} gate not wired to net_bias: {dev.terminals}"
+    assert len(load_devices) == 8
+    bias_gates = {dev.terminals["g"] for dev in load_devices.values()}
+    assert bias_gates == {"net_bias1", "net_bias2", "net_bias3", "net_bias4"}
 
 
 def test_load_topologies():

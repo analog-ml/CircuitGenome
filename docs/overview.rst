@@ -46,8 +46,8 @@ Module categories
        degeneration, NMOS with source degeneration, inverter-based
    * - Load
      - Resistor, PMOS active (current mirror), NMOS active (current mirror),
-       current source, folded cascode (PMOS/NMOS-input, standard & wide-swing),
-       telescopic cascode (PMOS/NMOS)
+       current source, folded cascode (PMOS/NMOS-input, single-output &
+       differential-output), telescopic cascode (PMOS/NMOS)
    * - Tail current
      - Current mirror, cascode current mirror, resistor
    * - Bias generation
@@ -146,13 +146,20 @@ internal device structure is invisible to the template.
    * - ``input_pair``
      - ``in1``, ``in2``, ``out1``, ``out2``, ``tail``, ``vdd``, ``gnd``
    * - ``load``
-     - ``in1``, ``out1``, ``in2`` *(optional)*, ``out2`` *(optional)*,
-       ``bias1``, ``bias2``, ``bias3`` *(each optional; declared only as
-       needed)*, ``vdd``, ``gnd``
+     - ``in1``, ``in2`` (differential signal nodes, driven by
+       ``input_pair.out1`` / ``out2``), ``out1``, ``out2`` (differential
+       output nodes — alias ``in1``/``in2`` for simple loads, or distinct
+       cascode-output nodes for differential-output cascode loads), ``out``
+       *(mandatory only for single-output cascode loads; optional/unused
+       otherwise)*, ``bias1``, ``bias2``, ``bias3``, ``bias_cmfb`` *(optional
+       bias inputs; each variant declares only as many as it needs)*,
+       ``vdd``, ``gnd``
    * - ``tail_current``
      - ``out``, ``bias``, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out``, ``vdd``, ``gnd``
+     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four independently
+       generated bias rails, so cascode loads can receive distinct
+       ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages), ``vdd``, ``gnd``
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``
