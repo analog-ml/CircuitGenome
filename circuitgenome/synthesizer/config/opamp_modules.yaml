@@ -37,11 +37,21 @@
 #                                     (net_bias1/2/3/4), produced by bias_gen's
 #                                     out1/out2/out3/out4.
 #   tail_current:     out, bias, vdd, gnd
-#   bias_generation:  ibias, out1, out2, out3, out4, vdd, gnd
-#                       - out1..out4 : four independently-generated bias rails
-#                                     (e.g. separate diode-connected legs), so
-#                                     cascode loads can receive distinct
-#                                     bias1/bias2/bias3/bias_cmfb voltages.
+#   bias_generation:  ibias, out1, out2, out3, out4, [vdd], gnd
+#                       - out1..out4 : four bias rails so cascode loads can
+#                                     receive distinct bias1/bias2/bias3/
+#                                     bias_cmfb voltages. Either four
+#                                     independent legs each mirroring ibias
+#                                     (magic_battery_bias), or four taps along
+#                                     a single ibias-to-gnd ladder, each one
+#                                     diode-drop/IR-drop below the last
+#                                     (diode_connected_mosfet_bias,
+#                                     resistor_bias).
+#                       - vdd        : optional; only declared by variants
+#                                     that source current from vdd
+#                                     (magic_battery_bias). Ladder variants
+#                                     run entirely from ibias to gnd and omit
+#                                     vdd.
 #   compensation:     in, out
 #   second_stage:     in, out, bias, vdd, gnd
 #
@@ -537,23 +547,24 @@ modules:
 
   - name: diode_connected_mosfet_bias
     category: bias_generation
-    display_name: "Diode-Connected MOSFET Bias"
-    # PMOS diode sets the ibias-side VGS reference; four independent
-    # NMOS diode-connected legs each generate their own bias rail.
+    display_name: "Diode-Connected MOSFET Bias (NMOS Ladder)"
+    # Series stack of diode-connected NMOS carrying ibias from the ibias node
+    # down to gnd. The same current flows through every device, so each tap
+    # (out1..out4) sits one V_GS below the node above it -- four distinct,
+    # monotonically-decreasing, ibias-derived bias voltages.
     ports:
       - {name: ibias, role: input}
       - {name: out1,  role: output}
       - {name: out2,  role: output}
       - {name: out3,  role: output}
       - {name: out4,  role: output}
-      - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
-      - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd, b: vdd}
-      - {ref: mn1, type: nmos, d: out1,  g: out1,  s: gnd, b: gnd}
-      - {ref: mn2, type: nmos, d: out2,  g: out2,  s: gnd, b: gnd}
-      - {ref: mn3, type: nmos, d: out3,  g: out3,  s: gnd, b: gnd}
-      - {ref: mn4, type: nmos, d: out4,  g: out4,  s: gnd, b: gnd}
+      - {ref: mn1, type: nmos, d: ibias, g: ibias, s: out1, b: gnd}
+      - {ref: mn2, type: nmos, d: out1,  g: out1,  s: out2, b: gnd}
+      - {ref: mn3, type: nmos, d: out2,  g: out2,  s: out3, b: gnd}
+      - {ref: mn4, type: nmos, d: out3,  g: out3,  s: out4, b: gnd}
+      - {ref: mn5, type: nmos, d: out4,  g: out4,  s: gnd,  b: gnd}
 
   - name: magic_battery_bias
     category: bias_generation
@@ -581,25 +592,24 @@ modules:
 
   - name: resistor_bias
     category: bias_generation
-    display_name: "Resistor Bias"
-    # Four independent resistive dividers, one per bias rail.
+    display_name: "Resistor Bias (Resistor Ladder)"
+    # Series resistor string carrying ibias from the ibias node down to gnd.
+    # The same current flows through every resistor, so each tap
+    # (out1..out4) sits one IR drop below the node above it -- four distinct,
+    # monotonically-decreasing, ibias-derived bias voltages.
     ports:
       - {name: ibias, role: input}
       - {name: out1,  role: output}
       - {name: out2,  role: output}
       - {name: out3,  role: output}
       - {name: out4,  role: output}
-      - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
-      - {ref: r1, type: resistor, t1: vdd,  t2: out1}
-      - {ref: r2, type: resistor, t1: out1, t2: gnd}
-      - {ref: r3, type: resistor, t1: vdd,  t2: out2}
-      - {ref: r4, type: resistor, t1: out2, t2: gnd}
-      - {ref: r5, type: resistor, t1: vdd,  t2: out3}
-      - {ref: r6, type: resistor, t1: out3, t2: gnd}
-      - {ref: r7, type: resistor, t1: vdd,  t2: out4}
-      - {ref: r8, type: resistor, t1: out4, t2: gnd}
+      - {ref: r1, type: resistor, t1: ibias, t2: out1}
+      - {ref: r2, type: resistor, t1: out1,  t2: out2}
+      - {ref: r3, type: resistor, t1: out2,  t2: out3}
+      - {ref: r4, type: resistor, t1: out3,  t2: out4}
+      - {ref: r5, type: resistor, t1: out4,  t2: gnd}
 
   # ─── COMPENSATION ─────────────────────────────────────────────────────────
 

@@ -36,7 +36,7 @@ The synthesizer works by combining **module variants** according to a **topology
 | Input pair | PMOS/NMOS differential pair, with/without source degeneration, inverter-based |
 | Load | Resistor (VDD-side / GND-side), PMOS/NMOS active (current mirror), PMOS/NMOS current source, folded cascode (PMOS/NMOS-input, single-output & differential-output), telescopic cascode (PMOS/NMOS) |
 | Tail current | Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS), resistor (VDD-side / GND-side) |
-| Bias generation | Diode-connected MOSFET, magic battery, resistor |
+| Bias generation | Diode-connected MOSFET ladder, magic battery (current mirror), resistor ladder |
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
 | Second stage | Common-source, common-drain (source follower), differential OTA |
 
