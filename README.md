@@ -35,7 +35,7 @@ The synthesizer works by combining **module variants** according to a **topology
 |---|---|
 | Input pair | PMOS/NMOS differential pair, with/without source degeneration, inverter-based |
 | Load | Resistor (VDD-side / GND-side), PMOS/NMOS active (current mirror), PMOS/NMOS current source, folded cascode (PMOS/NMOS-input, single-output & differential-output), telescopic cascode (PMOS/NMOS) |
-| Tail current | Current mirror, cascode current mirror, resistor |
+| Tail current | Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS), resistor (VDD-side / GND-side) |
 | Bias generation | Diode-connected MOSFET, magic battery, resistor |
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
 | Second stage | Common-source, common-drain (source follower), differential OTA |
@@ -52,12 +52,12 @@ The synthesizer works by combining **module variants** according to a **topology
 | `three_stage_opamp_nmc_fully_differential` | 3 | Fully differential | Nested Miller (NMC) |
 | `three_stage_opamp_rnmc_fully_differential` | 3 | Fully differential | Reversed Nested Miller (RNMC) |
 
-A 2-stage single-ended topology with no filters yields **4860 unique circuits**
-(5 × 12 × 3 × 3 × 3 × 3 module combinations). Each 3-stage single-ended topology
+A 2-stage single-ended topology with no filters yields **9720 unique circuits**
+(5 × 12 × 6 × 3 × 3 × 3 module combinations). Each 3-stage single-ended topology
 adds two more `second_stage` slots (gm2, gm3) and two `compensation` slots
-(Cm1, Cm2), yielding **43 740 circuits** (5 × 12 × 3 × 3 × 3 × 3 × 3 × 3). Each
+(Cm1, Cm2), yielding **87 480 circuits** (5 × 12 × 6 × 3 × 3 × 3 × 3 × 3). Each
 3-stage fully-differential topology duplicates those four slots per output
-path, yielding **3 542 940 circuits** (5 × 12 × 3 × 3 × 3⁸).
+path, yielding **7 085 880 circuits** (5 × 12 × 6 × 3 × 3⁸).
 
 ### Three-stage compensation schemes
 
@@ -177,7 +177,7 @@ r2 vdd in2 1k
 .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
 Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
 Xload net_diff1 net_mid net_diff1 net_mid vdd! gnd! resistor_load_vdd
-Xtail_current net_tail net_tail_bias vdd! gnd! current_mirror_tail
+Xtail_current net_tail net_tail_bias vdd! gnd! current_mirror_tail_pmos
 Xbias_gen ibias net_bias1 net_bias2 net_bias3 net_bias4 vdd! gnd! diode_connected_mosfet_bias
 Xcompensation net_mid out miller_cap
 Xsecond_stage net_mid out net_bias1 vdd! gnd! common_source
