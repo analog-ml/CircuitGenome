@@ -439,38 +439,81 @@ modules:
       - {ref: mn2, type: nmos, d: out,        g: bias1, s: in2, b: gnd}
 
   # ─── TAIL CURRENT SOURCES ──────────────────────────────────────────────────
+  # Each implementation comes in a PMOS/VDD-side and an NMOS/GND-side flavor.
+  # A PMOS input pair's tail sources current down into the differential pair,
+  # so it must pair with a *_pmos/_vdd variant (sources current from vdd into
+  # "out"). An NMOS input pair's tail sinks current coming from the
+  # differential pair, so it must pair with a *_nmos/_gnd variant (sinks
+  # current from "out" to gnd). Mixing polarities leaves the tail node with no
+  # current path and a non-functional circuit.
 
-  - name: current_mirror_tail
+  - name: current_mirror_tail_pmos
     category: tail_current
-    display_name: "Current Mirror Tail"
+    display_name: "Current Mirror Tail (PMOS, for PMOS Input Pair)"
     ports:
       - {name: out,  role: output}
       - {name: bias, role: input}
       - {name: vdd,  role: supply}
       - {name: gnd,  role: supply}
     devices:
-      # PMOS mirror: bias is the reference gate/drain; out is the mirrored drain
+      # PMOS mirror: bias is the self-biased reference gate/drain; out is the
+      # mirrored drain, sourcing current from vdd into the tail node.
       - {ref: m1, type: pmos, d: bias, g: bias, s: vdd, b: vdd}
       - {ref: m2, type: pmos, d: out,  g: bias, s: vdd, b: vdd}
 
-  - name: cascode_current_mirror_tail
+  - name: current_mirror_tail_nmos
     category: tail_current
-    display_name: "Cascode Current Mirror Tail"
+    display_name: "Current Mirror Tail (NMOS, for NMOS Input Pair)"
     ports:
       - {name: out,  role: output}
       - {name: bias, role: input}
       - {name: vdd,  role: supply}
       - {name: gnd,  role: supply}
     devices:
-      # Cascode PMOS mirror
-      - {ref: mp1, type: pmos, d: bias, g: bias, s: vdd, b: vdd}
-      - {ref: mp2, type: pmos, d: cm1,  g: bias, s: vdd, b: vdd}
-      - {ref: mp3, type: pmos, d: cm1,  g: cm1,  s: out_pre, b: out_pre}
-      - {ref: mp4, type: pmos, d: out,  g: cm1,  s: out,     b: out}
+      # Mirror image of current_mirror_tail_pmos: NMOS mirror sinking current
+      # from the tail node ("out") to gnd.
+      - {ref: m1, type: nmos, d: bias, g: bias, s: gnd, b: gnd}
+      - {ref: m2, type: nmos, d: out,  g: bias, s: gnd, b: gnd}
 
-  - name: resistor_tail
+  - name: cascode_current_mirror_tail_pmos
     category: tail_current
-    display_name: "Resistor Tail Current"
+    display_name: "Cascode Current Mirror Tail (PMOS, for PMOS Input Pair)"
+    # Self-biased 2-stack PMOS cascode mirror: mp1/mp3 (reference leg, both
+    # diode-connected) generate the cascode-gate bias (internal_0) and the
+    # mirror-gate bias (bias); mp2/mp4 (output leg) mirror them onto "out",
+    # sourcing current from vdd into the tail node.
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_0, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: bias,       g: bias,       s: internal_0, b: vdd}
+      - {ref: mp2, type: pmos, d: internal_1, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp4, type: pmos, d: out,        g: bias,       s: internal_1, b: vdd}
+
+  - name: cascode_current_mirror_tail_nmos
+    category: tail_current
+    display_name: "Cascode Current Mirror Tail (NMOS, for NMOS Input Pair)"
+    # Mirror image of cascode_current_mirror_tail_pmos: mn1/mn3 (reference
+    # leg, diode-connected) generate the cascode-gate bias (internal_0) and
+    # the mirror-gate bias (bias); mn2/mn4 (output leg) mirror them, sinking
+    # the tail node ("out") to gnd.
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mn1, type: nmos, d: internal_0, g: internal_0, s: gnd,        b: gnd}
+      - {ref: mn3, type: nmos, d: bias,       g: bias,       s: internal_0, b: gnd}
+      - {ref: mn2, type: nmos, d: internal_1, g: internal_0, s: gnd,        b: gnd}
+      - {ref: mn4, type: nmos, d: out,        g: bias,       s: internal_1, b: gnd}
+
+  - name: resistor_tail_vdd
+    category: tail_current
+    display_name: "Resistor Tail Current (from VDD, for PMOS Input Pair)"
     ports:
       - {name: out,  role: output}
       - {name: bias, role: optional}
@@ -478,6 +521,17 @@ modules:
       - {name: gnd,  role: supply}
     devices:
       - {ref: r1, type: resistor, t1: vdd, t2: out}
+
+  - name: resistor_tail_gnd
+    category: tail_current
+    display_name: "Resistor Tail Current (to GND, for NMOS Input Pair)"
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: optional}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: r1, type: resistor, t1: out, t2: gnd}
 
   # ─── BIAS GENERATION ──────────────────────────────────────────────────────
 

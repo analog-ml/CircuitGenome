@@ -50,7 +50,8 @@ Module categories
        (PMOS/NMOS-input, single-output & differential-output), telescopic
        cascode (PMOS/NMOS)
    * - Tail current
-     - Current mirror, cascode current mirror, resistor
+     - Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS),
+       resistor (VDD-side / GND-side)
    * - Bias generation
      - Diode-connected MOSFET, magic battery current mirror, resistor
    * - Compensation
@@ -100,12 +101,12 @@ Topology templates
      - Reversed Nested Miller (RNMC)
 
 With no filters, the 2-stage single-ended template alone produces
-**4 860 distinct circuits** (5 × 12 × 3 × 3 × 3 × 3). Each 3-stage
+**9 720 distinct circuits** (5 × 12 × 6 × 3 × 3 × 3). Each 3-stage
 single-ended template adds two more ``second_stage`` slots (gm2, gm3) and
-two ``compensation`` slots (Cm1, Cm2), producing **43 740 circuits**
-(5 × 12 × 3 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential template
-duplicates those four slots per output path, producing **3 542 940
-circuits** (5 × 12 × 3 × 3 × 3\ :sup:`8`).
+two ``compensation`` slots (Cm1, Cm2), producing **87 480 circuits**
+(5 × 12 × 6 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential template
+duplicates those four slots per output path, producing **7 085 880
+circuits** (5 × 12 × 6 × 3 × 3\ :sup:`8`).
 
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

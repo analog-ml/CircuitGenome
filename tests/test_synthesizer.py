@@ -121,7 +121,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
@@ -133,6 +133,24 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
     assert len(load_devices) == 8
     bias_gates = {dev.terminals["g"] for dev in load_devices.values()}
     assert bias_gates == {"net_bias1", "net_bias2", "net_bias3", "net_bias4"}
+
+
+def test_tail_current_variant_names():
+    """The tail_current category exposes 6 variants: each implementation
+    (current mirror, cascode current mirror, resistor) comes in a PMOS/VDD-side
+    flavor (for PMOS input pairs, whose tail sources current down from vdd)
+    and an NMOS/GND-side flavor (for NMOS input pairs, whose tail sinks
+    current to gnd)."""
+    modules = load_modules()
+    names = {v.name for v in modules["tail_current"]}
+    assert names == {
+        "current_mirror_tail_pmos",
+        "current_mirror_tail_nmos",
+        "cascode_current_mirror_tail_pmos",
+        "cascode_current_mirror_tail_nmos",
+        "resistor_tail_vdd",
+        "resistor_tail_gnd",
+    }
 
 
 def test_load_topologies():
@@ -155,12 +173,12 @@ def test_enumerate_circuits_nonempty():
 
 
 def test_enumerate_circuits_count():
-    """2-stage single-ended: 5 input pairs × 12 loads × 3 tails × 3 bias × 3 comp × 3 second = 4860."""
+    """2-stage single-ended: 5 input pairs × 12 loads × 6 tails × 3 bias × 3 comp × 3 second = 9720."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 4860
+    assert len(circuits) == 9720
 
 
 def test_flat_spice_structure():
@@ -172,7 +190,7 @@ def test_flat_spice_structure():
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
     }
 
@@ -194,7 +212,7 @@ def test_flat_spice_has_devices():
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
     }
 
@@ -212,7 +230,7 @@ def test_hierarchical_spice_has_subckt_definitions():
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
     }
 
@@ -244,18 +262,18 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 5 input pairs x 12 loads x 3 tails x 3 bias
-    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 43740."""
+    """3-stage single-ended (NMC/RNMC): 5 input pairs x 12 loads x 6 tails x 3 bias
+    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 87480."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 43740
+        assert len(circuits) == 87480
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~3.5M circuits (5x12x3x3 x 3^8); just
+    """FD 3-stage topologies enumerate ~7.1M circuits (5x12x6x3x3 x 3^8); just
     check the iterator yields a valid first circuit without materializing
     the full set."""
     modules = load_modules()
@@ -273,10 +291,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 43740
+    assert len(nmc) == 87480
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 43740
+    assert len(rnmc) == 87480
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
@@ -288,7 +306,7 @@ def test_three_stage_nmc_flat_spice_structure():
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
@@ -317,7 +335,7 @@ def test_three_stage_rnmc_hierarchical_spice():
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "active_load_pmos"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_drain"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap_with_nulling_resistor"],
