@@ -31,9 +31,14 @@ class PortDef:
     :param role: One of ``input``, ``output``, ``supply``, ``supply_in``,
                  or ``optional``.  Optional ports are skipped when not wired
                  in a topology.
+    :param alias_of: If set, this port is electrically the same node as the
+                      named port on the same variant (e.g. a non-cascode load's
+                      ``out1`` aliases its ``in1``). Used to recover the global
+                      net for ports that no device terminal references directly.
     """
     name: str
     role: str
+    alias_of: str | None = None
 
 
 @dataclass

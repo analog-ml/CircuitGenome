@@ -147,4 +147,11 @@ def _recover_port_nets(
             elif p.name == "gnd":
                 port_to_global["gnd"] = "gnd!"
 
+    # Ports that alias another port (e.g. a non-cascode load's out1/out2
+    # aliasing in1/in2) are never referenced directly by a device terminal,
+    # so recover their net from the aliased port instead.
+    for p in variant.ports:
+        if p.name not in port_to_global and p.alias_of and p.alias_of in port_to_global:
+            port_to_global[p.name] = port_to_global[p.alias_of]
+
     return port_to_global

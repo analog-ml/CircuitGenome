@@ -74,9 +74,9 @@ Generating circuits
 Sample output::
 
    Topology: two_stage_opamp_single_ended
-     Generated 2430 circuits
+     Generated 4050 circuits
 
-   Total: 2430 circuits written to ./circuits/
+   Total: 4050 circuits written to ./circuits/
 
 Output filenames follow the pattern ``circuit_NNNN_flat.ckt`` /
 ``circuit_NNNN_hier.ckt``, numbered sequentially within each topology.

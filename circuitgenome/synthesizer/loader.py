@@ -41,7 +41,10 @@ def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant
 
     by_category: dict[str, list[ModuleVariant]] = {}
     for entry in data["modules"]:
-        ports = [PortDef(name=p["name"], role=p["role"]) for p in entry["ports"]]
+        ports = [
+            PortDef(name=p["name"], role=p["role"], alias_of=p.get("alias_of"))
+            for p in entry["ports"]
+        ]
         devices = [
             Device(
                 ref=d["ref"],

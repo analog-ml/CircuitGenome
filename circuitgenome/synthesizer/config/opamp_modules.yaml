@@ -3,9 +3,45 @@
 #
 # Canonical port signatures by category:
 #   input_pair:       in1, in2, out1, out2, tail, vdd, gnd
-#   load:             in1, in2, out, bias, vdd, gnd
+#   load:             in1, in2, out, out1, out2, bias1, bias2, bias3,
+#                     bias_cmfb, vdd, gnd
+#                       - in1, in2  : the two differential signal nodes,
+#                                     connected to input_pair.out1 / out2
+#                       - out       : single-ended stage output. Mandatory on
+#                                     single-output cascode loads
+#                                     (folded_cascode_*_single_output,
+#                                     telescopic_cascode_*); optional/unused
+#                                     on simple and differential-output loads.
+#                       - out1, out2: differential output nodes. For simple
+#                                     (non-cascode) loads these alias in1/in2
+#                                     (out1 == in1, out2 == in2 — declared via
+#                                     `alias_of` on the port, since there is
+#                                     no folding node). For
+#                                     differential-output folded-cascode loads
+#                                     these are distinct cascode-output nodes,
+#                                     bridged to in1/in2 via cascode
+#                                     transistors (source on in1/in2, drain on
+#                                     out1/out2). Optional/unused on
+#                                     single-output cascode loads.
+#                       - bias1..3,
+#                         bias_cmfb : optional bias inputs; each variant
+#                                     declares only as many as it needs (e.g. a
+#                                     single current-source gate bias, or
+#                                     separate folding / cascode biases for
+#                                     cascode loads). bias_cmfb is the
+#                                     common-mode-feedback bias used by
+#                                     differential-output folded-cascode loads
+#                                     to set the output common-mode current.
+#                                     bias1/bias2/bias3/bias_cmfb are wired to
+#                                     up to four DISTINCT bias rails
+#                                     (net_bias1/2/3/4), produced by bias_gen's
+#                                     out1/out2/out3/out4.
 #   tail_current:     out, bias, vdd, gnd
-#   bias_generation:  ibias, out, vdd, gnd
+#   bias_generation:  ibias, out1, out2, out3, out4, vdd, gnd
+#                       - out1..out4 : four independently-generated bias rails
+#                                     (e.g. separate diode-connected legs), so
+#                                     cascode loads can receive distinct
+#                                     bias1/bias2/bias3/bias_cmfb voltages.
 #   compensation:     in, out
 #   second_stage:     in, out, bias, vdd, gnd
 #
@@ -103,95 +139,304 @@ modules:
 
   # ─── LOADS ────────────────────────────────────────────────────────────────
 
-  - name: resistor_load
+  - name: resistor_load_vdd
     category: load
-    display_name: "Resistor Load"
-    # in1 = reference-side drain (first diff pair output)
-    # out = output-side drain (second diff pair output = single-ended output)
+    display_name: "Resistor Load (to VDD)"
+    # No folding/cascode: out1/out2 alias in1/in2 (same nodes).
     ports:
-      - {name: in1,  role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: optional}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: optional}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
     devices:
       - {ref: r1, type: resistor, t1: vdd, t2: in1}
-      - {ref: r2, type: resistor, t1: vdd, t2: out}
-
+      - {ref: r2, type: resistor, t1: vdd, t2: in2}
+  - name: resistor_load_gnd
+    category: load
+    display_name: "Resistor Load (to GND)"
+    # No folding/cascode: out1/out2 alias in1/in2 (same nodes).
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: optional}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: r1, type: resistor, t1: in1, t2: gnd}
+      - {ref: r2, type: resistor, t1: in2, t2: gnd}
   - name: active_load_pmos
     category: load
     display_name: "PMOS Active Load (Current Mirror)"
-    # in1 = diode-connected reference side; out = mirror output side
+    # in1 = diode-connected reference side; in2 = mirror output side.
+    # No folding/cascode: out1/out2 alias in1/in2.
     ports:
-      - {name: in1,  role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: optional}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: optional}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
     devices:
       - {ref: m1, type: pmos, d: in1, g: in1, s: vdd, b: vdd}
-      - {ref: m2, type: pmos, d: out, g: in1, s: vdd, b: vdd}
+      - {ref: m2, type: pmos, d: in2, g: in1, s: vdd, b: vdd}
 
   - name: active_load_nmos
     category: load
     display_name: "NMOS Active Load (Current Mirror)"
+    # No folding/cascode: out1/out2 alias in1/in2.
     ports:
-      - {name: in1,  role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: optional}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: optional}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
     devices:
       - {ref: m1, type: nmos, d: in1, g: in1, s: gnd, b: gnd}
-      - {ref: m2, type: nmos, d: out, g: in1, s: gnd, b: gnd}
+      - {ref: m2, type: nmos, d: in2, g: in1, s: gnd, b: gnd}
 
-  - name: current_source_load
+  - name: current_source_load_pmos
     category: load
-    display_name: "Current Source Load"
+    display_name: "Current Source Load (PMOS)"
+    # PMOS current sources only — single bias voltage (bias1) sets both
+    # branch currents. No folding/cascode: out1/out2 alias in1/in2.
     ports:
-      - {name: in1,  role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: input}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
     devices:
-      - {ref: m1, type: pmos, d: in1, g: bias, s: vdd, b: vdd}
-      - {ref: m2, type: pmos, d: out, g: bias, s: vdd, b: vdd}
+      - {ref: m1, type: pmos, d: in1, g: bias1, s: vdd, b: vdd}
+      - {ref: m2, type: pmos, d: in2, g: bias1, s: vdd, b: vdd}
+  - name: current_source_load_nmos
+    category: load
+    display_name: "Current Source Load (NMOS)"
+    # NMOS current sources only — single bias voltage (bias1) sets both
+    # branch currents. No folding/cascode: out1/out2 alias in1/in2.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: m1, type: nmos, d: in1, g: bias1, s: gnd, b: gnd}
+      - {ref: m2, type: nmos, d: in2, g: bias1, s: gnd, b: gnd}
+  - name: folded_cascode_load_nmos_input_single_output
+    category: load
+    display_name: "Folded-Cascode Load (NMOS Input Pair, Single Output)"
+    # in1/in2 = folding nodes (PMOS folding sources mp1/mp2, gated bias1).
+    # mp3/mp4 cascode the folding nodes (gated bias2) up to a PMOS mirror
+    # reference/output pair (internal_0/out), whose current is set by the
+    # NMOS cascode mirror mn1/mn3 (reference leg) and mn2/mn4 (mirrored
+    # output leg). out = mp4.d = mn2.d is the single-ended output.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: output}
+      - {name: out1,      role: optional}
+      - {name: out2,      role: optional}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: input}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: in1,       g: bias1,      s: vdd,        b: vdd}
+      - {ref: mp2, type: pmos, d: in2,       g: bias1,      s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: internal_0, g: bias2,     s: in1,        b: vdd}
+      - {ref: mp4, type: pmos, d: out,       g: bias2,      s: in2,        b: vdd}
+      - {ref: mn1, type: nmos, d: internal_0, g: internal_0, s: internal_1, b: gnd}
+      - {ref: mn2, type: nmos, d: out,        g: internal_0, s: internal_2, b: gnd}
+      - {ref: mn3, type: nmos, d: internal_1, g: internal_1, s: gnd,       b: gnd}
+      - {ref: mn4, type: nmos, d: internal_2, g: internal_1, s: gnd,       b: gnd}
 
-  - name: folded_cascode_load
+  - name: folded_cascode_load_pmos_input_single_output
     category: load
-    display_name: "Folded-Cascode Load"
-    # PMOS current sources inject into both diff pair drain nodes (in1, out).
-    # NMOS cascode diode stack at in1 provides bias; output cascode at out.
+    display_name: "Folded-Cascode Load (PMOS Input Pair, Single Output)"
+    # Mirror image of folded_cascode_load_nmos_input_single_output: in1/in2
+    # = folding nodes (NMOS folding sinks mn3/mn4, gated bias1). mn1/mn2
+    # cascode the folding nodes (gated bias2) down to an NMOS mirror
+    # reference/output pair (internal_2/out), whose current is set by the
+    # PMOS cascode mirror mp1/mp3 (reference leg) and mp2/mp4 (mirrored
+    # output leg). out = mp4.d = mn2.d is the single-ended output.
     ports:
-      - {name: in1,  role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: input}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: output}
+      - {name: out1,      role: optional}
+      - {name: out2,      role: optional}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: input}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
     devices:
-      - {ref: mp1, type: pmos, d: in1, g: bias, s: vdd, b: vdd}
-      - {ref: mp2, type: pmos, d: out, g: bias, s: vdd, b: vdd}
-      - {ref: mn1, type: nmos, d: in1, g: in1,  s: cs1, b: cs1}
-      - {ref: mn2, type: nmos, d: cs1, g: cs1,  s: gnd, b: gnd}
-      - {ref: mn3, type: nmos, d: out, g: in1,  s: cs2, b: cs2}
-      - {ref: mn4, type: nmos, d: cs2, g: cs1,  s: gnd, b: gnd}
+      - {ref: mp1, type: pmos, d: internal_0, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp2, type: pmos, d: internal_1, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: internal_2, g: internal_2, s: internal_0, b: vdd}
+      - {ref: mp4, type: pmos, d: out,        g: internal_2, s: internal_1, b: vdd}
+      - {ref: mn1, type: nmos, d: internal_2, g: bias2,      s: in1,       b: gnd}
+      - {ref: mn2, type: nmos, d: out,        g: bias2,      s: in2,       b: gnd}
+      - {ref: mn3, type: nmos, d: in1,        g: bias1,      s: gnd,       b: gnd}
+      - {ref: mn4, type: nmos, d: in2,        g: bias1,      s: gnd,       b: gnd}
 
-  - name: telescopic_cascode_load
+  - name: folded_cascode_load_nmos_input_differential_output
     category: load
-    display_name: "Telescopic Cascode Load"
-    # Diode-connected stack at in1 (reference); cascode mirror at out.
+    display_name: "Folded-Cascode Load (NMOS Input Pair, Differential Output)"
+    # in1/in2 = folding nodes (PMOS folding sources mp1/mp2, gated bias1).
+    # mp3/mp4 cascode the folding nodes (gated bias2) up to the distinct
+    # cascode-output nodes out1/out2. mn1/mn2 cascode out1/out2 (gated
+    # bias3) down to internal_0/internal_1; mn3/mn4 are the NMOS tail
+    # current sinks for the differential branches, gated by bias_cmfb so an
+    # external common-mode feedback loop sets the output common-mode level.
     ports:
-      - {name: in1,  role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: optional}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output}
+      - {name: out2,      role: output}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: input}
+      - {name: bias3,     role: input}
+      - {name: bias_cmfb, role: input}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
     devices:
-      - {ref: mn1, type: nmos, d: in1, g: in1, s: cs1, b: cs1}
-      - {ref: mn2, type: nmos, d: cs1, g: cs1, s: gnd, b: gnd}
-      - {ref: mn3, type: nmos, d: out, g: in1, s: cs2, b: cs2}
-      - {ref: mn4, type: nmos, d: cs2, g: cs1, s: gnd, b: gnd}
+      - {ref: mp1, type: pmos, d: in1,       g: bias1,    s: vdd,        b: vdd}
+      - {ref: mp2, type: pmos, d: in2,       g: bias1,    s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: out1,      g: bias2,    s: in1,        b: vdd}
+      - {ref: mp4, type: pmos, d: out2,      g: bias2,    s: in2,        b: vdd}
+      - {ref: mn1, type: nmos, d: out1,      g: bias3,    s: internal_0, b: gnd}
+      - {ref: mn2, type: nmos, d: out2,      g: bias3,    s: internal_1, b: gnd}
+      - {ref: mn3, type: nmos, d: internal_0, g: bias_cmfb, s: gnd,      b: gnd}
+      - {ref: mn4, type: nmos, d: internal_1, g: bias_cmfb, s: gnd,      b: gnd}
+
+  - name: folded_cascode_load_pmos_input_differential_output
+    category: load
+    display_name: "Folded-Cascode Load (PMOS Input Pair, Differential Output)"
+    # Mirror image of folded_cascode_load_nmos_input_differential_output:
+    # in1/in2 = folding nodes (NMOS folding sinks mn3/mn4, gated bias1).
+    # mn1/mn2 cascode the folding nodes (gated bias2) down to the distinct
+    # cascode-output nodes out1/out2. mp3/mp4 cascode out1/out2 (gated
+    # bias3) up to internal_0/internal_1; mp1/mp2 are the PMOS tail current
+    # sources for the differential branches, gated by bias_cmfb so an
+    # external common-mode feedback loop sets the output common-mode level.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output}
+      - {name: out2,      role: output}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: input}
+      - {name: bias3,     role: input}
+      - {name: bias_cmfb, role: input}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_0, g: bias_cmfb, s: vdd,        b: vdd}
+      - {ref: mp2, type: pmos, d: internal_1, g: bias_cmfb, s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: out1,       g: bias3,    s: internal_0, b: vdd}
+      - {ref: mp4, type: pmos, d: out2,       g: bias3,    s: internal_1, b: vdd}
+      - {ref: mn1, type: nmos, d: out1,       g: bias2,    s: in1,        b: gnd}
+      - {ref: mn2, type: nmos, d: out2,       g: bias2,    s: in2,        b: gnd}
+      - {ref: mn3, type: nmos, d: in1,        g: bias1,    s: gnd,        b: gnd}
+      - {ref: mn4, type: nmos, d: in2,        g: bias1,    s: gnd,        b: gnd}
+
+  - name: telescopic_cascode_load_pmos
+    category: load
+    display_name: "Telescopic-Cascode Load (PMOS, for NMOS Input Pair, Single Output)"
+    # Self-biased telescopic stack: mp1/mp2 are PMOS cascode devices (gated
+    # by bias1) connecting in1/in2 up to internal_0/out; mn1/mn3 form a
+    # diode-connected NMOS cascode reference leg (internal_0/internal_1),
+    # mirrored by mn2/mn4 onto the output leg.
+    # out = mp2.d = mn2.d is the single-ended output.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: output}
+      - {name: out1,      role: optional}
+      - {name: out2,      role: optional}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_0, g: bias1,      s: in1,        b: vdd}
+      - {ref: mp2, type: pmos, d: out,        g: bias1,      s: in2,        b: vdd}
+      - {ref: mn1, type: nmos, d: internal_0, g: internal_0, s: internal_1, b: gnd}
+      - {ref: mn2, type: nmos, d: out,        g: internal_0, s: internal_2, b: gnd}
+      - {ref: mn3, type: nmos, d: internal_1, g: internal_1, s: gnd,        b: gnd}
+      - {ref: mn4, type: nmos, d: internal_2, g: internal_1, s: gnd,        b: gnd}
+
+  - name: telescopic_cascode_load_nmos
+    category: load
+    display_name: "Telescopic-Cascode Load (NMOS, for PMOS Input Pair, Single Output)"
+    # Mirror image of telescopic_cascode_load_pmos: mn1/mn2 are NMOS cascode
+    # devices (gated by bias1) connecting in1/in2 up to internal_2/out;
+    # mp1/mp3 form a diode-connected PMOS cascode reference leg
+    # (internal_0/internal_2), mirrored by mp2/mp4 onto the output leg.
+    # out = mp4.d = mn2.d is the single-ended output.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: output}
+      - {name: out1,      role: optional}
+      - {name: out2,      role: optional}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_0, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp2, type: pmos, d: internal_1, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: internal_2, g: internal_2, s: internal_0, b: vdd}
+      - {ref: mp4, type: pmos, d: out,        g: internal_2, s: internal_1, b: vdd}
+      - {ref: mn1, type: nmos, d: internal_2, g: bias1, s: in1, b: gnd}
+      - {ref: mn2, type: nmos, d: out,        g: bias1, s: in2, b: gnd}
 
   # ─── TAIL CURRENT SOURCES ──────────────────────────────────────────────────
 
@@ -239,41 +484,68 @@ modules:
   - name: diode_connected_mosfet_bias
     category: bias_generation
     display_name: "Diode-Connected MOSFET Bias"
+    # PMOS diode sets the ibias-side VGS reference; four independent
+    # NMOS diode-connected legs each generate their own bias rail.
     ports:
       - {name: ibias, role: input}
-      - {name: out,   role: output}
+      - {name: out1,  role: output}
+      - {name: out2,  role: output}
+      - {name: out3,  role: output}
+      - {name: out4,  role: output}
       - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
-      # PMOS diode sets VGS reference; NMOS diode mirrors the bias current
       - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd, b: vdd}
-      - {ref: mn1, type: nmos, d: out,   g: out,   s: gnd, b: gnd}
+      - {ref: mn1, type: nmos, d: out1,  g: out1,  s: gnd, b: gnd}
+      - {ref: mn2, type: nmos, d: out2,  g: out2,  s: gnd, b: gnd}
+      - {ref: mn3, type: nmos, d: out3,  g: out3,  s: gnd, b: gnd}
+      - {ref: mn4, type: nmos, d: out4,  g: out4,  s: gnd, b: gnd}
 
   - name: magic_battery_bias
     category: bias_generation
     display_name: "Magic Battery Current Mirror Bias"
-    # Uses a PMOS + NMOS pair with a self-biasing loop (Widlar-like).
+    # PMOS diode mp1 sets the ibias reference; four independent mirror
+    # legs (mpN/mnN) each generate their own bias rail.
     ports:
       - {name: ibias, role: input}
-      - {name: out,   role: output}
+      - {name: out1,  role: output}
+      - {name: out2,  role: output}
+      - {name: out3,  role: output}
+      - {name: out4,  role: output}
       - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
-      - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd,  b: vdd}
-      - {ref: mp2, type: pmos, d: out,   g: ibias, s: vdd,  b: vdd}
-      - {ref: mn1, type: nmos, d: out,   g: out,   s: gnd,  b: gnd}
+      - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd, b: vdd}
+      - {ref: mp2, type: pmos, d: out1,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn1, type: nmos, d: out1,  g: out1,  s: gnd, b: gnd}
+      - {ref: mp3, type: pmos, d: out2,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn2, type: nmos, d: out2,  g: out2,  s: gnd, b: gnd}
+      - {ref: mp4, type: pmos, d: out3,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn3, type: nmos, d: out3,  g: out3,  s: gnd, b: gnd}
+      - {ref: mp5, type: pmos, d: out4,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn4, type: nmos, d: out4,  g: out4,  s: gnd, b: gnd}
 
   - name: resistor_bias
     category: bias_generation
     display_name: "Resistor Bias"
+    # Four independent resistive dividers, one per bias rail.
     ports:
       - {name: ibias, role: input}
-      - {name: out,   role: output}
+      - {name: out1,  role: output}
+      - {name: out2,  role: output}
+      - {name: out3,  role: output}
+      - {name: out4,  role: output}
       - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
-      - {ref: r1, type: resistor, t1: vdd, t2: out}
-      - {ref: r2, type: resistor, t1: out, t2: gnd}
+      - {ref: r1, type: resistor, t1: vdd,  t2: out1}
+      - {ref: r2, type: resistor, t1: out1, t2: gnd}
+      - {ref: r3, type: resistor, t1: vdd,  t2: out2}
+      - {ref: r4, type: resistor, t1: out2, t2: gnd}
+      - {ref: r5, type: resistor, t1: vdd,  t2: out3}
+      - {ref: r6, type: resistor, t1: out3, t2: gnd}
+      - {ref: r7, type: resistor, t1: vdd,  t2: out4}
+      - {ref: r8, type: resistor, t1: out4, t2: gnd}
 
   # ─── COMPENSATION ─────────────────────────────────────────────────────────
 

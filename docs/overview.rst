@@ -45,8 +45,10 @@ Module categories
      - PMOS differential pair, NMOS differential pair, PMOS with source
        degeneration, NMOS with source degeneration, inverter-based
    * - Load
-     - Resistor, PMOS active (current mirror), NMOS active (current mirror),
-       current source, folded cascode, telescopic cascode
+     - Resistor (VDD-side / GND-side), PMOS active (current mirror), NMOS
+       active (current mirror), PMOS/NMOS current source, folded cascode
+       (PMOS/NMOS-input, single-output & differential-output), telescopic
+       cascode (PMOS/NMOS)
    * - Tail current
      - Current mirror, cascode current mirror, resistor
    * - Bias generation
@@ -98,12 +100,12 @@ Topology templates
      - Reversed Nested Miller (RNMC)
 
 With no filters, the 2-stage single-ended template alone produces
-**2 430 distinct circuits** (5 × 6 × 3 × 3 × 3 × 3). Each 3-stage
+**4 860 distinct circuits** (5 × 12 × 3 × 3 × 3 × 3). Each 3-stage
 single-ended template adds two more ``second_stage`` slots (gm2, gm3) and
-two ``compensation`` slots (Cm1, Cm2), producing **21 870 circuits**
-(5 × 6 × 3 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential template
-duplicates those four slots per output path, producing **1 771 470
-circuits** (5 × 6 × 3 × 3 × 3\ :sup:`8`).
+two ``compensation`` slots (Cm1, Cm2), producing **43 740 circuits**
+(5 × 12 × 3 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential template
+duplicates those four slots per output path, producing **3 542 940
+circuits** (5 × 12 × 3 × 3 × 3\ :sup:`8`).
 
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -145,11 +147,20 @@ internal device structure is invisible to the template.
    * - ``input_pair``
      - ``in1``, ``in2``, ``out1``, ``out2``, ``tail``, ``vdd``, ``gnd``
    * - ``load``
-     - ``in1``, ``out``, ``bias`` *(optional)*, ``vdd``, ``gnd``
+     - ``in1``, ``in2`` (differential signal nodes, driven by
+       ``input_pair.out1`` / ``out2``), ``out1``, ``out2`` (differential
+       output nodes — alias ``in1``/``in2`` for simple loads, or distinct
+       cascode-output nodes for differential-output cascode loads), ``out``
+       *(mandatory only for single-output cascode loads; optional/unused
+       otherwise)*, ``bias1``, ``bias2``, ``bias3``, ``bias_cmfb`` *(optional
+       bias inputs; each variant declares only as many as it needs)*,
+       ``vdd``, ``gnd``
    * - ``tail_current``
      - ``out``, ``bias``, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out``, ``vdd``, ``gnd``
+     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four independently
+       generated bias rails, so cascode loads can receive distinct
+       ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages), ``vdd``, ``gnd``
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``
