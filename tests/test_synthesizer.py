@@ -18,16 +18,20 @@ def test_load_modules():
 
 
 def test_load_variant_names():
-    """The load category exposes 10 variants: alias-based simple loads, plus
+    """The load category exposes 12 variants: alias-based simple loads (each
+    split into a VDD-side and a GND-side variant, since a PMOS-input pair and
+    an NMOS-input pair can't draw current from the same rail), plus
     PMOS/NMOS-input single-output and differential-output folded-cascode
     loads, plus PMOS/NMOS telescopic-cascode loads."""
     modules = load_modules()
     names = {v.name for v in modules["load"]}
     assert names == {
-        "resistor_load",
+        "resistor_load_vdd",
+        "resistor_load_gnd",
         "active_load_pmos",
         "active_load_nmos",
-        "current_source_load",
+        "current_source_load_pmos",
+        "current_source_load_nmos",
         "folded_cascode_load_nmos_input_single_output",
         "folded_cascode_load_pmos_input_single_output",
         "folded_cascode_load_nmos_input_differential_output",
@@ -35,6 +39,19 @@ def test_load_variant_names():
         "telescopic_cascode_load_pmos",
         "telescopic_cascode_load_nmos",
     }
+
+
+def test_load_ports_identical_across_variants():
+    """Every load variant declares the same canonical 11-port signature, in
+    the same order — only the per-port `role` (and `alias_of`) differs."""
+    modules = load_modules()
+    canonical = [
+        "in1", "in2", "out", "out1", "out2",
+        "bias1", "bias2", "bias3", "bias_cmfb", "vdd", "gnd",
+    ]
+    for variant in modules["load"]:
+        names = [p.name for p in variant.ports]
+        assert names == canonical, f"{variant.name}: {names}"
 
 
 def test_cascode_loads_do_not_use_signal_nodes_as_bias():
@@ -70,6 +87,7 @@ def test_folded_cascode_bias_port_roles():
         assert roles["bias1"] == "input"
         assert roles["bias2"] == "input"
         assert roles["bias3"] == "optional"
+        assert roles["bias_cmfb"] == "optional"
 
     for name in (
         "telescopic_cascode_load_pmos",
@@ -79,6 +97,7 @@ def test_folded_cascode_bias_port_roles():
         assert roles["bias1"] == "input"
         assert roles["bias2"] == "optional"
         assert roles["bias3"] == "optional"
+        assert roles["bias_cmfb"] == "optional"
 
     for name in (
         "folded_cascode_load_nmos_input_differential_output",
@@ -136,12 +155,12 @@ def test_enumerate_circuits_nonempty():
 
 
 def test_enumerate_circuits_count():
-    """2-stage single-ended: 5 input pairs × 10 loads × 3 tails × 3 bias × 3 comp × 3 second = 4050."""
+    """2-stage single-ended: 5 input pairs × 12 loads × 3 tails × 3 bias × 3 comp × 3 second = 4860."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 4050
+    assert len(circuits) == 4860
 
 
 def test_flat_spice_structure():
@@ -152,7 +171,7 @@ def test_flat_spice_structure():
     # Use the simplest variants for a deterministic test
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
-        "load": [v for v in modules["load"] if v.name == "resistor_load"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
     }
@@ -174,7 +193,7 @@ def test_flat_spice_has_devices():
 
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
-        "load": [v for v in modules["load"] if v.name == "resistor_load"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
     }
@@ -192,7 +211,7 @@ def test_hierarchical_spice_has_subckt_definitions():
 
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
-        "load": [v for v in modules["load"] if v.name == "resistor_load"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
     }
@@ -202,7 +221,7 @@ def test_hierarchical_spice_has_subckt_definitions():
 
     # Should have module subcircuit definitions
     assert ".subckt differential_pair_pmos" in spice
-    assert ".subckt resistor_load" in spice
+    assert ".subckt resistor_load_gnd" in spice
     # Should have top-level definition
     assert ".subckt test_opamp_hier" in spice
     # Should have X-instances
@@ -225,18 +244,18 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 5 input pairs x 10 loads x 3 tails x 3 bias
-    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 36450."""
+    """3-stage single-ended (NMC/RNMC): 5 input pairs x 12 loads x 3 tails x 3 bias
+    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 43740."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 36450
+        assert len(circuits) == 43740
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~2.95M circuits (5x10x3x3 x 3^8); just
+    """FD 3-stage topologies enumerate ~3.5M circuits (5x12x3x3 x 3^8); just
     check the iterator yields a valid first circuit without materializing
     the full set."""
     modules = load_modules()
@@ -254,10 +273,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 36450
+    assert len(nmc) == 43740
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 36450
+    assert len(rnmc) == 43740
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
@@ -268,7 +287,7 @@ def test_three_stage_nmc_flat_spice_structure():
 
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
-        "load": [v for v in modules["load"] if v.name == "resistor_load"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
