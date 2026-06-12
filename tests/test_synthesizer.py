@@ -1,4 +1,5 @@
 import pytest
+from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bias_generation
 from circuitgenome.synthesizer.compatibility import is_combination_valid
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits, synthesize
@@ -472,3 +473,203 @@ def test_three_stage_rnmc_hierarchical_spice():
     assert "Xthird_stage" in spice
     assert "Xcomp1" in spice
     assert "Xcomp2" in spice
+
+
+def _variant_map_for(modules, topo, overrides):
+    """Build a variant_map covering every slot in *topo*: ``overrides`` picks
+    a variant by name for specific slots, every other slot gets its first
+    available variant (its choice doesn't affect bias-rail usage)."""
+    variant_map = {}
+    for slot in topo.slots:
+        if slot.name in overrides:
+            variant_map[slot.name] = next(
+                v for v in modules[slot.category] if v.name == overrides[slot.name]
+            )
+        else:
+            variant_map[slot.name] = modules[slot.category][0]
+    return variant_map
+
+
+def test_needed_bias_outputs_simple_load_one_stage():
+    """A simple load (no cascode bias inputs) in a topology with no
+    second_stage slot needs none of the four bias rails."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    variant_map = _variant_map_for(modules, topo, {"load": "resistor_load_gnd"})
+    assert needed_bias_outputs(topo, variant_map) == set()
+
+
+def test_needed_bias_outputs_telescopic_cascode_one_stage():
+    """A telescopic cascode load only references bias1 (bias2/bias3/bias_cmfb
+    are declared optional but unused)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    variant_map = _variant_map_for(modules, topo, {"load": "telescopic_cascode_load_pmos"})
+    assert needed_bias_outputs(topo, variant_map) == {1}
+
+
+def test_needed_bias_outputs_folded_cascode_single_output():
+    """A single-output folded-cascode load references bias1 and bias2."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    variant_map = _variant_map_for(
+        modules, topo, {"load": "folded_cascode_load_nmos_input_single_output"}
+    )
+    assert needed_bias_outputs(topo, variant_map) == {1, 2}
+
+
+def test_needed_bias_outputs_folded_cascode_differential_output():
+    """A differential-output folded-cascode load references all four bias
+    rails (bias1, bias2, bias3, bias_cmfb)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    variant_map = _variant_map_for(
+        modules, topo, {"load": "folded_cascode_load_nmos_input_differential_output"}
+    )
+    assert needed_bias_outputs(topo, variant_map) == {1, 2, 3, 4}
+
+
+def test_needed_bias_outputs_second_stage_forces_out1():
+    """Even with a simple load, two_stage_opamp_single_ended's second_stage
+    slot taps out1 for its own gate bias, so out1 is always needed."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    variant_map = _variant_map_for(modules, topo, {"load": "resistor_load_gnd"})
+    assert needed_bias_outputs(topo, variant_map) == {1}
+
+
+@pytest.mark.parametrize("variant_name", ["diode_connected_mosfet_bias", "resistor_bias"])
+@pytest.mark.parametrize(
+    "needed,expected_out_ports,expected_n_devices",
+    [
+        (set(), [], 1),
+        ({1}, ["out1"], 2),
+        ({1, 2}, ["out1", "out2"], 3),
+        ({1, 2, 3}, ["out1", "out2", "out3"], 4),
+    ],
+)
+def test_prune_bias_generation_ladder_variants(variant_name, needed, expected_out_ports, expected_n_devices):
+    """Ladder bias generators (diode-connected / resistor) keep the first
+    max(needed)+1 devices and rewire the last kept device's far terminal to
+    gnd, so the chain still terminates correctly."""
+    modules = load_modules()
+    variant = next(v for v in modules["bias_generation"] if v.name == variant_name)
+
+    pruned = prune_bias_generation(variant, needed)
+
+    out_ports = [p.name for p in pruned.ports if p.name.startswith("out")]
+    assert out_ports == expected_out_ports
+    assert {"ibias", "gnd"} <= {p.name for p in pruned.ports}
+    assert len(pruned.devices) == expected_n_devices
+
+    last = pruned.devices[-1]
+    if last.type == "resistor":
+        assert last.terminals["t2"] == "gnd"
+    else:
+        assert last.terminals["s"] == "gnd"
+        assert last.terminals["b"] == "gnd"
+
+
+def test_prune_bias_generation_ladder_keeps_variant_unchanged_when_all_needed():
+    modules = load_modules()
+    diode = next(v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias")
+    assert prune_bias_generation(diode, {1, 2, 3, 4}) is diode
+
+
+@pytest.mark.parametrize(
+    "needed,expected_out_ports,expected_n_devices",
+    [
+        (set(), [], 1),
+        ({1}, ["out1"], 3),
+        ({1, 2}, ["out1", "out2"], 5),
+        ({1, 2, 3}, ["out1", "out2", "out3"], 7),
+    ],
+)
+def test_prune_bias_generation_magic_battery_independent_legs(needed, expected_out_ports, expected_n_devices):
+    """magic_battery_bias keeps its shared reference device (mp1) plus only
+    the mirror legs for needed output rails."""
+    modules = load_modules()
+    variant = next(v for v in modules["bias_generation"] if v.name == "magic_battery_bias")
+
+    pruned = prune_bias_generation(variant, needed)
+
+    out_ports = [p.name for p in pruned.ports if p.name.startswith("out")]
+    assert out_ports == expected_out_ports
+    assert len(pruned.devices) == expected_n_devices
+    assert any(dev.ref == "mp1" for dev in pruned.devices)
+    for dev in pruned.devices:
+        refs = {t for t in dev.terminals.values() if t.startswith("out")}
+        assert refs <= set(expected_out_ports)
+
+
+def test_enumerate_circuits_prunes_bias_generation_for_simple_load_one_stage():
+    """one_stage_opamp has no second_stage slot, so a simple load (which
+    needs none of the four bias rails) prunes diode_connected_mosfet_bias
+    down to a single device tying ibias directly to gnd."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports] == ["ibias", "gnd"]
+    assert len(bias_variant.devices) == 1
+
+    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
+    assert len(bias_devices) == 1
+    (dev,) = bias_devices.values()
+    assert dev.terminals["d"] == "ibias"
+    assert dev.terminals["g"] == "ibias"
+    assert dev.terminals["s"] == "gnd!"
+
+
+def test_enumerate_circuits_prunes_bias_generation_for_two_stage_simple_load():
+    """two_stage_opamp_single_ended's second_stage taps out1, so even a
+    simple load keeps exactly out1: diode_connected_mosfet_bias is pruned to
+    a 2-device chain ibias->out1->gnd."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports] == ["ibias", "out1", "gnd"]
+    assert len(bias_variant.devices) == 2
+
+    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
+    last_dev = bias_devices["bias_gen_mn2"]
+    assert last_dev.terminals["d"] == "net_bias1"
+    assert last_dev.terminals["s"] == "gnd!"
+
+
+def test_enumerate_circuits_does_not_prune_when_all_bias_outputs_needed():
+    """A differential-output folded-cascode load needs all four bias rails,
+    so diode_connected_mosfet_bias is left unchanged (5 devices, out1..out4)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports] == ["ibias", "out1", "out2", "out3", "out4", "gnd"]
+    assert len(bias_variant.devices) == 5
