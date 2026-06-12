@@ -133,6 +133,26 @@ extend the filter to a new or edited variant, add the matching ``polarity:``
 tag in YAML — no code changes needed
 (``circuitgenome/synthesizer/compatibility.py``).
 
+Bias output pruning
+~~~~~~~~~~~~~~~~~~~~
+
+Every ``bias_generation`` variant exposes four output rails (``out1``..``out4``)
+so it can feed the most demanding load -- a differential-output folded-cascode,
+which needs all four. Most loads need fewer: simple loads (resistor/active/
+current-source) need none, telescopic cascode loads need one, and
+single-output folded-cascode loads need two. In multi-stage topologies, the
+``second_stage``/``third_stage`` slots also tap ``out1`` for their own gate
+bias, so ``out1`` is mandatory whenever such a slot exists, regardless of the
+load.
+
+``enumerate_circuits`` computes which of ``out1``..``out4`` are actually
+consumed by the other slots in each combination and prunes the
+``bias_generation`` variant down to just those rails, dropping the now-unused
+output ports and the devices that exist only to drive them (e.g. unused
+diode-connected MOSFETs or ladder resistors). This reduces the device count of
+the assembled circuit without changing which combinations are enumerated --
+see :mod:`circuitgenome.synthesizer.bias_pruning`.
+
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

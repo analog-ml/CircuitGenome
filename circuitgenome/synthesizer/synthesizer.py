@@ -17,6 +17,7 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
+from .bias_pruning import needed_bias_outputs, prune_bias_generation
 from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
@@ -91,6 +92,11 @@ def enumerate_circuits(
     :func:`~circuitgenome.synthesizer.compatibility.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
 
+    The ``bias_generation`` variant in each combination is pruned to only the
+    ``out1``..``out4`` rails actually consumed by the other slots (see
+    :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
+    removing unused output ports and their dedicated devices.
+
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
                     return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
@@ -123,6 +129,11 @@ def enumerate_circuits(
         }
         if not is_combination_valid(variant_map):
             continue
+
+        needed = needed_bias_outputs(topology, variant_map)
+        for slot in topology.slots:
+            if slot.category == "bias_generation":
+                variant_map[slot.name] = prune_bias_generation(variant_map[slot.name], needed)
 
         all_devices: list[tuple[str, Device]] = []
         for slot in topology.slots:

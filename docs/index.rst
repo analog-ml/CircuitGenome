@@ -32,6 +32,7 @@ design exploration, or topology studies.
 
    api/synthesizer
    api/compatibility
+   api/bias_pruning
    api/models
    api/loader
    api/netlist
