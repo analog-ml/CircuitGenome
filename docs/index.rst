@@ -31,6 +31,7 @@ design exploration, or topology studies.
    :caption: API Reference
 
    api/synthesizer
+   api/compatibility
    api/models
    api/loader
    api/netlist

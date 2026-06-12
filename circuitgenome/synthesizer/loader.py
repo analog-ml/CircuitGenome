@@ -59,6 +59,7 @@ def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant
             display_name=entry["display_name"],
             ports=ports,
             devices=devices,
+            polarity=entry.get("polarity"),
         )
         by_category.setdefault(variant.category, []).append(variant)
     return by_category

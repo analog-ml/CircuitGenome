@@ -1,4 +1,5 @@
 import pytest
+from circuitgenome.synthesizer.compatibility import is_combination_valid
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits, synthesize
 from circuitgenome.synthesizer.netlist import to_flat_spice, to_hierarchical_spice
@@ -183,6 +184,93 @@ def test_bias_generation_ladder_variants_chain_ibias_to_gnd():
         assert nodes_in_chain == {"ibias", "out1", "out2", "out3", "out4", "gnd"}
 
 
+def test_polarity_tags_cover_input_pair_load_tail_current():
+    """input_pair, load, and tail_current variants are split into pmos_input
+    and nmos_input polarity groups (except inverter_based_input, which has no
+    current-direction requirement); bias_generation variants are untagged
+    (compatible with either polarity)."""
+    modules = load_modules()
+
+    input_pair_polarities = {v.name: v.polarity for v in modules["input_pair"]}
+    assert input_pair_polarities["inverter_based_input"] is None
+    for name in ("differential_pair_pmos", "differential_pair_pmos_degenerated"):
+        assert input_pair_polarities[name] == "pmos_input"
+    for name in ("differential_pair_nmos", "differential_pair_nmos_degenerated"):
+        assert input_pair_polarities[name] == "nmos_input"
+
+    load_polarities = [v.polarity for v in modules["load"]]
+    assert load_polarities.count("pmos_input") == 6
+    assert load_polarities.count("nmos_input") == 6
+
+    tail_polarities = [v.polarity for v in modules["tail_current"]]
+    assert tail_polarities.count("pmos_input") == 3
+    assert tail_polarities.count("nmos_input") == 3
+
+    assert all(v.polarity is None for v in modules["bias_generation"])
+
+
+def test_is_combination_valid_denies_polarity_mismatches():
+    """differential_pair_nmos (drains out1/out2 into the tail) can't pair with
+    active_load_nmos (which also sinks out1/out2 to gnd) or
+    current_mirror_tail_pmos (which also sources current into the tail) --
+    both leave a node with no DC current path. The mirror-image pmos/vdd
+    pairing is invalid for the same reason."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+
+    bad_combos = [
+        {"input_pair": "differential_pair_nmos", "load": "active_load_nmos", "tail_current": "current_mirror_tail_nmos"},
+        {"input_pair": "differential_pair_nmos", "load": "active_load_pmos", "tail_current": "current_mirror_tail_pmos"},
+        {"input_pair": "differential_pair_pmos", "load": "resistor_load_vdd", "tail_current": "resistor_tail_vdd"},
+    ]
+    for combo in bad_combos:
+        variant_map = {slot: by_name[name] for slot, name in combo.items()}
+        assert not is_combination_valid(variant_map), combo
+
+    good_combo = {
+        "input_pair": by_name["differential_pair_nmos"],
+        "load": by_name["active_load_pmos"],
+        "tail_current": by_name["current_mirror_tail_nmos"],
+    }
+    assert is_combination_valid(good_combo)
+
+
+def test_inverter_based_input_compatible_with_every_load_and_tail():
+    """inverter_based_input has no polarity tag, so it has no
+    current-direction requirement: it's valid alongside every load x
+    tail_current combination, including ones that mismatch each other's
+    polarity tags."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    input_pair = by_name["inverter_based_input"]
+
+    for load in modules["load"]:
+        for tail in modules["tail_current"]:
+            variant_map = {"input_pair": input_pair, "load": load, "tail_current": tail}
+            assert is_combination_valid(variant_map), (load.name, tail.name)
+
+
+def test_enumerate_circuits_excludes_polarity_mismatches():
+    """Every synthesized 2-stage single-ended circuit has a load and
+    tail_current whose polarity tag (if any) matches its input_pair's
+    polarity tag (if any)."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+
+    for circuit in enumerate_circuits(topo, modules):
+        input_pair = circuit.variant_map["input_pair"]
+        if input_pair.polarity is None:
+            continue
+        for slot_name in ("load", "tail_current"):
+            variant = circuit.variant_map[slot_name]
+            assert variant.polarity in (None, input_pair.polarity), (
+                f"{circuit.name}: input_pair={input_pair.name} "
+                f"({input_pair.polarity}) vs {slot_name}={variant.name} "
+                f"({variant.polarity})"
+            )
+
+
 def test_load_topologies():
     topologies = load_topologies()
     names = [t.name for t in topologies]
@@ -203,12 +291,14 @@ def test_enumerate_circuits_nonempty():
 
 
 def test_enumerate_circuits_count():
-    """2-stage single-ended: 5 input pairs × 12 loads × 6 tails × 3 bias × 3 comp × 3 second = 9720."""
+    """2-stage single-ended: of the 5 input pairs x 12 loads x 6 tails = 360
+    input_pair/load/tail_current combinations, only 144 are polarity-valid
+    (see test_polarity_filter_*) x 3 bias x 3 comp x 3 second = 3888."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 9720
+    assert len(circuits) == 3888
 
 
 def test_flat_spice_structure():
@@ -292,14 +382,15 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 5 input pairs x 12 loads x 6 tails x 3 bias
-    x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 87480."""
+    """3-stage single-ended (NMC/RNMC): 144 polarity-valid input_pair/load/tail_current
+    combinations (see test_enumerate_circuits_count) x 3 bias x 3 second stages
+    x 3 third stages x 3 comp1 x 3 comp2 = 34992."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 87480
+        assert len(circuits) == 34992
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
@@ -321,10 +412,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 87480
+    assert len(nmc) == 34992
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 87480
+    assert len(rnmc) == 34992
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 

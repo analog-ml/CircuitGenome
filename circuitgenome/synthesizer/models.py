@@ -53,12 +53,20 @@ class ModuleVariant:
     :param display_name: Human-readable name shown in listings.
     :param ports: Ordered list of port definitions.
     :param devices: Ordered list of primitive devices.
+    :param polarity: Electrical compatibility tag, either ``"pmos_input"``,
+                     ``"nmos_input"``, or ``None``. Variants that share a
+                     current-flow direction with a given ``input_pair``
+                     polarity declare the matching tag; ``None`` means the
+                     variant is compatible with either polarity. Used by
+                     :func:`~circuitgenome.synthesizer.compatibility.is_combination_valid`
+                     to filter out combinations with no DC current path.
     """
     name: str
     category: str
     display_name: str
     ports: list[PortDef]
     devices: list[Device]
+    polarity: str | None = None
 
     def port_names(self) -> set[str]:
         """Return the set of all port names on this variant."""
