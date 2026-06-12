@@ -17,7 +17,13 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
-from .bias_pruning import needed_bias_outputs, prune_bias_generation
+from .bias_pruning import (
+    assign_tail_bias_rail,
+    extend_bias_generation,
+    needed_bias_outputs,
+    prune_bias_generation,
+    tail_current_needs_bias,
+)
 from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
@@ -97,6 +103,18 @@ def enumerate_circuits(
     :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
     removing unused output ports and their dedicated devices.
 
+    The ``tail_current`` variant's local ``bias`` port (used by current-mirror
+    and cascode-current-mirror tails to set up their mirror reference -- see
+    :func:`~circuitgenome.synthesizer.bias_pruning.tail_current_needs_bias`) is
+    wired to its own dedicated ``net_bias{N}`` rail, distinct from any rail used
+    by ``load``/``second_stage``/``third_stage``. If all four of
+    ``out1``..``out4`` are already needed by those slots, the
+    ``bias_generation`` variant is extended with a fifth leg (``out5`` ->
+    ``net_bias5``) -- see
+    :func:`~circuitgenome.synthesizer.bias_pruning.assign_tail_bias_rail` and
+    :func:`~circuitgenome.synthesizer.bias_pruning.extend_bias_generation`.
+    Resistor-tail variants declare ``bias`` as ``optional`` and need no rail.
+
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
                     return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
@@ -131,14 +149,30 @@ def enumerate_circuits(
             continue
 
         needed = needed_bias_outputs(topology, variant_map)
-        for slot in topology.slots:
-            if slot.category == "bias_generation":
-                variant_map[slot.name] = prune_bias_generation(variant_map[slot.name], needed)
+
+        tail_slot = next(s for s in topology.slots if s.category == "tail_current")
+        bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
+
+        tail_rail: int | None = None
+        final_needed = needed
+        bias_variant = variant_map[bias_slot.name]
+        if tail_current_needs_bias(variant_map[tail_slot.name]):
+            tail_rail = assign_tail_bias_rail(needed)
+            final_needed = needed | {tail_rail}
+            if tail_rail == 5:
+                bias_variant = extend_bias_generation(bias_variant)
+
+        variant_map[bias_slot.name] = prune_bias_generation(bias_variant, final_needed)
 
         all_devices: list[tuple[str, Device]] = []
         for slot in topology.slots:
             variant = variant_map[slot.name]
             slot_connections = topology.slot_connections(slot.name)
+            if tail_rail is not None:
+                if slot.name == tail_slot.name:
+                    slot_connections = {**slot_connections, "bias": f"net_bias{tail_rail}"}
+                elif tail_rail == 5 and slot.name == bias_slot.name:
+                    slot_connections = {**slot_connections, "out5": "net_bias5"}
             port_net_map = _build_port_net_map(slot.name, variant, slot_connections)
             all_devices.extend(_resolve_devices(slot.name, variant, port_net_map))
 
