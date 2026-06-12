@@ -17,6 +17,7 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
+from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
 
@@ -86,6 +87,10 @@ def enumerate_circuits(
     """Yield one :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
     for every valid combination of module variants in *topology*.
 
+    Combinations that mix incompatible ``polarity`` tags (see
+    :func:`~circuitgenome.synthesizer.compatibility.is_combination_valid`) are
+    skipped -- these would leave a shared node with no DC current path.
+
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
                     return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
@@ -116,6 +121,8 @@ def enumerate_circuits(
             slot.name: variant
             for slot, variant in zip(topology.slots, combo)
         }
+        if not is_combination_valid(variant_map):
+            continue
 
         all_devices: list[tuple[str, Device]] = []
         for slot in topology.slots:

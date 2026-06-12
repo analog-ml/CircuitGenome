@@ -59,6 +59,18 @@
 #   MOSFET: d (drain), g (gate), s (source), b (bulk)
 #   Resistor: t1, t2
 #   Capacitor: p (plus), m (minus)
+#
+# Cross-category compatibility (`polarity` field):
+#   input_pair, load, and tail_current variants whose current-flow direction
+#   depends on the input pair's polarity declare `polarity: pmos_input` or
+#   `polarity: nmos_input`. enumerate_circuits() skips any combination that
+#   mixes the two tags (see circuitgenome.synthesizer.compatibility), since
+#   that leaves a shared node with no DC current path -- e.g. an NMOS input
+#   pair (drains out1/out2 into the tail) paired with active_load_nmos (also
+#   sinks out1/out2 to gnd), or with current_mirror_tail_pmos (sources
+#   current into the tail instead of sinking it). Variants compatible with
+#   either polarity (inverter_based_input, and -- for now -- all
+#   bias_generation variants) omit the field.
 
 modules:
 
@@ -66,6 +78,7 @@ modules:
 
   - name: differential_pair_pmos
     category: input_pair
+    polarity: pmos_input
     display_name: "PMOS Differential Pair"
     ports:
       - {name: in1,  role: input}
@@ -81,6 +94,7 @@ modules:
 
   - name: differential_pair_nmos
     category: input_pair
+    polarity: nmos_input
     display_name: "NMOS Differential Pair"
     ports:
       - {name: in1,  role: input}
@@ -96,6 +110,7 @@ modules:
 
   - name: differential_pair_pmos_degenerated
     category: input_pair
+    polarity: pmos_input
     display_name: "PMOS Differential Pair with Source Degeneration"
     ports:
       - {name: in1,  role: input}
@@ -113,6 +128,7 @@ modules:
 
   - name: differential_pair_nmos_degenerated
     category: input_pair
+    polarity: nmos_input
     display_name: "NMOS Differential Pair with Source Degeneration"
     ports:
       - {name: in1,  role: input}
@@ -151,6 +167,7 @@ modules:
 
   - name: resistor_load_vdd
     category: load
+    polarity: nmos_input
     display_name: "Resistor Load (to VDD)"
     # No folding/cascode: out1/out2 alias in1/in2 (same nodes).
     ports:
@@ -170,6 +187,7 @@ modules:
       - {ref: r2, type: resistor, t1: vdd, t2: in2}
   - name: resistor_load_gnd
     category: load
+    polarity: pmos_input
     display_name: "Resistor Load (to GND)"
     # No folding/cascode: out1/out2 alias in1/in2 (same nodes).
     ports:
@@ -189,6 +207,7 @@ modules:
       - {ref: r2, type: resistor, t1: in2, t2: gnd}
   - name: active_load_pmos
     category: load
+    polarity: nmos_input
     display_name: "PMOS Active Load (Current Mirror)"
     # in1 = diode-connected reference side; in2 = mirror output side.
     # No folding/cascode: out1/out2 alias in1/in2.
@@ -210,6 +229,7 @@ modules:
 
   - name: active_load_nmos
     category: load
+    polarity: pmos_input
     display_name: "NMOS Active Load (Current Mirror)"
     # No folding/cascode: out1/out2 alias in1/in2.
     ports:
@@ -230,6 +250,7 @@ modules:
 
   - name: current_source_load_pmos
     category: load
+    polarity: nmos_input
     display_name: "Current Source Load (PMOS)"
     # PMOS current sources only — single bias voltage (bias1) sets both
     # branch currents. No folding/cascode: out1/out2 alias in1/in2.
@@ -250,6 +271,7 @@ modules:
       - {ref: m2, type: pmos, d: in2, g: bias1, s: vdd, b: vdd}
   - name: current_source_load_nmos
     category: load
+    polarity: pmos_input
     display_name: "Current Source Load (NMOS)"
     # NMOS current sources only — single bias voltage (bias1) sets both
     # branch currents. No folding/cascode: out1/out2 alias in1/in2.
@@ -270,6 +292,7 @@ modules:
       - {ref: m2, type: nmos, d: in2, g: bias1, s: gnd, b: gnd}
   - name: folded_cascode_load_nmos_input_single_output
     category: load
+    polarity: nmos_input
     display_name: "Folded-Cascode Load (NMOS Input Pair, Single Output)"
     # in1/in2 = folding nodes (PMOS folding sources mp1/mp2, gated bias1).
     # mp3/mp4 cascode the folding nodes (gated bias2) up to a PMOS mirror
@@ -300,6 +323,7 @@ modules:
 
   - name: folded_cascode_load_pmos_input_single_output
     category: load
+    polarity: pmos_input
     display_name: "Folded-Cascode Load (PMOS Input Pair, Single Output)"
     # Mirror image of folded_cascode_load_nmos_input_single_output: in1/in2
     # = folding nodes (NMOS folding sinks mn3/mn4, gated bias1). mn1/mn2
@@ -331,6 +355,7 @@ modules:
 
   - name: folded_cascode_load_nmos_input_differential_output
     category: load
+    polarity: nmos_input
     display_name: "Folded-Cascode Load (NMOS Input Pair, Differential Output)"
     # in1/in2 = folding nodes (PMOS folding sources mp1/mp2, gated bias1).
     # mp3/mp4 cascode the folding nodes (gated bias2) up to the distinct
@@ -362,6 +387,7 @@ modules:
 
   - name: folded_cascode_load_pmos_input_differential_output
     category: load
+    polarity: pmos_input
     display_name: "Folded-Cascode Load (PMOS Input Pair, Differential Output)"
     # Mirror image of folded_cascode_load_nmos_input_differential_output:
     # in1/in2 = folding nodes (NMOS folding sinks mn3/mn4, gated bias1).
@@ -394,6 +420,7 @@ modules:
 
   - name: telescopic_cascode_load_pmos
     category: load
+    polarity: nmos_input
     display_name: "Telescopic-Cascode Load (PMOS, for NMOS Input Pair, Single Output)"
     # Self-biased telescopic stack: mp1/mp2 are PMOS cascode devices (gated
     # by bias1) connecting in1/in2 up to internal_0/out; mn1/mn3 form a
@@ -422,6 +449,7 @@ modules:
 
   - name: telescopic_cascode_load_nmos
     category: load
+    polarity: pmos_input
     display_name: "Telescopic-Cascode Load (NMOS, for PMOS Input Pair, Single Output)"
     # Mirror image of telescopic_cascode_load_pmos: mn1/mn2 are NMOS cascode
     # devices (gated by bias1) connecting in1/in2 up to internal_2/out;
@@ -459,6 +487,7 @@ modules:
 
   - name: current_mirror_tail_pmos
     category: tail_current
+    polarity: pmos_input
     display_name: "Current Mirror Tail (PMOS, for PMOS Input Pair)"
     ports:
       - {name: out,  role: output}
@@ -473,6 +502,7 @@ modules:
 
   - name: current_mirror_tail_nmos
     category: tail_current
+    polarity: nmos_input
     display_name: "Current Mirror Tail (NMOS, for NMOS Input Pair)"
     ports:
       - {name: out,  role: output}
@@ -487,6 +517,7 @@ modules:
 
   - name: cascode_current_mirror_tail_pmos
     category: tail_current
+    polarity: pmos_input
     display_name: "Cascode Current Mirror Tail (PMOS, for PMOS Input Pair)"
     # Self-biased 2-stack PMOS cascode mirror: mp1/mp3 (reference leg, both
     # diode-connected) generate the cascode-gate bias (internal_0) and the
@@ -505,6 +536,7 @@ modules:
 
   - name: cascode_current_mirror_tail_nmos
     category: tail_current
+    polarity: nmos_input
     display_name: "Cascode Current Mirror Tail (NMOS, for NMOS Input Pair)"
     # Mirror image of cascode_current_mirror_tail_pmos: mn1/mn3 (reference
     # leg, diode-connected) generate the cascode-gate bias (internal_0) and
@@ -523,6 +555,7 @@ modules:
 
   - name: resistor_tail_vdd
     category: tail_current
+    polarity: pmos_input
     display_name: "Resistor Tail Current (from VDD, for PMOS Input Pair)"
     ports:
       - {name: out,  role: output}
@@ -534,6 +567,7 @@ modules:
 
   - name: resistor_tail_gnd
     category: tail_current
+    polarity: nmos_input
     display_name: "Resistor Tail Current (to GND, for NMOS Input Pair)"
     ports:
       - {name: out,  role: output}

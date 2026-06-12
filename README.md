@@ -52,12 +52,34 @@ The synthesizer works by combining **module variants** according to a **topology
 | `three_stage_opamp_nmc_fully_differential` | 3 | Fully differential | Nested Miller (NMC) |
 | `three_stage_opamp_rnmc_fully_differential` | 3 | Fully differential | Reversed Nested Miller (RNMC) |
 
-A 2-stage single-ended topology with no filters yields **9720 unique circuits**
-(5 × 12 × 6 × 3 × 3 × 3 module combinations). Each 3-stage single-ended topology
-adds two more `second_stage` slots (gm2, gm3) and two `compensation` slots
-(Cm1, Cm2), yielding **87 480 circuits** (5 × 12 × 6 × 3 × 3 × 3 × 3 × 3). Each
-3-stage fully-differential topology duplicates those four slots per output
-path, yielding **7 085 880 circuits** (5 × 12 × 6 × 3 × 3⁸).
+Of the 5 × 12 × 6 = 360 possible `input_pair` / `load` / `tail_current`
+combinations, only 144 have compatible PMOS/NMOS polarities (see "Module
+compatibility filter" below) — the rest are filtered out by
+`enumerate_circuits`. A 2-stage single-ended topology therefore yields
+**3888 unique circuits** (144 × 3 × 3 × 3 module combinations). Each 3-stage
+single-ended topology adds two more `second_stage` slots (gm2, gm3) and two
+`compensation` slots (Cm1, Cm2), yielding **34 992 circuits**
+(144 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential topology duplicates
+those four slots per output path, yielding **2 834 352 circuits** (144 × 3⁹).
+
+### Module compatibility filter
+
+A circuit only has a real DC current path if its `input_pair`, `load`, and
+`tail_current` agree on polarity. For example, `differential_pair_nmos`
+draws current out of `out1`/`out2` into the tail, so it needs a `load` that
+*sources* current into `out1`/`out2` from vdd and a `tail_current` that
+*sinks* the tail node to gnd — pairing it with `active_load_nmos` (which also
+sinks to gnd) or `current_mirror_tail_pmos` (which also sources into the
+tail) leaves a node with no current path.
+
+Each `input_pair`, `load`, and `tail_current` variant declares a `polarity`
+field in `opamp_modules.yaml`: `pmos_input`, `nmos_input`, or omitted for
+variants that work with either (`inverter_based_input`, and currently all
+`bias_generation` variants). `enumerate_circuits` skips any combination where
+`load`/`tail_current`'s `polarity` (if set) doesn't match `input_pair`'s. To
+extend the filter to a new or edited variant, just add the matching
+`polarity:` tag in YAML — no code changes needed
+(`circuitgenome/synthesizer/compatibility.py`).
 
 ### Three-stage compensation schemes
 
