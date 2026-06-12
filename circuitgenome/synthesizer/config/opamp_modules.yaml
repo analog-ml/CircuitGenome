@@ -420,8 +420,8 @@ modules:
 
   - name: telescopic_cascode_load_pmos
     category: load
-    polarity: nmos_input
-    display_name: "Telescopic-Cascode Load (PMOS, for NMOS Input Pair, Single Output)"
+    polarity: pmos_input
+    display_name: "Telescopic-Cascode Load (PMOS, for PMOS Input Pair, Single Output)"
     # Self-biased telescopic stack: mp1/mp2 are PMOS cascode devices (gated
     # by bias1) connecting in1/in2 up to internal_0/out; mn1/mn3 form a
     # diode-connected NMOS cascode reference leg (internal_0/internal_1),
@@ -449,8 +449,8 @@ modules:
 
   - name: telescopic_cascode_load_nmos
     category: load
-    polarity: pmos_input
-    display_name: "Telescopic-Cascode Load (NMOS, for PMOS Input Pair, Single Output)"
+    polarity: nmos_input
+    display_name: "Telescopic-Cascode Load (NMOS, for NMOS Input Pair, Single Output)"
     # Mirror image of telescopic_cascode_load_pmos: mn1/mn2 are NMOS cascode
     # devices (gated by bias1) connecting in1/in2 up to internal_2/out;
     # mp1/mp3 form a diode-connected PMOS cascode reference leg
