@@ -153,6 +153,36 @@ def test_tail_current_variant_names():
     }
 
 
+def test_bias_generation_ladder_variants_chain_ibias_to_gnd():
+    """diode_connected_mosfet_bias and resistor_bias are ladders that carry
+    ibias from the ibias port down to gnd, tapping out1..out4 along the way:
+    each forms a single ibias->out1->out2->out3->out4->gnd chain (no
+    disconnected devices, no unused ibias port), and neither declares a vdd
+    port."""
+    modules = load_modules()
+    by_name = {v.name: v for v in modules["bias_generation"]}
+
+    for name in ("diode_connected_mosfet_bias", "resistor_bias"):
+        variant = by_name[name]
+        port_names = {p.name for p in variant.ports}
+        assert "vdd" not in port_names
+        assert "ibias" in port_names
+
+        nodes_in_chain = set()
+        for dev in variant.devices:
+            if dev.type == "resistor":
+                nodes_in_chain.add(dev.terminals["t1"])
+                nodes_in_chain.add(dev.terminals["t2"])
+            else:
+                assert dev.terminals["g"] == dev.terminals["d"], (
+                    f"{name}.{dev.ref}: not diode-connected (g != d)"
+                )
+                nodes_in_chain.add(dev.terminals["d"])
+                nodes_in_chain.add(dev.terminals["s"])
+
+        assert nodes_in_chain == {"ibias", "out1", "out2", "out3", "out4", "gnd"}
+
+
 def test_load_topologies():
     topologies = load_topologies()
     names = [t.name for t in topologies]

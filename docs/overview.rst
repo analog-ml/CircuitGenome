@@ -53,7 +53,8 @@ Module categories
      - Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS),
        resistor (VDD-side / GND-side)
    * - Bias generation
-     - Diode-connected MOSFET, magic battery current mirror, resistor
+     - Diode-connected MOSFET ladder, magic battery current mirror, resistor
+       ladder
    * - Compensation
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
@@ -159,9 +160,13 @@ internal device structure is invisible to the template.
    * - ``tail_current``
      - ``out``, ``bias``, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four independently
-       generated bias rails, so cascode loads can receive distinct
-       ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages), ``vdd``, ``gnd``
+     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four bias rails, so
+       cascode loads can receive distinct
+       ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages — either four
+       independent legs each mirroring ``ibias``, or four taps along a
+       single ``ibias``-to-``gnd`` ladder), ``vdd`` *(optional — only
+       declared by variants that source current from vdd; ladder variants
+       run from ``ibias`` to ``gnd`` and omit it)*, ``gnd``
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``
