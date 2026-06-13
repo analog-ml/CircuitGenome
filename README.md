@@ -53,16 +53,21 @@ The synthesizer works by combining **module variants** according to a **topology
 | `three_stage_opamp_rnmc_fully_differential` | 3 | Fully differential | Reversed Nested Miller (RNMC) |
 
 Of the 5 × 12 × 6 = 360 possible `input_pair` / `load` / `tail_current`
-combinations, only 144 have compatible PMOS/NMOS polarities (see "Module
+combinations, only 144 have compatible PMOS/NMOS polarities (see "Polarity
 compatibility filter" below) — the rest are filtered out by
-`enumerate_circuits`. A 2-stage single-ended topology therefore yields
-**3888 unique circuits** (144 × 3 × 3 × 3 module combinations). Each 3-stage
-single-ended topology adds two more `second_stage` slots (gm2, gm3) and two
-`compensation` slots (Cm1, Cm2), yielding **34 992 circuits**
-(144 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential topology duplicates
-those four slots per output path, yielding **2 834 352 circuits** (144 × 3⁹).
+`enumerate_circuits`. Of those 144, the "Output-cardinality compatibility
+filter" below further splits them by which output type the `load` supports:
+**120** are valid for single-ended topologies and **96** are valid for
+fully-differential topologies. A 1-stage topology therefore yields
+**360 unique circuits** (120 × 3). A 2-stage single-ended topology yields
+**3240 circuits** (120 × 3 × 3 × 3); a 2-stage fully-differential topology
+yields **23 328 circuits** (96 × 3⁵). Each 3-stage single-ended topology adds
+two more `second_stage` slots (gm2, gm3) and two `compensation` slots (Cm1,
+Cm2), yielding **29 160 circuits** (120 × 3⁵). Each 3-stage
+fully-differential topology duplicates those four slots per output path,
+yielding **1 889 568 circuits** (96 × 3⁹).
 
-### Module compatibility filter
+### Polarity compatibility filter
 
 A circuit only has a real DC current path if its `input_pair`, `load`, and
 `tail_current` agree on polarity. For example, `differential_pair_nmos`
@@ -80,6 +85,28 @@ variants that work with either (`inverter_based_input`, and currently all
 extend the filter to a new or edited variant, just add the matching
 `polarity:` tag in YAML — no code changes needed
 (`circuitgenome/synthesizer/compatibility.py`).
+
+### Output-cardinality compatibility filter
+
+A topology wires `load.out1`/`out2` to the same nets as `in1`/`in2`
+unconditionally, but only connects `load.out` to the stage's output node in
+`single_ended` topologies. Folded-cascode/telescopic-cascode loads with a
+single output (`folded_cascode_load_*_input_single_output`,
+`telescopic_cascode_load_{pmos,nmos}`) declare `out` as mandatory, so they'd
+be left floating in a `fully_differential` topology. Folded-cascode loads
+with differential outputs (`folded_cascode_load_*_input_differential_output`)
+declare `out1`/`out2` as mandatory cascode-output nodes, so they'd be shorted
+to `in1`/`in2` in a `single_ended` topology.
+
+These 6 `load` variants declare an `output_cardinality` field in
+`opamp_modules.yaml`: `"single"` (compatible only with `single_ended`) or
+`"differential"` (compatible only with `fully_differential`); the other 6
+`load` variants (resistor/active/current-source) are untagged and compatible
+with either. `enumerate_circuits` skips any combination where `load`'s
+`output_cardinality` (if set) doesn't match the topology's `output_type`. To
+extend the filter to a new or edited `load` variant, just add the matching
+`output_cardinality:` tag in YAML — no code changes needed
+(`circuitgenome/synthesizer/output_compatibility.py`).
 
 ### Three-stage compensation schemes
 

@@ -21,6 +21,7 @@ from .bias_pruning import needed_bias_outputs, prune_bias_generation
 from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
+from .output_compatibility import is_output_type_compatible
 
 
 def _resolve_devices(
@@ -92,6 +93,12 @@ def enumerate_circuits(
     :func:`~circuitgenome.synthesizer.compatibility.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
 
+    Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't
+    match *topology*'s ``output_type`` (see
+    :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`)
+    are also skipped -- these would leave the load's mandatory cascode-output
+    port either floating (unconnected) or shorted to its input.
+
     The ``bias_generation`` variant in each combination is pruned to only the
     ``out1``..``out7`` rails actually consumed by the other slots (see
     :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
@@ -136,6 +143,8 @@ def enumerate_circuits(
             for slot, variant in zip(topology.slots, combo)
         }
         if not is_combination_valid(variant_map):
+            continue
+        if not is_output_type_compatible(topology, variant_map):
             continue
 
         needed = needed_bias_outputs(topology, variant_map)
