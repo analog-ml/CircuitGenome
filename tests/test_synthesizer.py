@@ -1,5 +1,6 @@
 import pytest
 from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bias_generation
+from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
 from circuitgenome.synthesizer.compatibility import is_combination_valid
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
@@ -114,9 +115,10 @@ def test_folded_cascode_bias_port_roles():
 
 
 def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails():
-    """bias1/bias2/bias3/bias_cmfb of a differential-output folded-cascode
-    load each resolve to a distinct net_bias rail (no floating gates, no
-    accidental rail sharing)."""
+    """bias1/bias2/bias3 of a differential-output folded-cascode load each
+    resolve to a distinct net_bias rail (no floating gates, no accidental
+    rail sharing); bias_cmfb resolves to net_cmfb_out, driven by the cmfb
+    module's output."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
@@ -126,6 +128,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
     }
@@ -135,7 +138,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
 
     assert len(load_devices) == 8
     bias_gates = {dev.terminals["g"] for dev in load_devices.values()}
-    assert bias_gates == {"net_bias1", "net_bias2", "net_bias3", "net_bias4"}
+    assert bias_gates == {"net_bias1", "net_bias2", "net_bias3", "net_cmfb_out"}
 
 
 def test_tail_current_variant_names():
@@ -154,6 +157,22 @@ def test_tail_current_variant_names():
         "resistor_tail_vdd",
         "resistor_tail_gnd",
     }
+
+
+def test_cmfb_variant_names_and_ports():
+    """The cmfb category exposes 2 variants (resistive-sense 5T OTA and
+    differential-difference amplifier), both sharing the canonical
+    in1/in2/vref/bias/out/vdd/gnd port signature and untagged for polarity/
+    output_cardinality (compatible with any combination)."""
+    modules = load_modules()
+    names = {v.name for v in modules["cmfb"]}
+    assert names == {"resistive_sense_cmfb", "dda_cmfb"}
+
+    for variant in modules["cmfb"]:
+        port_names = [p.name for p in variant.ports]
+        assert port_names == ["in1", "in2", "vref", "bias", "out", "vdd", "gnd"], variant.name
+        assert variant.polarity is None
+        assert variant.output_cardinality is None
 
 
 def test_bias_generation_variants_share_uniform_leg_structure():
@@ -363,6 +382,82 @@ def test_enumerate_circuits_excludes_output_cardinality_mismatches():
         assert circuit.variant_map["load"].output_cardinality != "single"
 
 
+def test_is_cmfb_compatible_differential_load_allows_both_cmfb_variants():
+    """A load with output_cardinality "differential" has a real bias_cmfb
+    consumer (folded_cascode_load_*_input_differential_output's mn3/mn4 or
+    mp1/mp2), so either cmfb variant produces a meaningfully different
+    circuit -- both are compatible."""
+    modules = load_modules()
+    diff_load = next(v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output")
+
+    for cmfb_variant in modules["cmfb"]:
+        assert is_cmfb_compatible({"load": diff_load, "cmfb": cmfb_variant})
+
+
+def test_is_cmfb_compatible_other_loads_only_allow_canonical_variant():
+    """A load with output_cardinality None declares bias_cmfb as optional and
+    never references it, so cmfb.out drives nothing -- only
+    CANONICAL_CMFB_VARIANT is allowed through, to avoid enumerating the other
+    cmfb variant as a duplicate no-op circuit."""
+    modules = load_modules()
+    untagged_load = next(v for v in modules["load"] if v.name == "resistor_load_gnd")
+    cmfb_by_name = {v.name: v for v in modules["cmfb"]}
+
+    assert is_cmfb_compatible({"load": untagged_load, "cmfb": cmfb_by_name[CANONICAL_CMFB_VARIANT]})
+    for name, variant in cmfb_by_name.items():
+        if name == CANONICAL_CMFB_VARIANT:
+            continue
+        assert not is_cmfb_compatible({"load": untagged_load, "cmfb": variant})
+
+
+def test_is_cmfb_compatible_topology_without_cmfb_slot():
+    """A variant_map with no "cmfb" key (single_ended topologies have no cmfb
+    slot) is always compatible -- the filter is a no-op."""
+    modules = load_modules()
+    untagged_load = next(v for v in modules["load"] if v.name == "resistor_load_gnd")
+    assert is_cmfb_compatible({"load": untagged_load})
+
+
+def test_prune_cmfb_keeps_variant_for_differential_load():
+    """A load with output_cardinality "differential" has a real bias_cmfb
+    consumer -- the cmfb variant is returned unchanged."""
+    modules = load_modules()
+    diff_load = next(v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output")
+    cmfb_variant = next(v for v in modules["cmfb"] if v.name == CANONICAL_CMFB_VARIANT)
+
+    assert prune_cmfb(cmfb_variant, diff_load) is cmfb_variant
+
+
+def test_prune_cmfb_empties_variant_for_other_loads():
+    """A load with output_cardinality None has no bias_cmfb consumer -- the
+    cmfb variant is replaced with an empty placeholder (no ports, no
+    devices), so it contributes nothing to the assembled circuit and
+    cmfb.bias is no longer "needed" by needed_bias_outputs."""
+    modules = load_modules()
+    untagged_load = next(v for v in modules["load"] if v.name == "resistor_load_gnd")
+    cmfb_variant = next(v for v in modules["cmfb"] if v.name == CANONICAL_CMFB_VARIANT)
+
+    pruned = prune_cmfb(cmfb_variant, untagged_load)
+    assert pruned.name == "cmfb_absent"
+    assert pruned.ports == []
+    assert pruned.devices == []
+
+
+def test_enumerate_circuits_cmfb_present_iff_differential_load():
+    """For every synthesized fully-differential circuit, the cmfb slot's
+    variant has devices iff the load's output_cardinality is "differential" --
+    otherwise cmfb is pruned to an empty placeholder and no cmfb_* devices
+    appear in the assembled circuit."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
+
+    for circuit in enumerate_circuits(topo, modules):
+        is_differential = circuit.variant_map["load"].output_cardinality == "differential"
+        assert bool(circuit.variant_map["cmfb"].devices) == is_differential
+        cmfb_device_refs = [ref for ref, _ in circuit.devices if ref.startswith("cmfb_")]
+        assert bool(cmfb_device_refs) == is_differential
+
+
 def test_load_topologies():
     topologies = load_topologies()
     names = [t.name for t in topologies]
@@ -399,13 +494,18 @@ def test_enumerate_circuits_count():
 def test_enumerate_circuits_fully_differential_count():
     """2-stage fully-differential: of the 144 polarity-valid input_pair/load/
     tail_current combinations, 96 have an output_cardinality compatible with
-    fully_differential (the 48 "single"-cardinality combos are excluded) x 3
-    bias x (3 comp x 3 second)^2 = 96 x 3^5 = 23328."""
+    fully_differential (the 48 "single"-cardinality combos are excluded). Of
+    those 96, 24 use a "differential"-cardinality load -- the only loads with
+    a real bias_cmfb consumer -- and keep both cmfb variants (24 x 2 = 48);
+    the other 72 have no bias_cmfb consumer, so is_cmfb_compatible collapses
+    cmfb to 1 canonical variant (72 x 1 = 72). 48 + 72 = 120 effective
+    load/cmfb combinations, x 3 bias x (3 comp x 3 second)^2 = 120 x 3^5 =
+    29160."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 23328
+    assert len(circuits) == 29160
 
 
 def test_flat_spice_structure():
@@ -501,16 +601,17 @@ def test_enumerate_three_stage_single_ended_count():
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~1.89M circuits (96 x 3^9); just
-    check the iterator yields a valid first circuit without materializing
-    the full set."""
+    """FD 3-stage topologies enumerate ~2.36M circuits (120 x 3^9, see
+    test_enumerate_circuits_fully_differential_count for the 120 factor);
+    just check the iterator yields a valid first circuit without
+    materializing the full set."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_fully_differential", "three_stage_opamp_rnmc_fully_differential"):
         topo = next(t for t in topologies if t.name == name)
         circuit = next(enumerate_circuits(topo, modules))
         assert circuit.topology == name
-        assert circuit.external_ports == ["ibias", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
+        assert circuit.external_ports == ["ibias", "vcm_ref", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
 
 
 def test_synthesize_three_stage_single_ended_filters():
@@ -841,6 +942,7 @@ def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
     }
@@ -1002,7 +1104,11 @@ def test_enumerate_circuits_third_stage_uses_rail_6():
 def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
     """two_stage_opamp_fully_differential's second_stage_p and second_stage_n
     both statically wire bias to the same rail (net_bias5) -- shared via the
-    topology's wiring, with no per-combination grouping logic needed."""
+    topology's wiring, with no per-combination grouping logic needed.
+    resistor_load_gnd has output_cardinality None (no bias_cmfb consumer), so
+    is_cmfb_compatible/prune_cmfb collapse the cmfb slot to an empty
+    placeholder and rail 4 (cmfb.bias) is not needed -- only rail 5
+    survives."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
     simple_modules = {
@@ -1010,6 +1116,7 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
@@ -1018,7 +1125,10 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5"]
-    assert len(bias_variant.devices) == 3  # shared ref + 1 leg
+    assert len(bias_variant.devices) == 3  # shared ref + 1 leg (rail 5)
+
+    cmfb_variant = circuit.variant_map["cmfb"]
+    assert cmfb_variant.devices == []
 
     p_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_p_")}
     n_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_n_")}
@@ -1029,13 +1139,14 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
 
 
 def test_enumerate_circuits_all_seven_bias_rails_independent():
-    """A differential-output folded-cascode load (rails 1-4), second_stage and
-    third_stage (rails 5 and 6), and a current-mirror tail (rail 7) together
-    need all seven bias rails -- bias_gen is unpruned (15 devices), and each
-    role's devices reference a distinct net_bias{N}. A differential-output
-    folded-cascode load is only output_cardinality-compatible with
-    fully_differential topologies, so this uses the fully-differential 3-stage
-    NMC topology."""
+    """A differential-output folded-cascode load (rails 1-3, plus
+    bias_cmfb -> net_cmfb_out via the cmfb slot), second_stage and
+    third_stage (rails 5 and 6), a current-mirror tail (rail 7), and the cmfb
+    slot itself (rail 4, via cmfb.bias) together need all seven bias rails --
+    bias_gen is unpruned (15 devices), and each role's devices reference a
+    distinct net_bias{N}. A differential-output folded-cascode load is only
+    output_cardinality-compatible with fully_differential topologies, so this
+    uses the fully-differential 3-stage NMC topology."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
     simple_modules = {
@@ -1043,6 +1154,7 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
@@ -1059,8 +1171,14 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     second_stage_terms = {t for ref, dev in circuit.devices if ref.startswith("second_stage_") for t in dev.terminals.values()}
     third_stage_terms = {t for ref, dev in circuit.devices if ref.startswith("third_stage_") for t in dev.terminals.values()}
     tail_terms = {t for ref, dev in circuit.devices if ref.startswith("tail_current_") for t in dev.terminals.values()}
+    cmfb_terms = {t for ref, dev in circuit.devices if ref.startswith("cmfb_") for t in dev.terminals.values()}
 
-    assert {"net_bias1", "net_bias2", "net_bias3", "net_bias4"} <= load_terms
+    assert {"net_bias1", "net_bias2", "net_bias3"} <= load_terms
+    assert "net_cmfb_out" in load_terms
     assert "net_bias5" in second_stage_terms
     assert "net_bias6" in third_stage_terms
     assert "net_bias7" in tail_terms
+    assert "net_bias4" in cmfb_terms
+    assert "net_diff1" in cmfb_terms
+    assert "net_diff2" in cmfb_terms
+    assert "net_cmfb_out" in cmfb_terms

@@ -37,6 +37,7 @@ The synthesizer works by combining **module variants** according to a **topology
 | Load | Resistor (VDD-side / GND-side), PMOS/NMOS active (current mirror), PMOS/NMOS current source, folded cascode (PMOS/NMOS-input, single-output & differential-output), telescopic cascode (PMOS/NMOS) |
 | Tail current | Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS), resistor (VDD-side / GND-side) |
 | Bias generation | Diode-connected MOSFET ladder, magic battery (current mirror), resistor ladder |
+| CMFB | Resistive-sense 5T OTA, differential-difference amplifier (DDA) — present only when `load` has a differential-output cascode (`output_cardinality: "differential"`) |
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
 | Second stage | Common-source, common-drain (source follower), differential OTA |
 
@@ -61,11 +62,14 @@ filter" below further splits them by which output type the `load` supports:
 fully-differential topologies. A 1-stage topology therefore yields
 **360 unique circuits** (120 × 3). A 2-stage single-ended topology yields
 **3240 circuits** (120 × 3 × 3 × 3); a 2-stage fully-differential topology
-yields **23 328 circuits** (96 × 3⁵). Each 3-stage single-ended topology adds
+also has a `cmfb` slot, but (per the "CMFB compatibility filter" below) only
+the 24-of-96 combinations using a `"differential"`-cardinality `load` keep
+both `cmfb` variants -- 48 + 72 = 120 effective load/cmfb combinations, so it
+yields **29 160 circuits** (120 × 3⁵). Each 3-stage single-ended topology adds
 two more `second_stage` slots (gm2, gm3) and two `compensation` slots (Cm1,
 Cm2), yielding **29 160 circuits** (120 × 3⁵). Each 3-stage
-fully-differential topology duplicates those four slots per output path,
-yielding **1 889 568 circuits** (96 × 3⁹).
+fully-differential topology duplicates those four slots per output path
+(keeping the single `cmfb` slot), yielding **2 361 960 circuits** (120 × 3⁹).
 
 ### Polarity compatibility filter
 
@@ -107,6 +111,25 @@ with either. `enumerate_circuits` skips any combination where `load`'s
 extend the filter to a new or edited `load` variant, just add the matching
 `output_cardinality:` tag in YAML — no code changes needed
 (`circuitgenome/synthesizer/output_compatibility.py`).
+
+### CMFB compatibility filter
+
+`fully_differential` topologies have a `cmfb` slot, wired
+`cmfb.out -> net_cmfb_out -> load.bias_cmfb`. Of the 12 `load` variants, only
+the 2 tagged `output_cardinality: "differential"`
+(`folded_cascode_load_*_input_differential_output`) declare `bias_cmfb` as a
+real consumer (gating `mn3`/`mn4` or `mp1`/`mp2`); the other 10 declare it
+`optional` and never reference it, so `net_cmfb_out` would drive nothing.
+
+For a `load` whose `output_cardinality` isn't `"differential"`,
+`enumerate_circuits` only allows the canonical `resistive_sense_cmfb` variant
+through (avoiding a duplicate-circuit enumeration of `dda_cmfb`), then prunes
+it to an empty placeholder — it contributes no devices, `cmfb.bias` is no
+longer a needed bias rail, and the `vcm_ref` external port is left
+unconnected for these circuits. To extend: tag a new or edited `load` variant
+with `output_cardinality: "differential"` (and give it a real `bias_cmfb`
+consumer) to make it a genuine `cmfb` consumer — no code changes needed
+(`circuitgenome/synthesizer/cmfb_compatibility.py`).
 
 ### Three-stage compensation schemes
 

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .bias_pruning import needed_bias_outputs, prune_bias_generation
+from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
 from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
@@ -99,6 +100,15 @@ def enumerate_circuits(
     are also skipped -- these would leave the load's mandatory cascode-output
     port either floating (unconnected) or shorted to its input.
 
+    For topologies with a ``cmfb`` slot, combinations where ``load``'s
+    ``output_cardinality`` isn't ``"differential"`` (i.e. ``cmfb.out`` would
+    drive nothing) are restricted to the canonical ``cmfb`` variant (see
+    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`),
+    and that variant is then pruned to an empty placeholder (see
+    :func:`~circuitgenome.synthesizer.cmfb_compatibility.prune_cmfb`) so it
+    contributes no devices and ``cmfb.bias`` is not counted as a needed bias
+    rail.
+
     The ``bias_generation`` variant in each combination is pruned to only the
     ``out1``..``out7`` rails actually consumed by the other slots (see
     :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
@@ -146,6 +156,10 @@ def enumerate_circuits(
             continue
         if not is_output_type_compatible(topology, variant_map):
             continue
+        if not is_cmfb_compatible(variant_map):
+            continue
+        if "cmfb" in variant_map:
+            variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
 
         needed = needed_bias_outputs(topology, variant_map)
         bias_slot = next(s for s in topology.slots if s.category == "bias_generation")

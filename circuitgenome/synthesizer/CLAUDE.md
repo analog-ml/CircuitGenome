@@ -16,14 +16,16 @@ SPICE netlists.
   YAML device-entry keys except `ref`/`type` (so `d/g/s/b` for MOSFETs,
   `t1/t2` for resistors, `p/m` for capacitors — whatever the YAML uses).
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
-  category (input_pair, load, tail_current, bias_generation, compensation,
-  second_stage).
+  category (input_pair, load, tail_current, bias_generation, cmfb,
+  compensation, second_stage).
 - `config/opamp_topologies.yaml` — topology templates: slots (which
   categories are needed, and under what local slot name) + `{slot, port,
   net}` connection rules.
 - `compatibility.py` — polarity compatibility filter (`is_combination_valid`).
 - `output_compatibility.py` — output-cardinality compatibility filter
   (`is_output_type_compatible`).
+- `cmfb_compatibility.py` — cmfb-slot compatibility filter and pruning
+  (`is_cmfb_compatible`, `prune_cmfb`).
 - `bias_pruning.py` — bias-rail pruning (`needed_bias_outputs`,
   `prune_bias_generation`).
 - `synthesizer.py` — `enumerate_circuits`/`synthesize`, the orchestration
@@ -61,6 +63,14 @@ list is current.
   topologies); `net_bias7` connects `out7` to `tail_current.bias`. All of
   these connections are static (no per-combination rewiring).
   `resistor_tail_vdd/gnd` declare `bias` as `optional` and are never wired.
+  In `fully_differential` topologies, `net_bias4` also feeds the `cmfb`
+  slot's `bias` port; `load.bias_cmfb` itself is repointed to
+  `net_cmfb_out` (the `cmfb` slot's `out`), not `net_bias4` directly.
+  `cmfb.vref` is wired to `vcm_ref`, a new external port present only on
+  `fully_differential` topologies. However, `cmfb` is only a real consumer
+  of rail 4 when `load.output_cardinality == "differential"` (see "CMFB
+  compatibility filter" below) -- otherwise `cmfb` is pruned to an empty
+  placeholder, rail 4 is not needed, and `vcm_ref` is left unconnected.
 
 ## Polarity compatibility filter (`compatibility.py`)
 
@@ -85,6 +95,23 @@ declares `out` as mandatory, which only a `single_ended` topology wires;
 (untagged loads, i.e. resistor/active/current-source, impose no constraint).
 To support a new/edited `load` variant, just add the right
 `output_cardinality:` tag in YAML — no code changes needed.
+
+## CMFB compatibility filter & pruning (`cmfb_compatibility.py`)
+
+Of the 12 `load` variants, only the 2 tagged `output_cardinality:
+"differential"` declare `bias_cmfb` as a real `role: input` consumer; the
+other 10 declare it `role: optional` and never reference it, so
+`cmfb.out -> net_cmfb_out -> load.bias_cmfb` drives nothing.
+`is_cmfb_compatible` rejects combinations where `load`'s
+`output_cardinality` isn't `"differential"` and `cmfb` isn't
+`CANONICAL_CMFB_VARIANT` (`resistive_sense_cmfb`) -- this collapses the
+otherwise-duplicate choice between `cmfb` variants for those loads down to
+one. `prune_cmfb` then replaces that canonical variant with an empty
+placeholder (`name="cmfb_absent"`, no ports, no devices) for the same loads,
+so it contributes nothing and `cmfb.bias` is not counted by
+`needed_bias_outputs`. To support a new/edited `load` variant as a genuine
+`cmfb` consumer, tag it `output_cardinality: "differential"` and give it a
+real `bias_cmfb: role: input` -- no code changes needed here.
 
 ## Bias-rail pruning (`bias_pruning.py`)
 
@@ -125,14 +152,18 @@ it for future per-combination filters/transforms:
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_output_type_compatible(topology, variant_map)` — skip on
    output-cardinality mismatch.
-4. `needed_bias_outputs` → `prune_bias_generation`, replacing
+4. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
+   irrelevant for this `load` (see "CMFB compatibility filter" above).
+5. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
+   `variant_map["cmfb"]` (only if the topology has a `cmfb` slot).
+6. `needed_bias_outputs` → `prune_bias_generation`, replacing
    `variant_map[bias_gen_slot]`.
-5. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+7. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
    then `_build_port_net_map` + `_resolve_devices` → `all_devices`.
-6. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+8. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
    devices)`.
 
-Any new per-combination transform should slot in between steps 3 and 5,
+Any new per-combination transform should slot in between steps 4 and 7,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 
