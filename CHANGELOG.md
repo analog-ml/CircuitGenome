@@ -3,6 +3,51 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-13 (4)
+
+PR #15.
+
+### Added
+
+- `cmfb_compatibility.py`: `is_cmfb_compatible(variant_map)` and
+  `prune_cmfb(variant, load)`, called from `enumerate_circuits` right after
+  `is_output_type_compatible`.
+
+### Changed
+
+- Of the 12 `load` variants, only the 2 tagged `output_cardinality:
+  "differential"` (`folded_cascode_load_{nmos,pmos}_input_differential_output`)
+  declare `bias_cmfb` as a real consumer; the other 10 declare it `optional`
+  and never reference it, so `cmfb.out -> net_cmfb_out -> load.bias_cmfb` drove
+  nothing for those loads. For such combinations, `is_cmfb_compatible` now
+  restricts `cmfb` to a single canonical variant (`resistive_sense_cmfb`,
+  avoiding duplicate-circuit enumeration of `dda_cmfb`), and `prune_cmfb`
+  replaces it with an empty placeholder (`cmfb_absent`, no ports, no devices).
+- Rail 4 (`net_bias4`/`cmfb.bias`) is "needed" only when `load`'s
+  `output_cardinality` is `"differential"` -- reverting to the pre-CMFB
+  condition (previously rail 4 was always needed for FD circuits).
+- Per-topology circuit counts: `two_stage_opamp_fully_differential` 46,656 ->
+  29,160 (120 x 3^5); `three_stage_opamp_{nmc,rnmc}_fully_differential`
+  ~3,779,136 -> 2,361,960 each (120 x 3^9).
+
+### Docs
+
+- `docs/overview.rst`, `circuitgenome/synthesizer/CLAUDE.md`, `README.md`
+  updated with the new filter, the 48+72=120 effective load/cmfb combination
+  count, and corrected FD circuit counts. Added `docs/api/cmfb_compatibility.rst`.
+
+### Notes
+
+- For circuits where `cmfb` is pruned (~75% of FD circuits), the `vcm_ref`
+  external port is declared in the SPICE subckt header but left
+  unconnected -- the first "sometimes NC" external port in this codebase.
+- Out of scope: `active_load_*`/`current_source_*` loads also have
+  CM-undefined FD outputs and could genuinely benefit from CMFB, but giving
+  them a real `bias_cmfb` consumer would require redesigning those variants'
+  internals -- a separate, larger follow-up.
+- Follow-up to Phase B (PR #14). No changes to `models.py`, `loader.py`,
+  `compatibility.py`, `output_compatibility.py`, or `bias_pruning.py`.
+
 ## 2026-06-13 (3)
 
 PR [#14](https://github.com/analog-ml/CircuitGenome/pull/14).

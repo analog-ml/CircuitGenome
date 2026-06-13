@@ -62,7 +62,10 @@ Module categories
        senses the load's first-stage differential outputs
        (``net_diff1``/``net_diff2``) against an external ``vcm_ref`` and
        drives the differential-output cascode load's ``bias_cmfb`` input.
-       Present only in ``fully_differential`` topologies.
+       Present only when ``load``'s ``output_cardinality`` is
+       ``"differential"``; otherwise pruned to an empty placeholder (see
+       "CMFB compatibility filter" below) and ``vcm_ref`` is left
+       unconnected.
    * - Compensation
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
@@ -123,13 +126,18 @@ The 1-stage template therefore produces **360 distinct circuits**
 (120 × 3). The 2-stage single-ended template produces **3 240 circuits**
 (120 × 3 × 3 × 3); the 2-stage fully-differential template, which has two
 ``compensation`` slots, two ``second_stage`` slots (one per output path), and
-one ``cmfb`` slot (2 variants), produces **46 656 circuits**
-(96 × 3\ :sup:`5` × 2). Each 3-stage single-ended template adds two more
+one ``cmfb`` slot, produces **29 160 circuits** (120 × 3\ :sup:`5`). Of the 96
+fully-differential-compatible ``input_pair``/``load``/``tail_current``
+combinations, only the 24 using a ``"differential"``-cardinality load keep
+both ``cmfb`` variants (24 × 2 = 48); the other 72 collapse ``cmfb`` to a
+single canonical variant (72 × 1 = 72) -- 48 + 72 = 120 effective
+load/``cmfb`` combinations, × 3\ :sup:`5` = 29 160 (see "CMFB compatibility
+filter" below). Each 3-stage single-ended template adds two more
 ``second_stage`` slots (gm2, gm3) and two ``compensation`` slots (Cm1, Cm2) on
 top of the 1-stage base, producing **29 160 circuits** (120 × 3\ :sup:`5`).
 Each 3-stage fully-differential template duplicates those four slots per
 output path (and keeps the single ``cmfb`` slot), producing
-**3 779 136 circuits** (96 × 3\ :sup:`9` × 2).
+**2 361 960 circuits** (120 × 3\ :sup:`9`).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -183,6 +191,30 @@ To extend the filter to a new or edited ``load`` variant, add the matching
 ``output_cardinality:`` tag in YAML — no code changes needed
 (``circuitgenome/synthesizer/output_compatibility.py``).
 
+CMFB compatibility filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``fully_differential`` topologies have a ``cmfb`` slot, wired
+``cmfb.out -> net_cmfb_out -> load.bias_cmfb``. Of the 12 ``load`` variants,
+only the 2 tagged ``output_cardinality: "differential"``
+(``folded_cascode_load_*_input_differential_output``) declare ``bias_cmfb`` as
+a real ``role: input`` consumer (gating ``mn3``/``mn4`` or ``mp1``/``mp2``);
+the other 10 declare it ``role: optional`` and never reference it, so
+``net_cmfb_out`` would drive nothing.
+
+For a ``load`` whose ``output_cardinality`` isn't ``"differential"``, only the
+canonical ``resistive_sense_cmfb`` variant is allowed through -- the
+``dda_cmfb`` choice would otherwise be enumerated as a duplicate no-op
+circuit. That canonical variant is then pruned to an empty placeholder (no
+ports, no devices), so it contributes no devices to the assembled circuit and
+``cmfb.bias`` is no longer counted as a needed bias rail. The
+``vcm_ref`` external port (statically present on every ``fully_differential``
+topology) is left unconnected for these circuits. To extend: tag a new or
+edited ``load`` variant with ``output_cardinality: "differential"`` (and give
+it a real ``bias_cmfb: role: input`` consumer) to make it a genuine ``cmfb``
+consumer -- no code changes needed
+(``circuitgenome/synthesizer/cmfb_compatibility.py``).
+
 Bias-rail pruning
 ~~~~~~~~~~~~~~~~~
 
@@ -202,11 +234,14 @@ declare ``bias`` as ``optional`` and never need ``out7``. In a single-stage
 topology there is no ``second_stage``/``third_stage`` slot, so ``out5``/
 ``out6`` are never needed.
 
-In ``fully_differential`` topologies, the ``cmfb`` slot's mandatory ``bias``
-port is also wired to ``out4`` (``net_bias4``), so rail 4 is needed for
-*every* FD circuit regardless of which ``load`` variant is chosen -- the
-"only a differential-output folded-cascode needs all four" rule above applies
-only to ``single_ended`` topologies, which have no ``cmfb`` slot.
+In ``fully_differential`` topologies, the ``cmfb`` slot's ``bias`` port is
+also wired to ``out4`` (``net_bias4``), but (per the "CMFB compatibility
+filter" above) ``cmfb`` is pruned to an empty placeholder unless ``load``'s
+``output_cardinality`` is ``"differential"`` -- so rail 4 is needed under
+exactly the same condition as the "only a differential-output folded-cascode
+needs all four" rule above, whether ``single_ended`` (no ``cmfb`` slot, rail 4
+needed via ``load.bias_cmfb`` directly) or ``fully_differential`` (rail 4
+needed via ``cmfb.bias``).
 
 ``enumerate_circuits`` computes which of ``out1``..``out7`` are actually
 consumed by the other slots in each combination (any subset of ``{1..7}``, not
@@ -296,8 +331,10 @@ internal device structure is invisible to the template.
        from ``bias_generation.out4``), ``out`` (drives ``load.bias_cmfb`` via
        ``net_cmfb_out``), ``vdd``, ``gnd``. Two variants:
        ``resistive_sense_cmfb`` (resistive averager + 5T OTA) and
-       ``dda_cmfb`` (differential-difference amplifier). Present only in
-       ``fully_differential`` topologies
+       ``dda_cmfb`` (differential-difference amplifier). Present only when
+       ``load``'s ``output_cardinality`` is ``"differential"`` (see "CMFB
+       compatibility filter" above); otherwise pruned to an empty placeholder
+       and ``vcm_ref`` is left unconnected
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``
