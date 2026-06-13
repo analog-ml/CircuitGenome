@@ -51,15 +51,14 @@ list is current.
   terminal that references it.
 - `vdd`/`gnd` ports auto-connect to `vdd!`/`gnd!` unless the topology
   overrides them.
-- **Bias rails**: `net_bias1..4` connect `bias_gen.out1-4` to
-  `load.bias1/bias2/bias3/bias_cmfb` (same index) and, in multi-stage
-  topologies, also to `second_stage*/third_stage*.bias -> net_bias1`.
-  `tail_current.bias` is wired to its own dedicated `net_bias{N}` rail
-  (N = 1-5, via `assign_tail_bias_rail`), never shared with
-  load/second_stage/third_stage — this overrides the topology YAML's static
-  `tail_current.bias -> net_tail_bias` connection, which is vestigial for
-  bias-needing tails. `resistor_tail_vdd/gnd` declare `bias` as `optional`
-  and are never wired.
+- **Bias rails**: `bias_gen` has 7 independent output rails (`out1..out7`),
+  statically wired by the topology YAML to one role each: `net_bias1..4`
+  connect `out1-4` to `load.bias1/bias2/bias3/bias_cmfb` (same index);
+  `net_bias5`/`net_bias6` connect `out5`/`out6` to `second_stage*.bias`/
+  `third_stage*.bias` (shared by `_p`/`_n` instances in fully-differential
+  topologies); `net_bias7` connects `out7` to `tail_current.bias`. All of
+  these connections are static (no per-combination rewiring).
+  `resistor_tail_vdd/gnd` declare `bias` as `optional` and are never wired.
 
 ## Polarity compatibility filter (`compatibility.py`)
 
@@ -75,30 +74,20 @@ tag in YAML — no code changes needed.
 
 - `needed_bias_outputs(topology, variant_map)` does a **structural** check
   (actual device-terminal references, not declared `role`) of which of
-  `out1..out4` are consumed by the `load` and any `second_stage`/
-  `third_stage` slots.
-- `prune_bias_generation(variant, needed)` keeps a contiguous prefix
-  `out1..out_max(needed)` and drops the rest, along with the devices that
-  exist only to drive dropped rails — a single shared-reference-plus-legs
-  layout for all variants; see the module docstring for the full algorithm.
-- **Load-bearing assumption**: `needed_bias_outputs` alone is always a
-  contiguous prefix starting at 1 (`{}`, `{1}`, `{1,2}`, or `{1,2,3,4}` —
-  never a gap like `{1,3}`). `prune_bias_generation` is called with
-  `final_needed = needed | {tail_rail}`, which can also be `{1,2,3,4,5}`; the
-  `max_needed >= 4` early-return covers both cases. If you add a load or
-  second-stage variant that could need a non-prefix subset, re-check this
-  before relying on pruning.
-- `tail_current_needs_bias(variant)` detects (structurally) whether a
-  `tail_current` variant needs its own bias voltage.
-  `assign_tail_bias_rail(load_needed)` picks the next free rail after
-  `load_needed` (or rail 5 if `load_needed == {1,2,3,4}`), in which case
-  `extend_bias_generation(variant)` clones the fourth leg onto a new `out5`
-  before pruning.
+  `out1..out7` are consumed by the `load`, `second_stage`, `third_stage`, and
+  `tail_current` slots — each role is detected independently via the
+  topology's static `net_bias{1-7}` wiring. The result can be any subset of
+  `{1..7}`, not necessarily contiguous (e.g. `{1, 5, 7}`).
+- `prune_bias_generation(variant, needed)` drops every rail not in `needed`,
+  along with the devices that exist only to drive dropped rails — a single
+  shared-reference-plus-7-legs layout for all variants; see the module
+  docstring for the full algorithm. If `needed` covers all of `{1..7}`,
+  `variant` is returned unchanged.
 - Invoked once per combination in `enumerate_circuits`, **after**
   `is_combination_valid`, **before** `_build_port_net_map`/`_resolve_devices`.
-  The pruned (and possibly extended) variant replaces `variant_map[slot.name]`
-  for the `bias_generation` slot, so `SynthesizedCircuit.variant_map` and both
-  SPICE serializers reflect the pruned device set.
+  The pruned variant replaces `variant_map[slot.name]` for the
+  `bias_generation` slot, so `SynthesizedCircuit.variant_map` and both SPICE
+  serializers reflect the pruned device set.
 
 ## Pattern for small internal pure-function modules
 
@@ -118,14 +107,10 @@ it for future per-combination filters/transforms:
 
 1. `itertools.product` over per-slot candidate variants → `variant_map`.
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
-3. `needed_bias_outputs` → (if `tail_current_needs_bias`)
-   `assign_tail_bias_rail` → (if rail 5) `extend_bias_generation` →
-   `prune_bias_generation`, mutating `variant_map[bias_gen_slot]` in place.
-4. For each slot: build `slot_connections` (overriding `tail_current.bias`,
-   and `bias_gen.out5` in the rail-5 case, with the assigned `net_bias{N}` —
-   `variant_map[tail_slot]` itself is not mutated, only its net-resolution
-   connections for this combo), then `_build_port_net_map` +
-   `_resolve_devices` → `all_devices`.
+3. `needed_bias_outputs` → `prune_bias_generation`, replacing
+   `variant_map[bias_gen_slot]`.
+4. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+   then `_build_port_net_map` + `_resolve_devices` → `all_devices`.
 5. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
    devices)`.
 

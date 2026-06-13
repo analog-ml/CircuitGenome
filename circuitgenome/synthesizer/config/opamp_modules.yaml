@@ -594,6 +594,9 @@ modules:
       - {name: out2,  role: output}
       - {name: out3,  role: output}
       - {name: out4,  role: output}
+      - {name: out5,  role: output}
+      - {name: out6,  role: output}
+      - {name: out7,  role: output}
       - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
@@ -606,6 +609,12 @@ modules:
       - {ref: mp3, type: pmos, d: out3,  g: out3,  s: vdd,  b: vdd}
       - {ref: mn5, type: nmos, d: out4,  g: ibias, s: gnd,  b: gnd}
       - {ref: mp4, type: pmos, d: out4,  g: out4,  s: vdd,  b: vdd}
+      - {ref: mn6, type: nmos, d: out5,  g: ibias, s: gnd,  b: gnd}
+      - {ref: mp5, type: pmos, d: out5,  g: out5,  s: vdd,  b: vdd}
+      - {ref: mn7, type: nmos, d: out6,  g: ibias, s: gnd,  b: gnd}
+      - {ref: mp6, type: pmos, d: out6,  g: out6,  s: vdd,  b: vdd}
+      - {ref: mn8, type: nmos, d: out7,  g: ibias, s: gnd,  b: gnd}
+      - {ref: mp7, type: pmos, d: out7,  g: out7,  s: vdd,  b: vdd}
 
   - name: magic_battery_bias
     category: bias_generation
@@ -618,6 +627,9 @@ modules:
       - {name: out2,  role: output}
       - {name: out3,  role: output}
       - {name: out4,  role: output}
+      - {name: out5,  role: output}
+      - {name: out6,  role: output}
+      - {name: out7,  role: output}
       - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
@@ -630,6 +642,12 @@ modules:
       - {ref: mn3, type: nmos, d: out3,  g: out3,  s: gnd, b: gnd}
       - {ref: mp5, type: pmos, d: out4,  g: ibias, s: vdd, b: vdd}
       - {ref: mn4, type: nmos, d: out4,  g: out4,  s: gnd, b: gnd}
+      - {ref: mp6, type: pmos, d: out5,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn5, type: nmos, d: out5,  g: out5,  s: gnd, b: gnd}
+      - {ref: mp7, type: pmos, d: out6,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn6, type: nmos, d: out6,  g: out6,  s: gnd, b: gnd}
+      - {ref: mp8, type: pmos, d: out7,  g: ibias, s: vdd, b: vdd}
+      - {ref: mn7, type: nmos, d: out7,  g: out7,  s: gnd, b: gnd}
 
   - name: resistor_bias
     category: bias_generation
@@ -646,6 +664,9 @@ modules:
       - {name: out2,  role: output}
       - {name: out3,  role: output}
       - {name: out4,  role: output}
+      - {name: out5,  role: output}
+      - {name: out6,  role: output}
+      - {name: out7,  role: output}
       - {name: vdd,   role: supply}
       - {name: gnd,   role: supply}
     devices:
@@ -658,6 +679,12 @@ modules:
       - {ref: r3,  type: resistor, t1: out3, t2: gnd}
       - {ref: mp5, type: pmos,     d: out4,  g: ibias, s: vdd, b: vdd}
       - {ref: r4,  type: resistor, t1: out4, t2: gnd}
+      - {ref: mp6, type: pmos,     d: out5,  g: ibias, s: vdd, b: vdd}
+      - {ref: r5,  type: resistor, t1: out5, t2: gnd}
+      - {ref: mp7, type: pmos,     d: out6,  g: ibias, s: vdd, b: vdd}
+      - {ref: r6,  type: resistor, t1: out6, t2: gnd}
+      - {ref: mp8, type: pmos,     d: out7,  g: ibias, s: vdd, b: vdd}
+      - {ref: r7,  type: resistor, t1: out7, t2: gnd}
 
   # ─── COMPENSATION ─────────────────────────────────────────────────────────
 

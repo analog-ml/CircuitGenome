@@ -54,7 +54,9 @@ Module categories
        resistor (VDD-side / GND-side)
    * - Bias generation
      - Diode-connected MOSFET legs, magic battery current mirror, resistor
-       legs (all three: shared ibias reference + four independent mirror legs)
+       legs (all three: shared ibias reference + seven independent mirror
+       legs -- rails 1-4 for ``load``, rail 5 for ``second_stage``, rail 6
+       for ``third_stage``, rail 7 for ``tail_current``)
    * - Compensation
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
@@ -133,45 +135,40 @@ extend the filter to a new or edited variant, add the matching ``polarity:``
 tag in YAML — no code changes needed
 (``circuitgenome/synthesizer/compatibility.py``).
 
-Bias-rail pruning and tail-current bias assignment
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Bias-rail pruning
+~~~~~~~~~~~~~~~~~
 
-Every ``bias_generation`` variant exposes four output rails (``out1``..``out4``)
-so it can feed the most demanding load -- a differential-output folded-cascode,
-which needs all four. Most loads need fewer: simple loads (resistor/active/
-current-source) need none, telescopic cascode loads need one, and
-single-output folded-cascode loads need two. In multi-stage topologies, the
-``second_stage``/``third_stage`` slots also tap ``out1`` for their own gate
-bias, so ``out1`` is mandatory whenever such a slot exists, regardless of the
-load.
+Every ``bias_generation`` variant exposes seven independent output rails
+(``out1``..``out7``), one per bias-consuming role: ``out1``..``out4`` feed
+``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
+``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, and ``out7``
+feeds ``tail_current.bias``. Each role's rail is independent of the others --
+``load``, ``second_stage``, ``third_stage``, and ``tail_current`` never share
+a bias voltage, so each can be sized independently.
 
-``enumerate_circuits`` computes which of ``out1``..``out4`` are actually
-consumed by the other slots in each combination and prunes the
-``bias_generation`` variant down to just those rails, dropping the now-unused
-output ports and the devices that exist only to drive them (e.g. an unused
-mirror leg's diode-connected MOSFET or load resistor). This reduces the device
-count of the assembled circuit without changing which combinations are
-enumerated -- see :mod:`circuitgenome.synthesizer.bias_pruning`.
+Most combinations don't need every rail: simple loads (resistor/active/
+current-source) need none of ``out1``..``out4``, telescopic cascode loads need
+one, single-output folded-cascode loads need two, and only a
+differential-output folded-cascode needs all four. Resistor-tail variants
+declare ``bias`` as ``optional`` and never need ``out7``. In a single-stage
+topology there is no ``second_stage``/``third_stage`` slot, so ``out5``/
+``out6`` are never needed.
+
+``enumerate_circuits`` computes which of ``out1``..``out7`` are actually
+consumed by the other slots in each combination (any subset of ``{1..7}``, not
+necessarily contiguous) and prunes the ``bias_generation`` variant down to
+just those rails, dropping the now-unused output ports and the devices that
+exist only to drive them (e.g. an unused mirror leg's diode-connected MOSFET
+or load resistor). This reduces the device count of the assembled circuit
+without changing which combinations are enumerated -- see
+:mod:`circuitgenome.synthesizer.bias_pruning`.
 
 Every ``bias_generation`` variant shares one structural layout: a *shared
 reference device* that mirrors ``ibias`` onto an internal reference node
-(never touching ``out1``..``out4``), plus one self-contained *leg* per output
+(never touching ``out1``..``out7``), plus one self-contained *leg* per output
 rail that mirrors the reference and delivers that rail via its own complete
-current path. Pruning drops whole legs (and their output port) above the
-highest needed rail, leaving the shared reference device and any remaining
-legs untouched. Separately, some ``tail_current`` variants (the current-mirror
-and cascode-current-mirror flavors) need their own bias voltage on a local
-``bias`` port to set up their mirror reference --
-:func:`~circuitgenome.synthesizer.bias_pruning.tail_current_needs_bias` detects
-this structurally, and
-:func:`~circuitgenome.synthesizer.bias_pruning.assign_tail_bias_rail` picks a
-*dedicated* rail for it, immediately after the highest rail the
-load/second_stage/third_stage slots need -- never shared with them. If those
-slots already need all four of ``out1``..``out4``, the dedicated rail would be
-a fifth (``out5``), so
-:func:`~circuitgenome.synthesizer.bias_pruning.extend_bias_generation` clones
-the existing fourth leg onto ``out5`` before pruning. Resistor-tail variants
-declare ``bias`` as ``optional`` and need no dedicated rail.
+current path. Pruning drops each leg (and its output port) whose rail is not
+needed, leaving the shared reference device and the needed legs untouched.
 
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -223,18 +220,17 @@ internal device structure is invisible to the template.
        ``vdd``, ``gnd``
    * - ``tail_current``
      - ``out``, ``bias`` *(current-mirror / cascode-current-mirror variants
-       wire this to a dedicated ``net_bias{N}`` rail, N = 1-5, assigned by
-       :func:`~circuitgenome.synthesizer.bias_pruning.assign_tail_bias_rail`;
-       resistor-tail variants declare it ``optional`` and leave it
-       unconnected)*, ``vdd``, ``gnd``
+       wire this to the dedicated ``net_bias7`` rail; resistor-tail variants
+       declare it ``optional`` and leave it unconnected)*, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four independent
-       mirror legs off a shared ``ibias`` reference, so cascode loads can
-       receive distinct ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages),
-       ``vdd``, ``gnd``. A fifth rail (``out5``) is added dynamically by
-       :func:`~circuitgenome.synthesizer.bias_pruning.extend_bias_generation`
-       when ``tail_current`` needs a dedicated bias rail but ``out1``..``out4``
-       are already fully used
+     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4``, ``out5``, ``out6``,
+       ``out7`` (seven independent mirror legs off a shared ``ibias``
+       reference: ``out1``-``out4`` feed ``load``'s
+       ``bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
+       ``second_stage.bias``, ``out6`` feeds ``third_stage.bias``, ``out7``
+       feeds ``tail_current.bias``), ``vdd``, ``gnd``. Each combination's
+       :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
+       drops whichever subset of ``out1``..``out7`` isn't needed
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``

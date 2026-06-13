@@ -17,13 +17,7 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
-from .bias_pruning import (
-    assign_tail_bias_rail,
-    extend_bias_generation,
-    needed_bias_outputs,
-    prune_bias_generation,
-    tail_current_needs_bias,
-)
+from .bias_pruning import needed_bias_outputs, prune_bias_generation
 from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
@@ -99,21 +93,17 @@ def enumerate_circuits(
     skipped -- these would leave a shared node with no DC current path.
 
     The ``bias_generation`` variant in each combination is pruned to only the
-    ``out1``..``out4`` rails actually consumed by the other slots (see
+    ``out1``..``out7`` rails actually consumed by the other slots (see
     :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
-    removing unused output ports and their dedicated devices.
-
-    The ``tail_current`` variant's local ``bias`` port (used by current-mirror
-    and cascode-current-mirror tails to set up their mirror reference -- see
-    :func:`~circuitgenome.synthesizer.bias_pruning.tail_current_needs_bias`) is
-    wired to its own dedicated ``net_bias{N}`` rail, distinct from any rail used
-    by ``load``/``second_stage``/``third_stage``. If all four of
-    ``out1``..``out4`` are already needed by those slots, the
-    ``bias_generation`` variant is extended with a fifth leg (``out5`` ->
-    ``net_bias5``) -- see
-    :func:`~circuitgenome.synthesizer.bias_pruning.assign_tail_bias_rail` and
-    :func:`~circuitgenome.synthesizer.bias_pruning.extend_bias_generation`.
-    Resistor-tail variants declare ``bias`` as ``optional`` and need no rail.
+    removing unused output ports and their dedicated devices. ``out1``..
+    ``out4`` feed ``load``'s cascode bias inputs; ``out5``/``out6`` feed
+    ``second_stage``/``third_stage`` (shared across ``_p``/``_n`` instances in
+    fully-differential topologies via the topology's static wiring); ``out7``
+    feeds ``tail_current`` (current-mirror / cascode-current-mirror variants
+    only -- resistor-tail variants declare ``bias`` as ``optional`` and need
+    no rail). Each role's rail is independent of the others, so
+    ``load``/``second_stage``/``third_stage``/``tail_current`` never share a
+    bias voltage.
 
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
@@ -149,30 +139,13 @@ def enumerate_circuits(
             continue
 
         needed = needed_bias_outputs(topology, variant_map)
-
-        tail_slot = next(s for s in topology.slots if s.category == "tail_current")
         bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
-
-        tail_rail: int | None = None
-        final_needed = needed
-        bias_variant = variant_map[bias_slot.name]
-        if tail_current_needs_bias(variant_map[tail_slot.name]):
-            tail_rail = assign_tail_bias_rail(needed)
-            final_needed = needed | {tail_rail}
-            if tail_rail == 5:
-                bias_variant = extend_bias_generation(bias_variant)
-
-        variant_map[bias_slot.name] = prune_bias_generation(bias_variant, final_needed)
+        variant_map[bias_slot.name] = prune_bias_generation(variant_map[bias_slot.name], needed)
 
         all_devices: list[tuple[str, Device]] = []
         for slot in topology.slots:
             variant = variant_map[slot.name]
             slot_connections = topology.slot_connections(slot.name)
-            if tail_rail is not None:
-                if slot.name == tail_slot.name:
-                    slot_connections = {**slot_connections, "bias": f"net_bias{tail_rail}"}
-                elif tail_rail == 5 and slot.name == bias_slot.name:
-                    slot_connections = {**slot_connections, "out5": "net_bias5"}
             port_net_map = _build_port_net_map(slot.name, variant, slot_connections)
             all_devices.extend(_resolve_devices(slot.name, variant, port_net_map))
 
