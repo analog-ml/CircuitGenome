@@ -57,6 +57,12 @@ Module categories
        legs (all three: shared ibias reference + seven independent mirror
        legs -- rails 1-4 for ``load``, rail 5 for ``second_stage``, rail 6
        for ``third_stage``, rail 7 for ``tail_current``)
+   * - CMFB
+     - Resistive-sense 5T OTA, differential-difference amplifier (DDA) --
+       senses the load's first-stage differential outputs
+       (``net_diff1``/``net_diff2``) against an external ``vcm_ref`` and
+       drives the differential-output cascode load's ``bias_cmfb`` input.
+       Present only in ``fully_differential`` topologies.
    * - Compensation
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
@@ -116,13 +122,14 @@ single-output cascode or telescopic-cascode load).
 The 1-stage template therefore produces **360 distinct circuits**
 (120 × 3). The 2-stage single-ended template produces **3 240 circuits**
 (120 × 3 × 3 × 3); the 2-stage fully-differential template, which has two
-``compensation`` slots and two ``second_stage`` slots (one per output path),
-produces **23 328 circuits** (96 × 3\ :sup:`5`). Each 3-stage single-ended
-template adds two more ``second_stage`` slots (gm2, gm3) and two
-``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
-**29 160 circuits** (120 × 3\ :sup:`5`). Each 3-stage fully-differential
-template duplicates those four slots per output path, producing
-**1 889 568 circuits** (96 × 3\ :sup:`9`).
+``compensation`` slots, two ``second_stage`` slots (one per output path), and
+one ``cmfb`` slot (2 variants), produces **46 656 circuits**
+(96 × 3\ :sup:`5` × 2). Each 3-stage single-ended template adds two more
+``second_stage`` slots (gm2, gm3) and two ``compensation`` slots (Cm1, Cm2) on
+top of the 1-stage base, producing **29 160 circuits** (120 × 3\ :sup:`5`).
+Each 3-stage fully-differential template duplicates those four slots per
+output path (and keeps the single ``cmfb`` slot), producing
+**3 779 136 circuits** (96 × 3\ :sup:`9` × 2).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,6 +201,12 @@ differential-output folded-cascode needs all four. Resistor-tail variants
 declare ``bias`` as ``optional`` and never need ``out7``. In a single-stage
 topology there is no ``second_stage``/``third_stage`` slot, so ``out5``/
 ``out6`` are never needed.
+
+In ``fully_differential`` topologies, the ``cmfb`` slot's mandatory ``bias``
+port is also wired to ``out4`` (``net_bias4``), so rail 4 is needed for
+*every* FD circuit regardless of which ``load`` variant is chosen -- the
+"only a differential-output folded-cascode needs all four" rule above applies
+only to ``single_ended`` topologies, which have no ``cmfb`` slot.
 
 ``enumerate_circuits`` computes which of ``out1``..``out7`` are actually
 consumed by the other slots in each combination (any subset of ``{1..7}``, not
@@ -275,6 +288,16 @@ internal device structure is invisible to the template.
        feeds ``tail_current.bias``), ``vdd``, ``gnd``. Each combination's
        :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
        drops whichever subset of ``out1``..``out7`` isn't needed
+   * - ``cmfb``
+     - ``in1``, ``in2`` (differential sense inputs, wired to
+       ``net_diff1``/``net_diff2`` -- the ``load``'s first-stage differential
+       outputs), ``vref`` (common-mode reference, wired to the external
+       ``vcm_ref`` port), ``bias`` (tail-current bias, reuses ``net_bias4``
+       from ``bias_generation.out4``), ``out`` (drives ``load.bias_cmfb`` via
+       ``net_cmfb_out``), ``vdd``, ``gnd``. Two variants:
+       ``resistive_sense_cmfb`` (resistive averager + 5T OTA) and
+       ``dda_cmfb`` (differential-difference amplifier). Present only in
+       ``fully_differential`` topologies
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``

@@ -16,8 +16,8 @@ SPICE netlists.
   YAML device-entry keys except `ref`/`type` (so `d/g/s/b` for MOSFETs,
   `t1/t2` for resistors, `p/m` for capacitors — whatever the YAML uses).
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
-  category (input_pair, load, tail_current, bias_generation, compensation,
-  second_stage).
+  category (input_pair, load, tail_current, bias_generation, cmfb,
+  compensation, second_stage).
 - `config/opamp_topologies.yaml` — topology templates: slots (which
   categories are needed, and under what local slot name) + `{slot, port,
   net}` connection rules.
@@ -61,6 +61,12 @@ list is current.
   topologies); `net_bias7` connects `out7` to `tail_current.bias`. All of
   these connections are static (no per-combination rewiring).
   `resistor_tail_vdd/gnd` declare `bias` as `optional` and are never wired.
+  In `fully_differential` topologies, `net_bias4` also feeds the `cmfb`
+  slot's `bias` port (in addition to `load.bias_cmfb`, where present), so
+  rail 4 is always needed for FD circuits; `load.bias_cmfb` itself is
+  repointed to `net_cmfb_out` (the `cmfb` slot's `out`), not `net_bias4`
+  directly. `cmfb.vref` is wired to `vcm_ref`, a new external port present
+  only on `fully_differential` topologies.
 
 ## Polarity compatibility filter (`compatibility.py`)
 

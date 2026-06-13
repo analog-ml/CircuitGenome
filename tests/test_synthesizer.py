@@ -114,9 +114,10 @@ def test_folded_cascode_bias_port_roles():
 
 
 def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails():
-    """bias1/bias2/bias3/bias_cmfb of a differential-output folded-cascode
-    load each resolve to a distinct net_bias rail (no floating gates, no
-    accidental rail sharing)."""
+    """bias1/bias2/bias3 of a differential-output folded-cascode load each
+    resolve to a distinct net_bias rail (no floating gates, no accidental
+    rail sharing); bias_cmfb resolves to net_cmfb_out, driven by the cmfb
+    module's output."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
@@ -126,6 +127,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
     }
@@ -135,7 +137,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
 
     assert len(load_devices) == 8
     bias_gates = {dev.terminals["g"] for dev in load_devices.values()}
-    assert bias_gates == {"net_bias1", "net_bias2", "net_bias3", "net_bias4"}
+    assert bias_gates == {"net_bias1", "net_bias2", "net_bias3", "net_cmfb_out"}
 
 
 def test_tail_current_variant_names():
@@ -154,6 +156,22 @@ def test_tail_current_variant_names():
         "resistor_tail_vdd",
         "resistor_tail_gnd",
     }
+
+
+def test_cmfb_variant_names_and_ports():
+    """The cmfb category exposes 2 variants (resistive-sense 5T OTA and
+    differential-difference amplifier), both sharing the canonical
+    in1/in2/vref/bias/out/vdd/gnd port signature and untagged for polarity/
+    output_cardinality (compatible with any combination)."""
+    modules = load_modules()
+    names = {v.name for v in modules["cmfb"]}
+    assert names == {"resistive_sense_cmfb", "dda_cmfb"}
+
+    for variant in modules["cmfb"]:
+        port_names = [p.name for p in variant.ports]
+        assert port_names == ["in1", "in2", "vref", "bias", "out", "vdd", "gnd"], variant.name
+        assert variant.polarity is None
+        assert variant.output_cardinality is None
 
 
 def test_bias_generation_variants_share_uniform_leg_structure():
@@ -400,12 +418,12 @@ def test_enumerate_circuits_fully_differential_count():
     """2-stage fully-differential: of the 144 polarity-valid input_pair/load/
     tail_current combinations, 96 have an output_cardinality compatible with
     fully_differential (the 48 "single"-cardinality combos are excluded) x 3
-    bias x (3 comp x 3 second)^2 = 96 x 3^5 = 23328."""
+    bias x (3 comp x 3 second)^2 x 2 cmfb = 96 x 3^5 x 2 = 46656."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 23328
+    assert len(circuits) == 46656
 
 
 def test_flat_spice_structure():
@@ -501,7 +519,7 @@ def test_enumerate_three_stage_single_ended_count():
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~1.89M circuits (96 x 3^9); just
+    """FD 3-stage topologies enumerate ~3.78M circuits (96 x 3^9 x 2); just
     check the iterator yields a valid first circuit without materializing
     the full set."""
     modules = load_modules()
@@ -510,7 +528,7 @@ def test_enumerate_three_stage_fully_differential_nonempty():
         topo = next(t for t in topologies if t.name == name)
         circuit = next(enumerate_circuits(topo, modules))
         assert circuit.topology == name
-        assert circuit.external_ports == ["ibias", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
+        assert circuit.external_ports == ["ibias", "vcm_ref", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
 
 
 def test_synthesize_three_stage_single_ended_filters():
@@ -841,6 +859,7 @@ def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
     }
@@ -1002,7 +1021,11 @@ def test_enumerate_circuits_third_stage_uses_rail_6():
 def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
     """two_stage_opamp_fully_differential's second_stage_p and second_stage_n
     both statically wire bias to the same rail (net_bias5) -- shared via the
-    topology's wiring, with no per-combination grouping logic needed."""
+    topology's wiring, with no per-combination grouping logic needed. The
+    cmfb slot's bias input also statically wires to net_bias4, so rail 4 is
+    needed for every fully_differential circuit regardless of the load
+    variant (resistor_load_gnd, used here, has no bias_cmfb port of its
+    own)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
     simple_modules = {
@@ -1010,6 +1033,7 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
@@ -1017,8 +1041,8 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
     circuit = next(enumerate_circuits(topo, simple_modules))
     bias_variant = circuit.variant_map["bias_gen"]
 
-    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5"]
-    assert len(bias_variant.devices) == 3  # shared ref + 1 leg
+    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out4", "out5"]
+    assert len(bias_variant.devices) == 5  # shared ref + 2 legs (rails 4 and 5)
 
     p_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_p_")}
     n_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_n_")}
@@ -1029,13 +1053,14 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
 
 
 def test_enumerate_circuits_all_seven_bias_rails_independent():
-    """A differential-output folded-cascode load (rails 1-4), second_stage and
-    third_stage (rails 5 and 6), and a current-mirror tail (rail 7) together
-    need all seven bias rails -- bias_gen is unpruned (15 devices), and each
-    role's devices reference a distinct net_bias{N}. A differential-output
-    folded-cascode load is only output_cardinality-compatible with
-    fully_differential topologies, so this uses the fully-differential 3-stage
-    NMC topology."""
+    """A differential-output folded-cascode load (rails 1-3, plus
+    bias_cmfb -> net_cmfb_out via the cmfb slot), second_stage and
+    third_stage (rails 5 and 6), a current-mirror tail (rail 7), and the cmfb
+    slot itself (rail 4, via cmfb.bias) together need all seven bias rails --
+    bias_gen is unpruned (15 devices), and each role's devices reference a
+    distinct net_bias{N}. A differential-output folded-cascode load is only
+    output_cardinality-compatible with fully_differential topologies, so this
+    uses the fully-differential 3-stage NMC topology."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
     simple_modules = {
@@ -1043,6 +1068,7 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
@@ -1059,8 +1085,14 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     second_stage_terms = {t for ref, dev in circuit.devices if ref.startswith("second_stage_") for t in dev.terminals.values()}
     third_stage_terms = {t for ref, dev in circuit.devices if ref.startswith("third_stage_") for t in dev.terminals.values()}
     tail_terms = {t for ref, dev in circuit.devices if ref.startswith("tail_current_") for t in dev.terminals.values()}
+    cmfb_terms = {t for ref, dev in circuit.devices if ref.startswith("cmfb_") for t in dev.terminals.values()}
 
-    assert {"net_bias1", "net_bias2", "net_bias3", "net_bias4"} <= load_terms
+    assert {"net_bias1", "net_bias2", "net_bias3"} <= load_terms
+    assert "net_cmfb_out" in load_terms
     assert "net_bias5" in second_stage_terms
     assert "net_bias6" in third_stage_terms
     assert "net_bias7" in tail_terms
+    assert "net_bias4" in cmfb_terms
+    assert "net_diff1" in cmfb_terms
+    assert "net_diff2" in cmfb_terms
+    assert "net_cmfb_out" in cmfb_terms

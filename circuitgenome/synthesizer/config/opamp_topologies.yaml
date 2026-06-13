@@ -20,6 +20,13 @@
 # cascode-style loads, wired to four distinct bias rails (net_bias1..4)
 # produced by bias_gen's out1/out2/out3/out4.
 #
+# fully_differential templates additionally include a `cmfb` slot
+# (common-mode feedback): cmfb.in1/in2 sense net_diff1/net_diff2 (the load's
+# first-stage differential outputs), cmfb.vref is wired to the external
+# vcm_ref port, cmfb.bias reuses net_bias4 (bias_gen.out4), and cmfb.out
+# drives load.bias_cmfb via a new net_cmfb_out net (replacing the static
+# net_bias4 connection used directly elsewhere).
+#
 # config.compensation_scheme (3-stage templates only) – "nested_miller" (NMC)
 # or "reversed_nested_miller" (RNMC). Filterable via synthesize(config=...).
 
@@ -111,12 +118,13 @@ topologies:
     config:
       output_type: fully_differential
       stages: 2
-    external_ports: [ibias, in1, in2, outp, outn, vdd!, gnd!]
+    external_ports: [ibias, vcm_ref, in1, in2, outp, outn, vdd!, gnd!]
     slots:
       - {name: input_pair,     category: input_pair}
       - {name: load,           category: load}
       - {name: tail_current,   category: tail_current}
       - {name: bias_gen,       category: bias_generation}
+      - {name: cmfb,           category: cmfb}
       - {name: comp_p,         category: compensation}
       - {name: comp_n,         category: compensation}
       - {name: second_stage_p, category: second_stage}
@@ -134,7 +142,7 @@ topologies:
       - {slot: load,            port: bias1,     net: net_bias1}
       - {slot: load,            port: bias2,     net: net_bias2}
       - {slot: load,            port: bias3,     net: net_bias3}
-      - {slot: load,            port: bias_cmfb, net: net_bias4}
+      - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
       - {slot: tail_current,    port: out,   net: net_tail}
       - {slot: tail_current,    port: bias,  net: net_bias7}
       - {slot: bias_gen,        port: ibias, net: ibias}
@@ -145,6 +153,11 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: cmfb,            port: in1,   net: net_diff1}
+      - {slot: cmfb,            port: in2,   net: net_diff2}
+      - {slot: cmfb,            port: vref,  net: vcm_ref}
+      - {slot: cmfb,            port: bias,  net: net_bias4}
+      - {slot: cmfb,            port: out,   net: net_cmfb_out}
       # Positive output: second stage driven by diff pair output2
       - {slot: second_stage_p,  port: in,    net: net_diff2}
       - {slot: second_stage_p,  port: out,   net: outp}
@@ -277,12 +290,13 @@ topologies:
       output_type: fully_differential
       stages: 3
       compensation_scheme: nested_miller
-    external_ports: [ibias, in1, in2, outp, outn, vdd!, gnd!]
+    external_ports: [ibias, vcm_ref, in1, in2, outp, outn, vdd!, gnd!]
     slots:
       - {name: input_pair,     category: input_pair}
       - {name: load,           category: load}
       - {name: tail_current,   category: tail_current}
       - {name: bias_gen,       category: bias_generation}
+      - {name: cmfb,           category: cmfb}
       - {name: second_stage_p, category: second_stage}
       - {name: third_stage_p,  category: second_stage}
       - {name: comp1_p,        category: compensation}
@@ -304,7 +318,7 @@ topologies:
       - {slot: load,            port: bias1,     net: net_bias1}
       - {slot: load,            port: bias2,     net: net_bias2}
       - {slot: load,            port: bias3,     net: net_bias3}
-      - {slot: load,            port: bias_cmfb, net: net_bias4}
+      - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
       - {slot: tail_current,    port: out,   net: net_tail}
       - {slot: tail_current,    port: bias,  net: net_bias7}
       - {slot: bias_gen,        port: ibias, net: ibias}
@@ -315,6 +329,11 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: cmfb,            port: in1,   net: net_diff1}
+      - {slot: cmfb,            port: in2,   net: net_diff2}
+      - {slot: cmfb,            port: vref,  net: vcm_ref}
+      - {slot: cmfb,            port: bias,  net: net_bias4}
+      - {slot: cmfb,            port: out,   net: net_cmfb_out}
       # Positive output path: stage1 output is net_diff2
       - {slot: second_stage_p,  port: in,    net: net_diff2}
       - {slot: second_stage_p,  port: out,   net: net_mid2_p}
@@ -346,12 +365,13 @@ topologies:
       output_type: fully_differential
       stages: 3
       compensation_scheme: reversed_nested_miller
-    external_ports: [ibias, in1, in2, outp, outn, vdd!, gnd!]
+    external_ports: [ibias, vcm_ref, in1, in2, outp, outn, vdd!, gnd!]
     slots:
       - {name: input_pair,     category: input_pair}
       - {name: load,           category: load}
       - {name: tail_current,   category: tail_current}
       - {name: bias_gen,       category: bias_generation}
+      - {name: cmfb,           category: cmfb}
       - {name: second_stage_p, category: second_stage}
       - {name: third_stage_p,  category: second_stage}
       - {name: comp1_p,        category: compensation}
@@ -373,7 +393,7 @@ topologies:
       - {slot: load,            port: bias1,     net: net_bias1}
       - {slot: load,            port: bias2,     net: net_bias2}
       - {slot: load,            port: bias3,     net: net_bias3}
-      - {slot: load,            port: bias_cmfb, net: net_bias4}
+      - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
       - {slot: tail_current,    port: out,   net: net_tail}
       - {slot: tail_current,    port: bias,  net: net_bias7}
       - {slot: bias_gen,        port: ibias, net: ibias}
@@ -384,6 +404,11 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: cmfb,            port: in1,   net: net_diff1}
+      - {slot: cmfb,            port: in2,   net: net_diff2}
+      - {slot: cmfb,            port: vref,  net: vcm_ref}
+      - {slot: cmfb,            port: bias,  net: net_bias4}
+      - {slot: cmfb,            port: out,   net: net_cmfb_out}
       # Positive output path: stage1 output is net_diff2
       - {slot: second_stage_p,  port: in,    net: net_diff2}
       - {slot: second_stage_p,  port: out,   net: net_mid2_p}

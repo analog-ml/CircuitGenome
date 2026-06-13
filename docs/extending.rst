@@ -23,8 +23,8 @@ Required fields:
    * - ``name``
      - Unique snake_case identifier.
    * - ``category``
-     - One of the six canonical categories: ``input_pair``, ``load``,
-       ``tail_current``, ``bias_generation``, ``compensation``,
+     - One of the seven canonical categories: ``input_pair``, ``load``,
+       ``tail_current``, ``bias_generation``, ``cmfb``, ``compensation``,
        ``second_stage``.
    * - ``display_name``
      - Human-readable label shown in ``--list-modules``.

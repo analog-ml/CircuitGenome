@@ -37,6 +37,7 @@ The synthesizer works by combining **module variants** according to a **topology
 | Load | Resistor (VDD-side / GND-side), PMOS/NMOS active (current mirror), PMOS/NMOS current source, folded cascode (PMOS/NMOS-input, single-output & differential-output), telescopic cascode (PMOS/NMOS) |
 | Tail current | Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS), resistor (VDD-side / GND-side) |
 | Bias generation | Diode-connected MOSFET ladder, magic battery (current mirror), resistor ladder |
+| CMFB | Resistive-sense 5T OTA, differential-difference amplifier (DDA) — fully-differential topologies only |
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
 | Second stage | Common-source, common-drain (source follower), differential OTA |
 
@@ -61,11 +62,12 @@ filter" below further splits them by which output type the `load` supports:
 fully-differential topologies. A 1-stage topology therefore yields
 **360 unique circuits** (120 × 3). A 2-stage single-ended topology yields
 **3240 circuits** (120 × 3 × 3 × 3); a 2-stage fully-differential topology
-yields **23 328 circuits** (96 × 3⁵). Each 3-stage single-ended topology adds
-two more `second_stage` slots (gm2, gm3) and two `compensation` slots (Cm1,
-Cm2), yielding **29 160 circuits** (120 × 3⁵). Each 3-stage
-fully-differential topology duplicates those four slots per output path,
-yielding **1 889 568 circuits** (96 × 3⁹).
+also has a `cmfb` slot (2 variants) and yields **46 656 circuits**
+(96 × 3⁵ × 2). Each 3-stage single-ended topology adds two more
+`second_stage` slots (gm2, gm3) and two `compensation` slots (Cm1, Cm2),
+yielding **29 160 circuits** (120 × 3⁵). Each 3-stage fully-differential
+topology duplicates those four slots per output path (keeping the single
+`cmfb` slot), yielding **3 779 136 circuits** (96 × 3⁹ × 2).
 
 ### Polarity compatibility filter
 
