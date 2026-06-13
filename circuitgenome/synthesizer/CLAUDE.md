@@ -22,6 +22,8 @@ SPICE netlists.
   categories are needed, and under what local slot name) + `{slot, port,
   net}` connection rules.
 - `compatibility.py` — polarity compatibility filter (`is_combination_valid`).
+- `output_compatibility.py` — output-cardinality compatibility filter
+  (`is_output_type_compatible`).
 - `bias_pruning.py` — bias-rail pruning (`needed_bias_outputs`,
   `prune_bias_generation`).
 - `synthesizer.py` — `enumerate_circuits`/`synthesize`, the orchestration
@@ -70,6 +72,20 @@ polarity doesn't match `input_pair`'s (untagged variants, e.g.
 constraint). To support a new/edited variant, just add the right `polarity:`
 tag in YAML — no code changes needed.
 
+## Output-cardinality compatibility filter (`output_compatibility.py`)
+
+Each `load` variant declares `output_cardinality: "single" | "differential" |
+None`. `"single"` (folded-cascode single-output and telescopic-cascode loads)
+declares `out` as mandatory, which only a `single_ended` topology wires;
+`"differential"` (folded-cascode differential-output loads) declares
+`out1`/`out2` as mandatory cascode-output nodes, which only a
+`fully_differential` topology keeps distinct from `in1`/`in2`.
+`is_output_type_compatible` rejects a combination if `load`'s
+`output_cardinality` (if set) doesn't match the topology's `output_type`
+(untagged loads, i.e. resistor/active/current-source, impose no constraint).
+To support a new/edited `load` variant, just add the right
+`output_cardinality:` tag in YAML — no code changes needed.
+
 ## Bias-rail pruning (`bias_pruning.py`)
 
 - `needed_bias_outputs(topology, variant_map)` does a **structural** check
@@ -107,14 +123,16 @@ it for future per-combination filters/transforms:
 
 1. `itertools.product` over per-slot candidate variants → `variant_map`.
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
-3. `needed_bias_outputs` → `prune_bias_generation`, replacing
+3. `is_output_type_compatible(topology, variant_map)` — skip on
+   output-cardinality mismatch.
+4. `needed_bias_outputs` → `prune_bias_generation`, replacing
    `variant_map[bias_gen_slot]`.
-4. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+5. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
    then `_build_port_net_map` + `_resolve_devices` → `all_devices`.
-5. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+6. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
    devices)`.
 
-Any new per-combination transform should slot in between steps 2 and 4,
+Any new per-combination transform should slot in between steps 3 and 5,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 

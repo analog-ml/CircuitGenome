@@ -60,6 +60,15 @@ class ModuleVariant:
                      variant is compatible with either polarity. Used by
                      :func:`~circuitgenome.synthesizer.compatibility.is_combination_valid`
                      to filter out combinations with no DC current path.
+    :param output_cardinality: ``load``-only tag, either ``"single"``,
+                     ``"differential"``, or ``None``. Declares which topology
+                     ``output_type`` the variant's mandatory cascode-output
+                     port is wired for; ``None`` means the variant has no
+                     such port and is compatible with either output type.
+                     Used by
+                     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`
+                     to filter out combinations that would leave a floating
+                     or shorted cascode-output node.
     """
     name: str
     category: str
@@ -67,6 +76,7 @@ class ModuleVariant:
     ports: list[PortDef]
     devices: list[Device]
     polarity: str | None = None
+    output_cardinality: str | None = None
 
     def port_names(self) -> set[str]:
         """Return the set of all port names on this variant."""

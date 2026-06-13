@@ -104,18 +104,28 @@ Topology templates
      - Reversed Nested Miller (RNMC)
 
 Of the 5 × 12 × 6 = 360 possible ``input_pair`` / ``load`` / ``tail_current``
-combinations, only 144 have compatible PMOS/NMOS polarities (see "Module
+combinations, only 144 have compatible PMOS/NMOS polarities (see "Polarity
 compatibility filter" below) — the rest are filtered out by
-``enumerate_circuits``. The 2-stage single-ended template therefore produces
-**3 888 distinct circuits** (144 × 3 × 3 × 3). Each 3-stage single-ended
-template adds two more ``second_stage`` slots (gm2, gm3) and two
-``compensation`` slots (Cm1, Cm2), producing **34 992 circuits**
-(144 × 3 × 3 × 3 × 3 × 3). Each 3-stage fully-differential template
-duplicates those four slots per output path, producing **2 834 352
-circuits** (144 × 3\ :sup:`9`).
+``enumerate_circuits``. Of those 144, the "Output-cardinality compatibility
+filter" below further splits them by which output type the ``load`` supports:
+**120** are valid for single-ended templates (excluding the 24 combinations
+using a differential-output cascode load) and **96** are valid for
+fully-differential templates (excluding the 48 combinations using a
+single-output cascode or telescopic-cascode load).
 
-Module compatibility filter
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The 1-stage template therefore produces **360 distinct circuits**
+(120 × 3). The 2-stage single-ended template produces **3 240 circuits**
+(120 × 3 × 3 × 3); the 2-stage fully-differential template, which has two
+``compensation`` slots and two ``second_stage`` slots (one per output path),
+produces **23 328 circuits** (96 × 3\ :sup:`5`). Each 3-stage single-ended
+template adds two more ``second_stage`` slots (gm2, gm3) and two
+``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
+**29 160 circuits** (120 × 3\ :sup:`5`). Each 3-stage fully-differential
+template duplicates those four slots per output path, producing
+**1 889 568 circuits** (96 × 3\ :sup:`9`).
+
+Polarity compatibility filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A circuit only has a real DC current path if its ``input_pair``, ``load``,
 and ``tail_current`` agree on polarity. For example, ``differential_pair_nmos``
@@ -134,6 +144,37 @@ or omitted for variants that work with either polarity
 extend the filter to a new or edited variant, add the matching ``polarity:``
 tag in YAML — no code changes needed
 (``circuitgenome/synthesizer/compatibility.py``).
+
+Output-cardinality compatibility filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A topology template wires two of ``load``'s ports unconditionally
+(``out1``/``out2`` to the same nets as ``in1``/``in2``) and one port
+conditionally (``out`` to the stage's single output node, but only in
+``single_ended`` topologies — ``fully_differential`` topologies never connect
+it). Some ``load`` variants declare a *mandatory* port on one side of that
+conditional wiring:
+
+- ``folded_cascode_load_*_input_single_output`` and
+  ``telescopic_cascode_load_{pmos,nmos}`` declare ``out`` as mandatory. In a
+  ``fully_differential`` topology, ``out`` is never wired, leaving that
+  device terminal floating (disconnected).
+- ``folded_cascode_load_*_input_differential_output`` declare ``out1``/
+  ``out2`` as mandatory cascode-output nodes. In a ``single_ended`` topology,
+  ``out1``/``out2`` are wired to the same nets as ``in1``/``in2``, so the
+  cascode device ends up with drain == source (shorted).
+
+These 6 ``load`` variants declare an ``output_cardinality`` field in
+``opamp_modules.yaml``: ``"single"`` (compatible only with
+``output_type: single_ended``) or ``"differential"`` (compatible only with
+``output_type: fully_differential``). The other 6 ``load`` variants
+(resistor/active/current-source) have no such mandatory port and are
+untagged (``output_cardinality: None``), compatible with either output type.
+``enumerate_circuits`` skips any combination where ``load``'s
+``output_cardinality`` (if set) doesn't match the topology's ``output_type``.
+To extend the filter to a new or edited ``load`` variant, add the matching
+``output_cardinality:`` tag in YAML — no code changes needed
+(``circuitgenome/synthesizer/output_compatibility.py``).
 
 Bias-rail pruning
 ~~~~~~~~~~~~~~~~~
@@ -217,7 +258,10 @@ internal device structure is invisible to the template.
        *(mandatory only for single-output cascode loads; optional/unused
        otherwise)*, ``bias1``, ``bias2``, ``bias3``, ``bias_cmfb`` *(optional
        bias inputs; each variant declares only as many as it needs)*,
-       ``vdd``, ``gnd``
+       ``vdd``, ``gnd``. Whichever of ``out``/``out1``/``out2`` is mandatory
+       is declared via ``output_cardinality: "single" | "differential" |
+       None``, checked against the topology's ``output_type`` by the
+       output-cardinality compatibility filter
    * - ``tail_current``
      - ``out``, ``bias`` *(current-mirror / cascode-current-mirror variants
        wire this to the dedicated ``net_bias7`` rail; resistor-tail variants

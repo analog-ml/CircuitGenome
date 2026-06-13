@@ -293,6 +293,7 @@ modules:
   - name: folded_cascode_load_nmos_input_single_output
     category: load
     polarity: nmos_input
+    output_cardinality: single
     display_name: "Folded-Cascode Load (NMOS Input Pair, Single Output)"
     # in1/in2 = folding nodes (PMOS folding sources mp1/mp2, gated bias1).
     # mp3/mp4 cascode the folding nodes (gated bias2) up to a PMOS mirror
@@ -324,6 +325,7 @@ modules:
   - name: folded_cascode_load_pmos_input_single_output
     category: load
     polarity: pmos_input
+    output_cardinality: single
     display_name: "Folded-Cascode Load (PMOS Input Pair, Single Output)"
     # Mirror image of folded_cascode_load_nmos_input_single_output: in1/in2
     # = folding nodes (NMOS folding sinks mn3/mn4, gated bias1). mn1/mn2
@@ -356,6 +358,7 @@ modules:
   - name: folded_cascode_load_nmos_input_differential_output
     category: load
     polarity: nmos_input
+    output_cardinality: differential
     display_name: "Folded-Cascode Load (NMOS Input Pair, Differential Output)"
     # in1/in2 = folding nodes (PMOS folding sources mp1/mp2, gated bias1).
     # mp3/mp4 cascode the folding nodes (gated bias2) up to the distinct
@@ -388,6 +391,7 @@ modules:
   - name: folded_cascode_load_pmos_input_differential_output
     category: load
     polarity: pmos_input
+    output_cardinality: differential
     display_name: "Folded-Cascode Load (PMOS Input Pair, Differential Output)"
     # Mirror image of folded_cascode_load_nmos_input_differential_output:
     # in1/in2 = folding nodes (NMOS folding sinks mn3/mn4, gated bias1).
@@ -421,6 +425,7 @@ modules:
   - name: telescopic_cascode_load_pmos
     category: load
     polarity: pmos_input
+    output_cardinality: single
     display_name: "Telescopic-Cascode Load (PMOS, for PMOS Input Pair, Single Output)"
     # Self-biased telescopic stack: mp1/mp2 are PMOS cascode devices (gated
     # by bias1) connecting in1/in2 up to internal_0/out; mn1/mn3 form a
@@ -450,6 +455,7 @@ modules:
   - name: telescopic_cascode_load_nmos
     category: load
     polarity: nmos_input
+    output_cardinality: single
     display_name: "Telescopic-Cascode Load (NMOS, for NMOS Input Pair, Single Output)"
     # Mirror image of telescopic_cascode_load_pmos: mn1/mn2 are NMOS cascode
     # devices (gated by bias1) connecting in1/in2 up to internal_2/out;

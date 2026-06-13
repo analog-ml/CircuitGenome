@@ -1,6 +1,7 @@
 import pytest
 from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bias_generation
 from circuitgenome.synthesizer.compatibility import is_combination_valid
+from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits, synthesize
 from circuitgenome.synthesizer.netlist import to_flat_spice, to_hierarchical_spice
@@ -270,6 +271,98 @@ def test_enumerate_circuits_excludes_polarity_mismatches():
             )
 
 
+def test_output_cardinality_tags_cover_folded_and_telescopic_cascode_loads():
+    """Single-output folded-cascode and telescopic-cascode loads declare a
+    mandatory `out` (wired only in single_ended topologies) and are tagged
+    output_cardinality "single"; differential-output folded-cascode loads
+    declare mandatory `out1`/`out2` (wired only in fully_differential
+    topologies) and are tagged "differential". The other 6 loads
+    (resistor/active/current-source) have no such mandatory port and are
+    untagged (compatible with either output type)."""
+    modules = load_modules()
+    cardinalities = {v.name: v.output_cardinality for v in modules["load"]}
+
+    for name in (
+        "folded_cascode_load_nmos_input_single_output",
+        "folded_cascode_load_pmos_input_single_output",
+        "telescopic_cascode_load_pmos",
+        "telescopic_cascode_load_nmos",
+    ):
+        assert cardinalities[name] == "single", name
+
+    for name in (
+        "folded_cascode_load_nmos_input_differential_output",
+        "folded_cascode_load_pmos_input_differential_output",
+    ):
+        assert cardinalities[name] == "differential", name
+
+    for name in (
+        "resistor_load_vdd",
+        "resistor_load_gnd",
+        "active_load_pmos",
+        "active_load_nmos",
+        "current_source_load_pmos",
+        "current_source_load_nmos",
+    ):
+        assert cardinalities[name] is None, name
+
+
+def test_is_output_type_compatible_denies_cardinality_mismatches():
+    """A differential-output folded-cascode load (output_cardinality
+    "differential") would leave a shorted cascode device in a single_ended
+    topology; a single-output folded-cascode load (output_cardinality
+    "single") would leave a floating cascode-output node in a
+    fully_differential topology. Both are rejected."""
+    modules = load_modules()
+    topologies = load_topologies()
+    by_name = {v.name: v for v in modules["load"]}
+    se_topo = next(t for t in topologies if t.name == "one_stage_opamp")
+    fd_topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+
+    diff_load = by_name["folded_cascode_load_nmos_input_differential_output"]
+    single_load = by_name["folded_cascode_load_nmos_input_single_output"]
+
+    assert not is_output_type_compatible(se_topo, {"load": diff_load})
+    assert not is_output_type_compatible(fd_topo, {"load": single_load})
+
+
+def test_is_output_type_compatible_allows_matches_and_untagged():
+    """A differential-output load matches a fully_differential topology, a
+    single-output load matches a single_ended topology, and an untagged load
+    (output_cardinality None) is compatible with either."""
+    modules = load_modules()
+    topologies = load_topologies()
+    by_name = {v.name: v for v in modules["load"]}
+    se_topo = next(t for t in topologies if t.name == "one_stage_opamp")
+    fd_topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+
+    diff_load = by_name["folded_cascode_load_nmos_input_differential_output"]
+    single_load = by_name["folded_cascode_load_nmos_input_single_output"]
+    untagged_load = by_name["resistor_load_gnd"]
+
+    assert is_output_type_compatible(fd_topo, {"load": diff_load})
+    assert is_output_type_compatible(se_topo, {"load": single_load})
+    assert is_output_type_compatible(se_topo, {"load": untagged_load})
+    assert is_output_type_compatible(fd_topo, {"load": untagged_load})
+
+
+def test_enumerate_circuits_excludes_output_cardinality_mismatches():
+    """Every synthesized circuit's load has an output_cardinality compatible
+    with its topology's output_type: a differential-output cascode load never
+    appears in a single_ended circuit, and a single-output cascode or
+    telescopic load never appears in a fully_differential circuit."""
+    modules = load_modules()
+    topologies = load_topologies()
+
+    se_topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+    for circuit in enumerate_circuits(se_topo, modules):
+        assert circuit.variant_map["load"].output_cardinality != "differential"
+
+    fd_topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+    for circuit in enumerate_circuits(fd_topo, modules):
+        assert circuit.variant_map["load"].output_cardinality != "single"
+
+
 def test_load_topologies():
     topologies = load_topologies()
     names = [t.name for t in topologies]
@@ -291,13 +384,28 @@ def test_enumerate_circuits_nonempty():
 
 def test_enumerate_circuits_count():
     """2-stage single-ended: of the 5 input pairs x 12 loads x 6 tails = 360
-    input_pair/load/tail_current combinations, only 144 are polarity-valid
-    (see test_polarity_filter_*) x 3 bias x 3 comp x 3 second = 3888."""
+    input_pair/load/tail_current combinations, 144 are polarity-valid (see
+    test_polarity_filter_*), and of those 120 also have an output_cardinality
+    compatible with single_ended (the 24 "differential"-cardinality combos
+    are excluded; see test_is_output_type_compatible_*) x 3 bias x 3 comp x 3
+    second = 3240."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 3888
+    assert len(circuits) == 3240
+
+
+def test_enumerate_circuits_fully_differential_count():
+    """2-stage fully-differential: of the 144 polarity-valid input_pair/load/
+    tail_current combinations, 96 have an output_cardinality compatible with
+    fully_differential (the 48 "single"-cardinality combos are excluded) x 3
+    bias x (3 comp x 3 second)^2 = 96 x 3^5 = 23328."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+    circuits = list(enumerate_circuits(topo, modules))
+    assert len(circuits) == 23328
 
 
 def test_flat_spice_structure():
@@ -381,19 +489,19 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 144 polarity-valid input_pair/load/tail_current
-    combinations (see test_enumerate_circuits_count) x 3 bias x 3 second stages
-    x 3 third stages x 3 comp1 x 3 comp2 = 34992."""
+    """3-stage single-ended (NMC/RNMC): 120 polarity-and-output_cardinality-valid
+    input_pair/load/tail_current combinations (see test_enumerate_circuits_count)
+    x 3 bias x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 29160."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 34992
+        assert len(circuits) == 29160
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~7.1M circuits (5x12x6x3x3 x 3^8); just
+    """FD 3-stage topologies enumerate ~1.89M circuits (96 x 3^9); just
     check the iterator yields a valid first circuit without materializing
     the full set."""
     modules = load_modules()
@@ -411,10 +519,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 34992
+    assert len(nmc) == 29160
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 34992
+    assert len(rnmc) == 29160
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
@@ -721,25 +829,29 @@ def test_enumerate_circuits_prunes_bias_generation_for_two_stage_simple_load():
 
 def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
     """A differential-output folded-cascode load needs all four load bias
-    rails (out1..out4), and current_mirror_tail_nmos needs its own dedicated
-    rail 7 -- both are present simultaneously in bias_generation's static
-    7-leg layout, with no extension needed."""
+    rails (out1..out4) and is only output_cardinality-compatible with
+    fully_differential topologies, which always have >=2 stages -- so
+    second_stage's rail 5 is also unavoidably present. current_mirror_tail_nmos
+    needs its own dedicated rail 7 -- all are present simultaneously in
+    bias_generation's static 7-leg layout, with no extension needed."""
     modules = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports] == [
-        "ibias", "out1", "out2", "out3", "out4", "out7", "vdd", "gnd",
+        "ibias", "out1", "out2", "out3", "out4", "out5", "out7", "vdd", "gnd",
     ]
-    assert len(bias_variant.devices) == 11
+    assert len(bias_variant.devices) == 13
 
     bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
     assert "bias_gen_mn8" in bias_devices  # leg 7
@@ -920,9 +1032,12 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     """A differential-output folded-cascode load (rails 1-4), second_stage and
     third_stage (rails 5 and 6), and a current-mirror tail (rail 7) together
     need all seven bias rails -- bias_gen is unpruned (15 devices), and each
-    role's devices reference a distinct net_bias{N}."""
+    role's devices reference a distinct net_bias{N}. A differential-output
+    folded-cascode load is only output_cardinality-compatible with
+    fully_differential topologies, so this uses the fully-differential 3-stage
+    NMC topology."""
     modules = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_single_ended")
+    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
