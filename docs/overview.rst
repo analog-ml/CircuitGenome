@@ -53,8 +53,8 @@ Module categories
      - Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS),
        resistor (VDD-side / GND-side)
    * - Bias generation
-     - Diode-connected MOSFET ladder, magic battery current mirror, resistor
-       ladder
+     - Diode-connected MOSFET legs, magic battery current mirror, resistor
+       legs (all three: shared ibias reference + four independent mirror legs)
    * - Compensation
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
@@ -133,8 +133,8 @@ extend the filter to a new or edited variant, add the matching ``polarity:``
 tag in YAML — no code changes needed
 (``circuitgenome/synthesizer/compatibility.py``).
 
-Bias output pruning
-~~~~~~~~~~~~~~~~~~~~
+Bias-rail pruning and tail-current bias assignment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Every ``bias_generation`` variant exposes four output rails (``out1``..``out4``)
 so it can feed the most demanding load -- a differential-output folded-cascode,
@@ -148,10 +148,30 @@ load.
 ``enumerate_circuits`` computes which of ``out1``..``out4`` are actually
 consumed by the other slots in each combination and prunes the
 ``bias_generation`` variant down to just those rails, dropping the now-unused
-output ports and the devices that exist only to drive them (e.g. unused
-diode-connected MOSFETs or ladder resistors). This reduces the device count of
-the assembled circuit without changing which combinations are enumerated --
-see :mod:`circuitgenome.synthesizer.bias_pruning`.
+output ports and the devices that exist only to drive them (e.g. an unused
+mirror leg's diode-connected MOSFET or load resistor). This reduces the device
+count of the assembled circuit without changing which combinations are
+enumerated -- see :mod:`circuitgenome.synthesizer.bias_pruning`.
+
+Every ``bias_generation`` variant shares one structural layout: a *shared
+reference device* that mirrors ``ibias`` onto an internal reference node
+(never touching ``out1``..``out4``), plus one self-contained *leg* per output
+rail that mirrors the reference and delivers that rail via its own complete
+current path. Pruning drops whole legs (and their output port) above the
+highest needed rail, leaving the shared reference device and any remaining
+legs untouched. Separately, some ``tail_current`` variants (the current-mirror
+and cascode-current-mirror flavors) need their own bias voltage on a local
+``bias`` port to set up their mirror reference --
+:func:`~circuitgenome.synthesizer.bias_pruning.tail_current_needs_bias` detects
+this structurally, and
+:func:`~circuitgenome.synthesizer.bias_pruning.assign_tail_bias_rail` picks a
+*dedicated* rail for it, immediately after the highest rail the
+load/second_stage/third_stage slots need -- never shared with them. If those
+slots already need all four of ``out1``..``out4``, the dedicated rail would be
+a fifth (``out5``), so
+:func:`~circuitgenome.synthesizer.bias_pruning.extend_bias_generation` clones
+the existing fourth leg onto ``out5`` before pruning. Resistor-tail variants
+declare ``bias`` as ``optional`` and need no dedicated rail.
 
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -202,15 +222,19 @@ internal device structure is invisible to the template.
        bias inputs; each variant declares only as many as it needs)*,
        ``vdd``, ``gnd``
    * - ``tail_current``
-     - ``out``, ``bias``, ``vdd``, ``gnd``
+     - ``out``, ``bias`` *(current-mirror / cascode-current-mirror variants
+       wire this to a dedicated ``net_bias{N}`` rail, N = 1-5, assigned by
+       :func:`~circuitgenome.synthesizer.bias_pruning.assign_tail_bias_rail`;
+       resistor-tail variants declare it ``optional`` and leave it
+       unconnected)*, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four bias rails, so
-       cascode loads can receive distinct
-       ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages — either four
-       independent legs each mirroring ``ibias``, or four taps along a
-       single ``ibias``-to-``gnd`` ladder), ``vdd`` *(optional — only
-       declared by variants that source current from vdd; ladder variants
-       run from ``ibias`` to ``gnd`` and omit it)*, ``gnd``
+     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4`` (four independent
+       mirror legs off a shared ``ibias`` reference, so cascode loads can
+       receive distinct ``bias1``/``bias2``/``bias3``/``bias_cmfb`` voltages),
+       ``vdd``, ``gnd``. A fifth rail (``out5``) is added dynamically by
+       :func:`~circuitgenome.synthesizer.bias_pruning.extend_bias_generation`
+       when ``tail_current`` needs a dedicated bias rail but ``out1``..``out4``
+       are already fully used
    * - ``compensation``
      - ``in``, ``out``
    * - ``second_stage``

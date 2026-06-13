@@ -1,5 +1,11 @@
 import pytest
-from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bias_generation
+from circuitgenome.synthesizer.bias_pruning import (
+    assign_tail_bias_rail,
+    extend_bias_generation,
+    needed_bias_outputs,
+    prune_bias_generation,
+    tail_current_needs_bias,
+)
 from circuitgenome.synthesizer.compatibility import is_combination_valid
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits, synthesize
@@ -155,34 +161,30 @@ def test_tail_current_variant_names():
     }
 
 
-def test_bias_generation_ladder_variants_chain_ibias_to_gnd():
-    """diode_connected_mosfet_bias and resistor_bias are ladders that carry
-    ibias from the ibias port down to gnd, tapping out1..out4 along the way:
-    each forms a single ibias->out1->out2->out3->out4->gnd chain (no
-    disconnected devices, no unused ibias port), and neither declares a vdd
-    port."""
+def test_bias_generation_variants_share_uniform_leg_structure():
+    """All three bias_generation variants declare ibias/out1-4/vdd/gnd ports
+    and 9 devices: 1 shared reference device (terminals never reference
+    out1..out4) plus 4 legs of 2 devices each (both referencing the same
+    outN)."""
     modules = load_modules()
-    by_name = {v.name: v for v in modules["bias_generation"]}
+    for variant in modules["bias_generation"]:
+        port_names = [p.name for p in variant.ports]
+        assert port_names == ["ibias", "out1", "out2", "out3", "out4", "vdd", "gnd"], variant.name
+        assert len(variant.devices) == 9, variant.name
 
-    for name in ("diode_connected_mosfet_bias", "resistor_bias"):
-        variant = by_name[name]
-        port_names = {p.name for p in variant.ports}
-        assert "vdd" not in port_names
-        assert "ibias" in port_names
+        shared = [
+            dev for dev in variant.devices
+            if not any(t.startswith("out") for t in dev.terminals.values())
+        ]
+        assert len(shared) == 1, variant.name
 
-        nodes_in_chain = set()
-        for dev in variant.devices:
-            if dev.type == "resistor":
-                nodes_in_chain.add(dev.terminals["t1"])
-                nodes_in_chain.add(dev.terminals["t2"])
-            else:
-                assert dev.terminals["g"] == dev.terminals["d"], (
-                    f"{name}.{dev.ref}: not diode-connected (g != d)"
-                )
-                nodes_in_chain.add(dev.terminals["d"])
-                nodes_in_chain.add(dev.terminals["s"])
-
-        assert nodes_in_chain == {"ibias", "out1", "out2", "out3", "out4", "gnd"}
+        for i in range(1, 5):
+            rail = f"out{i}"
+            leg = [dev for dev in variant.devices if rail in dev.terminals.values()]
+            assert len(leg) == 2, f"{variant.name}: leg for {rail}"
+            for dev in leg:
+                refs = {t for t in dev.terminals.values() if t.startswith("out")}
+                assert refs == {rail}, f"{variant.name}.{dev.ref}: {refs}"
 
 
 def test_polarity_tags_cover_input_pair_load_tail_current():
@@ -538,20 +540,24 @@ def test_needed_bias_outputs_second_stage_forces_out1():
     assert needed_bias_outputs(topo, variant_map) == {1}
 
 
-@pytest.mark.parametrize("variant_name", ["diode_connected_mosfet_bias", "resistor_bias"])
+@pytest.mark.parametrize(
+    "variant_name", ["diode_connected_mosfet_bias", "resistor_bias", "magic_battery_bias"]
+)
 @pytest.mark.parametrize(
     "needed,expected_out_ports,expected_n_devices",
     [
         (set(), [], 1),
-        ({1}, ["out1"], 2),
-        ({1, 2}, ["out1", "out2"], 3),
-        ({1, 2, 3}, ["out1", "out2", "out3"], 4),
+        ({1}, ["out1"], 3),
+        ({1, 2}, ["out1", "out2"], 5),
+        ({1, 2, 3, 4}, ["out1", "out2", "out3", "out4"], 9),
     ],
 )
-def test_prune_bias_generation_ladder_variants(variant_name, needed, expected_out_ports, expected_n_devices):
-    """Ladder bias generators (diode-connected / resistor) keep the first
-    max(needed)+1 devices and rewire the last kept device's far terminal to
-    gnd, so the chain still terminates correctly."""
+def test_prune_bias_generation_independent_legs_all_variants(
+    variant_name, needed, expected_out_ports, expected_n_devices
+):
+    """Pruning keeps the shared reference device plus exactly the legs for
+    needed rails (1 + 2*len(needed) devices); needed={1,2,3,4} returns the
+    variant unchanged (9 devices, identity)."""
     modules = load_modules()
     variant = next(v for v in modules["bias_generation"] if v.name == variant_name)
 
@@ -559,53 +565,40 @@ def test_prune_bias_generation_ladder_variants(variant_name, needed, expected_ou
 
     out_ports = [p.name for p in pruned.ports if p.name.startswith("out")]
     assert out_ports == expected_out_ports
-    assert {"ibias", "gnd"} <= {p.name for p in pruned.ports}
+    assert {"ibias", "vdd", "gnd"} <= {p.name for p in pruned.ports}
     assert len(pruned.devices) == expected_n_devices
+    if needed == {1, 2, 3, 4}:
+        assert pruned is variant
 
-    last = pruned.devices[-1]
-    if last.type == "resistor":
-        assert last.terminals["t2"] == "gnd"
-    else:
-        assert last.terminals["s"] == "gnd"
-        assert last.terminals["b"] == "gnd"
-
-
-def test_prune_bias_generation_ladder_keeps_variant_unchanged_when_all_needed():
-    modules = load_modules()
-    diode = next(v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias")
-    assert prune_bias_generation(diode, {1, 2, 3, 4}) is diode
-
-
-@pytest.mark.parametrize(
-    "needed,expected_out_ports,expected_n_devices",
-    [
-        (set(), [], 1),
-        ({1}, ["out1"], 3),
-        ({1, 2}, ["out1", "out2"], 5),
-        ({1, 2, 3}, ["out1", "out2", "out3"], 7),
-    ],
-)
-def test_prune_bias_generation_magic_battery_independent_legs(needed, expected_out_ports, expected_n_devices):
-    """magic_battery_bias keeps its shared reference device (mp1) plus only
-    the mirror legs for needed output rails."""
-    modules = load_modules()
-    variant = next(v for v in modules["bias_generation"] if v.name == "magic_battery_bias")
-
-    pruned = prune_bias_generation(variant, needed)
-
-    out_ports = [p.name for p in pruned.ports if p.name.startswith("out")]
-    assert out_ports == expected_out_ports
-    assert len(pruned.devices) == expected_n_devices
-    assert any(dev.ref == "mp1" for dev in pruned.devices)
     for dev in pruned.devices:
         refs = {t for t in dev.terminals.values() if t.startswith("out")}
         assert refs <= set(expected_out_ports)
 
 
+@pytest.mark.parametrize(
+    "variant_name,shared_ref",
+    [
+        ("magic_battery_bias", "mp1"),
+        ("diode_connected_mosfet_bias", "mn1"),
+        ("resistor_bias", "mp1"),
+    ],
+)
+def test_prune_bias_generation_keeps_shared_reference_device(variant_name, shared_ref):
+    """Every bias_generation variant's shared reference device (mirrors ibias
+    onto an internal node, never touches out1..out4) survives pruning even
+    when needed is empty."""
+    modules = load_modules()
+    variant = next(v for v in modules["bias_generation"] if v.name == variant_name)
+    pruned = prune_bias_generation(variant, set())
+    assert len(pruned.devices) == 1
+    assert pruned.devices[0].ref == shared_ref
+
+
 def test_enumerate_circuits_prunes_bias_generation_for_simple_load_one_stage():
-    """one_stage_opamp has no second_stage slot, so a simple load (which
-    needs none of the four bias rails) prunes diode_connected_mosfet_bias
-    down to a single device tying ibias directly to gnd."""
+    """one_stage_opamp has no second_stage slot and resistor_tail_vdd needs no
+    bias rail, so a simple load (needing none of the four bias rails) prunes
+    diode_connected_mosfet_bias down to just its shared reference device
+    (mn1: ibias -> gnd)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     simple_modules = {
@@ -618,21 +611,23 @@ def test_enumerate_circuits_prunes_bias_generation_for_simple_load_one_stage():
     circuit = next(enumerate_circuits(topo, simple_modules))
     bias_variant = circuit.variant_map["bias_gen"]
 
-    assert [p.name for p in bias_variant.ports] == ["ibias", "gnd"]
+    assert [p.name for p in bias_variant.ports] == ["ibias", "vdd", "gnd"]
     assert len(bias_variant.devices) == 1
 
     bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
-    assert len(bias_devices) == 1
     (dev,) = bias_devices.values()
+    assert dev.ref == "bias_gen_mn1"
     assert dev.terminals["d"] == "ibias"
     assert dev.terminals["g"] == "ibias"
     assert dev.terminals["s"] == "gnd!"
+    assert dev.terminals["b"] == "gnd!"
 
 
 def test_enumerate_circuits_prunes_bias_generation_for_two_stage_simple_load():
-    """two_stage_opamp_single_ended's second_stage taps out1, so even a
-    simple load keeps exactly out1: diode_connected_mosfet_bias is pruned to
-    a 2-device chain ibias->out1->gnd."""
+    """two_stage_opamp_single_ended's second_stage taps out1, and
+    resistor_tail_vdd needs no bias rail, so even a simple load keeps exactly
+    out1: diode_connected_mosfet_bias is pruned to its shared reference device
+    (mn1) plus leg 1 (mn2, mp1)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     simple_modules = {
@@ -647,18 +642,23 @@ def test_enumerate_circuits_prunes_bias_generation_for_two_stage_simple_load():
     circuit = next(enumerate_circuits(topo, simple_modules))
     bias_variant = circuit.variant_map["bias_gen"]
 
-    assert [p.name for p in bias_variant.ports] == ["ibias", "out1", "gnd"]
-    assert len(bias_variant.devices) == 2
+    assert [p.name for p in bias_variant.ports] == ["ibias", "out1", "vdd", "gnd"]
+    assert len(bias_variant.devices) == 3
 
     bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
-    last_dev = bias_devices["bias_gen_mn2"]
-    assert last_dev.terminals["d"] == "net_bias1"
-    assert last_dev.terminals["s"] == "gnd!"
+    assert set(bias_devices) == {"bias_gen_mn1", "bias_gen_mn2", "bias_gen_mp1"}
+    assert bias_devices["bias_gen_mn2"].terminals["d"] == "net_bias1"
+    assert bias_devices["bias_gen_mn2"].terminals["g"] == "ibias"
+    assert bias_devices["bias_gen_mp1"].terminals["d"] == "net_bias1"
+    assert bias_devices["bias_gen_mp1"].terminals["g"] == "net_bias1"
+    assert bias_devices["bias_gen_mp1"].terminals["s"] == "vdd!"
 
 
-def test_enumerate_circuits_does_not_prune_when_all_bias_outputs_needed():
-    """A differential-output folded-cascode load needs all four bias rails,
-    so diode_connected_mosfet_bias is left unchanged (5 devices, out1..out4)."""
+def test_enumerate_circuits_extends_bias_generation_for_tail_bias_rail_overflow():
+    """A differential-output folded-cascode load needs all four bias rails
+    (out1..out4), and current_mirror_tail_nmos needs its own dedicated bias
+    rail -- since out1..out4 are taken, diode_connected_mosfet_bias is
+    extended with a fifth leg (out5/net_bias5) for the tail's bias."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     simple_modules = {
@@ -671,5 +671,207 @@ def test_enumerate_circuits_does_not_prune_when_all_bias_outputs_needed():
     circuit = next(enumerate_circuits(topo, simple_modules))
     bias_variant = circuit.variant_map["bias_gen"]
 
-    assert [p.name for p in bias_variant.ports] == ["ibias", "out1", "out2", "out3", "out4", "gnd"]
-    assert len(bias_variant.devices) == 5
+    assert [p.name for p in bias_variant.ports] == [
+        "ibias", "out1", "out2", "out3", "out4", "vdd", "gnd", "out5",
+    ]
+    assert len(bias_variant.devices) == 11
+
+    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
+    assert "bias_gen_mn6" in bias_devices  # cloned from mn5
+    assert "bias_gen_mp5" in bias_devices  # cloned from mp4
+    assert bias_devices["bias_gen_mn6"].terminals["d"] == "net_bias5"
+    assert bias_devices["bias_gen_mp5"].terminals["d"] == "net_bias5"
+    assert bias_devices["bias_gen_mp5"].terminals["g"] == "net_bias5"
+
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias5"
+    assert tail_devices["tail_current_m1"].terminals["g"] == "net_bias5"
+
+
+@pytest.mark.parametrize(
+    "variant_name,expected",
+    [
+        ("current_mirror_tail_pmos", True),
+        ("current_mirror_tail_nmos", True),
+        ("cascode_current_mirror_tail_pmos", True),
+        ("cascode_current_mirror_tail_nmos", True),
+        ("resistor_tail_vdd", False),
+        ("resistor_tail_gnd", False),
+    ],
+)
+def test_tail_current_needs_bias(variant_name, expected):
+    modules = load_modules()
+    variant = next(v for v in modules["tail_current"] if v.name == variant_name)
+    assert tail_current_needs_bias(variant) is expected
+
+
+@pytest.mark.parametrize(
+    "load_needed,expected_rail",
+    [
+        (set(), 1),
+        ({1}, 2),
+        ({1, 2}, 3),
+        ({1, 2, 3, 4}, 5),
+    ],
+)
+def test_assign_tail_bias_rail(load_needed, expected_rail):
+    assert assign_tail_bias_rail(load_needed) == expected_rail
+
+
+@pytest.mark.parametrize(
+    "variant_name,cloned_refs",
+    [
+        ("magic_battery_bias", {"mp6", "mn5"}),
+        ("diode_connected_mosfet_bias", {"mn6", "mp5"}),
+        ("resistor_bias", {"mp6", "r5"}),
+    ],
+)
+def test_extend_bias_generation(variant_name, cloned_refs):
+    """extend_bias_generation clones leg 4's devices onto out5 with
+    incremented refs, appends an out5 output port, and leaves the original 9
+    devices untouched."""
+    modules = load_modules()
+    variant = next(v for v in modules["bias_generation"] if v.name == variant_name)
+    original_refs = {dev.ref for dev in variant.devices}
+
+    extended = extend_bias_generation(variant)
+
+    assert len(extended.devices) == 11
+    assert [p.name for p in extended.ports][-1] == "out5"
+    assert {p.name for p in extended.ports} == {
+        "ibias", "out1", "out2", "out3", "out4", "out5", "vdd", "gnd",
+    }
+
+    new_refs = {dev.ref for dev in extended.devices} - original_refs
+    assert new_refs == cloned_refs
+    for dev in extended.devices:
+        if dev.ref in cloned_refs:
+            refs = {t for t in dev.terminals.values() if t.startswith("out")}
+            assert refs == {"out5"}
+
+
+@pytest.mark.parametrize(
+    "bias_variant_name", ["diode_connected_mosfet_bias", "resistor_bias", "magic_battery_bias"]
+)
+def test_enumerate_circuits_assigns_tail_bias_rail_one_stage_simple_load(bias_variant_name):
+    """one_stage_opamp + simple load (load_needed={}) + current_mirror_tail_nmos
+    (needs bias): tail gets rail 1 (net_bias1); bias_gen is pruned to shared
+    reference + leg 1 only."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "active_load_pmos"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_variant_name],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out1"]
+    assert len(bias_variant.devices) == 3  # shared ref + 1 leg
+
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias1"
+    assert tail_devices["tail_current_m1"].terminals["g"] == "net_bias1"
+
+
+@pytest.mark.parametrize(
+    "bias_variant_name", ["diode_connected_mosfet_bias", "resistor_bias", "magic_battery_bias"]
+)
+def test_enumerate_circuits_assigns_tail_bias_rail_two_stage_simple_load(bias_variant_name):
+    """two_stage_opamp_single_ended + simple load (load_needed={1}, forced by
+    second_stage) + current_mirror_tail_nmos: tail gets rail 2 (net_bias2),
+    distinct from load/second_stage's rail 1."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_vdd"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_variant_name],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out1", "out2"]
+    assert len(bias_variant.devices) == 5  # shared ref + 2 legs
+
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias2"
+
+
+@pytest.mark.parametrize(
+    "bias_variant_name", ["diode_connected_mosfet_bias", "resistor_bias", "magic_battery_bias"]
+)
+def test_enumerate_circuits_assigns_tail_bias_rail_overflow_to_rail_5(bias_variant_name):
+    """one_stage_opamp + differential-output folded-cascode load (load_needed=
+    {1,2,3,4}) + current_mirror_tail_nmos: tail gets the overflow rail 5
+    (net_bias5), and bias_gen is extended with a fifth leg for all 3 variants."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_variant_name],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert "out5" in {p.name for p in bias_variant.ports}
+    assert len(bias_variant.devices) == 11  # 9 + 2 cloned
+
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias5"
+    assert tail_devices["tail_current_m1"].terminals["g"] == "net_bias5"
+
+
+def test_enumerate_circuits_resistor_tail_vdd_needs_no_bias_rail():
+    """resistor_tail_vdd needs no bias rail: bias_gen pruning is driven purely
+    by load_needed, no extra rail consumed."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == []
+    assert len(bias_variant.devices) == 1
+
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    all_terms = {t for dev in tail_devices.values() for t in dev.terminals.values()}
+    assert not any(t.startswith("net_bias") for t in all_terms)
+
+
+def test_enumerate_circuits_resistor_tail_gnd_needs_no_bias_rail():
+    """resistor_tail_gnd needs no bias rail (mirror of the vdd case above)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_vdd"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_gnd"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == []
+    assert len(bias_variant.devices) == 1
+
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    all_terms = {t for dev in tail_devices.values() for t in dev.terminals.values()}
+    assert not any(t.startswith("net_bias") for t in all_terms)
