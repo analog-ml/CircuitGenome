@@ -8,6 +8,8 @@ SPICE netlists.
 
 ## File map
 
+### Core pipeline & data model
+
 - `models.py` — plain dataclasses, no logic: `Device`, `PortDef`,
   `ModuleVariant`, `Slot`, `Connection`, `TopologyTemplate`,
   `SynthesizedCircuit`. **None are frozen** — `dataclasses.replace()` is the
@@ -21,7 +23,17 @@ SPICE netlists.
 - `config/opamp_topologies.yaml` — topology templates: slots (which
   categories are needed, and under what local slot name) + `{slot, port,
   net}` connection rules.
-- `compatibility.py` — polarity compatibility filter (`is_combination_valid`).
+- `synthesizer.py` — `enumerate_circuits`/`synthesize`, the orchestration
+  pipeline. **Primary integration point for any new per-combination
+  filter/transform.**
+- `netlist.py` — `to_flat_spice` / `to_hierarchical_spice` serializers.
+- `__init__.py` — public API surface (`__all__`); `polarity_compatibility` and
+  `bias_pruning` are intentionally **not** exported (see pattern below).
+
+### Pipeline filters & pruning (internal, not in `__all__`)
+
+- `polarity_compatibility.py` — polarity compatibility filter
+  (`is_combination_valid`).
 - `output_compatibility.py` — output-cardinality compatibility filter
   (`is_output_type_compatible`).
 - `cmfb_compatibility.py` — cmfb-slot compatibility filter and pruning
@@ -32,12 +44,10 @@ SPICE netlists.
   `prune_bias_generation`).
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
-- `synthesizer.py` — `enumerate_circuits`/`synthesize`, the orchestration
-  pipeline. **Primary integration point for any new per-combination
-  filter/transform.**
-- `netlist.py` — `to_flat_spice` / `to_hierarchical_spice` serializers.
-- `__init__.py` — public API surface (`__all__`); `compatibility` and
-  `bias_pruning` are intentionally **not** exported (see pattern below).
+
+These six modules all follow the same shape (see "Pattern for small internal
+pure-function modules" below) and are invoked, in this order, from
+`enumerate_circuits` (see "pipeline order" below).
 
 ## Module categories & canonical ports
 
@@ -88,7 +98,7 @@ list is current.
   single shared in/out node those variants' devices assume, while leaving the
   6 cascode loads' distinct in/out nets intact.
 
-## Polarity compatibility filter (`compatibility.py`)
+## Polarity compatibility filter (`polarity_compatibility.py`)
 
 Each `input_pair`/`load`/`tail_current` variant declares
 `polarity: pmos_input | nmos_input | None`. `input_pair` is the reference:
@@ -172,8 +182,9 @@ one of its device terminals to `tail` -- no code changes needed here.
 
 ## Pattern for small internal pure-function modules
 
-`compatibility.py`, `bias_pruning.py`, and `net_aliasing.py` all follow the
-same template — use it for future per-combination filters/transforms:
+`polarity_compatibility.py`, `bias_pruning.py`, and `net_aliasing.py` all
+follow the same template — use it for future per-combination
+filters/transforms:
 
 1. Small, dependency-light, pure functions over `ModuleVariant`/
    `TopologyTemplate`/`variant_map`.
