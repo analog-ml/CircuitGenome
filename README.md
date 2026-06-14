@@ -41,6 +41,8 @@ The synthesizer works by combining **module variants** according to a **topology
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
 | Second stage | Common-source, common-drain (source follower), differential OTA |
 
+![All implemented module categories](gallery/modules-implementations/all.svg)
+
 ### Topology templates
 
 | Name | Stages | Output | Compensation |

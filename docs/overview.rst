@@ -72,6 +72,13 @@ Module categories
    * - Second stage
      - Common-source, common-drain (source follower), differential OTA
 
+.. figure:: ../gallery/modules-implementations/all.svg
+   :alt: All implemented module categories
+   :width: 100%
+
+   All module variants CircuitGenome currently implements, grouped by
+   module category.
+
 Topology templates
 ~~~~~~~~~~~~~~~~~~
 

@@ -1,0 +1,2 @@
+1. [Lec 21: Common-mode feedback choices & design considerations; 2-stage Miller OTA with CMFB - YouTube](https://www.youtube.com/watch?v=GgBZESkLCUA)
+2. [Common-mode feedback circuit. | Download Scientific Diagram](https://www.researchgate.net/figure/Common-mode-feedback-circuit_fig5_362816751)
