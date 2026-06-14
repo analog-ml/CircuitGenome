@@ -92,24 +92,34 @@ extend the filter to a new or edited variant, just add the matching
 
 ### Output-cardinality compatibility filter
 
-A topology wires `load.out1`/`out2` to the same nets as `in1`/`in2`
-unconditionally, but only connects `load.out` to the stage's output node in
-`single_ended` topologies. Folded-cascode/telescopic-cascode loads with a
-single output (`folded_cascode_load_*_input_single_output`,
+`load.in1`/`in2` (the folding nodes fed by `input_pair.out1`/`out2`) and
+`load.out`/`out1`/`out2` (the load's actual output node(s)) are wired to
+*separate* nets by every topology. Whether the output-side ports get a net at
+all depends on the topology's `output_type`: `load.out1`/`out2` are wired to
+`net_loadout1`/`net_loadout2` only in `fully_differential` topologies (sensed
+by `cmfb`/`second_stage*`/`comp*`), and `load.out`/`out2` are wired to the
+stage's output node only in `single_ended` topologies.
+
+Folded-cascode/telescopic-cascode loads with a single output
+(`folded_cascode_load_*_input_single_output`,
 `telescopic_cascode_load_{pmos,nmos}`) declare `out` as mandatory, so they'd
 be left floating in a `fully_differential` topology. Folded-cascode loads
 with differential outputs (`folded_cascode_load_*_input_differential_output`)
-declare `out1`/`out2` as mandatory cascode-output nodes, so they'd be shorted
-to `in1`/`in2` in a `single_ended` topology.
+declare `out1`/`out2` as mandatory cascode-output nodes, so they'd be left
+floating in a `single_ended` topology (where `net_loadout1`/`net_loadout2`
+aren't defined).
 
 These 6 `load` variants declare an `output_cardinality` field in
 `opamp_modules.yaml`: `"single"` (compatible only with `single_ended`) or
 `"differential"` (compatible only with `fully_differential`); the other 6
-`load` variants (resistor/active/current-source) are untagged and compatible
-with either. `enumerate_circuits` skips any combination where `load`'s
-`output_cardinality` (if set) doesn't match the topology's `output_type`. To
-extend the filter to a new or edited `load` variant, just add the matching
-`output_cardinality:` tag in YAML — no code changes needed
+`load` variants (resistor/active/current-source) declare `out1`/`out2` as
+`alias_of: in1`/`in2` — a net-merge pass (`net_aliasing.py`) collapses their
+`out1`/`out2` net back onto `in1`/`in2`'s after assembly, restoring a single
+shared in/out node regardless of `output_type`. They're untagged and
+compatible with either. `enumerate_circuits` skips any combination where
+`load`'s `output_cardinality` (if set) doesn't match the topology's
+`output_type`. To extend the filter to a new or edited `load` variant, just
+add the matching `output_cardinality:` tag in YAML — no code changes needed
 (`circuitgenome/synthesizer/output_compatibility.py`).
 
 ### CMFB compatibility filter

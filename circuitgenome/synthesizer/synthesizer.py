@@ -22,6 +22,7 @@ from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
 from .compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
+from .net_aliasing import apply_net_rename, compute_alias_net_rename
 from .output_compatibility import is_output_type_compatible
 
 
@@ -97,8 +98,19 @@ def enumerate_circuits(
     Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't
     match *topology*'s ``output_type`` (see
     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`)
-    are also skipped -- these would leave the load's mandatory cascode-output
-    port either floating (unconnected) or shorted to its input.
+    are also skipped -- these would leave the load's mandatory output port(s)
+    (``out`` for ``"single"``, ``out1``/``out2`` for ``"differential"``)
+    unconnected: only ``single_ended`` topologies define a net for
+    ``load.out``, and only ``fully_differential`` topologies define
+    ``net_loadout1``/``net_loadout2`` for ``load.out1``/``out2``.
+
+    After each slot's ports are wired, a net-merge pass (see
+    :func:`~circuitgenome.synthesizer.net_aliasing.compute_alias_net_rename`/
+    :func:`~circuitgenome.synthesizer.net_aliasing.apply_net_rename`) collapses
+    ``load`` ports declared ``alias_of`` another ``load`` port (``out1``/
+    ``out2`` on the 6 resistor/active/current-source loads) onto their target
+    port's net, restoring the shared in/out node those variants' devices
+    assume.
 
     For topologies with a ``cmfb`` slot, combinations where ``load``'s
     ``output_cardinality`` isn't ``"differential"`` (i.e. ``cmfb.out`` would
@@ -166,11 +178,17 @@ def enumerate_circuits(
         variant_map[bias_slot.name] = prune_bias_generation(variant_map[bias_slot.name], needed)
 
         all_devices: list[tuple[str, Device]] = []
+        load_port_net_map: dict[str, str] = {}
         for slot in topology.slots:
             variant = variant_map[slot.name]
             slot_connections = topology.slot_connections(slot.name)
             port_net_map = _build_port_net_map(slot.name, variant, slot_connections)
+            if slot.category == "load":
+                load_port_net_map = port_net_map
             all_devices.extend(_resolve_devices(slot.name, variant, port_net_map))
+
+        rename = compute_alias_net_rename(variant_map["load"], load_port_net_map, topology.external_ports)
+        all_devices = apply_net_rename(all_devices, rename)
 
         name = _circuit_name(topology, variant_map)
         yield SynthesizedCircuit(

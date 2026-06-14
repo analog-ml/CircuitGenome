@@ -3,6 +3,56 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-14
+
+PR #16.
+
+### Added
+
+- New module `net_aliasing.py`: `compute_alias_net_rename`/
+  `apply_net_rename`, a net-merge pass run at the end of `enumerate_circuits`
+  for `load` ports declared `alias_of` another `load` port.
+- New nets: `net_loadout1`/`net_loadout2` (`fully_differential` topologies,
+  the `load`'s cascode-output nodes) and `net_fold2` (`single_ended`/
+  1-stage topologies, the `load`'s branch-2 folding node).
+
+### Changed
+
+- Fixed a gain-killing wiring defect: `load.in1`/`in2` (the folding nodes fed
+  by `input_pair.out1`/`out2`) and `load.out`/`out1`/`out2` (the load's
+  actual output node(s)) are now wired to *separate* nets in all 7
+  topologies. Previously, the 6 cascode `load` variants' cascode-output
+  devices had drain == source (degenerate, Vds=0), and `cmfb`/
+  `second_stage*`/`comp*` sensed the low-impedance folding node instead of
+  the cascode's high-impedance output.
+  - `fully_differential` topologies: `load.out1`/`out2`, `cmfb.in1`/`in2`,
+    `second_stage_p`/`_n.in`, and the corresponding `comp*_p`/`_n.in` now
+    read `net_loadout1`/`net_loadout2` (previously `net_diff1`/`net_diff2`).
+  - `single_ended`/1-stage topologies: `input_pair.out2`/`load.in2` now read
+    `net_fold2` (previously the stage-output net); `load.out`/`out2`/
+    `second_stage.in`/`comp*.in` are unchanged.
+- For the 6 `load` variants whose `out1`/`out2` are declared `alias_of:
+  in1`/`in2` (resistor/active/current-source loads), the new net-merge pass
+  collapses `out1`/`out2`'s net back onto `in1`/`in2`'s, restoring their
+  previous shared in/out connectivity unchanged.
+- Circuit counts unchanged -- only net assignments/connectivity within
+  existing combinations change.
+
+### Docs
+
+- `output_compatibility.py`, `models.py` (`output_cardinality` docstring),
+  `circuitgenome/synthesizer/CLAUDE.md`, `docs/overview.rst`, `README.md`
+  updated for the new distinct-in/out-nets + `alias_of`-merge model. Added
+  `docs/api/net_aliasing.rst`.
+
+### Notes
+
+- No changes to `opamp_modules.yaml`, `loader.py`, `compatibility.py`,
+  `cmfb_compatibility.py`, `bias_pruning.py`, or `netlist.py` -- the 6
+  existing `alias_of: in1`/`in2` declarations on the resistor/active/
+  current-source loads' `out1`/`out2` (previously cosmetic, consumed only by
+  `netlist.py::_recover_port_nets`) become functionally load-bearing.
+
 ## 2026-06-13 (4)
 
 PR #15.
