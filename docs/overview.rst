@@ -163,11 +163,18 @@ tag in YAML — no code changes needed
 Output-cardinality compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A topology template wires two of ``load``'s ports unconditionally
-(``out1``/``out2`` to the same nets as ``in1``/``in2``) and one port
-conditionally (``out`` to the stage's single output node, but only in
-``single_ended`` topologies — ``fully_differential`` topologies never connect
-it). Some ``load`` variants declare a *mandatory* port on one side of that
+``load.in1``/``in2`` (the folding nodes fed by ``input_pair.out1``/``out2``)
+and ``load.out``/``out1``/``out2`` (the load's actual output node(s)) are
+wired to *separate* nets by every topology template. Whether the output-side
+ports get a net at all depends on the topology's ``output_type``:
+
+- ``load.out1``/``out2`` are wired to ``net_loadout1``/``net_loadout2`` only
+  in ``fully_differential`` topologies (sensed by ``cmfb``/
+  ``second_stage*``/``comp*``).
+- ``load.out``/``out2`` are wired to the stage's single output node only in
+  ``single_ended`` topologies.
+
+Some ``load`` variants declare a *mandatory* port on one side of that
 conditional wiring:
 
 - ``folded_cascode_load_*_input_single_output`` and
@@ -176,15 +183,18 @@ conditional wiring:
   device terminal floating (disconnected).
 - ``folded_cascode_load_*_input_differential_output`` declare ``out1``/
   ``out2`` as mandatory cascode-output nodes. In a ``single_ended`` topology,
-  ``out1``/``out2`` are wired to the same nets as ``in1``/``in2``, so the
-  cascode device ends up with drain == source (shorted).
+  ``net_loadout1``/``net_loadout2`` aren't defined, so ``out1``/``out2`` are
+  never wired, leaving the cascode device's drain floating (disconnected).
 
 These 6 ``load`` variants declare an ``output_cardinality`` field in
 ``opamp_modules.yaml``: ``"single"`` (compatible only with
 ``output_type: single_ended``) or ``"differential"`` (compatible only with
 ``output_type: fully_differential``). The other 6 ``load`` variants
-(resistor/active/current-source) have no such mandatory port and are
-untagged (``output_cardinality: None``), compatible with either output type.
+(resistor/active/current-source) declare ``out1``/``out2`` as ``alias_of:
+in1``/``in2`` — a net-merge pass (``net_aliasing.py``) collapses their
+``out1``/``out2`` net back onto ``in1``/``in2``'s after assembly, restoring a
+single shared in/out node regardless of ``output_type``. They're untagged
+(``output_cardinality: None``) and compatible with either output type.
 ``enumerate_circuits`` skips any combination where ``load``'s
 ``output_cardinality`` (if set) doesn't match the topology's ``output_type``.
 To extend the filter to a new or edited ``load`` variant, add the matching
@@ -299,17 +309,20 @@ internal device structure is invisible to the template.
    * - ``input_pair``
      - ``in1``, ``in2``, ``out1``, ``out2``, ``tail``, ``vdd``, ``gnd``
    * - ``load``
-     - ``in1``, ``in2`` (differential signal nodes, driven by
-       ``input_pair.out1`` / ``out2``), ``out1``, ``out2`` (differential
-       output nodes — alias ``in1``/``in2`` for simple loads, or distinct
-       cascode-output nodes for differential-output cascode loads), ``out``
-       *(mandatory only for single-output cascode loads; optional/unused
-       otherwise)*, ``bias1``, ``bias2``, ``bias3``, ``bias_cmfb`` *(optional
-       bias inputs; each variant declares only as many as it needs)*,
-       ``vdd``, ``gnd``. Whichever of ``out``/``out1``/``out2`` is mandatory
-       is declared via ``output_cardinality: "single" | "differential" |
-       None``, checked against the topology's ``output_type`` by the
-       output-cardinality compatibility filter
+     - ``in1``, ``in2`` (folding nodes, driven by ``input_pair.out1`` /
+       ``out2``), ``out1``, ``out2`` (differential output nodes — wired to
+       dedicated ``net_loadout1``/``net_loadout2`` nets in
+       ``fully_differential`` topologies for distinct cascode-output devices,
+       or merged back onto ``in1``/``in2`` via ``alias_of`` for simple
+       resistor/active/current-source loads), ``out`` *(mandatory only for
+       single-output cascode loads, wired to the stage's single output node
+       in ``single_ended`` topologies; optional/unused otherwise)*,
+       ``bias1``, ``bias2``, ``bias3``, ``bias_cmfb`` *(optional bias inputs;
+       each variant declares only as many as it needs)*, ``vdd``, ``gnd``.
+       Whichever of ``out``/``out1``/``out2`` is mandatory is declared via
+       ``output_cardinality: "single" | "differential" | None``, checked
+       against the topology's ``output_type`` by the output-cardinality
+       compatibility filter
    * - ``tail_current``
      - ``out``, ``bias`` *(current-mirror / cascode-current-mirror variants
        wire this to the dedicated ``net_bias7`` rail; resistor-tail variants
@@ -325,8 +338,8 @@ internal device structure is invisible to the template.
        drops whichever subset of ``out1``..``out7`` isn't needed
    * - ``cmfb``
      - ``in1``, ``in2`` (differential sense inputs, wired to
-       ``net_diff1``/``net_diff2`` -- the ``load``'s first-stage differential
-       outputs), ``vref`` (common-mode reference, wired to the external
+       ``net_loadout1``/``net_loadout2`` -- the ``load``'s cascode-output
+       nodes), ``vref`` (common-mode reference, wired to the external
        ``vcm_ref`` port), ``bias`` (tail-current bias, reuses ``net_bias4``
        from ``bias_generation.out4``), ``out`` (drives ``load.bias_cmfb`` via
        ``net_cmfb_out``), ``vdd``, ``gnd``. Two variants:

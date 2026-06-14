@@ -328,10 +328,11 @@ def test_output_cardinality_tags_cover_folded_and_telescopic_cascode_loads():
 
 def test_is_output_type_compatible_denies_cardinality_mismatches():
     """A differential-output folded-cascode load (output_cardinality
-    "differential") would leave a shorted cascode device in a single_ended
-    topology; a single-output folded-cascode load (output_cardinality
-    "single") would leave a floating cascode-output node in a
-    fully_differential topology. Both are rejected."""
+    "differential") would leave its mandatory out1/out2 ports floating in a
+    single_ended topology (no net_loadout1/net_loadout2 defined there); a
+    single-output folded-cascode load (output_cardinality "single") would
+    leave its mandatory out port floating in a fully_differential topology.
+    Both are rejected."""
     modules = load_modules()
     topologies = load_topologies()
     by_name = {v.name: v for v in modules["load"]}
@@ -1179,6 +1180,95 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     assert "net_bias6" in third_stage_terms
     assert "net_bias7" in tail_terms
     assert "net_bias4" in cmfb_terms
-    assert "net_diff1" in cmfb_terms
-    assert "net_diff2" in cmfb_terms
+    assert "net_loadout1" in cmfb_terms
+    assert "net_loadout2" in cmfb_terms
     assert "net_cmfb_out" in cmfb_terms
+
+
+def test_synthesize_differential_output_folded_cascode_has_nondegenerate_cascode_devices():
+    """folded_cascode_load_nmos_input_differential_output's out1/out2 are
+    wired to dedicated net_loadout1/net_loadout2 nets, distinct from in1/in2
+    (net_diff1/net_diff2) -- so the cascode devices whose drain is out1/out2
+    have a different source net (no longer Vds=0). cmfb's sense inputs land
+    on the same net_loadout1/net_loadout2 nets, confirming cmfb senses the
+    load's actual cascode output rather than the folding node."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
+    cmfb_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("cmfb_")}
+
+    cascode_outputs = {"net_loadout1", "net_loadout2"}
+    cascode_devices = [dev for dev in load_devices.values() if dev.terminals.get("d") in cascode_outputs]
+    assert len(cascode_devices) == 4  # mp3/mp4 (cascode) + mn1/mn2 (folded branch)
+    for dev in cascode_devices:
+        assert dev.terminals["d"] != dev.terminals["s"]
+
+    cmfb_sensed = {dev.terminals["t1"] for dev in cmfb_devices.values() if "t1" in dev.terminals}
+    assert cascode_outputs == cmfb_sensed
+
+
+def test_synthesize_single_output_cascode_load_has_nondegenerate_output_device():
+    """telescopic_cascode_load_pmos's out is wired to the stage's output net
+    (out), distinct from in1/in2 (net_diff1/net_fold2) -- so the cascode
+    device whose drain is out has a different source net (no longer
+    Vds=0)."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "one_stage_opamp")
+
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
+        "load": [v for v in modules["load"] if v.name == "telescopic_cascode_load_pmos"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
+
+    output_device = next(dev for dev in load_devices.values() if dev.terminals.get("d") == "out")
+    assert output_device.terminals["s"] != "out"
+
+
+def test_synthesize_alias_of_load_merges_in_and_out_nets():
+    """resistor_load_vdd declares out1/out2 as alias_of in1/in2. The topology
+    wires load.in1 and load.out1 to separate nets (net_diff1 and
+    net_loadout1), but the net-merge pass collapses them back into one --
+    so load_r1 (load.in1), input_pair_m1 (input_pair.out1), and
+    second_stage_n_mn1 (which senses the load's output) all land on the same
+    net, restoring the single shared in/out node these devices assume."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
+        "load": [v for v in modules["load"] if v.name == "resistor_load_vdd"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_gnd"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    devices = dict(circuit.devices)
+
+    load_in1_net = devices["load_r1"].terminals["t2"]
+    input_pair_out1_net = devices["input_pair_m1"].terminals["d"]
+    second_stage_n_sense_net = devices["second_stage_n_mn1"].terminals["g"]
+
+    assert load_in1_net == input_pair_out1_net == second_stage_n_sense_net

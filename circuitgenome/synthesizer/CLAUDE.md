@@ -28,6 +28,8 @@ SPICE netlists.
   (`is_cmfb_compatible`, `prune_cmfb`).
 - `bias_pruning.py` — bias-rail pruning (`needed_bias_outputs`,
   `prune_bias_generation`).
+- `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
+  another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 - `synthesizer.py` — `enumerate_circuits`/`synthesize`, the orchestration
   pipeline. **Primary integration point for any new per-combination
   filter/transform.**
@@ -71,6 +73,18 @@ list is current.
   of rail 4 when `load.output_cardinality == "differential"` (see "CMFB
   compatibility filter" below) -- otherwise `cmfb` is pruned to an empty
   placeholder, rail 4 is not needed, and `vcm_ref` is left unconnected.
+- **`load` in/out nets**: `load.in1`/`in2` (folding nodes fed by
+  `input_pair.out1`/`out2`) and `load.out`/`out1`/`out2` (the load's output
+  node(s)) are wired to *separate* nets by every topology -- `net_loadout1`/
+  `net_loadout2` (FD topologies, sensed by `cmfb`/`second_stage*`/`comp*`) or
+  the stage-output net (SE/1-stage topologies, via `load.out`/`out2`); SE
+  topologies additionally introduce `net_fold2` for `load.in2`/
+  `input_pair.out2`. A net-merge pass (`net_aliasing.py`, run at the end of
+  `enumerate_circuits`) then collapses any `load` port declared `alias_of`
+  another `load` port (`out1`/`out2` on the 6 resistor/active/current-source
+  loads, aliased to `in1`/`in2`) back onto its target's net -- restoring the
+  single shared in/out node those variants' devices assume, while leaving the
+  6 cascode loads' distinct in/out nets intact.
 
 ## Polarity compatibility filter (`compatibility.py`)
 
@@ -86,15 +100,18 @@ tag in YAML — no code changes needed.
 
 Each `load` variant declares `output_cardinality: "single" | "differential" |
 None`. `"single"` (folded-cascode single-output and telescopic-cascode loads)
-declares `out` as mandatory, which only a `single_ended` topology wires;
-`"differential"` (folded-cascode differential-output loads) declares
-`out1`/`out2` as mandatory cascode-output nodes, which only a
-`fully_differential` topology keeps distinct from `in1`/`in2`.
+declares `out` as mandatory, which only a `single_ended` topology wires (to
+the stage-output net); `"differential"` (folded-cascode differential-output
+loads) declares `out1`/`out2` as mandatory cascode-output nodes, which only a
+`fully_differential` topology wires (to `net_loadout1`/`net_loadout2`).
 `is_output_type_compatible` rejects a combination if `load`'s
-`output_cardinality` (if set) doesn't match the topology's `output_type`
-(untagged loads, i.e. resistor/active/current-source, impose no constraint).
-To support a new/edited `load` variant, just add the right
-`output_cardinality:` tag in YAML — no code changes needed.
+`output_cardinality` (if set) doesn't match the topology's `output_type` --
+otherwise the mandatory port(s) would be left floating (unconnected)
+(untagged loads, i.e. resistor/active/current-source, impose no constraint --
+their `out1`/`out2` are `alias_of in1`/`in2` and merged back by
+`net_aliasing.py` regardless of `output_type`). To support a new/edited
+`load` variant, just add the right `output_cardinality:` tag in YAML — no
+code changes needed.
 
 ## CMFB compatibility filter & pruning (`cmfb_compatibility.py`)
 
@@ -134,8 +151,8 @@ real `bias_cmfb: role: input` -- no code changes needed here.
 
 ## Pattern for small internal pure-function modules
 
-`compatibility.py` and `bias_pruning.py` both follow the same template — use
-it for future per-combination filters/transforms:
+`compatibility.py`, `bias_pruning.py`, and `net_aliasing.py` all follow the
+same template — use it for future per-combination filters/transforms:
 
 1. Small, dependency-light, pure functions over `ModuleVariant`/
    `TopologyTemplate`/`variant_map`.
@@ -159,8 +176,14 @@ it for future per-combination filters/transforms:
 6. `needed_bias_outputs` → `prune_bias_generation`, replacing
    `variant_map[bias_gen_slot]`.
 7. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
-   then `_build_port_net_map` + `_resolve_devices` → `all_devices`.
-8. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+   then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
+   `load` slot's `port_net_map` is captured separately as
+   `load_port_net_map`.
+8. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+   topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
+   net-merge pass for `load` ports declared `alias_of` another `load` port
+   (see "Net-naming & wiring conventions" above).
+9. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
    devices)`.
 
 Any new per-combination transform should slot in between steps 4 and 7,

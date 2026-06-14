@@ -35,6 +35,7 @@ design exploration, or topology studies.
    api/output_compatibility
    api/cmfb_compatibility
    api/bias_pruning
+   api/net_aliasing
    api/models
    api/loader
    api/netlist

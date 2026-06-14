@@ -8,24 +8,28 @@
 # to any slot port named "vdd" or "gnd" by the synthesizer.
 #
 # Load canonical interface: in1, in2, out, out1, out2, bias1, bias2, bias3,
-# bias_cmfb. input_pair.out1 → net_diff1 (load.in1 side), input_pair.out2 →
-# net_diff2/net_mid (load.in2 side). load.out1/out2 are wired to the same
-# nets as load.in1/in2 respectively (in1<->out1, in2<->out2 pairing): for
-# simple (alias-based) loads out1/out2 ARE in1/in2 (same node); for cascode
-# loads this gives the cascode transistor on that branch a defined terminal
-# even when the variant's "real" differential output isn't otherwise used by
-# this topology. For single-ended templates, load.out (the single-output
-# cascode loads' real output) is additionally wired to the stage-output net.
+# bias_cmfb. input_pair.out1/out2 feed load.in1/in2 (net_diff1, and
+# net_diff2/net_fold2 — the load's folding nodes). load.out1/out2
+# (fully_differential templates: net_loadout1/net_loadout2) and load.out/out2
+# (single-ended templates: the stage-output net) are the load's actual output
+# node(s), sensed by cmfb.in1/in2, second_stage*.in, and comp*.in. in1/in2 and
+# out1/out2/out are deliberately DISTINCT nets here: for the 6 cascode load
+# variants these are genuinely separate device terminals (e.g. a folded
+# cascode's source vs. drain); for the other 6 (resistor/active/
+# current-source) loads, out1/out2 declare alias_of: in1/in2 in
+# opamp_modules.yaml, and a net-merge pass (net_aliasing.py) collapses each
+# such pair back onto one net after assembly, restoring the shared in/out node
+# those variants' devices assume.
 # load.bias1/bias2/bias3/bias_cmfb are optional bias inputs used by
 # cascode-style loads, wired to four distinct bias rails (net_bias1..4)
 # produced by bias_gen's out1/out2/out3/out4.
 #
 # fully_differential templates additionally include a `cmfb` slot
-# (common-mode feedback): cmfb.in1/in2 sense net_diff1/net_diff2 (the load's
-# first-stage differential outputs), cmfb.vref is wired to the external
-# vcm_ref port, cmfb.bias reuses net_bias4 (bias_gen.out4), and cmfb.out
-# drives load.bias_cmfb via a new net_cmfb_out net (replacing the static
-# net_bias4 connection used directly elsewhere).
+# (common-mode feedback): cmfb.in1/in2 sense net_loadout1/net_loadout2 (the
+# load's cascode-output nodes), cmfb.vref is wired to the external vcm_ref
+# port, cmfb.bias reuses net_bias4 (bias_gen.out4), and cmfb.out drives
+# load.bias_cmfb via a new net_cmfb_out net (replacing the static net_bias4
+# connection used directly elsewhere).
 #
 # config.compensation_scheme (3-stage templates only) – "nested_miller" (NMC)
 # or "reversed_nested_miller" (RNMC). Filterable via synthesize(config=...).
@@ -47,10 +51,10 @@ topologies:
       - {slot: input_pair,   port: in1,   net: in1}
       - {slot: input_pair,   port: in2,   net: in2}
       - {slot: input_pair,   port: out1,  net: net_diff1}
-      - {slot: input_pair,   port: out2,  net: out}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,       net: net_diff1}
-      - {slot: load,         port: in2,       net: out}
+      - {slot: load,         port: in2,       net: net_fold2}
       - {slot: load,         port: out1,      net: net_diff1}
       - {slot: load,         port: out2,      net: out}
       - {slot: load,         port: out,       net: out}
@@ -86,10 +90,10 @@ topologies:
       - {slot: input_pair,   port: in1,   net: in1}
       - {slot: input_pair,   port: in2,   net: in2}
       - {slot: input_pair,   port: out1,  net: net_diff1}
-      - {slot: input_pair,   port: out2,  net: net_mid}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,       net: net_diff1}
-      - {slot: load,         port: in2,       net: net_mid}
+      - {slot: load,         port: in2,       net: net_fold2}
       - {slot: load,         port: out1,      net: net_diff1}
       - {slot: load,         port: out2,      net: net_mid}
       - {slot: load,         port: out,       net: net_mid}
@@ -137,8 +141,8 @@ topologies:
       - {slot: input_pair,      port: tail,  net: net_tail}
       - {slot: load,            port: in1,       net: net_diff1}
       - {slot: load,            port: in2,       net: net_diff2}
-      - {slot: load,            port: out1,      net: net_diff1}
-      - {slot: load,            port: out2,      net: net_diff2}
+      - {slot: load,            port: out1,      net: net_loadout1}
+      - {slot: load,            port: out2,      net: net_loadout2}
       - {slot: load,            port: bias1,     net: net_bias1}
       - {slot: load,            port: bias2,     net: net_bias2}
       - {slot: load,            port: bias3,     net: net_bias3}
@@ -153,22 +157,22 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
-      - {slot: cmfb,            port: in1,   net: net_diff1}
-      - {slot: cmfb,            port: in2,   net: net_diff2}
+      - {slot: cmfb,            port: in1,   net: net_loadout1}
+      - {slot: cmfb,            port: in2,   net: net_loadout2}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
       # Positive output: second stage driven by diff pair output2
-      - {slot: second_stage_p,  port: in,    net: net_diff2}
+      - {slot: second_stage_p,  port: in,    net: net_loadout2}
       - {slot: second_stage_p,  port: out,   net: outp}
       - {slot: second_stage_p,  port: bias,  net: net_bias5}
-      - {slot: comp_p,          port: in,    net: net_diff2}
+      - {slot: comp_p,          port: in,    net: net_loadout2}
       - {slot: comp_p,          port: out,   net: outp}
       # Negative output: second stage driven by diff pair output1
-      - {slot: second_stage_n,  port: in,    net: net_diff1}
+      - {slot: second_stage_n,  port: in,    net: net_loadout1}
       - {slot: second_stage_n,  port: out,   net: outn}
       - {slot: second_stage_n,  port: bias,  net: net_bias5}
-      - {slot: comp_n,          port: in,    net: net_diff1}
+      - {slot: comp_n,          port: in,    net: net_loadout1}
       - {slot: comp_n,          port: out,   net: outn}
 
   # ── 3-STAGE OTA, NESTED MILLER COMPENSATION (single-ended output) ───────
@@ -195,10 +199,10 @@ topologies:
       - {slot: input_pair,   port: in1,   net: in1}
       - {slot: input_pair,   port: in2,   net: in2}
       - {slot: input_pair,   port: out1,  net: net_diff1}
-      - {slot: input_pair,   port: out2,  net: net_mid1}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,       net: net_diff1}
-      - {slot: load,         port: in2,       net: net_mid1}
+      - {slot: load,         port: in2,       net: net_fold2}
       - {slot: load,         port: out1,      net: net_diff1}
       - {slot: load,         port: out2,      net: net_mid1}
       - {slot: load,         port: out,       net: net_mid1}
@@ -250,10 +254,10 @@ topologies:
       - {slot: input_pair,   port: in1,   net: in1}
       - {slot: input_pair,   port: in2,   net: in2}
       - {slot: input_pair,   port: out1,  net: net_diff1}
-      - {slot: input_pair,   port: out2,  net: net_mid1}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
       - {slot: input_pair,   port: tail,  net: net_tail}
       - {slot: load,         port: in1,       net: net_diff1}
-      - {slot: load,         port: in2,       net: net_mid1}
+      - {slot: load,         port: in2,       net: net_fold2}
       - {slot: load,         port: out1,      net: net_diff1}
       - {slot: load,         port: out2,      net: net_mid1}
       - {slot: load,         port: out,       net: net_mid1}
@@ -313,8 +317,8 @@ topologies:
       - {slot: input_pair,      port: tail,  net: net_tail}
       - {slot: load,            port: in1,       net: net_diff1}
       - {slot: load,            port: in2,       net: net_diff2}
-      - {slot: load,            port: out1,      net: net_diff1}
-      - {slot: load,            port: out2,      net: net_diff2}
+      - {slot: load,            port: out1,      net: net_loadout1}
+      - {slot: load,            port: out2,      net: net_loadout2}
       - {slot: load,            port: bias1,     net: net_bias1}
       - {slot: load,            port: bias2,     net: net_bias2}
       - {slot: load,            port: bias3,     net: net_bias3}
@@ -329,30 +333,30 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
-      - {slot: cmfb,            port: in1,   net: net_diff1}
-      - {slot: cmfb,            port: in2,   net: net_diff2}
+      - {slot: cmfb,            port: in1,   net: net_loadout1}
+      - {slot: cmfb,            port: in2,   net: net_loadout2}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
       # Positive output path: stage1 output is net_diff2
-      - {slot: second_stage_p,  port: in,    net: net_diff2}
+      - {slot: second_stage_p,  port: in,    net: net_loadout2}
       - {slot: second_stage_p,  port: out,   net: net_mid2_p}
       - {slot: second_stage_p,  port: bias,  net: net_bias5}
       - {slot: third_stage_p,   port: in,    net: net_mid2_p}
       - {slot: third_stage_p,   port: out,   net: outp}
       - {slot: third_stage_p,   port: bias,  net: net_bias6}
-      - {slot: comp1_p,         port: in,    net: net_diff2}
+      - {slot: comp1_p,         port: in,    net: net_loadout2}
       - {slot: comp1_p,         port: out,   net: outp}
       - {slot: comp2_p,         port: in,    net: net_mid2_p}
       - {slot: comp2_p,         port: out,   net: outp}
       # Negative output path: stage1 output is net_diff1
-      - {slot: second_stage_n,  port: in,    net: net_diff1}
+      - {slot: second_stage_n,  port: in,    net: net_loadout1}
       - {slot: second_stage_n,  port: out,   net: net_mid2_n}
       - {slot: second_stage_n,  port: bias,  net: net_bias5}
       - {slot: third_stage_n,   port: in,    net: net_mid2_n}
       - {slot: third_stage_n,   port: out,   net: outn}
       - {slot: third_stage_n,   port: bias,  net: net_bias6}
-      - {slot: comp1_n,         port: in,    net: net_diff1}
+      - {slot: comp1_n,         port: in,    net: net_loadout1}
       - {slot: comp1_n,         port: out,   net: outn}
       - {slot: comp2_n,         port: in,    net: net_mid2_n}
       - {slot: comp2_n,         port: out,   net: outn}
@@ -388,8 +392,8 @@ topologies:
       - {slot: input_pair,      port: tail,  net: net_tail}
       - {slot: load,            port: in1,       net: net_diff1}
       - {slot: load,            port: in2,       net: net_diff2}
-      - {slot: load,            port: out1,      net: net_diff1}
-      - {slot: load,            port: out2,      net: net_diff2}
+      - {slot: load,            port: out1,      net: net_loadout1}
+      - {slot: load,            port: out2,      net: net_loadout2}
       - {slot: load,            port: bias1,     net: net_bias1}
       - {slot: load,            port: bias2,     net: net_bias2}
       - {slot: load,            port: bias3,     net: net_bias3}
@@ -404,13 +408,13 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
-      - {slot: cmfb,            port: in1,   net: net_diff1}
-      - {slot: cmfb,            port: in2,   net: net_diff2}
+      - {slot: cmfb,            port: in1,   net: net_loadout1}
+      - {slot: cmfb,            port: in2,   net: net_loadout2}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
       # Positive output path: stage1 output is net_diff2
-      - {slot: second_stage_p,  port: in,    net: net_diff2}
+      - {slot: second_stage_p,  port: in,    net: net_loadout2}
       - {slot: second_stage_p,  port: out,   net: net_mid2_p}
       - {slot: second_stage_p,  port: bias,  net: net_bias5}
       - {slot: third_stage_p,   port: in,    net: net_mid2_p}
@@ -418,10 +422,10 @@ topologies:
       - {slot: third_stage_p,   port: bias,  net: net_bias6}
       - {slot: comp1_p,         port: in,    net: net_mid2_p}
       - {slot: comp1_p,         port: out,   net: outp}
-      - {slot: comp2_p,         port: in,    net: net_diff2}
+      - {slot: comp2_p,         port: in,    net: net_loadout2}
       - {slot: comp2_p,         port: out,   net: net_mid2_p}
       # Negative output path: stage1 output is net_diff1
-      - {slot: second_stage_n,  port: in,    net: net_diff1}
+      - {slot: second_stage_n,  port: in,    net: net_loadout1}
       - {slot: second_stage_n,  port: out,   net: net_mid2_n}
       - {slot: second_stage_n,  port: bias,  net: net_bias5}
       - {slot: third_stage_n,   port: in,    net: net_mid2_n}
@@ -429,5 +433,5 @@ topologies:
       - {slot: third_stage_n,   port: bias,  net: net_bias6}
       - {slot: comp1_n,         port: in,    net: net_mid2_n}
       - {slot: comp1_n,         port: out,   net: outn}
-      - {slot: comp2_n,         port: in,    net: net_diff1}
+      - {slot: comp2_n,         port: in,    net: net_loadout1}
       - {slot: comp2_n,         port: out,   net: net_mid2_n}
