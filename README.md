@@ -93,7 +93,7 @@ variants that work with either (`inverter_based_input`, and currently all
 `load`/`tail_current`'s `polarity` (if set) doesn't match `input_pair`'s. To
 extend the filter to a new or edited variant, just add the matching
 `polarity:` tag in YAML — no code changes needed
-(`circuitgenome/synthesizer/compatibility.py`).
+(`circuitgenome/synthesizer/polarity_compatibility.py`).
 
 ### Output-cardinality compatibility filter
 

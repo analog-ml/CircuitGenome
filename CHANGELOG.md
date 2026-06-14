@@ -3,6 +3,30 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-14 (2)
+
+PR #20.
+
+### Changed
+
+- Renamed `compatibility.py` to `polarity_compatibility.py` for naming
+  consistency with its siblings (`output_compatibility.py`,
+  `cmfb_compatibility.py`, `tail_current_compatibility.py`). Updated all
+  imports/docstring/comment references (`synthesizer.py`,
+  `tests/test_synthesizer.py`, `opamp_modules.yaml`, `README.md`,
+  `docs/overview.rst`) -- no behavioral change.
+
+### Docs
+
+- `docs/index.rst`: split the "API Reference" toctree into "Core & I/O"
+  (`synthesizer`, `models`, `loader`, `netlist`) and "Pipeline Filters &
+  Pruning" (`polarity_compatibility`, `output_compatibility`,
+  `cmfb_compatibility`, `tail_current_compatibility`, `bias_pruning`,
+  `net_aliasing`, in pipeline order).
+- `circuitgenome/synthesizer/CLAUDE.md`: split the file map into "Core
+  pipeline & data model" and "Pipeline filters & pruning (internal, not in
+  `__all__`)" sections, matching the new toctree grouping.
+
 ## 2026-06-14
 
 PR #16.

@@ -1,7 +1,7 @@
 import pytest
 from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bias_generation
 from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
-from circuitgenome.synthesizer.compatibility import is_combination_valid
+from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.tail_current_compatibility import (
     CANONICAL_TAIL_CURRENT_VARIANT,

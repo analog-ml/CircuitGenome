@@ -19,7 +19,7 @@ from typing import Iterator
 
 from .bias_pruning import needed_bias_outputs, prune_bias_generation
 from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
-from .compatibility import is_combination_valid
+from .polarity_compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
 from .net_aliasing import apply_net_rename, compute_alias_net_rename
@@ -93,7 +93,7 @@ def enumerate_circuits(
     for every valid combination of module variants in *topology*.
 
     Combinations that mix incompatible ``polarity`` tags (see
-    :func:`~circuitgenome.synthesizer.compatibility.is_combination_valid`) are
+    :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
 
     Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't

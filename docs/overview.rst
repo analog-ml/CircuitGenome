@@ -163,7 +163,7 @@ or omitted for variants that work with either polarity
 ``tail_current``'s ``polarity`` (if set) doesn't match ``input_pair``'s. To
 extend the filter to a new or edited variant, add the matching ``polarity:``
 tag in YAML — no code changes needed
-(``circuitgenome/synthesizer/compatibility.py``).
+(``circuitgenome/synthesizer/polarity_compatibility.py``).
 
 Output-cardinality compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

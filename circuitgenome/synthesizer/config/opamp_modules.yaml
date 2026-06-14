@@ -75,7 +75,7 @@
 #   input_pair, load, and tail_current variants whose current-flow direction
 #   depends on the input pair's polarity declare `polarity: pmos_input` or
 #   `polarity: nmos_input`. enumerate_circuits() skips any combination that
-#   mixes the two tags (see circuitgenome.synthesizer.compatibility), since
+#   mixes the two tags (see circuitgenome.synthesizer.polarity_compatibility), since
 #   that leaves a shared node with no DC current path -- e.g. an NMOS input
 #   pair (drains out1/out2 into the tail) paired with active_load_nmos (also
 #   sinks out1/out2 to gnd), or with current_mirror_tail_pmos (sources
