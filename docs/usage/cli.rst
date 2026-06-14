@@ -99,6 +99,13 @@ Requires the ``viz`` extra:
 
    pip install circuitgenome[viz]
 
+.. figure:: /images/topology_visualizer.png
+   :alt: Topology Explorer screenshot
+   :width: 100%
+
+   The Topology Explorer tab: pick a topology and module variants in the
+   sidebar, and the block diagram updates live.
+
 Options reference
 -----------------
 

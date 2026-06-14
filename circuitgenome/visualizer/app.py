@@ -56,7 +56,8 @@ def _render_graph(graph: VizGraph) -> str:
             edge.source,
             edge.target,
             label=edge.net,
-            title=f"{edge.net} ({edge.source_port} ↔ {edge.target_port})",
+            title=f"{edge.source}.{edge.source_port} ↔ {edge.net} ↔ {edge.target}.{edge.target_port}",
+            font={"size": 7},
         )
     return net.generate_html()
 

@@ -242,6 +242,8 @@ diagram (and SPICE netlist, for valid combinations) update live. Requires the
 pip install circuitgenome[viz]
 ```
 
+![Topology Explorer screenshot](docs/images/topology_visualizer.png)
+
 #### CLI options
 
 | Flag | Description | Default |
