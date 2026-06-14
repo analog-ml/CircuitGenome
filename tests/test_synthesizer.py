@@ -3,6 +3,11 @@ from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bi
 from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
 from circuitgenome.synthesizer.compatibility import is_combination_valid
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
+from circuitgenome.synthesizer.tail_current_compatibility import (
+    CANONICAL_TAIL_CURRENT_VARIANT,
+    is_tail_current_compatible,
+    prune_tail_current,
+)
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits, synthesize
 from circuitgenome.synthesizer.netlist import to_flat_spice, to_hierarchical_spice
@@ -459,6 +464,91 @@ def test_enumerate_circuits_cmfb_present_iff_differential_load():
         assert bool(cmfb_device_refs) == is_differential
 
 
+def test_is_tail_current_compatible_tail_consuming_input_pair_allows_all_variants():
+    """differential_pair_pmos references its tail port (s/b: tail on the tail
+    transistor), so every tail_current variant supplies a real bias current
+    -- all 6 are compatible."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    input_pair = by_name["differential_pair_pmos"]
+
+    for tail_variant in modules["tail_current"]:
+        assert is_tail_current_compatible({"input_pair": input_pair, "tail_current": tail_variant})
+
+
+def test_is_tail_current_compatible_inverter_based_input_only_allows_canonical_variant():
+    """inverter_based_input never references its tail port, so
+    tail_current.out drives nothing -- only CANONICAL_TAIL_CURRENT_VARIANT is
+    allowed through, to avoid enumerating the other 5 tail_current variants as
+    duplicate no-op circuits."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    input_pair = by_name["inverter_based_input"]
+    tail_by_name = {v.name: v for v in modules["tail_current"]}
+
+    assert is_tail_current_compatible(
+        {"input_pair": input_pair, "tail_current": tail_by_name[CANONICAL_TAIL_CURRENT_VARIANT]}
+    )
+    for name, variant in tail_by_name.items():
+        if name == CANONICAL_TAIL_CURRENT_VARIANT:
+            continue
+        assert not is_tail_current_compatible({"input_pair": input_pair, "tail_current": variant})
+
+
+def test_prune_tail_current_keeps_variant_for_tail_consuming_input_pair():
+    """differential_pair_pmos references its tail port -- the tail_current
+    variant is returned unchanged."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    input_pair = by_name["differential_pair_pmos"]
+    tail_variant = by_name[CANONICAL_TAIL_CURRENT_VARIANT]
+
+    assert prune_tail_current(tail_variant, input_pair) is tail_variant
+
+
+def test_prune_tail_current_empties_variant_for_inverter_based_input():
+    """inverter_based_input never references its tail port -- the
+    tail_current variant is replaced with an empty placeholder (no ports, no
+    devices), so it contributes nothing to the assembled circuit and
+    tail_current.bias is no longer "needed" by needed_bias_outputs."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    input_pair = by_name["inverter_based_input"]
+    tail_variant = by_name[CANONICAL_TAIL_CURRENT_VARIANT]
+
+    pruned = prune_tail_current(tail_variant, input_pair)
+    assert pruned.name == "tail_current_absent"
+    assert pruned.ports == []
+    assert pruned.devices == []
+
+
+def test_enumerate_circuits_tail_current_present_iff_not_inverter_based_input():
+    """For every synthesized circuit, the tail_current slot's variant has
+    devices iff input_pair is not inverter_based_input -- for
+    inverter_based_input circuits, tail_current is pruned to an empty
+    placeholder, no tail_current_* devices appear, net_tail is never a device
+    terminal (no longer floating), and bias_gen has no rail-7 leg (out7),
+    closing out Issue #17."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+
+    for circuit in enumerate_circuits(topo, modules):
+        is_inverter_based = circuit.variant_map["input_pair"].name == "inverter_based_input"
+        assert bool(circuit.variant_map["tail_current"].devices) != is_inverter_based
+
+        tail_current_device_refs = [ref for ref, _ in circuit.devices if ref.startswith("tail_current_")]
+        assert bool(tail_current_device_refs) != is_inverter_based
+
+        if is_inverter_based:
+            assert circuit.variant_map["tail_current"].name == "tail_current_absent"
+
+            all_terms = {t for _, dev in circuit.devices for t in dev.terminals.values()}
+            assert "net_tail" not in all_terms
+
+            bias_variant = circuit.variant_map["bias_gen"]
+            assert "out7" not in {p.name for p in bias_variant.ports}
+
+
 def test_load_topologies():
     topologies = load_topologies()
     names = [t.name for t in topologies]
@@ -481,32 +571,35 @@ def test_enumerate_circuits_nonempty():
 def test_enumerate_circuits_count():
     """2-stage single-ended: of the 5 input pairs x 12 loads x 6 tails = 360
     input_pair/load/tail_current combinations, 144 are polarity-valid (see
-    test_polarity_filter_*), and of those 120 also have an output_cardinality
-    compatible with single_ended (the 24 "differential"-cardinality combos
-    are excluded; see test_is_output_type_compatible_*) x 3 bias x 3 comp x 3
-    second = 3240."""
+    test_polarity_filter_*). is_tail_current_compatible then collapses the 72
+    inverter_based_input combinations' 6 tail_current choices down to 1 (72 ->
+    12), for 84 effective combinations -- of those, 70 also have an
+    output_cardinality compatible with single_ended (the 14
+    "differential"-cardinality combos are excluded; see
+    test_is_output_type_compatible_*) x 3 bias x 3 comp x 3 second = 1890."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 3240
+    assert len(circuits) == 1890
 
 
 def test_enumerate_circuits_fully_differential_count():
-    """2-stage fully-differential: of the 144 polarity-valid input_pair/load/
-    tail_current combinations, 96 have an output_cardinality compatible with
-    fully_differential (the 48 "single"-cardinality combos are excluded). Of
-    those 96, 24 use a "differential"-cardinality load -- the only loads with
-    a real bias_cmfb consumer -- and keep both cmfb variants (24 x 2 = 48);
-    the other 72 have no bias_cmfb consumer, so is_cmfb_compatible collapses
-    cmfb to 1 canonical variant (72 x 1 = 72). 48 + 72 = 120 effective
-    load/cmfb combinations, x 3 bias x (3 comp x 3 second)^2 = 120 x 3^5 =
-    29160."""
+    """2-stage fully-differential: of the 84 effective input_pair/load/
+    tail_current combinations (144 polarity-valid, collapsed to 84 by
+    is_tail_current_compatible -- see test_enumerate_circuits_count), 56 have
+    an output_cardinality compatible with fully_differential (the 28
+    "single"-cardinality combos are excluded). Of those 56, 14 use a
+    "differential"-cardinality load -- the only loads with a real bias_cmfb
+    consumer -- and keep both cmfb variants (14 x 2 = 28); the other 42 have
+    no bias_cmfb consumer, so is_cmfb_compatible collapses cmfb to 1 canonical
+    variant (42 x 1 = 42). 28 + 42 = 70 effective load/cmfb combinations, x 3
+    bias x (3 comp x 3 second)^2 = 70 x 3^5 = 17010."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 29160
+    assert len(circuits) == 17010
 
 
 def test_flat_spice_structure():
@@ -590,20 +683,20 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 120 polarity-and-output_cardinality-valid
+    """3-stage single-ended (NMC/RNMC): 70 polarity-and-output_cardinality-valid
     input_pair/load/tail_current combinations (see test_enumerate_circuits_count)
-    x 3 bias x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 29160."""
+    x 3 bias x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 17010."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 29160
+        assert len(circuits) == 17010
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~2.36M circuits (120 x 3^9, see
-    test_enumerate_circuits_fully_differential_count for the 120 factor);
+    """FD 3-stage topologies enumerate ~1.38M circuits (70 x 3^9, see
+    test_enumerate_circuits_fully_differential_count for the 70 factor);
     just check the iterator yields a valid first circuit without
     materializing the full set."""
     modules = load_modules()
@@ -621,10 +714,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 29160
+    assert len(nmc) == 17010
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 29160
+    assert len(rnmc) == 17010
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
