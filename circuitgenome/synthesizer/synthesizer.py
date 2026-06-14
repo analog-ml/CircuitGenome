@@ -84,6 +84,68 @@ def _circuit_name(topology: TopologyTemplate, variant_map: dict[str, ModuleVaria
     return "__".join(parts)
 
 
+def build_circuit(
+    topology: TopologyTemplate,
+    variant_map: dict[str, ModuleVariant],
+) -> SynthesizedCircuit | None:
+    """Assemble a single :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
+    from *variant_map*, applying all cross-slot compatibility filters and
+    pruning passes described in :func:`enumerate_circuits`.
+
+    Returns ``None`` if *variant_map* is rejected by
+    :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
+    :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
+    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
+    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`.
+
+    :param topology: The wiring template that defines slots and net connections.
+    :param variant_map: One :class:`~circuitgenome.synthesizer.models.ModuleVariant`
+                         per slot, keyed by slot name.
+    """
+    variant_map = dict(variant_map)  # don't mutate caller's dict
+
+    if not is_combination_valid(variant_map):
+        return None
+    if not is_output_type_compatible(topology, variant_map):
+        return None
+    if not is_cmfb_compatible(variant_map):
+        return None
+    if "cmfb" in variant_map:
+        variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
+
+    if not is_tail_current_compatible(variant_map):
+        return None
+    variant_map["tail_current"] = prune_tail_current(
+        variant_map["tail_current"], variant_map["input_pair"]
+    )
+
+    needed = needed_bias_outputs(topology, variant_map)
+    bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
+    variant_map[bias_slot.name] = prune_bias_generation(variant_map[bias_slot.name], needed)
+
+    all_devices: list[tuple[str, Device]] = []
+    load_port_net_map: dict[str, str] = {}
+    for slot in topology.slots:
+        variant = variant_map[slot.name]
+        slot_connections = topology.slot_connections(slot.name)
+        port_net_map = _build_port_net_map(slot.name, variant, slot_connections)
+        if slot.category == "load":
+            load_port_net_map = port_net_map
+        all_devices.extend(_resolve_devices(slot.name, variant, port_net_map))
+
+    rename = compute_alias_net_rename(variant_map["load"], load_port_net_map, topology.external_ports)
+    all_devices = apply_net_rename(all_devices, rename)
+
+    name = _circuit_name(topology, variant_map)
+    return SynthesizedCircuit(
+        name=name,
+        topology=topology.name,
+        variant_map=variant_map,
+        external_ports=topology.external_ports,
+        devices=all_devices,
+    )
+
+
 def enumerate_circuits(
     topology: TopologyTemplate,
     modules: dict[str, list[ModuleVariant]],
@@ -175,44 +237,9 @@ def enumerate_circuits(
             slot.name: variant
             for slot, variant in zip(topology.slots, combo)
         }
-        if not is_combination_valid(variant_map):
-            continue
-        if not is_output_type_compatible(topology, variant_map):
-            continue
-        if not is_cmfb_compatible(variant_map):
-            continue
-        if "cmfb" in variant_map:
-            variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
-
-        if not is_tail_current_compatible(variant_map):
-            continue
-        variant_map["tail_current"] = prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])
-
-        needed = needed_bias_outputs(topology, variant_map)
-        bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
-        variant_map[bias_slot.name] = prune_bias_generation(variant_map[bias_slot.name], needed)
-
-        all_devices: list[tuple[str, Device]] = []
-        load_port_net_map: dict[str, str] = {}
-        for slot in topology.slots:
-            variant = variant_map[slot.name]
-            slot_connections = topology.slot_connections(slot.name)
-            port_net_map = _build_port_net_map(slot.name, variant, slot_connections)
-            if slot.category == "load":
-                load_port_net_map = port_net_map
-            all_devices.extend(_resolve_devices(slot.name, variant, port_net_map))
-
-        rename = compute_alias_net_rename(variant_map["load"], load_port_net_map, topology.external_ports)
-        all_devices = apply_net_rename(all_devices, rename)
-
-        name = _circuit_name(topology, variant_map)
-        yield SynthesizedCircuit(
-            name=name,
-            topology=topology.name,
-            variant_map=variant_map,
-            external_ports=topology.external_ports,
-            devices=all_devices,
-        )
+        circuit = build_circuit(topology, variant_map)
+        if circuit is not None:
+            yield circuit
 
 
 def synthesize(
