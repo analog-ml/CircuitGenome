@@ -33,6 +33,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     synth.add_argument("--dry-run", action="store_true", dest="dry_run",
                        help="Print summary without writing files")
 
+    sub.add_parser("visualize", help="Launch the topology visualizer (Streamlit web UI)")
+
     return parser.parse_args(argv)
 
 
@@ -100,10 +102,24 @@ def _cmd_synthesize(args: argparse.Namespace) -> None:
         print(f" written to {args.output_dir}/")
 
 
+def _cmd_visualize(args: argparse.Namespace) -> None:
+    try:
+        import streamlit.web.cli as stcli
+    except ImportError:
+        print("The visualizer requires the 'viz' extra: pip install circuitgenome[viz]", file=sys.stderr)
+        sys.exit(1)
+
+    app_path = Path(__file__).parent / "visualizer" / "app.py"
+    sys.argv = ["streamlit", "run", str(app_path)]
+    stcli.main()
+
+
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
     if args.command == "synthesize":
         _cmd_synthesize(args)
+    elif args.command == "visualize":
+        _cmd_visualize(args)
 
 
 if __name__ == "__main__":

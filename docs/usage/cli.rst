@@ -1,7 +1,9 @@
 CLI Usage
 =========
 
-All commands go through the ``circuitgenome synthesize`` subcommand.
+Circuit generation goes through the ``circuitgenome synthesize`` subcommand;
+``circuitgenome visualize`` launches an interactive topology browser (see
+*Visualizing topologies* below).
 
 .. code-block:: bash
 
@@ -80,6 +82,22 @@ Sample output::
 
 Output filenames follow the pattern ``circuit_NNNN_flat.ckt`` /
 ``circuit_NNNN_hier.ckt``, numbered sequentially within each topology.
+
+Visualizing topologies
+----------------------
+
+.. code-block:: bash
+
+   circuitgenome visualize
+
+Launches a Streamlit web UI for browsing topologies and module variants:
+pick a topology, swap each slot's module variant, and see the resulting
+block diagram (and SPICE netlist, for valid combinations) update live.
+Requires the ``viz`` extra:
+
+.. code-block:: bash
+
+   pip install circuitgenome[viz]
 
 Options reference
 -----------------

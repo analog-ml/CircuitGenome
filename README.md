@@ -227,6 +227,21 @@ circuitgenome synthesize --topology three_stage_opamp_nmc_single_ended --output-
 circuitgenome synthesize --stages 3 --dry-run
 ```
 
+### Visualize topologies
+
+```bash
+circuitgenome visualize
+```
+
+Launches a Streamlit web UI for browsing topologies and module variants: pick
+a topology, swap each slot's module variant, and see the resulting block
+diagram (and SPICE netlist, for valid combinations) update live. Requires the
+`viz` extra:
+
+```bash
+pip install circuitgenome[viz]
+```
+
 #### CLI options
 
 | Flag | Description | Default |
