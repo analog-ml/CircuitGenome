@@ -3,8 +3,8 @@ Graph data model for visualizing topologies as slot/connection diagrams.
 
 :func:`topology_to_graph` turns a :class:`~circuitgenome.synthesizer.models.TopologyTemplate`
 and a chosen ``variant_map`` into a :class:`VizGraph` -- one :class:`VizNode`
-per slot, one :class:`VizEdge` per pair of ports sharing a net (excluding the
-supply nets ``vdd!``/``gnd!``). This is the data layer for
+per slot, one :class:`VizEdge` per pair of distinct slots sharing a net
+(excluding the supply nets ``vdd!``/``gnd!``). This is the data layer for
 ``circuitgenome.visualizer.app``; it has no Streamlit/pyvis dependency so it
 can be used and tested independently of the ``viz`` extra.
 
@@ -18,7 +18,7 @@ import itertools
 from dataclasses import dataclass, field
 
 from circuitgenome.synthesizer.cmfb_compatibility import is_cmfb_compatible
-from circuitgenome.synthesizer.models import ModuleVariant, TopologyTemplate
+from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
 from circuitgenome.synthesizer.tail_current_compatibility import is_tail_current_compatible
@@ -70,21 +70,22 @@ class VizEdge:
 @dataclass
 class VizGraph:
     """A block diagram: one :class:`VizNode` per slot, one :class:`VizEdge`
-    per pair of ports sharing a net."""
+    per pair of distinct slots sharing a net."""
     nodes: list[VizNode] = field(default_factory=list)
     edges: list[VizEdge] = field(default_factory=list)
 
 
 def _build_edges(topology: TopologyTemplate) -> list[VizEdge]:
-    """Group *topology*'s connections by net and emit one edge per pair.
+    """Group *topology*'s connections by net and emit one edge per pair of
+    distinct slots sharing that net.
 
-    Nets shared by more than two ports (e.g. a bias rail feeding several
-    slots) produce one edge per pair via :func:`itertools.combinations`. A
-    net with both of its connections on the same slot produces a self-loop
-    edge -- this is correct: it represents two ports of that slot tied
-    together.
+    A net can list more than one port on the same slot (e.g. an
+    optional/alias port that mirrors another port's net). Such ports don't
+    represent a separate inter-slot connection, so only the first connection
+    per slot is kept per net before pairing -- this avoids both self-loops
+    and duplicate edges between the same pair of slots.
     """
-    nets: dict[str, list] = {}
+    nets: dict[str, list[Connection]] = {}
     for conn in topology.connections:
         if conn.net in SUPPLY_NETS:
             continue
@@ -92,7 +93,10 @@ def _build_edges(topology: TopologyTemplate) -> list[VizEdge]:
 
     edges = []
     for net, conns in nets.items():
-        for a, b in itertools.combinations(conns, 2):
+        by_slot: dict[str, Connection] = {}
+        for conn in conns:
+            by_slot.setdefault(conn.slot, conn)
+        for a, b in itertools.combinations(by_slot.values(), 2):
             edges.append(VizEdge(a.slot, b.slot, a.port, b.port, net))
     return edges
 

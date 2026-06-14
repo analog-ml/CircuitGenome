@@ -62,15 +62,20 @@ def test_topology_to_graph_one_node_per_slot(topologies, by_name):
         assert node.is_pruned is False
 
 
-def test_build_edges_one_stage_opamp_self_loops(topologies, by_name):
+def test_build_edges_one_stage_opamp_no_self_loops(topologies, by_name):
     topo = topologies["one_stage_opamp"]
     variant_map = _variant_map(by_name, ONE_STAGE_VALID)
 
     graph = topology_to_graph(topo, variant_map)
 
-    assert len(graph.edges) == 11
-    self_loop_nets = {e.net for e in graph.edges if e.source == e.target}
-    assert self_loop_nets == {"net_diff1", "out"}
+    assert len(graph.edges) == 8
+    assert not any(e.source == e.target for e in graph.edges)
+
+    diff1_edges = [e for e in graph.edges if e.net == "net_diff1"]
+    assert len(diff1_edges) == 1
+    edge = diff1_edges[0]
+    assert {edge.source, edge.target} == {"input_pair", "load"}
+    assert {edge.source_port, edge.target_port} == {"out1", "in1"}
 
 
 def test_build_edges_two_stage_fd_fanout(topologies, by_name):
