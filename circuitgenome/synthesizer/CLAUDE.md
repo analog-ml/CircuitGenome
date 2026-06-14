@@ -26,6 +26,8 @@ SPICE netlists.
   (`is_output_type_compatible`).
 - `cmfb_compatibility.py` — cmfb-slot compatibility filter and pruning
   (`is_cmfb_compatible`, `prune_cmfb`).
+- `tail_current_compatibility.py` — tail_current-slot compatibility filter
+  and pruning (`is_tail_current_compatible`, `prune_tail_current`).
 - `bias_pruning.py` — bias-rail pruning (`needed_bias_outputs`,
   `prune_bias_generation`).
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
@@ -130,6 +132,25 @@ so it contributes nothing and `cmfb.bias` is not counted by
 `cmfb` consumer, tag it `output_cardinality: "differential"` and give it a
 real `bias_cmfb: role: input` -- no code changes needed here.
 
+## Tail-current compatibility filter & pruning (`tail_current_compatibility.py`)
+
+Of the 5 `input_pair` variants, only the 4 `differential_pair_*` variants
+reference their `tail` port from a device terminal (`s`/`b: tail` on the
+tail transistor, or `t2: tail` on the degenerated variants' tail resistor);
+`inverter_based_input` -- two back-to-back CMOS inverters -- is self-biased
+and never references `tail`, so `input_pair.tail -> net_tail <-
+tail_current.out` drives nothing. `is_tail_current_compatible` rejects
+combinations where `input_pair` doesn't reference `tail` and `tail_current`
+isn't `CANONICAL_TAIL_CURRENT_VARIANT` (`current_mirror_tail_pmos`) -- this
+collapses the otherwise-duplicate choice between the 6 `tail_current`
+variants for `inverter_based_input` down to one. `prune_tail_current` then
+replaces that canonical variant with an empty placeholder
+(`name="tail_current_absent"`, no ports, no devices) for the same
+`input_pair`, so it contributes nothing, `net_tail` is no longer floating,
+and `tail_current.bias` is not counted by `needed_bias_outputs`. To support
+a new/edited `input_pair` variant as a genuine `tail_current` consumer, wire
+one of its device terminals to `tail` -- no code changes needed here.
+
 ## Bias-rail pruning (`bias_pruning.py`)
 
 - `needed_bias_outputs(topology, variant_map)` does a **structural** check
@@ -173,20 +194,25 @@ same template — use it for future per-combination filters/transforms:
    irrelevant for this `load` (see "CMFB compatibility filter" above).
 5. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
    `variant_map["cmfb"]` (only if the topology has a `cmfb` slot).
-6. `needed_bias_outputs` → `prune_bias_generation`, replacing
+6. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
+   variant choice is irrelevant for this `input_pair` (see "Tail-current
+   compatibility filter" above).
+7. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
+   replacing `variant_map["tail_current"]`.
+8. `needed_bias_outputs` → `prune_bias_generation`, replacing
    `variant_map[bias_gen_slot]`.
-7. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+9. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
    then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
    `load` slot's `port_net_map` is captured separately as
    `load_port_net_map`.
-8. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
-   topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
-   net-merge pass for `load` ports declared `alias_of` another `load` port
-   (see "Net-naming & wiring conventions" above).
-9. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
-   devices)`.
+10. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+    topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
+    net-merge pass for `load` ports declared `alias_of` another `load` port
+    (see "Net-naming & wiring conventions" above).
+11. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+    devices)`.
 
-Any new per-combination transform should slot in between steps 4 and 7,
+Any new per-combination transform should slot in between steps 4 and 9,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 

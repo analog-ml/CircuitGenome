@@ -24,6 +24,7 @@ from .loader import load_modules, load_topologies
 from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
 from .net_aliasing import apply_net_rename, compute_alias_net_rename
 from .output_compatibility import is_output_type_compatible
+from .tail_current_compatibility import is_tail_current_compatible, prune_tail_current
 
 
 def _resolve_devices(
@@ -121,6 +122,16 @@ def enumerate_circuits(
     contributes no devices and ``cmfb.bias`` is not counted as a needed bias
     rail.
 
+    Likewise, combinations where ``input_pair`` doesn't reference its
+    ``tail`` port (currently only ``inverter_based_input``, which is
+    self-biased and would otherwise leave ``net_tail`` floating) are
+    restricted to the canonical ``tail_current`` variant (see
+    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`),
+    and that variant is then pruned to an empty placeholder (see
+    :func:`~circuitgenome.synthesizer.tail_current_compatibility.prune_tail_current`)
+    so it contributes no devices and ``tail_current.bias`` is not counted as
+    a needed bias rail.
+
     The ``bias_generation`` variant in each combination is pruned to only the
     ``out1``..``out7`` rails actually consumed by the other slots (see
     :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
@@ -172,6 +183,10 @@ def enumerate_circuits(
             continue
         if "cmfb" in variant_map:
             variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
+
+        if not is_tail_current_compatible(variant_map):
+            continue
+        variant_map["tail_current"] = prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])
 
         needed = needed_bias_outputs(topology, variant_map)
         bias_slot = next(s for s in topology.slots if s.category == "bias_generation")

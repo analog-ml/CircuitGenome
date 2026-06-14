@@ -115,29 +115,34 @@ Topology templates
 Of the 5 × 12 × 6 = 360 possible ``input_pair`` / ``load`` / ``tail_current``
 combinations, only 144 have compatible PMOS/NMOS polarities (see "Polarity
 compatibility filter" below) — the rest are filtered out by
-``enumerate_circuits``. Of those 144, the "Output-cardinality compatibility
-filter" below further splits them by which output type the ``load`` supports:
-**120** are valid for single-ended templates (excluding the 24 combinations
-using a differential-output cascode load) and **96** are valid for
-fully-differential templates (excluding the 48 combinations using a
-single-output cascode or telescopic-cascode load).
+``enumerate_circuits``. Of those 144, 72 use ``inverter_based_input``, whose
+self-biased design never references its ``tail`` port: the "Tail-current
+compatibility filter" below collapses those 72 combinations' 6
+``tail_current`` choices down to 1 canonical choice (72 -> 12), leaving
+**84** effective combinations (the 72 combinations using a
+``differential_pair_*`` variant are unaffected). Of those 84, the
+"Output-cardinality compatibility filter" below further splits them by which
+output type the ``load`` supports: **70** are valid for single-ended
+templates (excluding the 14 combinations using a differential-output cascode
+load) and **56** are valid for fully-differential templates (excluding the 28
+combinations using a single-output cascode or telescopic-cascode load).
 
-The 1-stage template therefore produces **360 distinct circuits**
-(120 × 3). The 2-stage single-ended template produces **3 240 circuits**
-(120 × 3 × 3 × 3); the 2-stage fully-differential template, which has two
+The 1-stage template therefore produces **210 distinct circuits**
+(70 × 3). The 2-stage single-ended template produces **1 890 circuits**
+(70 × 3 × 3 × 3); the 2-stage fully-differential template, which has two
 ``compensation`` slots, two ``second_stage`` slots (one per output path), and
-one ``cmfb`` slot, produces **29 160 circuits** (120 × 3\ :sup:`5`). Of the 96
+one ``cmfb`` slot, produces **17 010 circuits** (70 × 3\ :sup:`5`). Of the 56
 fully-differential-compatible ``input_pair``/``load``/``tail_current``
-combinations, only the 24 using a ``"differential"``-cardinality load keep
-both ``cmfb`` variants (24 × 2 = 48); the other 72 collapse ``cmfb`` to a
-single canonical variant (72 × 1 = 72) -- 48 + 72 = 120 effective
-load/``cmfb`` combinations, × 3\ :sup:`5` = 29 160 (see "CMFB compatibility
+combinations, only the 14 using a ``"differential"``-cardinality load keep
+both ``cmfb`` variants (14 × 2 = 28); the other 42 collapse ``cmfb`` to a
+single canonical variant (42 × 1 = 42) -- 28 + 42 = 70 effective
+load/``cmfb`` combinations, × 3\ :sup:`5` = 17 010 (see "CMFB compatibility
 filter" below). Each 3-stage single-ended template adds two more
 ``second_stage`` slots (gm2, gm3) and two ``compensation`` slots (Cm1, Cm2) on
-top of the 1-stage base, producing **29 160 circuits** (120 × 3\ :sup:`5`).
+top of the 1-stage base, producing **17 010 circuits** (70 × 3\ :sup:`5`).
 Each 3-stage fully-differential template duplicates those four slots per
 output path (and keeps the single ``cmfb`` slot), producing
-**2 361 960 circuits** (120 × 3\ :sup:`9`).
+**1 377 810 circuits** (70 × 3\ :sup:`9`).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -224,6 +229,29 @@ edited ``load`` variant with ``output_cardinality: "differential"`` (and give
 it a real ``bias_cmfb: role: input`` consumer) to make it a genuine ``cmfb``
 consumer -- no code changes needed
 (``circuitgenome/synthesizer/cmfb_compatibility.py``).
+
+Tail-current compatibility filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every topology has a ``tail_current`` slot, wired ``input_pair.tail ->
+net_tail <- tail_current.out``. Of the 5 ``input_pair`` variants, only the 4
+``differential_pair_*`` variants reference their ``tail`` port from a device
+terminal (``s``/``b: tail`` on the tail transistor, or ``t2: tail`` on the
+degenerated variants' tail resistor). ``inverter_based_input`` -- two
+back-to-back CMOS inverters -- is self-biased by design and never references
+``tail``, so without this filter ``net_tail`` would be a floating,
+single-terminal node and ``tail_current`` would drive nothing.
+
+For an ``input_pair`` that doesn't reference ``tail``, only the canonical
+``current_mirror_tail_pmos`` variant is allowed through -- the other 5
+``tail_current`` choices would otherwise be enumerated as duplicate no-op
+circuits. That canonical variant is then pruned to an empty placeholder (no
+ports, no devices), so it contributes no devices to the assembled circuit,
+``net_tail`` is no longer floating, and ``tail_current.bias`` is no longer
+counted as a needed bias rail. To extend: wire a new or edited ``input_pair``
+variant's tail-side device terminal(s) to ``tail`` to make it a genuine
+``tail_current`` consumer -- no code changes needed
+(``circuitgenome/synthesizer/tail_current_compatibility.py``).
 
 Bias-rail pruning
 ~~~~~~~~~~~~~~~~~

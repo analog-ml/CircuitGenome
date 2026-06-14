@@ -158,8 +158,9 @@ modules:
   - name: inverter_based_input
     category: input_pair
     display_name: "Inverter-Based Input Stage"
-    # Two back-to-back CMOS inverters used as a differential input.
-    # tail port is unused (tied to vdd internally via b of pmos).
+    # Two back-to-back CMOS inverters used as a differential input --
+    # self-biased, no tail-current source needed. tail_current is pruned to
+    # an empty placeholder for this variant; see tail_current_compatibility.py.
     ports:
       - {name: in1,  role: input}
       - {name: in2,  role: input}
