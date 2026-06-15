@@ -61,9 +61,12 @@ list is current.
 ## Net-naming & wiring conventions (synthesizer.py)
 
 - `TopologyTemplate.connections` maps `(slot, port) -> global net`.
-- `_resolve_devices`: device refs get prefixed `{slot_name}_{ref}`; any
-  device terminal whose local net is *not* a connected port gets prefixed
-  `{slot_name}_{local_net}` (internal node).
+- `_resolve_devices`: device refs get **suffixed** `{ref}_{slot_name}` (e.g.
+  `m1_input_pair`) so the leading character of the global ref still matches
+  SPICE's type-inference convention (`m`/`mn`/`mp`→MOSFET, `r`→resistor,
+  `c`→capacitor, ...); any device terminal whose local net is *not* a
+  connected port gets **prefixed** `{slot_name}_{local_net}` (internal node)
+  -- refs and internal-node net names follow different (opposite) ordering.
 - A port declared `role: optional` that the topology does **not** wire gets
   `{slot_name}_{port}_nc` (explicit not-connected placeholder) for any device
   terminal that references it.

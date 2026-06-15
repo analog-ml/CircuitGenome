@@ -37,8 +37,10 @@ def to_flat_spice(circuit: SynthesizedCircuit, name: str | None = None) -> str:
     """Serialize *circuit* as a flat SPICE subcircuit.
 
     All devices from every module slot are inlined into a single ``.subckt``
-    block.  Internal nets are prefixed with the slot name (e.g.
-    ``input_pair_m1``).
+    block.  Device reference designators are suffixed with the slot name
+    (e.g. ``m1_input_pair``) so the leading character still identifies the
+    SPICE primitive type; internal nets are prefixed with the slot name
+    (e.g. ``load_internal_0``).
 
     :param circuit: A :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
                     returned by :func:`~circuitgenome.synthesizer.synthesizer.synthesize`
@@ -124,13 +126,13 @@ def _recover_port_nets(
     device list and reversing the terminal substitution applied during synthesis.
     """
     port_names = {p.name for p in variant.ports}
-    slot_prefix = f"{slot_name}_"
+    slot_suffix = f"_{slot_name}"
     port_to_global: dict[str, str] = {}
 
     for ref, dev in circuit.devices:
-        if not ref.startswith(slot_prefix):
+        if not ref.endswith(slot_suffix):
             continue
-        local_ref = ref[len(slot_prefix):]
+        local_ref = ref[: -len(slot_suffix)]
         orig_dev = next((d for d in variant.devices if d.ref == local_ref), None)
         if orig_dev is None:
             continue

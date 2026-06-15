@@ -424,10 +424,10 @@ portable.
 .. code-block:: spice
 
    .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
-   input_pair_m1 net_diff1 in1 net_tail net_tail pmos
-   input_pair_m2 net_mid in2 net_tail net_tail pmos
-   load_r1 vdd! net_diff1 1k
-   load_r2 vdd! net_mid 1k
+   m1_input_pair net_diff1 in1 net_tail net_tail pmos
+   m2_input_pair net_mid in2 net_tail net_tail pmos
+   r1_load vdd! net_diff1 1k
+   r2_load vdd! net_mid 1k
    ...
    .ends
 
