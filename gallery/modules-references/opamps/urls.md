@@ -1,0 +1,1 @@
+1. [Ultimate Guide to Op-Amp Architectures: Design Choices and Trade-Offs](https://analogcircuitdesign.com/opamp-architectures/)

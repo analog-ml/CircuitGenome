@@ -1,0 +1,3 @@
+1. [mosfet - what is telescopic Mos load - Electrical Engineering Stack Exchange](https://electronics.stackexchange.com/questions/199880/what-is-telescopic-mos-load)
+2. [Analog VLSI Design Lecture 40.1 : Numerical on Telescopic Cascode Single stage Opamp - YouTube](https://www.youtube.com/watch?v=EKdo7e9i7Cw)
+3. [fetch.phphttps://wiki.to.infn.it/lib/exe/fetch.php?media=vlsi%3Apersonalpages%3Apacher%3Adocuments%3Apacher_lausanne2013_exam.pdf](fetch.phphttps://wiki.to.infn.it/lib/exe/fetch.php?media=vlsi%3Apersonalpages%3Apacher%3Adocuments%3Apacher_lausanne2013_exam.pdf)

@@ -72,6 +72,36 @@ Module categories
    * - Second stage
      - Common-source, common-drain (source follower), differential OTA
 
+.. rubric:: Input pair
+
+.. figure:: ../gallery/modules-implementations/input_pair+load+tail_current/input_pair.svg
+   :alt: Input pair variants
+   :width: 100%
+
+.. rubric:: Load
+
+.. figure:: ../gallery/modules-implementations/input_pair+load+tail_current/load.svg
+   :alt: Load variants
+   :width: 100%
+
+.. rubric:: Tail current
+
+.. figure:: ../gallery/modules-implementations/input_pair+load+tail_current/tail_current.svg
+   :alt: Tail current variants
+   :width: 100%
+
+.. rubric:: Bias generation
+
+.. figure:: ../gallery/modules-implementations/bias_generation+cmfb/bias_generation.svg
+   :alt: Bias generation variants
+   :width: 100%
+
+.. rubric:: CMFB
+
+.. figure:: ../gallery/modules-implementations/bias_generation+cmfb/cmfb.svg
+   :alt: CMFB variants
+   :width: 100%
+
 Topology templates
 ~~~~~~~~~~~~~~~~~~
 

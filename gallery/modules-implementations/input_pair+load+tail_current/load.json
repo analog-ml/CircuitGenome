@@ -1,0 +1,4376 @@
+{
+    "version": "0.1",
+    "tikzSettings": {},
+    "components": [
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 60.567,
+                    "y": -839.244
+                },
+                {
+                    "x": 136.157,
+                    "y": -838.488
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 99.119,
+                    "y": -867.59
+                },
+                {
+                    "x": 99.119,
+                    "y": -839.244
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vnd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 99.119,
+                "y": -867.59
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "path",
+            "points": [
+                {
+                    "x": 60.567,
+                    "y": -839.244
+                },
+                {
+                    "x": 60.567,
+                    "y": -792
+                }
+            ],
+            "label": {
+                "value": "r1"
+            },
+            "id": "american resistor",
+            "scale": {
+                "x": 0.5,
+                "y": 0.5
+            }
+        },
+        {
+            "type": "path",
+            "points": [
+                {
+                    "x": 136.157,
+                    "y": -838.488
+                },
+                {
+                    "x": 136.158,
+                    "y": -793.511
+                }
+            ],
+            "label": {
+                "value": "r2"
+            },
+            "id": "american resistor",
+            "scale": {
+                "x": 0.5,
+                "y": 0.5
+            }
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1/out1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 60.567,
+                "y": -793.511
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2/out2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 136.158,
+                "y": -793.511
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "m1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 599.907,
+                "y": -816.378
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 599.907,
+                    "y": -796.725
+                },
+                {
+                    "x": 637.702,
+                    "y": -815.622
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "m2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 722.741,
+                "y": -816.256
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 636.946,
+                    "y": -816.378
+                },
+                {
+                    "x": 685.702,
+                    "y": -815.622
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1/out2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 599.907,
+                "y": -787.276
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2/out2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 722.741,
+                "y": -787.154
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 599.907,
+                    "y": -845.481
+                },
+                {
+                    "x": 722.741,
+                    "y": -843.969
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 656.6,
+                    "y": -873.692
+                },
+                {
+                    "x": 656.6,
+                    "y": -845.346
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 656.6,
+                "y": -873.692
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 636.946,
+                "y": -816.378
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 599.907,
+                "y": -796.725
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 392.033,
+                "y": -825.827
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 533.765,
+                "y": -825.827
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 496.726,
+                    "y": -825.827
+                },
+                {
+                    "x": 429.072,
+                    "y": -825.827
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 392.033,
+                    "y": -854.929
+                },
+                {
+                    "x": 429.072,
+                    "y": -825.827
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 533.765,
+                    "y": -796.725
+                },
+                {
+                    "x": 392.033,
+                    "y": -796.725
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 458.175,
+                    "y": -796.725
+                },
+                {
+                    "x": 458.175,
+                    "y": -768.379
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 458.175,
+                "y": -768.378
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2/out2",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 533.765,
+                "y": -854.929
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 458.175,
+                "y": -796.725
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 429.072,
+                "y": -825.827
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 392.033,
+                    "y": -854.929
+                },
+                {
+                    "x": 392.033,
+                    "y": -862.866
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1/out1",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 392.033,
+                "y": -862.866
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "m1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 816.474,
+                "y": -816.378
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "m2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 939.308,
+                "y": -816.256
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 853.513,
+                    "y": -816.378
+                },
+                {
+                    "x": 902.269,
+                    "y": -815.622
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1/out1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 816.474,
+                "y": -787.276
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2/out2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 939.308,
+                "y": -787.154
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 816.474,
+                    "y": -845.481
+                },
+                {
+                    "x": 939.308,
+                    "y": -843.969
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 873.167,
+                    "y": -873.692
+                },
+                {
+                    "x": 873.167,
+                    "y": -845.346
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 873.167,
+                "y": -873.692
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 873.922,
+                "y": -816.222
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 816.474,
+                "y": -796.725
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 873.922,
+                    "y": -815.622
+                },
+                {
+                    "x": 873.922,
+                    "y": -788.111
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 873.922,
+                "y": -787.276
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 100.723,
+                "y": -743.999
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "resistor_load_vdd",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 654.237,
+                "y": -740.031
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "active_load_pmos",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 458.174,
+                "y": -740.031
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "active_load_nmos",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 876.284,
+                "y": -740.031
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "current_source_load_pmos",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 33.827,
+                "y": -240.123
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 156.661,
+                "y": -240.001
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 70.866,
+                    "y": -240.959
+                },
+                {
+                    "x": 119.622,
+                    "y": -240.203
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 91.275,
+                "y": -239.967
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 91.275,
+                    "y": -239.367
+                },
+                {
+                    "x": 91.275,
+                    "y": -211.856
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 91.275,
+                "y": -211.021
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 33.827,
+                "y": -181.918
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 33.827,
+                    "y": -211.021
+                },
+                {
+                    "x": 70.866,
+                    "y": -181.918
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 33.827,
+                "y": -123.713
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 70.866,
+                    "y": -123.713
+                },
+                {
+                    "x": 33.827,
+                    "y": -152.816
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 156.661,
+                "y": -181.796
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 70.866,
+                    "y": -181.918
+                },
+                {
+                    "x": 119.622,
+                    "y": -181.796
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 156.661,
+                "y": -210.899
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 156.661,
+                "y": -123.592
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 119.622,
+                    "y": -123.592
+                },
+                {
+                    "x": 70.866,
+                    "y": -123.713
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 156.661,
+                    "y": -94.489
+                },
+                {
+                    "x": 33.827,
+                    "y": -94.611
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 99.935,
+                    "y": -94.92
+                },
+                {
+                    "x": 99.935,
+                    "y": -66.574
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 99.935,
+                "y": -66.573
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 99.935,
+                "y": -94.92
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 70.866,
+                "y": -123.592
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 33.827,
+                "y": -152.816
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 33.827,
+                "y": -211.021
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 101.481,
+                "y": -21.921
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "telescopic_cascode_load_pmos",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 70.866,
+                "y": -181.918
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 43.276,
+                "y": -621.086
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 166.11,
+                "y": -620.964
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 80.315,
+                    "y": -621.922
+                },
+                {
+                    "x": 129.071,
+                    "y": -621.166
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 43.276,
+                    "y": -650.189
+                },
+                {
+                    "x": 166.11,
+                    "y": -648.677
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 99.969,
+                    "y": -678.4
+                },
+                {
+                    "x": 99.969,
+                    "y": -650.054
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 99.969,
+                "y": -678.4
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 100.724,
+                "y": -620.93
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 100.724,
+                    "y": -620.33
+                },
+                {
+                    "x": 100.724,
+                    "y": -592.819
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 100.724,
+                "y": -591.984
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 43.276,
+                "y": -505.512
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 43.276,
+                "y": -447.307
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 166.11,
+                "y": -505.39
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 80.315,
+                    "y": -505.512
+                },
+                {
+                    "x": 129.071,
+                    "y": -505.39
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 166.11,
+                "y": -591.862
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 166.11,
+                "y": -447.185
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 129.071,
+                    "y": -447.185
+                },
+                {
+                    "x": 80.315,
+                    "y": -447.306
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 166.866,
+                    "y": -418.016
+                },
+                {
+                    "x": 44.032,
+                    "y": -418.138
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 110.173,
+                    "y": -418.016
+                },
+                {
+                    "x": 110.173,
+                    "y": -389.67
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 110.173,
+                "y": -389.669
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 43.276,
+                "y": -476.41
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 43.276,
+                "y": -591.984
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 43.276,
+                    "y": -591.983
+                },
+                {
+                    "x": 20.409,
+                    "y": -592.819
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1",
+                "anchor": "east",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 20.409,
+                "y": -592.819
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 144,
+                "y": -333.732
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "folded_cascode_load_nmos_input_single_output",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 80.315,
+                "y": -505.512
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 81.827,
+                "y": -446.362
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 240.854,
+                    "y": -796.883
+                },
+                {
+                    "x": 316.444,
+                    "y": -796.127
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "path",
+            "points": [
+                {
+                    "x": 240.853,
+                    "y": -842.616
+                },
+                {
+                    "x": 240.853,
+                    "y": -795.372
+                }
+            ],
+            "label": {
+                "value": "r1"
+            },
+            "id": "american resistor",
+            "scale": {
+                "x": 0.5,
+                "y": 0.5
+            }
+        },
+        {
+            "type": "path",
+            "points": [
+                {
+                    "x": 316.443,
+                    "y": -841.86
+                },
+                {
+                    "x": 316.444,
+                    "y": -796.883
+                }
+            ],
+            "label": {
+                "value": "r2"
+            },
+            "id": "american resistor",
+            "scale": {
+                "x": 0.5,
+                "y": 0.5
+            }
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1/out1",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 240.853,
+                "y": -842.616
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2/out2",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 316.443,
+                "y": -841.86
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 281.01,
+                    "y": -796.725
+                },
+                {
+                    "x": 281.01,
+                    "y": -768.379
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 281.01,
+                "y": -768.378
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 281.009,
+                "y": -740.031
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "resistor_load_gnd",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 281.01,
+                "y": -796.725
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1013.292,
+                "y": -821.103
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1155.024,
+                "y": -821.103
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1117.985,
+                    "y": -821.103
+                },
+                {
+                    "x": 1050.331,
+                    "y": -821.103
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1155.024,
+                    "y": -792.001
+                },
+                {
+                    "x": 1013.292,
+                    "y": -792.001
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1079.434,
+                    "y": -792.001
+                },
+                {
+                    "x": 1079.434,
+                    "y": -763.655
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1079.434,
+                "y": -763.654
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2/out2",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1155.024,
+                "y": -850.205
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1079.434,
+                "y": -792.001
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1050.331,
+                "y": -821.103
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1013.292,
+                    "y": -850.205
+                },
+                {
+                    "x": 1013.292,
+                    "y": -858.142
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1/out1",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1013.292,
+                "y": -858.142
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 1079.433,
+                "y": -735.307
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "current_source_load_nmos",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1079.133,
+                    "y": -849.036
+                },
+                {
+                    "x": 1079.133,
+                    "y": -820.69
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1079.133,
+                "y": -849.036
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1079.133,
+                "y": -820.69
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 873.167,
+                "y": -845.346
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 656.6,
+                "y": -845.346
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 43.276,
+                "y": -563.717
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 166.11,
+                "y": -563.595
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 80.315,
+                    "y": -564.553
+                },
+                {
+                    "x": 129.071,
+                    "y": -563.797
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 100.724,
+                "y": -563.561
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 100.724,
+                    "y": -562.961
+                },
+                {
+                    "x": 100.724,
+                    "y": -535.45
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 100.724,
+                "y": -534.615
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 166.11,
+                "y": -534.493
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 43.276,
+                "y": -534.615
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 43.276,
+                    "y": -534.614
+                },
+                {
+                    "x": 80.315,
+                    "y": -505.512
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 43.276,
+                    "y": -476.41
+                },
+                {
+                    "x": 81.827,
+                    "y": -446.362
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 110.173,
+                "y": -418.016
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 325.135,
+                "y": -631.29
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 447.969,
+                "y": -631.168
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 362.174,
+                    "y": -632.126
+                },
+                {
+                    "x": 410.93,
+                    "y": -631.37
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 325.135,
+                    "y": -660.393
+                },
+                {
+                    "x": 447.969,
+                    "y": -658.881
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 381.828,
+                    "y": -688.604
+                },
+                {
+                    "x": 381.828,
+                    "y": -660.258
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 381.828,
+                "y": -688.604
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 382.584,
+                "y": -458.267
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 382.584,
+                    "y": -485.778
+                },
+                {
+                    "x": 382.584,
+                    "y": -458.267
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 382.584,
+                "y": -486.614
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 325.135,
+                "y": -515.716
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 325.135,
+                "y": -457.511
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 447.969,
+                "y": -515.594
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 362.174,
+                    "y": -515.716
+                },
+                {
+                    "x": 410.93,
+                    "y": -515.594
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 447.969,
+                "y": -457.389
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 410.93,
+                    "y": -457.389
+                },
+                {
+                    "x": 362.174,
+                    "y": -457.51
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 448.725,
+                    "y": -428.22
+                },
+                {
+                    "x": 325.891,
+                    "y": -428.342
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 392.032,
+                    "y": -428.22
+                },
+                {
+                    "x": 392.032,
+                    "y": -399.874
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 392.032,
+                "y": -399.873
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 325.135,
+                "y": -486.614
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 325.891,
+                "y": -486.615
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 325.891,
+                    "y": -486.614
+                },
+                {
+                    "x": 303.024,
+                    "y": -487.45
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1",
+                "anchor": "east",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 303.024,
+                "y": -487.45
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 325.135,
+                "y": -573.921
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 447.969,
+                "y": -573.799
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 362.174,
+                    "y": -574.757
+                },
+                {
+                    "x": 410.93,
+                    "y": -574.001
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 382.584,
+                "y": -514.96
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 382.584,
+                    "y": -542.471
+                },
+                {
+                    "x": 382.584,
+                    "y": -514.96
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias2",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 382.584,
+                "y": -542.471
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 447.969,
+                "y": -544.697
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 325.135,
+                "y": -544.818
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 392.032,
+                "y": -428.22
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 408.567,
+                "y": -366.803
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "folded_cascode_load_pmos_input_single_output",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 470.836,
+                    "y": -485.655
+                },
+                {
+                    "x": 447.969,
+                    "y": -486.491
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 447.969,
+                "y": -486.491
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 470.836,
+                "y": -486.491
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 325.135,
+                    "y": -603.023
+                },
+                {
+                    "x": 362.174,
+                    "y": -631.37
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 325.135,
+                    "y": -544.818
+                },
+                {
+                    "x": 362.174,
+                    "y": -573.921
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 362.174,
+                "y": -574.001
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 362.174,
+                "y": -632.126
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 325.135,
+                "y": -603.023
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 643.276,
+                "y": -625.81
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 766.11,
+                "y": -625.688
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 680.315,
+                    "y": -626.646
+                },
+                {
+                    "x": 729.071,
+                    "y": -625.89
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 643.276,
+                    "y": -654.913
+                },
+                {
+                    "x": 766.11,
+                    "y": -653.401
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 699.969,
+                    "y": -683.124
+                },
+                {
+                    "x": 699.969,
+                    "y": -654.778
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 699.969,
+                "y": -683.124
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 700.724,
+                "y": -625.654
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 700.724,
+                    "y": -625.054
+                },
+                {
+                    "x": 700.724,
+                    "y": -597.543
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 700.724,
+                "y": -596.708
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 643.276,
+                "y": -510.236
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 643.276,
+                "y": -452.031
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 766.11,
+                "y": -510.114
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 680.315,
+                    "y": -510.236
+                },
+                {
+                    "x": 729.071,
+                    "y": -510.114
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 766.11,
+                "y": -596.586
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 766.11,
+                "y": -451.909
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 729.071,
+                    "y": -451.909
+                },
+                {
+                    "x": 680.315,
+                    "y": -452.03
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 766.866,
+                    "y": -422.74
+                },
+                {
+                    "x": 644.032,
+                    "y": -422.862
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 710.173,
+                    "y": -422.74
+                },
+                {
+                    "x": 710.173,
+                    "y": -394.394
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 710.173,
+                "y": -394.393
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 643.276,
+                "y": -481.134
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 643.276,
+                "y": -596.708
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 643.276,
+                    "y": -596.707
+                },
+                {
+                    "x": 620.409,
+                    "y": -597.543
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1",
+                "anchor": "east",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 620.409,
+                "y": -597.543
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 715.654,
+                "y": -338.456
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "folded_cascode_load_nmos_input_differential_output\n",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 700.725,
+                "y": -451.086
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 643.276,
+                "y": -568.441
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 766.11,
+                "y": -568.319
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 680.315,
+                    "y": -569.277
+                },
+                {
+                    "x": 729.071,
+                    "y": -568.521
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 700.724,
+                "y": -567.685
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 700.724,
+                    "y": -567.685
+                },
+                {
+                    "x": 700.724,
+                    "y": -540.174
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 700.724,
+                "y": -539.339
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out2",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 766.11,
+                "y": -539.217
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 643.276,
+                "y": -539.339
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 710.173,
+                "y": -422.74
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out1",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 643.276,
+                "y": -539.338
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 700.725,
+                "y": -509.879
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 700.725,
+                    "y": -509.879
+                },
+                {
+                    "x": 700.725,
+                    "y": -482.368
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias3",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 700.725,
+                "y": -481.533
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 700.725,
+                    "y": -451.086
+                },
+                {
+                    "x": 700.725,
+                    "y": -441.637
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias\\_cmfb",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 700.725,
+                "y": -441.637
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 984.19,
+                "y": -636.015
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 1107.024,
+                "y": -635.893
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1021.229,
+                    "y": -636.851
+                },
+                {
+                    "x": 1069.985,
+                    "y": -636.095
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 984.19,
+                    "y": -665.118
+                },
+                {
+                    "x": 1107.024,
+                    "y": -663.606
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1040.883,
+                    "y": -693.329
+                },
+                {
+                    "x": 1040.883,
+                    "y": -664.983
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1040.883,
+                "y": -693.329
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1041.638,
+                "y": -635.859
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1041.638,
+                    "y": -635.259
+                },
+                {
+                    "x": 1041.638,
+                    "y": -607.748
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias\\_cmfb",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1041.638,
+                "y": -606.913
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 984.19,
+                "y": -520.441
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 984.19,
+                "y": -462.236
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 1107.024,
+                "y": -520.319
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1021.229,
+                    "y": -520.441
+                },
+                {
+                    "x": 1069.985,
+                    "y": -520.319
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 1107.024,
+                "y": -462.114
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1069.985,
+                    "y": -462.114
+                },
+                {
+                    "x": 1021.229,
+                    "y": -462.235
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1107.78,
+                    "y": -432.945
+                },
+                {
+                    "x": 984.946,
+                    "y": -433.067
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1051.087,
+                    "y": -432.945
+                },
+                {
+                    "x": 1051.087,
+                    "y": -404.599
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "gdd",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1051.087,
+                "y": -404.598
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 984.19,
+                "y": -491.339
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 1051.938,
+                "y": -358.112
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "folded_cascode_load_pmos_input_differential_output",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1041.639,
+                "y": -461.291
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp3",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 984.19,
+                "y": -578.646
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp4",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 1107.024,
+                "y": -578.524
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1021.229,
+                    "y": -579.482
+                },
+                {
+                    "x": 1069.985,
+                    "y": -578.726
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1041.638,
+                "y": -577.89
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1041.638,
+                    "y": -577.89
+                },
+                {
+                    "x": 1041.638,
+                    "y": -550.379
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias3",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1041.638,
+                "y": -549.544
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out2",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1107.024,
+                "y": -549.422
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 984.19,
+                "y": -549.544
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1051.087,
+                "y": -432.945
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out1",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 984.19,
+                "y": -549.543
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 1041.639,
+                "y": -520.084
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1041.639,
+                    "y": -520.084
+                },
+                {
+                    "x": 1041.639,
+                    "y": -492.573
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1041.639,
+                "y": -491.738
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1041.639,
+                    "y": -461.291
+                },
+                {
+                    "x": 1041.639,
+                    "y": -451.842
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1041.639,
+                "y": -451.842
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 984.19,
+                "y": -491.34
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 984.19,
+                    "y": -491.339
+                },
+                {
+                    "x": 961.323,
+                    "y": -492.175
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1",
+                "anchor": "east",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 961.323,
+                "y": -492.175
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 1107.024,
+                    "y": -491.217
+                },
+                {
+                    "x": 1138.489,
+                    "y": -489.638
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 1138.489,
+                "y": -491.217
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 33.827,
+                "y": -269.225
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 157.417,
+                "y": -266.835
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 328.252,
+                "y": -241.634
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 451.086,
+                "y": -241.512
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 365.291,
+                    "y": -242.47
+                },
+                {
+                    "x": 414.047,
+                    "y": -241.714
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 365.291,
+                "y": -242.47
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 328.252,
+                "y": -125.224
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mn2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 451.086,
+                "y": -125.103
+            },
+            "id": "nmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 414.047,
+                    "y": -125.103
+                },
+                {
+                    "x": 365.291,
+                    "y": -125.224
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 328.252,
+                "y": -154.327
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 328.252,
+                "y": -212.532
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "rect",
+            "position": {
+                "x": 394.394,
+                "y": -21.921
+            },
+            "stroke": {
+                "opacity": 0
+            },
+            "size": {
+                "x": 165.354,
+                "y": 28.346
+            },
+            "text": {
+                "text": "telescopic_cascode_load_nmos",
+                "align": 1,
+                "showPlaceholderText": true
+            }
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 328.252,
+                "y": -96.122
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "in2",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 450.33,
+                "y": -96.757
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp1",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 328.252,
+                "y": -183.429
+            },
+            "rotation": -180,
+            "scale": {
+                "x": 1,
+                "y": -1
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "mp2",
+                "anchor": "default",
+                "position": "default"
+            },
+            "position": {
+                "x": 451.086,
+                "y": -183.307
+            },
+            "id": "pmos",
+            "options": [
+                "arrowmos"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 365.291,
+                    "y": -184.265
+                },
+                {
+                    "x": 414.047,
+                    "y": -183.509
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 365.291,
+                "y": -184.265
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "out",
+                "anchor": "west",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 451.086,
+                "y": -154.205
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 328.252,
+                    "y": -212.532
+                },
+                {
+                    "x": 365.291,
+                    "y": -241.634
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 328.252,
+                    "y": -154.326
+                },
+                {
+                    "x": 365.291,
+                    "y": -184.265
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 388.703,
+                "y": -124.868
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 388.703,
+                    "y": -124.268
+                },
+                {
+                    "x": 388.703,
+                    "y": -96.757
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "bias1",
+                "anchor": "north",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 388.703,
+                "y": -95.922
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 328.252,
+                    "y": -270.736
+                },
+                {
+                    "x": 451.086,
+                    "y": -269.224
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "-|"
+            ]
+        },
+        {
+            "type": "wire",
+            "points": [
+                {
+                    "x": 388.062,
+                    "y": -298.682
+                },
+                {
+                    "x": 388.062,
+                    "y": -270.336
+                }
+            ],
+            "stroke": {
+                "width": "0.4pt"
+            },
+            "directions": [
+                "|-"
+            ]
+        },
+        {
+            "type": "node",
+            "label": {
+                "value": "vdd",
+                "anchor": "south",
+                "position": "north",
+                "relativeToComponent": true
+            },
+            "position": {
+                "x": 388.062,
+                "y": -298.682
+            },
+            "id": "odiamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 388.062,
+                "y": -270.336
+            },
+            "id": "diamondpole"
+        },
+        {
+            "type": "node",
+            "position": {
+                "x": 381.828,
+                "y": -660.258
+            },
+            "id": "diamondpole"
+        }
+    ]
+}
