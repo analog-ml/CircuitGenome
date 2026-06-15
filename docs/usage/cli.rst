@@ -76,9 +76,12 @@ Generating circuits
 Sample output::
 
    Topology: two_stage_opamp_single_ended
-     Generated 4050 circuits
+     Generated 1890 circuits
 
-   Total: 4050 circuits written to ./circuits/
+   Topology: two_stage_opamp_fully_differential
+     Generated 17010 circuits
+
+   Total: 18900 circuits (dry run — no files written)
 
 Output filenames follow the pattern ``circuit_NNNN_flat.ckt`` /
 ``circuit_NNNN_hier.ckt``, numbered sequentially within each topology.

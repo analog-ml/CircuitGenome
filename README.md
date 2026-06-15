@@ -293,18 +293,18 @@ Each generated circuit gets its own `.ckt` file. For `--format both`, two files 
 .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
 m1_input_pair net_diff1 in1 net_tail net_tail pmos
 m2_input_pair net_mid in2 net_tail net_tail pmos
-r1_load vdd! net_diff1 1k
-r2_load vdd! net_mid 1k
-m1_tail_current net_tail_bias net_tail_bias vdd! vdd! pmos
-m2_tail_current net_tail net_tail_bias vdd! vdd! pmos
-mp1_bias_gen ibias ibias vdd! vdd! pmos
-mn1_bias_gen net_bias1 net_bias1 gnd! gnd! nmos
-mn2_bias_gen net_bias2 net_bias2 gnd! gnd! nmos
-mn3_bias_gen net_bias3 net_bias3 gnd! gnd! nmos
-mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+r1_load net_diff1 gnd! 1k
+r2_load net_mid gnd! 1k
+m1_tail_current net_bias7 net_bias7 vdd! vdd! pmos
+m2_tail_current net_tail net_bias7 vdd! vdd! pmos
+mn1_bias_gen ibias ibias gnd! gnd! nmos
+mn6_bias_gen net_bias5 ibias gnd! gnd! nmos
+mp5_bias_gen net_bias5 net_bias5 vdd! vdd! pmos
+mn8_bias_gen net_bias7 ibias gnd! gnd! nmos
+mp7_bias_gen net_bias7 net_bias7 vdd! vdd! pmos
 c1_compensation net_mid out 1p
 mn1_second_stage out net_mid gnd! gnd! nmos
-mp1_second_stage out net_bias1 vdd! vdd! pmos
+mp1_second_stage out net_bias5 vdd! vdd! pmos
 .ends
 ```
 
@@ -316,20 +316,40 @@ m1 out1 in1 tail tail pmos
 m2 out2 in2 tail tail pmos
 .ends
 
-.subckt resistor_load_vdd in1 in2 out1 out2 vdd gnd
-r1 vdd in1 1k
-r2 vdd in2 1k
+.subckt resistor_load_gnd in1 in2 out1 out2 vdd gnd
+r1 in1 gnd 1k
+r2 in2 gnd 1k
 .ends
 
-* ... (one block per module variant used)
+.subckt current_mirror_tail_pmos out bias vdd gnd
+m1 bias bias vdd vdd pmos
+m2 out bias vdd vdd pmos
+.ends
+
+.subckt diode_connected_mosfet_bias ibias out5 out7 vdd gnd
+mn1 ibias ibias gnd gnd nmos
+mn6 out5 ibias gnd gnd nmos
+mp5 out5 out5 vdd vdd pmos
+mn8 out7 ibias gnd gnd nmos
+mp7 out7 out7 vdd vdd pmos
+.ends
+
+.subckt miller_cap in out
+c1 in out 1p
+.ends
+
+.subckt common_source in out bias vdd gnd
+mn1 out in gnd gnd nmos
+mp1 out bias vdd vdd pmos
+.ends
 
 .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
 Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
-Xload net_diff1 net_mid net_diff1 net_mid vdd! gnd! resistor_load_vdd
-Xtail_current net_tail net_tail_bias vdd! gnd! current_mirror_tail_pmos
-Xbias_gen ibias net_bias1 net_bias2 net_bias3 net_bias4 vdd! gnd! diode_connected_mosfet_bias
+Xload net_diff1 net_mid net_diff1 net_mid vdd! gnd! resistor_load_gnd
+Xtail_current net_tail net_bias7 vdd! gnd! current_mirror_tail_pmos
+Xbias_gen ibias net_bias5 net_bias7 vdd! gnd! diode_connected_mosfet_bias
 Xcompensation net_mid out miller_cap
-Xsecond_stage net_mid out net_bias1 vdd! gnd! common_source
+Xsecond_stage net_mid out net_bias5 vdd! gnd! common_source
 .ends
 ```
 

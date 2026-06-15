@@ -15,7 +15,7 @@ It loads the built-in YAML configs, applies your filters, and returns a list of
 
    # All 2-stage single-ended circuits
    circuits = synthesize({"stages": 2, "output_type": "single_ended"})
-   print(f"{len(circuits)} circuits")  # 4050
+   print(f"{len(circuits)} circuits")  # 1890
 
    # Serialize the first circuit
    print(to_flat_spice(circuits[0], name="my_ota"))
