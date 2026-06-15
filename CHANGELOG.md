@@ -3,6 +3,37 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-15 (2)
+
+PR [#27](https://github.com/analog-ml/CircuitGenome/pull/27).
+
+### Docs
+
+- `opamp_modules.yaml`: header comment and the 3 `bias_generation` variant
+  docstrings updated from the stale 4-rail description (`out1-out4`, `vdd`
+  optional) to the current 7-rail/4-role model (`out1..out7`, `vdd`/`gnd`
+  always present; `out1-4` -> `load`, `out5` -> `second_stage`, `out6` ->
+  `third_stage`, `out7` -> `tail_current`).
+- `docs/usage/python_api.rst` and `docs/usage/cli.rst`: corrected the stale
+  `# 4050` circuit-count comment/sample output for
+  `synthesize({"stages": 2, "output_type": "single_ended"})` to the verified
+  **1890**; `cli.rst`'s `--stages 2 --dry-run` sample now also shows the
+  `two_stage_opamp_fully_differential` line (17010), total 18900.
+- `README.md`: regenerated the "Output format" flat and hierarchical SPICE
+  examples from real `to_flat_spice`/`to_hierarchical_spice` output -- the
+  previous examples predated the 7-rail refactor and used the orphaned
+  `net_tail_bias` net and a polarity-invalid variant combination.
+- `docs/extending.rst`: fixed the custom-topology example's `connections:`
+  list -- `tail_current.bias` was wired to an undriven `net_tail_bias`, and
+  `second_stage.bias`/`third_stage.bias` both shared `net_bias1` with
+  `load.bias1`. Rewired to the dedicated-rail convention
+  (`net_bias5`/`net_bias6`/`net_bias7`).
+
+### Notes
+
+- No source code (`.py`) changes -- documentation/config-comment fixes only,
+  found via a full doc-vs-code audit.
+
 ## 2026-06-15
 
 PR #25.

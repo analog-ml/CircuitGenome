@@ -37,21 +37,21 @@
 #                                     (net_bias1/2/3/4), produced by bias_gen's
 #                                     out1/out2/out3/out4.
 #   tail_current:     out, bias, vdd, gnd
-#   bias_generation:  ibias, out1, out2, out3, out4, [vdd], gnd
-#                       - out1..out4 : four bias rails so cascode loads can
-#                                     receive distinct bias1/bias2/bias3/
-#                                     bias_cmfb voltages. Either four
-#                                     independent legs each mirroring ibias
-#                                     (magic_battery_bias), or four taps along
-#                                     a single ibias-to-gnd ladder, each one
-#                                     diode-drop/IR-drop below the last
-#                                     (diode_connected_mosfet_bias,
-#                                     resistor_bias).
-#                       - vdd        : optional; only declared by variants
-#                                     that source current from vdd
-#                                     (magic_battery_bias). Ladder variants
-#                                     run entirely from ibias to gnd and omit
-#                                     vdd.
+#   bias_generation:  ibias, out1, out2, out3, out4, out5, out6, out7, vdd, gnd
+#                       - out1..out7 : seven independent legs, each mirroring
+#                                     ibias through its own current path to
+#                                     produce one bias rail. out1..out4 feed
+#                                     load.bias1/bias2/bias3/bias_cmfb
+#                                     (net_bias1..4); out5 feeds
+#                                     second_stage*.bias (net_bias5); out6
+#                                     feeds third_stage*.bias (net_bias6);
+#                                     out7 feeds tail_current.bias
+#                                     (net_bias7). bias_pruning drops any
+#                                     leg/rail not needed by a given
+#                                     combination.
+#                       - vdd, gnd   : always declared -- every leg draws from
+#                                     both rails (a vdd-side device paired
+#                                     with a gnd-side device per rail).
 #   compensation:     in, out
 #   second_stage:     in, out, bias, vdd, gnd
 #   cmfb:             in1, in2, vref, bias, out, vdd, gnd
@@ -604,7 +604,7 @@ modules:
     # reference gate voltage. Each leg i has its own complete current path:
     # mn(i+1) mirrors ibias (sinking current to gnd) while diode-connected
     # PMOS mp(i) sits between out_i and vdd, so out_i settles near vdd minus
-    # one |V_GSP| -- four independent, ibias-derived bias voltages suitable
+    # one |V_GSP| -- seven independent, ibias-derived bias voltages suitable
     # for biasing PMOS gates.
     ports:
       - {name: ibias, role: input}
@@ -637,7 +637,7 @@ modules:
   - name: magic_battery_bias
     category: bias_generation
     display_name: "Magic Battery Current Mirror Bias"
-    # PMOS diode mp1 sets the ibias reference; four independent mirror
+    # PMOS diode mp1 sets the ibias reference; seven independent mirror
     # legs (mpN/mnN) each generate their own bias rail.
     ports:
       - {name: ibias, role: input}
@@ -673,7 +673,7 @@ modules:
     # Shared diode-connected PMOS mp1 mirrors ibias from vdd, setting a
     # reference gate voltage. Each leg i has its own complete current path:
     # mp(i+1) mirrors ibias (sourcing current from vdd) through its own
-    # resistor r(i) to gnd, so out_i = I_leg * R(i) -- four independent,
+    # resistor r(i) to gnd, so out_i = I_leg * R(i) -- seven independent,
     # ibias-derived bias voltages, each independently tunable via its
     # resistor value.
     ports:
