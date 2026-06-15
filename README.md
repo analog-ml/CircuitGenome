@@ -41,7 +41,25 @@ The synthesizer works by combining **module variants** according to a **topology
 | Compensation | Miller cap, Miller cap + nulling resistor, indirect |
 | Second stage | Common-source, common-drain (source follower), differential OTA |
 
-![All implemented module categories](gallery/modules-implementations/all.svg)
+**Input pair**
+
+![Input pair variants](gallery/modules-implementations/input_pair+load+tail_current/input_pair.svg)
+
+**Load**
+
+![Load variants](gallery/modules-implementations/input_pair+load+tail_current/load.svg)
+
+**Tail current**
+
+![Tail current variants](gallery/modules-implementations/input_pair+load+tail_current/tail_current.svg)
+
+**Bias generation**
+
+![Bias generation variants](gallery/modules-implementations/bias_generation+cmfb/bias_generation.svg)
+
+**CMFB**
+
+![CMFB variants](gallery/modules-implementations/bias_generation+cmfb/cmfb.svg)
 
 ### Topology templates
 
