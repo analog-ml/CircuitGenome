@@ -3,6 +3,28 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-15
+
+PR #25.
+
+### Added
+
+- `circuitgenome.__version__` attribute.
+- `pyproject.toml` packaging metadata: `description`, `readme`, `license`,
+  `authors`/`maintainers`, `keywords`, `classifiers`, and `[project.urls]`.
+
+### Changed
+
+- `[tool.setuptools.packages.find]` now uses `include = ["circuitgenome*"]`
+  (previously `where = ["."]`), so the `tests` package is no longer bundled
+  into the built distribution.
+
+### Docs
+
+- README and `docs/installation.rst`: document `pip install circuitgenome`
+  (CircuitGenome is now published on PyPI), alongside the existing
+  install-from-source instructions.
+
 ## 2026-06-14 (2)
 
 PR #20.
