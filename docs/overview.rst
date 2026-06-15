@@ -16,11 +16,11 @@ direction of the analog circuit design problem.
      - Constructs op-amp circuits from modular building blocks and emits
        SPICE netlists.
    * - Subcircuit Recognizer
-     - Coming soon
+     - Available (MVP)
      - Identifies structural subcircuits (differential pairs, cascode
        mirrors, etc.) in a flat SPICE netlist.
    * - Functional Block Recognizer
-     - Coming soon
+     - Available (MVP)
      - Identifies the functional role of each part of a flat SPICE netlist
        (input stage, load, bias generation, etc.).
 
@@ -445,3 +445,175 @@ instances.  Shared variants are defined only once.
    Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
    ...
    .ends
+
+Subcircuit & Functional Block Recognizer
+-----------------------------------------
+
+The recognizer (:mod:`circuitgenome.recognizer`) is the structural inverse of
+the synthesizer: given a flat SPICE netlist produced by
+:func:`~circuitgenome.synthesizer.netlist.to_flat_spice`, it recovers the
+:attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map` that
+produced it. It is organized as a 3-layer pipeline:
+
+1. **Layer 0 -- netlist parsing**
+   (:func:`~circuitgenome.recognizer.netlist_parser.parse`) turns the flat
+   SPICE text back into a
+   :class:`~circuitgenome.recognizer.models.ParsedNetlist` -- a list of
+   :class:`~circuitgenome.synthesizer.models.Device` plus the external port
+   and internal net names.
+2. **Layer 1 -- Subcircuit Recognizer (SR)**
+   (:func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize`) matches
+   a library of structural patterns (differential pairs, current mirrors,
+   ...) against the parsed devices, producing a
+   :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`.
+3. **Layer 2 -- Functional Block Recognizer (FBR)**
+   (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
+   assigns each recognized structure to a topology slot (``input_pair``,
+   ``load``, ``tail_current``, ...), recovering the ``variant_map`` shape.
+
+This MVP slice targets round-trip recognition of ``one_stage_opamp`` circuits
+built from one fixed combination of module variants --
+``differential_pair_nmos`` / ``active_load_pmos`` / ``current_mirror_tail_nmos``
+/ ``diode_connected_mosfet_bias``, with ``cmfb``, ``compensation``, and
+``second_stage`` pruned to empty placeholders for this topology. See
+``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for the
+full design rationale.
+
+Netlist parsing (Layer 0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:func:`~circuitgenome.recognizer.netlist_parser.parse` is the structural
+inverse of :func:`~circuitgenome.synthesizer.netlist.to_flat_spice`: it reads
+a ``.subckt <name> <port...>`` / ``.ends`` block with one MOSFET device line
+per device,
+
+.. code-block:: text
+
+   {ref} {d} {g} {s} {b} {nmos|pmos}
+
+and produces a :class:`~circuitgenome.recognizer.models.ParsedNetlist`. Net
+and ref names are treated as arbitrary strings -- the parser makes no
+assumptions about ``to_flat_spice``'s own naming conventions. Resistor and
+capacitor device lines are not yet supported and raise ``ValueError``; this
+is deferred to a later slice (the MVP's module combination is all-MOSFET).
+
+Subcircuit recognition (Layer 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The SR pattern library
+(``circuitgenome/recognizer/config/subcircuit_patterns.yaml``, loaded by
+:func:`~circuitgenome.recognizer.subcircuit_recognizer.load_patterns`) is a
+list of small template graphs. Each pattern declares:
+
+- ``devices`` -- typed template slots (``nmos``/``pmos``), e.g. ``m1``, ``m2``.
+- ``same_net`` -- terminal-equality constraints between slots, e.g.
+  ``[m1.s, m2.s]`` ("``m1``'s source and ``m2``'s source must be the same
+  net"); unlisted terminals are unconstrained.
+- ``pins`` -- named nets exported by the pattern, e.g. ``in1: m1.g``.
+- ``tech_type_from`` -- which template device's matched type (``"n"``/``"p"``)
+  becomes the recognized structure's ``tech_type``.
+- an optional ``hook`` -- a ``"module:function"`` extra-check for constraints
+  too awkward to express declaratively.
+
+Composite patterns correspond 1:1 to an ``opamp_modules.yaml`` module variant
+and reuse its name, so a successful match's
+:attr:`~circuitgenome.recognizer.models.RecognizedStructure.name` is directly
+comparable to a
+:attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
+entry's variant name. The four patterns implemented for this MVP:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 20 50
+
+   * - Pattern
+     - Category
+     - Template
+   * - ``differential_pair_nmos``
+     - ``input_pair``
+     - Two NMOS with shared source (``tail``) and bulk.
+   * - ``active_load_pmos``
+     - ``load``
+     - Two PMOS current mirror: ``m1`` diode-connected, ``m2`` mirrors it,
+       shared source (``vdd``) and bulk.
+   * - ``current_mirror_tail_nmos``
+     - ``tail_current``
+     - Two NMOS current mirror: ``m1`` diode-connected (the bias reference),
+       ``m2`` mirrors it, shared source (``gnd``) and bulk.
+   * - ``diode_connected_mosfet_bias``
+     - ``bias_generation``
+     - A single diode-connected NMOS reference, extended by a hook (below)
+       with however many output "legs" are present.
+
+:func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
+every pattern against the netlist's devices via a small backtracking search
+(patterns are 1-4 devices, so no graph library is needed), filtering
+candidates by device type and checking ``same_net``. A pattern's ``hook``, if
+any, runs once per base-template match and may reject the match (return
+``None``) or accept it with extra devices/pins merged in (a
+:class:`~circuitgenome.recognizer.models.HookMatch`).
+
+The ``diode_connected_mosfet_bias`` hook
+(:func:`~circuitgenome.recognizer.hooks.diode_connected_mosfet_bias_legs`)
+handles the variability described in
+:mod:`circuitgenome.synthesizer.bias_pruning`: a ``bias_generation`` variant's
+shared reference device is always present, but the number of output "legs"
+(1-7, depending on which ``out1``..``out7`` rails
+:func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation` kept)
+varies per combination. The base template matches only the reference device;
+the hook walks the netlist to find however many legs are actually present and
+appends their devices and ``legN_out`` pins.
+
+The result, a
+:class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`, may
+contain **multiple overlapping candidates** for the same device(s) -- SR does
+not pick a winner. For example, ``current_mirror_tail_nmos`` and
+``diode_connected_mosfet_bias`` share the same 2-terminal diode-connected
+shape, so a single diode-connected NMOS may match the base template of both
+patterns; disambiguation is FBR's job.
+``unrecognized_devices`` lists any device matched by no pattern -- for a
+netlist produced from a known ``SynthesizedCircuit`` with full pattern
+coverage, this should be empty.
+
+Functional block recognition (Layer 2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
+takes SR's output plus the
+:class:`~circuitgenome.synthesizer.models.TopologyTemplate` the netlist is
+known to have been synthesized from (the MVP does not attempt topology
+identification from an arbitrary netlist -- see "MVP scope" below), and
+assigns each :class:`~circuitgenome.synthesizer.models.Slot` in
+``topology.slots`` to its best-matching SR candidate:
+
+1. Filter SR's candidates to those whose ``category`` matches the slot's
+   ``category``.
+2. Score each remaining candidate by how many of its resolved ``pins`` agree
+   with
+   :meth:`~circuitgenome.synthesizer.models.TopologyTemplate.slot_connections`
+   for that slot (the topology's static ``{port: expected global net}``
+   wiring).
+3. Assign the highest-scoring candidate.
+
+Connectivity scoring runs even for categories with only one slot, since SR may
+report multiple overlapping candidates per category (as above) regardless of
+how many slots need that category. The output,
+:class:`~circuitgenome.recognizer.models.FunctionalBlockRecognitionResult`, is
+shaped like ``variant_map`` (``{slot_name: SlotAssignment}``), plus any
+unassigned candidate structures and ``unrecognized_devices`` passed through
+from SR.
+
+MVP scope
+~~~~~~~~~
+
+The current slice covers one fixed combination of ``one_stage_opamp`` module
+variants -- ``differential_pair_nmos`` / ``active_load_pmos`` /
+``current_mirror_tail_nmos`` / ``diode_connected_mosfet_bias`` -- round-tripped
+through ``synthesize`` -> ``to_flat_spice`` -> ``parse`` -> ``recognize`` ->
+``assign_slots``, recovering the original ``variant_map``. Broader
+pattern-library coverage (other ``opamp_modules.yaml`` variants and
+topologies), resistor/capacitor device lines, multi-level/primitive pattern
+composition, and topology identification from an arbitrary netlist are
+deferred to later milestones -- see
+``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
+details.

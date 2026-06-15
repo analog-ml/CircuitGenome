@@ -7,11 +7,11 @@ A Python toolkit for analog circuit topology synthesis and recognition, focused 
 ### 1. Topology Synthesizer *(available)*
 Constructs complete op-amp circuits from modular building blocks. Given a topology configuration (number of stages, output type), it enumerates every valid combination of module variants and emits SPICE netlists.
 
-### 2. Subcircuit Recognizer *(coming soon)*
-Takes a flat SPICE netlist and identifies structural subcircuits (differential pairs, cascode mirrors, etc.) at multiple hierarchy levels.
+### 2. Subcircuit Recognizer *(available, MVP)*
+Takes a flat SPICE netlist and identifies structural subcircuits (differential pairs, current mirrors, bias generators, etc.) via a YAML pattern library. The current MVP covers the four module variants used by `one_stage_opamp`; broader pattern and topology coverage is planned.
 
-### 3. Functional Block Recognizer *(coming soon)*
-Takes a flat SPICE netlist and identifies which functional roles (input stage, load, bias, compensation, etc.) each part of the circuit plays.
+### 3. Functional Block Recognizer *(available, MVP)*
+Takes the Subcircuit Recognizer's output plus a topology template and assigns each recognized structure to its functional slot (input stage, load, tail current, bias generation, etc.), recovering the original `variant_map`.
 
 ---
 

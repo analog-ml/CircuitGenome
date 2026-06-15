@@ -43,3 +43,4 @@ include = ["circuitgenome*"]
 
 [tool.setuptools.package-data]
 "circuitgenome.synthesizer" = ["config/*.yaml"]
+"circuitgenome.recognizer" = ["config/*.yaml"]

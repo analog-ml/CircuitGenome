@@ -110,3 +110,40 @@ Pass explicit file paths to load your own module or topology definitions:
        print(circuit.name)
 
 See :doc:`../extending` for the YAML schema.
+
+Recognizer
+----------
+
+:mod:`circuitgenome.recognizer` recovers a circuit's ``variant_map`` from its
+flat SPICE netlist -- the structural inverse of ``synthesize`` +
+``to_flat_spice``. The current MVP covers ``one_stage_opamp`` circuits built
+from ``differential_pair_nmos`` / ``active_load_pmos`` /
+``current_mirror_tail_nmos`` / ``diode_connected_mosfet_bias``:
+
+.. code-block:: python
+
+   from circuitgenome.synthesizer.loader import load_modules, load_topologies
+   from circuitgenome.synthesizer.synthesizer import enumerate_circuits
+   from circuitgenome.synthesizer.netlist import to_flat_spice
+   from circuitgenome.recognizer import parse, recognize, assign_slots
+
+   modules = load_modules()
+   topology = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+   circuit = next(enumerate_circuits(topology, modules))
+
+   # Layer 0: flat SPICE -> ParsedNetlist
+   parsed = parse(to_flat_spice(circuit))
+
+   # Layer 1: ParsedNetlist -> SubcircuitRecognitionResult
+   sr_result = recognize(parsed)
+   assert sr_result.unrecognized_devices == []
+
+   # Layer 2: SubcircuitRecognitionResult + TopologyTemplate -> variant_map
+   fbr_result = assign_slots(sr_result, topology)
+
+   for slot_name, variant in circuit.variant_map.items():
+       recovered = fbr_result.slot_assignments[slot_name].pattern_name
+       assert recovered == variant.name
+
+See :doc:`../overview` for the recognizer's 3-layer pipeline and pattern
+schema.
