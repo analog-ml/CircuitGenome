@@ -5,17 +5,41 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "circuitgenome"
 version = "0.1.0"
+description = "A Python toolkit for analog circuit topology synthesis and recognition, focused on op-amp design."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "Analog ML"}]
+maintainers = [{name = "Analog ML"}]
+keywords = ["analog", "circuit-design", "spice", "eda", "op-amp", "topology-synthesis"]
 requires-python = ">=3.9"
 dependencies = ["pyyaml>=6.0"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
 
 [project.optional-dependencies]
 viz = ["streamlit>=1.30", "pyvis>=0.3"]
+
+[project.urls]
+Homepage = "https://github.com/analog-ml/CircuitGenome"
+Repository = "https://github.com/analog-ml/CircuitGenome"
+Issues = "https://github.com/analog-ml/CircuitGenome/issues"
+Changelog = "https://github.com/analog-ml/CircuitGenome/blob/main/CHANGELOG.md"
 
 [project.scripts]
 circuitgenome = "circuitgenome.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+include = ["circuitgenome*"]
 
 [tool.setuptools.package-data]
 "circuitgenome.synthesizer" = ["config/*.yaml"]

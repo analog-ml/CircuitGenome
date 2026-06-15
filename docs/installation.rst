@@ -7,6 +7,13 @@ Requirements
 - Python 3.9 or later
 - `PyYAML <https://pyyaml.org/>`_ ≥ 6.0 (installed automatically)
 
+Install from PyPI
+------------------
+
+.. code-block:: bash
+
+   pip install circuitgenome
+
 Install from source
 -------------------
 
