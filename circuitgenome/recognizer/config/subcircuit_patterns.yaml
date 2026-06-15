@@ -1,0 +1,69 @@
+# SR pattern library (design doc section 5.1-5.2).
+#
+# Composite patterns correspond 1:1 to an opamp_modules.yaml variant and
+# reuse its name. `same_net` entries are the only required equalities;
+# unlisted terminals are not constrained.
+
+patterns:
+  - name: differential_pair_nmos
+    category: input_pair
+    devices:
+      - {ref: m1, type: nmos}
+      - {ref: m2, type: nmos}
+    same_net:
+      - [m1.s, m2.s]   # shared tail node
+      - [m1.b, m2.b]   # shared bulk node
+    pins:
+      in1: m1.g
+      in2: m2.g
+      out1: m1.d
+      out2: m2.d
+      tail: m1.s
+      bulk: m1.b
+    tech_type_from: m1   # tech_type = "n"
+
+  - name: active_load_pmos
+    category: load
+    devices:
+      - {ref: m1, type: pmos}
+      - {ref: m2, type: pmos}
+    same_net:
+      - [m1.d, m1.g]   # m1 is diode-connected
+      - [m1.g, m2.g]   # m2 mirrors m1's gate
+      - [m1.s, m2.s]   # shared vdd connection
+      - [m1.b, m2.b]
+    pins:
+      in1: m1.d
+      in2: m2.d
+      vdd: m1.s
+    tech_type_from: m1   # tech_type = "p"
+
+  - name: current_mirror_tail_nmos
+    category: tail_current
+    devices:
+      - {ref: m1, type: nmos}
+      - {ref: m2, type: nmos}
+    same_net:
+      - [m1.d, m1.g]   # m1 is diode-connected (bias reference)
+      - [m1.g, m2.g]   # m2 mirrors m1's gate
+      - [m1.s, m2.s]   # shared gnd connection
+      - [m1.b, m2.b]
+    pins:
+      bias: m1.g
+      out: m2.d
+      gnd: m1.s
+    tech_type_from: m1   # tech_type = "n"
+
+  - name: diode_connected_mosfet_bias
+    category: bias_generation
+    devices:
+      - {ref: mref, type: nmos}
+    same_net:
+      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
+    pins:
+      ibias: mref.g
+      gnd: mref.s
+    tech_type_from: mref   # tech_type = "n"
+    # Discovers however many output "legs" (nmos+pmos pairs mirroring mref)
+    # are present in the netlist and appends their devices/pins.
+    hook: "circuitgenome.recognizer.hooks:diode_connected_mosfet_bias_legs"

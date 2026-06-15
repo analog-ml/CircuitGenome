@@ -47,6 +47,16 @@ design exploration, or topology studies.
    api/net_aliasing
 
 .. toctree::
+   :maxdepth: 2
+   :caption: API Reference - Subcircuit & Functional Block Recognizer
+
+   api/recognizer/models
+   api/recognizer/netlist_parser
+   api/recognizer/subcircuit_recognizer
+   api/recognizer/functional_block_recognizer
+   api/recognizer/hooks
+
+.. toctree::
    :maxdepth: 1
    :caption: About
 
