@@ -139,7 +139,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
-    load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
+    load_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_load")}
 
     assert len(load_devices) == 8
     bias_gates = {dev.terminals["g"] for dev in load_devices.values()}
@@ -460,7 +460,7 @@ def test_enumerate_circuits_cmfb_present_iff_differential_load():
     for circuit in enumerate_circuits(topo, modules):
         is_differential = circuit.variant_map["load"].output_cardinality == "differential"
         assert bool(circuit.variant_map["cmfb"].devices) == is_differential
-        cmfb_device_refs = [ref for ref, _ in circuit.devices if ref.startswith("cmfb_")]
+        cmfb_device_refs = [ref for ref, _ in circuit.devices if ref.endswith("_cmfb")]
         assert bool(cmfb_device_refs) == is_differential
 
 
@@ -536,7 +536,7 @@ def test_enumerate_circuits_tail_current_present_iff_not_inverter_based_input():
         is_inverter_based = circuit.variant_map["input_pair"].name == "inverter_based_input"
         assert bool(circuit.variant_map["tail_current"].devices) != is_inverter_based
 
-        tail_current_device_refs = [ref for ref, _ in circuit.devices if ref.startswith("tail_current_")]
+        tail_current_device_refs = [ref for ref, _ in circuit.devices if ref.endswith("_tail_current")]
         assert bool(tail_current_device_refs) != is_inverter_based
 
         if is_inverter_based:
@@ -744,10 +744,10 @@ def test_three_stage_nmc_flat_spice_structure():
         assert port in spice.split("\n")[0]
 
     lines = spice.split("\n")
-    assert sum(1 for l in lines if l.startswith("comp1_")) == 1
-    assert sum(1 for l in lines if l.startswith("comp2_")) == 1
-    assert any(l.startswith("second_stage_") for l in lines)
-    assert any(l.startswith("third_stage_") for l in lines)
+    assert sum(1 for l in lines if l.split()[0].endswith("_comp1")) == 1
+    assert sum(1 for l in lines if l.split()[0].endswith("_comp2")) == 1
+    assert any(l.split()[0].endswith("_second_stage") for l in lines)
+    assert any(l.split()[0].endswith("_third_stage") for l in lines)
 
 
 def test_three_stage_rnmc_hierarchical_spice():
@@ -982,9 +982,9 @@ def test_enumerate_circuits_prunes_bias_generation_for_simple_load_one_stage():
     assert [p.name for p in bias_variant.ports] == ["ibias", "vdd", "gnd"]
     assert len(bias_variant.devices) == 1
 
-    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
+    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_bias_gen")}
     (dev,) = bias_devices.values()
-    assert dev.ref == "bias_gen_mn1"
+    assert dev.ref == "mn1_bias_gen"
     assert dev.terminals["d"] == "ibias"
     assert dev.terminals["g"] == "ibias"
     assert dev.terminals["s"] == "gnd!"
@@ -1013,13 +1013,13 @@ def test_enumerate_circuits_prunes_bias_generation_for_two_stage_simple_load():
     assert [p.name for p in bias_variant.ports] == ["ibias", "out5", "vdd", "gnd"]
     assert len(bias_variant.devices) == 3
 
-    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
-    assert set(bias_devices) == {"bias_gen_mn1", "bias_gen_mn6", "bias_gen_mp5"}
-    assert bias_devices["bias_gen_mn6"].terminals["d"] == "net_bias5"
-    assert bias_devices["bias_gen_mn6"].terminals["g"] == "ibias"
-    assert bias_devices["bias_gen_mp5"].terminals["d"] == "net_bias5"
-    assert bias_devices["bias_gen_mp5"].terminals["g"] == "net_bias5"
-    assert bias_devices["bias_gen_mp5"].terminals["s"] == "vdd!"
+    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_bias_gen")}
+    assert set(bias_devices) == {"mn1_bias_gen", "mn6_bias_gen", "mp5_bias_gen"}
+    assert bias_devices["mn6_bias_gen"].terminals["d"] == "net_bias5"
+    assert bias_devices["mn6_bias_gen"].terminals["g"] == "ibias"
+    assert bias_devices["mp5_bias_gen"].terminals["d"] == "net_bias5"
+    assert bias_devices["mp5_bias_gen"].terminals["g"] == "net_bias5"
+    assert bias_devices["mp5_bias_gen"].terminals["s"] == "vdd!"
 
 
 def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
@@ -1049,17 +1049,17 @@ def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
     ]
     assert len(bias_variant.devices) == 13
 
-    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("bias_gen_")}
-    assert "bias_gen_mn8" in bias_devices  # leg 7
-    assert "bias_gen_mp7" in bias_devices  # leg 7
-    assert bias_devices["bias_gen_mn8"].terminals["d"] == "net_bias7"
-    assert bias_devices["bias_gen_mp7"].terminals["d"] == "net_bias7"
-    assert bias_devices["bias_gen_mp7"].terminals["g"] == "net_bias7"
-    assert bias_devices["bias_gen_mp7"].terminals["s"] == "vdd!"
+    bias_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_bias_gen")}
+    assert "mn8_bias_gen" in bias_devices  # leg 7
+    assert "mp7_bias_gen" in bias_devices  # leg 7
+    assert bias_devices["mn8_bias_gen"].terminals["d"] == "net_bias7"
+    assert bias_devices["mp7_bias_gen"].terminals["d"] == "net_bias7"
+    assert bias_devices["mp7_bias_gen"].terminals["g"] == "net_bias7"
+    assert bias_devices["mp7_bias_gen"].terminals["s"] == "vdd!"
 
-    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
-    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias7"
-    assert tail_devices["tail_current_m1"].terminals["g"] == "net_bias7"
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
+    assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
+    assert tail_devices["m1_tail_current"].terminals["g"] == "net_bias7"
 
 
 @pytest.mark.parametrize(
@@ -1084,9 +1084,9 @@ def test_enumerate_circuits_tail_current_uses_rail_7_simple_load(bias_variant_na
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out7"]
     assert len(bias_variant.devices) == 3  # shared ref + 1 leg
 
-    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
-    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias7"
-    assert tail_devices["tail_current_m1"].terminals["g"] == "net_bias7"
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
+    assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
+    assert tail_devices["m1_tail_current"].terminals["g"] == "net_bias7"
 
 
 @pytest.mark.parametrize(
@@ -1113,10 +1113,10 @@ def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails(bia
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out7"]
     assert len(bias_variant.devices) == 5  # shared ref + 2 legs
 
-    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
-    assert tail_devices["tail_current_m1"].terminals["d"] == "net_bias7"
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
+    assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
 
-    second_stage_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_")}
+    second_stage_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_second_stage")}
     second_stage_terms = {t for dev in second_stage_devices.values() for t in dev.terminals.values()}
     assert "net_bias5" in second_stage_terms
 
@@ -1139,7 +1139,7 @@ def test_enumerate_circuits_resistor_tail_vdd_needs_no_bias_rail():
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == []
     assert len(bias_variant.devices) == 1
 
-    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     all_terms = {t for dev in tail_devices.values() for t in dev.terminals.values()}
     assert not any(t.startswith("net_bias") for t in all_terms)
 
@@ -1161,7 +1161,7 @@ def test_enumerate_circuits_resistor_tail_gnd_needs_no_bias_rail():
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == []
     assert len(bias_variant.devices) == 1
 
-    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("tail_current_")}
+    tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     all_terms = {t for dev in tail_devices.values() for t in dev.terminals.values()}
     assert not any(t.startswith("net_bias") for t in all_terms)
 
@@ -1187,8 +1187,8 @@ def test_enumerate_circuits_third_stage_uses_rail_6():
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out6"]
     assert len(bias_variant.devices) == 5  # shared ref + 2 legs
 
-    second_stage_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_")}
-    third_stage_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("third_stage_")}
+    second_stage_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_second_stage")}
+    third_stage_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_third_stage")}
     second_stage_terms = {t for dev in second_stage_devices.values() for t in dev.terminals.values()}
     third_stage_terms = {t for dev in third_stage_devices.values() for t in dev.terminals.values()}
     assert "net_bias5" in second_stage_terms
@@ -1224,8 +1224,8 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
     cmfb_variant = circuit.variant_map["cmfb"]
     assert cmfb_variant.devices == []
 
-    p_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_p_")}
-    n_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("second_stage_n_")}
+    p_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_second_stage_p")}
+    n_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_second_stage_n")}
     p_terms = {t for dev in p_devices.values() for t in dev.terminals.values()}
     n_terms = {t for dev in n_devices.values() for t in dev.terminals.values()}
     assert "net_bias5" in p_terms
@@ -1261,11 +1261,11 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     ]
     assert len(bias_variant.devices) == 15
 
-    load_terms = {t for ref, dev in circuit.devices if ref.startswith("load_") for t in dev.terminals.values()}
-    second_stage_terms = {t for ref, dev in circuit.devices if ref.startswith("second_stage_") for t in dev.terminals.values()}
-    third_stage_terms = {t for ref, dev in circuit.devices if ref.startswith("third_stage_") for t in dev.terminals.values()}
-    tail_terms = {t for ref, dev in circuit.devices if ref.startswith("tail_current_") for t in dev.terminals.values()}
-    cmfb_terms = {t for ref, dev in circuit.devices if ref.startswith("cmfb_") for t in dev.terminals.values()}
+    load_terms = {t for ref, dev in circuit.devices if ref.endswith("_load") for t in dev.terminals.values()}
+    second_stage_terms = {t for ref, dev in circuit.devices if "_second_stage" in ref for t in dev.terminals.values()}
+    third_stage_terms = {t for ref, dev in circuit.devices if "_third_stage" in ref for t in dev.terminals.values()}
+    tail_terms = {t for ref, dev in circuit.devices if ref.endswith("_tail_current") for t in dev.terminals.values()}
+    cmfb_terms = {t for ref, dev in circuit.devices if ref.endswith("_cmfb") for t in dev.terminals.values()}
 
     assert {"net_bias1", "net_bias2", "net_bias3"} <= load_terms
     assert "net_cmfb_out" in load_terms
@@ -1300,8 +1300,8 @@ def test_synthesize_differential_output_folded_cascode_has_nondegenerate_cascode
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
-    load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
-    cmfb_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("cmfb_")}
+    load_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_load")}
+    cmfb_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_cmfb")}
 
     cascode_outputs = {"net_loadout1", "net_loadout2"}
     cascode_devices = [dev for dev in load_devices.values() if dev.terminals.get("d") in cascode_outputs]
@@ -1330,7 +1330,7 @@ def test_synthesize_single_output_cascode_load_has_nondegenerate_output_device()
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
-    load_devices = {ref: dev for ref, dev in circuit.devices if ref.startswith("load_")}
+    load_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_load")}
 
     output_device = next(dev for dev in load_devices.values() if dev.terminals.get("d") == "out")
     assert output_device.terminals["s"] != "out"
@@ -1340,8 +1340,8 @@ def test_synthesize_alias_of_load_merges_in_and_out_nets():
     """resistor_load_vdd declares out1/out2 as alias_of in1/in2. The topology
     wires load.in1 and load.out1 to separate nets (net_diff1 and
     net_loadout1), but the net-merge pass collapses them back into one --
-    so load_r1 (load.in1), input_pair_m1 (input_pair.out1), and
-    second_stage_n_mn1 (which senses the load's output) all land on the same
+    so r1_load (load.in1), m1_input_pair (input_pair.out1), and
+    mn1_second_stage_n (which senses the load's output) all land on the same
     net, restoring the single shared in/out node these devices assume."""
     modules = load_modules()
     topologies = load_topologies()
@@ -1360,8 +1360,8 @@ def test_synthesize_alias_of_load_merges_in_and_out_nets():
     circuit = next(enumerate_circuits(topo, simple_modules))
     devices = dict(circuit.devices)
 
-    load_in1_net = devices["load_r1"].terminals["t2"]
-    input_pair_out1_net = devices["input_pair_m1"].terminals["d"]
-    second_stage_n_sense_net = devices["second_stage_n_mn1"].terminals["g"]
+    load_in1_net = devices["r1_load"].terminals["t2"]
+    input_pair_out1_net = devices["m1_input_pair"].terminals["d"]
+    second_stage_n_sense_net = devices["mn1_second_stage_n"].terminals["g"]
 
     assert load_in1_net == input_pair_out1_net == second_stage_n_sense_net

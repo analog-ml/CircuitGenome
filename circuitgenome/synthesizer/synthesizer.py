@@ -51,7 +51,7 @@ def _resolve_devices(
                 resolved_terminals[term] = f"{slot_name}_{local_net}_nc"
             else:
                 resolved_terminals[term] = f"{slot_name}_{local_net}"
-        global_ref = f"{slot_name}_{dev.ref}"
+        global_ref = f"{dev.ref}_{slot_name}"
         result.append((global_ref, Device(ref=global_ref, type=dev.type, terminals=resolved_terminals)))
     return result
 

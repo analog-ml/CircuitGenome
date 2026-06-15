@@ -285,20 +285,20 @@ Each generated circuit gets its own `.ckt` file. For `--format both`, two files 
 
 ```spice
 .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
-input_pair_m1 net_diff1 in1 net_tail net_tail pmos
-input_pair_m2 net_mid in2 net_tail net_tail pmos
-load_r1 vdd! net_diff1 1k
-load_r2 vdd! net_mid 1k
-tail_current_m1 net_tail_bias net_tail_bias vdd! vdd! pmos
-tail_current_m2 net_tail net_tail_bias vdd! vdd! pmos
-bias_gen_mp1 ibias ibias vdd! vdd! pmos
-bias_gen_mn1 net_bias1 net_bias1 gnd! gnd! nmos
-bias_gen_mn2 net_bias2 net_bias2 gnd! gnd! nmos
-bias_gen_mn3 net_bias3 net_bias3 gnd! gnd! nmos
-bias_gen_mn4 net_bias4 net_bias4 gnd! gnd! nmos
-compensation_c1 net_mid out 1p
-second_stage_mn1 out net_mid gnd! gnd! nmos
-second_stage_mp1 out net_bias1 vdd! vdd! pmos
+m1_input_pair net_diff1 in1 net_tail net_tail pmos
+m2_input_pair net_mid in2 net_tail net_tail pmos
+r1_load vdd! net_diff1 1k
+r2_load vdd! net_mid 1k
+m1_tail_current net_tail_bias net_tail_bias vdd! vdd! pmos
+m2_tail_current net_tail net_tail_bias vdd! vdd! pmos
+mp1_bias_gen ibias ibias vdd! vdd! pmos
+mn1_bias_gen net_bias1 net_bias1 gnd! gnd! nmos
+mn2_bias_gen net_bias2 net_bias2 gnd! gnd! nmos
+mn3_bias_gen net_bias3 net_bias3 gnd! gnd! nmos
+mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+c1_compensation net_mid out 1p
+mn1_second_stage out net_mid gnd! gnd! nmos
+mp1_second_stage out net_bias1 vdd! vdd! pmos
 .ends
 ```
 
