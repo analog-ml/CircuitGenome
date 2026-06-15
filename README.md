@@ -18,6 +18,12 @@ Takes a flat SPICE netlist and identifies which functional roles (input stage, l
 ## Installation
 
 ```bash
+pip install circuitgenome
+```
+
+Or install from source:
+
+```bash
 pip install -e .
 ```
 
