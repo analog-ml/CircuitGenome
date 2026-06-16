@@ -3,6 +3,36 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-16 (2)
+
+Issue [#30](https://github.com/analog-ml/CircuitGenome/issues/30), PR
+(this branch: `feat/sr-two-stage-coverage`).
+
+### Added
+
+- **6 new SR patterns** for `two_stage_opamp_single_ended`'s new slots,
+  bringing the total from 24 to 30:
+  - *compensation* (3): `miller_cap` (1 capacitor), `miller_cap_with_nulling_resistor`
+    (series resistor + capacitor sharing an internal `cn` node),
+    `indirect_compensation` (capacitor + series resistor sharing an internal `ind`
+    node). Connectivity scoring disambiguates overlapping 1-device subsets without
+    any hooks.
+  - *second_stage* (3): `common_source` (NMOS input + PMOS load, drains shorted),
+    `common_drain` (PMOS source-follower + NMOS tail, distinguished by `[mp1.d,
+    mp1.b]` same_net constraint forcing the PMOS drain to vdd),
+    `differential_ota_second_stage` (2 PMOS + 2 NMOS, cross-coupled via an internal
+    `d1` node with 5 `same_net` groups).
+- **Parametrized round-trip test for `two_stage_opamp_single_ended`**: 11 combos
+  in `tests/test_recognizer.py` covering all 9 `compensation` × `second_stage`
+  pairs and all 5 `input_pair` variants, each asserting `unrecognized_devices ==
+  []` and full `variant_map` recovery.
+
+### Docs
+
+- `docs/overview.rst`: SR pattern table extended with `compensation` and
+  `second_stage` rows; pattern count updated to 30; "SR pattern coverage" section
+  updated to describe coverage of both topologies and the full 22-combo test suite.
+
 ## 2026-06-16
 
 Issue [#29](https://github.com/analog-ml/CircuitGenome/issues/29), PR

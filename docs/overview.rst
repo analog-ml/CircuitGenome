@@ -471,11 +471,9 @@ produced it. It is organized as a 3-layer pipeline:
    assigns each recognized structure to a topology slot (``input_pair``,
    ``load``, ``tail_current``, ...), recovering the ``variant_map`` shape.
 
-This MVP slice targets round-trip recognition of ``one_stage_opamp`` circuits
-built from one fixed combination of module variants --
-``differential_pair_nmos`` / ``active_load_pmos`` / ``current_mirror_tail_nmos``
-/ ``diode_connected_mosfet_bias``, with ``cmfb``, ``compensation``, and
-``second_stage`` pruned to empty placeholders for this topology. See
+The recognizer currently targets round-trip recognition of
+``one_stage_opamp`` and ``two_stage_opamp_single_ended`` circuits synthesized
+by :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`. See
 ``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for the
 full design rationale.
 
@@ -522,7 +520,8 @@ and reuse its name, so a successful match's
 comparable to a
 :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
 entry's variant name. The library covers every reachable ``one_stage_opamp``
-variant -- 24 patterns across four categories:
+and ``two_stage_opamp_single_ended`` variant -- 30 patterns across six
+categories:
 
 .. list-table::
    :header-rows: 1
@@ -556,6 +555,20 @@ variant -- 24 patterns across four categories:
        use hooks (below) to discover however many output legs
        :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
        left in the netlist.
+   * - ``compensation``
+     - 3
+     - ``miller_cap`` (1 capacitor across ``in``→``out``),
+       ``miller_cap_with_nulling_resistor`` (series resistor + capacitor, sharing
+       an internal ``cn`` node), ``indirect_compensation`` (capacitor to an
+       internal ``ind`` node + series resistor to ``out``). Connectivity scoring
+       naturally disambiguates overlapping 1-device subsets without hooks.
+   * - ``second_stage``
+     - 3
+     - ``common_source`` (NMOS input + PMOS load, drains shorted to ``out``),
+       ``common_drain`` (PMOS source-follower driving NMOS tail; distinguished
+       from ``common_source`` by ``[mp1.d, mp1.b]`` same_net group forcing
+       the PMOS drain to vdd), ``differential_ota_second_stage`` (2 PMOS + 2
+       NMOS, cross-coupled via an internal ``d1`` node).
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search
@@ -626,21 +639,27 @@ from SR.
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~
 
-The pattern library covers all 24 reachable ``one_stage_opamp`` variants (5
-``input_pair`` × 10 ``load`` × 6 real ``tail_current`` × 3
-``bias_generation``). The round-trip test in ``tests/test_recognizer.py`` is
-parametrized over 11 representative combinations sampled from that space,
-asserting ``unrecognized_devices == []`` and full ``variant_map`` recovery for
-each. The 11 combos are chosen so that every variant appears in at least one
-combo and every selected combo is structurally unambiguous for the SR/FBR
-pipeline. Known structural ambiguities -- ``resistor_bias`` paired with a
-``current_mirror_tail`` (a spurious ``magic_battery_bias`` candidate arises from
-the tail's diode-connected reference transistor) and any ``magic_battery_bias``
-or ``resistor_bias`` combination where bias-rail pruning reduces the
-``bias_generation`` slot to its bare reference device (0 legs, making the two
-variants structurally identical) -- are avoided by careful combo selection
-rather than additional code. Broader topology coverage, primitive/multi-level
-pattern composition, and topology identification from an arbitrary netlist are
-deferred to later milestones -- see
-``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
+The pattern library covers all 30 reachable variants across two topologies:
+
+- **one_stage_opamp**: 24 patterns (5 ``input_pair`` × 10 ``load`` × 6 real
+  ``tail_current`` × 3 ``bias_generation``). The round-trip test is
+  parametrized over 11 representative combinations covering every variant.
+- **two_stage_opamp_single_ended**: adds 6 new patterns (3 ``compensation`` ×
+  3 ``second_stage``). The round-trip test adds 11 further combinations
+  covering all 9 ``compensation``/``second_stage`` pairs and all 5
+  ``input_pair`` variants.
+
+All 22 test combos assert ``unrecognized_devices == []`` and full
+``variant_map`` recovery. Combos are chosen so every variant appears in at
+least one and every selected combo is structurally unambiguous for the SR/FBR
+pipeline. Known structural ambiguities -- ``resistor_bias`` paired with
+``current_mirror_tail_{nmos,pmos}`` (the tail's diode-connected reference
+transistor spuriously satisfies the ``magic_battery_bias`` NMOS leg template)
+and any ``magic_battery_bias`` or ``resistor_bias`` combination where
+bias-rail pruning reduces the ``bias_generation`` slot to 0 legs (making the
+two variants structurally identical) -- are avoided by careful combo selection
+rather than additional code. Broader topology coverage (fully-differential,
+3-stage), primitive/multi-level pattern composition, and topology
+identification from an arbitrary netlist are deferred to later milestones --
+see ``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
 details.
