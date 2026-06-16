@@ -12,6 +12,15 @@ from circuitgenome.recognizer.functional_block_recognizer import assign_slots
 # tail_current_compatibility.py.
 _CANONICAL_TAIL = "current_mirror_tail_pmos"
 
+_MODULES = None
+
+
+def _get_modules():
+    global _MODULES
+    if _MODULES is None:
+        _MODULES = load_modules()
+    return _MODULES
+
 # 11 combos covering every reachable one_stage_opamp variant: all 5
 # input_pair, all 10 load, all 6 real tail_current, and all 3 bias_generation
 # variants.  Combo selection avoids two known structural ambiguities:
@@ -62,6 +71,76 @@ def test_round_trip_one_stage_opamp(
         "cmfb":            modules["cmfb"],
         "compensation":    modules["compensation"],
         "second_stage":    modules["second_stage"],
+    }
+    circuit = next(enumerate_circuits(topology, simple_modules))
+
+    sr_result = recognize(parse(to_flat_spice(circuit)))
+
+    assert sr_result.unrecognized_devices == [], (
+        f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"
+    )
+
+    fbr_result = assign_slots(sr_result, topology)
+
+    for slot_name, variant in circuit.variant_map.items():
+        if not variant.devices:
+            continue
+        assigned = fbr_result.slot_assignments.get(slot_name)
+        assert assigned is not None, (
+            f"slot {slot_name!r} missing; expected {variant.name!r}"
+        )
+        assert assigned.pattern_name == variant.name, (
+            f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
+        )
+
+
+# ─── two_stage_opamp_single_ended round-trip ────────────────────────────────
+#
+# 11 combos cover all 3 compensation variants, all 3 second_stage variants,
+# and all 5 input_pair variants across representative base combinations.
+# Combos avoid the known B1 ambiguity (current_mirror_tail_nmos + resistor_bias
+# → spurious magic_battery_bias wins); see _ONE_STAGE_COMBOS comment above.
+_TWO_STAGE_COMBOS = [
+    # fmt: off
+    # input_pair                           load                                        tail_current                         bias_gen                        compensation                        second_stage
+    ("differential_pair_pmos",             "telescopic_cascode_load_pmos",             "current_mirror_tail_pmos",          "diode_connected_mosfet_bias",  "miller_cap",                       "common_source"),
+    ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "diode_connected_mosfet_bias",  "miller_cap",                       "common_drain"),
+    ("differential_pair_pmos",             "active_load_nmos",                         "current_mirror_tail_pmos",          "magic_battery_bias",           "miller_cap",                       "differential_ota_second_stage"),
+    ("differential_pair_pmos",             "current_source_load_nmos",                 "cascode_current_mirror_tail_pmos",  "diode_connected_mosfet_bias",  "miller_cap_with_nulling_resistor", "common_source"),
+    ("differential_pair_nmos",             "active_load_pmos",                         "current_mirror_tail_nmos",          "magic_battery_bias",           "miller_cap_with_nulling_resistor", "common_drain"),
+    ("differential_pair_nmos",             "current_source_load_pmos",                 "resistor_tail_gnd",                 "resistor_bias",                "miller_cap_with_nulling_resistor", "differential_ota_second_stage"),
+    ("differential_pair_nmos",             "resistor_load_vdd",                        "resistor_tail_gnd",                 "diode_connected_mosfet_bias",  "indirect_compensation",            "common_source"),
+    ("differential_pair_nmos",             "telescopic_cascode_load_nmos",             "resistor_tail_gnd",                 "resistor_bias",                "indirect_compensation",            "common_drain"),
+    ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_single_output", "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias", "indirect_compensation",          "differential_ota_second_stage"),
+    ("differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_single_output", "cascode_current_mirror_tail_pmos", "magic_battery_bias",          "miller_cap",                     "common_source"),
+    ("inverter_based_input",               "folded_cascode_load_pmos_input_single_output", _CANONICAL_TAIL,                 "diode_connected_mosfet_bias",  "miller_cap_with_nulling_resistor", "common_drain"),
+    # fmt: on
+]
+
+
+@pytest.fixture(scope="module")
+def two_stage_fixtures():
+    modules = load_modules()
+    topology = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    return modules, topology
+
+
+@pytest.mark.parametrize(
+    "input_pair,load,tail_current,bias_generation,compensation,second_stage",
+    _TWO_STAGE_COMBOS,
+)
+def test_round_trip_two_stage_opamp(
+    two_stage_fixtures,
+    input_pair, load, tail_current, bias_generation, compensation, second_stage,
+):
+    modules, topology = two_stage_fixtures
+    simple_modules = {
+        "input_pair":      [v for v in modules["input_pair"]      if v.name == input_pair],
+        "load":            [v for v in modules["load"]            if v.name == load],
+        "tail_current":    [v for v in modules["tail_current"]    if v.name == tail_current],
+        "bias_generation": [v for v in modules["bias_generation"]  if v.name == bias_generation],
+        "compensation":    [v for v in modules["compensation"]    if v.name == compensation],
+        "second_stage":    [v for v in modules["second_stage"]    if v.name == second_stage],
     }
     circuit = next(enumerate_circuits(topology, simple_modules))
 

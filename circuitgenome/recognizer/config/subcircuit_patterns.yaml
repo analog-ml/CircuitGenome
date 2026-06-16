@@ -445,3 +445,89 @@ patterns:
     # Mirror of resistor_tail_vdd's check: rejects any resistor whose t2
     # isn't the global gnd! rail.
     hook: "circuitgenome.recognizer.hooks:resistor_tail_gnd_check"
+
+  # ─── COMPENSATION variants ──────────────────────────────────────────────────
+
+  - name: miller_cap
+    category: compensation
+    devices:
+      - {ref: c1, type: capacitor}
+    pins:
+      in: c1.p
+      out: c1.m
+
+  - name: miller_cap_with_nulling_resistor
+    category: compensation
+    devices:
+      - {ref: r1, type: resistor}
+      - {ref: c1, type: capacitor}
+    # r1.t2 and c1.p share the internal cn node.
+    same_net:
+      - [r1.t2, c1.p]
+    pins:
+      in: r1.t1
+      out: c1.m
+
+  - name: indirect_compensation
+    category: compensation
+    devices:
+      - {ref: c1, type: capacitor}
+      - {ref: r1, type: resistor}
+    # c1.m and r1.t1 share the internal ind node.
+    same_net:
+      - [c1.m, r1.t1]
+    pins:
+      in: c1.p
+      out: r1.t2
+
+  # ─── SECOND STAGE variants ──────────────────────────────────────────────────
+
+  - name: common_source
+    category: second_stage
+    devices:
+      - {ref: mn1, type: nmos}
+      - {ref: mp1, type: pmos}
+    # Both drains share the output node.
+    same_net:
+      - [mn1.d, mp1.d]
+    pins:
+      in: mn1.g
+      bias: mp1.g
+      out: mn1.d
+
+  - name: common_drain
+    category: second_stage
+    devices:
+      - {ref: mp1, type: pmos}
+      - {ref: mn1, type: nmos}
+    # PMOS source == NMOS drain (shared output). PMOS drain == PMOS bulk (vdd).
+    same_net:
+      - [mp1.s, mn1.d]
+      - [mp1.d, mp1.b]
+    pins:
+      in: mp1.g
+      bias: mn1.g
+      out: mp1.s
+
+  - name: differential_ota_second_stage
+    category: second_stage
+    devices:
+      - {ref: mp1, type: pmos}
+      - {ref: mp2, type: pmos}
+      - {ref: mn1, type: nmos}
+      - {ref: mn2, type: nmos}
+    # mp1.d == mn1.d == mn2.g  (internal d1 node: cross-coupled gain stage)
+    # mp1.g == mp2.g            (shared bias gate)
+    # mp1.s == mp1.b == mp2.s == mp2.b  (all tied to vdd)
+    # mn1.s == mn1.b == mn2.s == mn2.b  (all tied to gnd)
+    # mp2.d == mn2.d            (shared output)
+    same_net:
+      - [mp1.d, mn1.d, mn2.g]
+      - [mp1.g, mp2.g]
+      - [mp1.s, mp1.b, mp2.s, mp2.b]
+      - [mn1.s, mn1.b, mn2.s, mn2.b]
+      - [mp2.d, mn2.d]
+    pins:
+      in: mn1.g
+      bias: mp1.g
+      out: mp2.d
