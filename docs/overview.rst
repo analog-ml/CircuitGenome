@@ -493,9 +493,10 @@ per device,
 
 and produces a :class:`~circuitgenome.recognizer.models.ParsedNetlist`. Net
 and ref names are treated as arbitrary strings -- the parser makes no
-assumptions about ``to_flat_spice``'s own naming conventions. Resistor and
-capacitor device lines are not yet supported and raise ``ValueError``; this
-is deferred to a later slice (the MVP's module combination is all-MOSFET).
+assumptions about ``to_flat_spice``'s own naming conventions. Resistor lines
+(``r<ref> <t1> <t2> <value>``) and capacitor lines (``c<ref> <p> <m>
+<value>``) are also handled; the leading character of ``ref`` determines the
+device type (``r`` → ``resistor``, ``c`` → ``capacitor``).
 
 Subcircuit recognition (Layer 1)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -520,30 +521,41 @@ and reuse its name, so a successful match's
 :attr:`~circuitgenome.recognizer.models.RecognizedStructure.name` is directly
 comparable to a
 :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
-entry's variant name. The four patterns implemented for this MVP:
+entry's variant name. The library covers every reachable ``one_stage_opamp``
+variant -- 24 patterns across four categories:
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 20 50
+   :widths: 25 20 55
 
-   * - Pattern
-     - Category
-     - Template
-   * - ``differential_pair_nmos``
-     - ``input_pair``
-     - Two NMOS with shared source (``tail``) and bulk.
-   * - ``active_load_pmos``
-     - ``load``
-     - Two PMOS current mirror: ``m1`` diode-connected, ``m2`` mirrors it,
-       shared source (``vdd``) and bulk.
-   * - ``current_mirror_tail_nmos``
-     - ``tail_current``
-     - Two NMOS current mirror: ``m1`` diode-connected (the bias reference),
-       ``m2`` mirrors it, shared source (``gnd``) and bulk.
-   * - ``diode_connected_mosfet_bias``
-     - ``bias_generation``
-     - A single diode-connected NMOS reference, extended by a hook (below)
-       with however many output "legs" are present.
+   * - Category
+     - Patterns (count)
+     - Notes
+   * - ``input_pair``
+     - 5
+     - ``differential_pair_{nmos,pmos}``, degenerated variants (NMOS+NMOS /
+       PMOS+PMOS transistors + 2 source-degeneration resistors),
+       ``inverter_based_input`` (2 CMOS inverters: 2 PMOS + 2 NMOS).
+   * - ``load``
+     - 10
+     - Resistor (VDD-side / GND-side), active current mirror (PMOS / NMOS),
+       current-source (PMOS / NMOS), single-output folded cascode (NMOS-input /
+       PMOS-input, 8 devices each), telescopic cascode (PMOS / NMOS, 6 devices
+       each). The 2 differential-output folded-cascode variants are excluded from
+       ``one_stage_opamp`` (single-ended topology only).
+   * - ``tail_current``
+     - 6
+     - Current mirror (PMOS / NMOS, 2 devices each), cascode current mirror
+       (PMOS / NMOS, 4 devices each), resistor (VDD-side / GND-side, each using
+       a hook to reject resistors whose supply terminal isn't the global rail).
+   * - ``bias_generation``
+     - 3
+     - ``diode_connected_mosfet_bias`` (NMOS reference + NMOS/PMOS leg pairs),
+       ``magic_battery_bias`` (PMOS reference + PMOS/NMOS leg pairs),
+       ``resistor_bias`` (PMOS reference + PMOS/resistor leg pairs). All three
+       use hooks (below) to discover however many output legs
+       :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
+       left in the netlist.
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search
@@ -553,16 +565,24 @@ any, runs once per base-template match and may reject the match (return
 ``None``) or accept it with extra devices/pins merged in (a
 :class:`~circuitgenome.recognizer.models.HookMatch`).
 
-The ``diode_connected_mosfet_bias`` hook
-(:func:`~circuitgenome.recognizer.hooks.diode_connected_mosfet_bias_legs`)
-handles the variability described in
-:mod:`circuitgenome.synthesizer.bias_pruning`: a ``bias_generation`` variant's
-shared reference device is always present, but the number of output "legs"
-(1-7, depending on which ``out1``..``out7`` rails
-:func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation` kept)
-varies per combination. The base template matches only the reference device;
-the hook walks the netlist to find however many legs are actually present and
-appends their devices and ``legN_out`` pins.
+Five hooks are implemented in :mod:`circuitgenome.recognizer.hooks`:
+
+- :func:`~circuitgenome.recognizer.hooks.diode_connected_mosfet_bias_legs`,
+  :func:`~circuitgenome.recognizer.hooks.magic_battery_bias_legs`, and
+  :func:`~circuitgenome.recognizer.hooks.resistor_bias_legs` each handle the
+  variability described in :mod:`circuitgenome.synthesizer.bias_pruning`: a
+  ``bias_generation`` variant's shared reference device is always present, but
+  the number of output "legs" (0-7, depending on which ``out1``..``out7`` rails
+  :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation` kept)
+  varies per combination. The base template matches only the reference device;
+  the hook walks the netlist to find however many legs are actually present and
+  appends their devices and ``legN_out`` pins to
+  :class:`~circuitgenome.recognizer.models.HookMatch`.
+- :func:`~circuitgenome.recognizer.hooks.resistor_tail_vdd_check` and
+  :func:`~circuitgenome.recognizer.hooks.resistor_tail_gnd_check` each accept a
+  single-resistor ``tail_current`` match only if the resistor's supply-side
+  terminal is the global ``vdd!``/``gnd!`` rail, preventing the unconstrained
+  1-device template from spuriously matching every resistor in the netlist.
 
 The result, a
 :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`, may
@@ -603,17 +623,24 @@ shaped like ``variant_map`` (``{slot_name: SlotAssignment}``), plus any
 unassigned candidate structures and ``unrecognized_devices`` passed through
 from SR.
 
-MVP scope
-~~~~~~~~~
+SR pattern coverage
+~~~~~~~~~~~~~~~~~~~~
 
-The current slice covers one fixed combination of ``one_stage_opamp`` module
-variants -- ``differential_pair_nmos`` / ``active_load_pmos`` /
-``current_mirror_tail_nmos`` / ``diode_connected_mosfet_bias`` -- round-tripped
-through ``synthesize`` -> ``to_flat_spice`` -> ``parse`` -> ``recognize`` ->
-``assign_slots``, recovering the original ``variant_map``. Broader
-pattern-library coverage (other ``opamp_modules.yaml`` variants and
-topologies), resistor/capacitor device lines, multi-level/primitive pattern
-composition, and topology identification from an arbitrary netlist are
+The pattern library covers all 24 reachable ``one_stage_opamp`` variants (5
+``input_pair`` × 10 ``load`` × 6 real ``tail_current`` × 3
+``bias_generation``). The round-trip test in ``tests/test_recognizer.py`` is
+parametrized over 11 representative combinations sampled from that space,
+asserting ``unrecognized_devices == []`` and full ``variant_map`` recovery for
+each. The 11 combos are chosen so that every variant appears in at least one
+combo and every selected combo is structurally unambiguous for the SR/FBR
+pipeline. Known structural ambiguities -- ``resistor_bias`` paired with a
+``current_mirror_tail`` (a spurious ``magic_battery_bias`` candidate arises from
+the tail's diode-connected reference transistor) and any ``magic_battery_bias``
+or ``resistor_bias`` combination where bias-rail pruning reduces the
+``bias_generation`` slot to its bare reference device (0 legs, making the two
+variants structurally identical) -- are avoided by careful combo selection
+rather than additional code. Broader topology coverage, primitive/multi-level
+pattern composition, and topology identification from an arbitrary netlist are
 deferred to later milestones -- see
 ``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
 details.

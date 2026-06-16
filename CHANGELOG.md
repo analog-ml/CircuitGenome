@@ -3,6 +3,65 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-16
+
+Issue [#29](https://github.com/analog-ml/CircuitGenome/issues/29), PR
+(this branch: `feat/sr-pattern-coverage`).
+
+### Added
+
+- **Layer 0 resistor/capacitor parsing**: `netlist_parser.parse` now handles
+  resistor lines (`r<ref> <t1> <t2> <value>`) and capacitor lines
+  (`c<ref> <p> <m> <value>`) in addition to MOSFET lines.  Device type is
+  inferred from the leading character of the ref.
+- **24 SR patterns** (up from 4): every reachable `one_stage_opamp` variant
+  is now covered by a composite pattern in
+  `circuitgenome/recognizer/config/subcircuit_patterns.yaml`.
+  - *input_pair* (5): `differential_pair_{nmos,pmos}`, degenerated variants
+    (with source-degeneration resistors), `inverter_based_input`.
+  - *load* (10): resistor (VDD/GND), active current mirror (PMOS/NMOS),
+    current-source (PMOS/NMOS), single-output folded cascode (NMOS-input /
+    PMOS-input), telescopic cascode (PMOS/NMOS).
+  - *tail_current* (6): current mirror (PMOS/NMOS), cascode current mirror
+    (PMOS/NMOS), resistor tail (VDD/GND).
+  - *bias_generation* (3): `diode_connected_mosfet_bias`,
+    `magic_battery_bias`, `resistor_bias`.
+- **4 new hooks** in `circuitgenome/recognizer/hooks.py`:
+  - `magic_battery_bias_legs`: discovers PMOS-reference + PMOS/NMOS leg pairs
+    for `magic_battery_bias` (mirrors `diode_connected_mosfet_bias_legs` with
+    polarities flipped).
+  - `resistor_bias_legs`: discovers PMOS-reference + PMOS/resistor leg pairs
+    for `resistor_bias`.
+  - `resistor_tail_vdd_check` / `resistor_tail_gnd_check`: accept a
+    single-resistor `tail_current` match only when the resistor's supply
+    terminal is the global `vdd!` / `gnd!` rail, preventing spurious matches
+    on degeneration and load resistors.
+- **Incremental `same_net` checking** in `subcircuit_recognizer._find_assignments`:
+  `_check_same_net` now handles partial assignments and is called after every
+  tentative device binding (not just at the leaf), pruning invalid branches
+  immediately (~1500× speedup on 8-device patterns with 10 `same_net` groups).
+- **Parametrized round-trip test**: `tests/test_recognizer.py` is now
+  parametrized over 11 representative `one_stage_opamp` combinations covering
+  all 24 reachable variants, each asserting `unrecognized_devices == []` and
+  full `variant_map` recovery.
+
+### Changed
+
+- `inverter_based_input` pattern moved to the top of
+  `subcircuit_patterns.yaml` (was after the `differential_pair_*` patterns).
+  Its NMOS pair alone satisfies `differential_pair_nmos`'s 2-device template
+  (shared source/bulk = gnd), creating an equal connectivity score; file order
+  now breaks that tie in favour of the more-specific 4-device pattern.
+
+### Docs
+
+- `docs/overview.rst` "Subcircuit & Functional Block Recognizer" section
+  updated: netlist-parsing paragraph reflects resistor/capacitor support; the
+  4-pattern table replaced by a category-level summary of all 24 patterns;
+  hook description extended to cover all five hooks; "MVP scope" section
+  replaced by "SR pattern coverage" describing the 11-combo parametrized test
+  and the known structural ambiguities that guided combo selection.
+
 ## 2026-06-15 (2)
 
 PR [#27](https://github.com/analog-ml/CircuitGenome/pull/27).

@@ -1,3 +1,5 @@
+import pytest
+
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -5,36 +7,79 @@ from circuitgenome.recognizer.netlist_parser import parse
 from circuitgenome.recognizer.subcircuit_recognizer import recognize
 from circuitgenome.recognizer.functional_block_recognizer import assign_slots
 
+# For inverter_based_input, enumerate_circuits accepts only the canonical tail
+# variant and prunes it to tail_current_absent (0 devices); see
+# tail_current_compatibility.py.
+_CANONICAL_TAIL = "current_mirror_tail_pmos"
 
-def _one_stage_combo():
-    """The fixed combo for this slice: differential_pair_nmos / active_load_pmos /
-    current_mirror_tail_nmos / diode_connected_mosfet_bias, all polarity-compatible
-    and all-MOSFET so Layer 0 only needs to handle MOSFET device lines."""
+# 11 combos covering every reachable one_stage_opamp variant: all 5
+# input_pair, all 10 load, all 6 real tail_current, and all 3 bias_generation
+# variants.  Combo selection avoids two known structural ambiguities:
+#   - resistor_bias is paired with resistor_tail_* + a bias-rail-needing load
+#     (current_source/folded_cascode/telescopic) to avoid the B1 spurious
+#     match where current_mirror_tail's diode-connected m1 mimics a
+#     magic_battery_bias nmos_leg, causing FBR to prefer magic_battery_bias.
+#   - magic_battery_bias is paired with current_mirror_tail_* or
+#     active_load_nmos+current_mirror_tail_pmos so rail 7 is present;
+#     no 0-rail combos (where mref-only magic_battery_bias and resistor_bias
+#     are structurally identical) are included.
+_ONE_STAGE_COMBOS = [
+    # ── input_pair: differential_pair_pmos ──────────────────────────────────
+    ("differential_pair_pmos",            "telescopic_cascode_load_pmos",                 "current_mirror_tail_pmos",         "diode_connected_mosfet_bias"),
+    ("differential_pair_pmos",            "resistor_load_gnd",                            "resistor_tail_vdd",                "diode_connected_mosfet_bias"),
+    ("differential_pair_pmos",            "active_load_nmos",                             "current_mirror_tail_pmos",         "magic_battery_bias"),
+    ("differential_pair_pmos",            "current_source_load_nmos",                     "cascode_current_mirror_tail_pmos", "diode_connected_mosfet_bias"),
+    # ── input_pair: differential_pair_nmos ──────────────────────────────────
+    ("differential_pair_nmos",            "active_load_pmos",                             "current_mirror_tail_nmos",         "magic_battery_bias"),
+    ("differential_pair_nmos",            "current_source_load_pmos",                     "resistor_tail_gnd",                "resistor_bias"),
+    ("differential_pair_nmos",            "resistor_load_vdd",                            "resistor_tail_gnd",                "diode_connected_mosfet_bias"),
+    ("differential_pair_nmos",            "telescopic_cascode_load_nmos",                 "resistor_tail_gnd",                "resistor_bias"),
+    # ── input_pair: degenerated variants ────────────────────────────────────
+    ("differential_pair_nmos_degenerated","folded_cascode_load_nmos_input_single_output", "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias"),
+    ("differential_pair_pmos_degenerated","folded_cascode_load_pmos_input_single_output", "cascode_current_mirror_tail_pmos", "magic_battery_bias"),
+    # ── input_pair: inverter_based_input (tail pruned to absent) ────────────
+    ("inverter_based_input",              "folded_cascode_load_pmos_input_single_output", _CANONICAL_TAIL,                    "diode_connected_mosfet_bias"),
+]
+
+
+@pytest.fixture(scope="module")
+def one_stage_fixtures():
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    return modules, topology
+
+
+@pytest.mark.parametrize("input_pair,load,tail_current,bias_generation", _ONE_STAGE_COMBOS)
+def test_round_trip_one_stage_opamp(
+    one_stage_fixtures, input_pair, load, tail_current, bias_generation
+):
+    modules, topology = one_stage_fixtures
     simple_modules = {
-        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
-        "load": [v for v in modules["load"] if v.name == "active_load_pmos"],
-        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
-        "cmfb": modules["cmfb"],
-        "compensation": modules["compensation"],
-        "second_stage": modules["second_stage"],
+        "input_pair":      [v for v in modules["input_pair"]      if v.name == input_pair],
+        "load":            [v for v in modules["load"]            if v.name == load],
+        "tail_current":    [v for v in modules["tail_current"]    if v.name == tail_current],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_generation],
+        "cmfb":            modules["cmfb"],
+        "compensation":    modules["compensation"],
+        "second_stage":    modules["second_stage"],
     }
     circuit = next(enumerate_circuits(topology, simple_modules))
-    return circuit, topology
 
+    sr_result = recognize(parse(to_flat_spice(circuit)))
 
-def test_round_trip_one_stage_opamp():
-    circuit, topology = _one_stage_combo()
-
-    spice = to_flat_spice(circuit)
-    parsed = parse(spice)
-
-    sr_result = recognize(parsed)
-    assert sr_result.unrecognized_devices == []
+    assert sr_result.unrecognized_devices == [], (
+        f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"
+    )
 
     fbr_result = assign_slots(sr_result, topology)
 
     for slot_name, variant in circuit.variant_map.items():
-        assert fbr_result.slot_assignments[slot_name].pattern_name == variant.name
+        if not variant.devices:
+            continue
+        assigned = fbr_result.slot_assignments.get(slot_name)
+        assert assigned is not None, (
+            f"slot {slot_name!r} missing; expected {variant.name!r}"
+        )
+        assert assigned.pattern_name == variant.name, (
+            f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
+        )
