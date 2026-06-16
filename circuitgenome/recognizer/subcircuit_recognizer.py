@@ -105,27 +105,37 @@ def _resolve_hook(path: str) -> HookFn:
 
 
 def _check_same_net(pattern: PatternDef, assignment: dict[str, Device]) -> bool:
-    """Check that ``assignment`` satisfies every ``same_net`` constraint.
+    """Check that ``assignment`` satisfies every fully-assigned ``same_net`` constraint.
+
+    ``assignment`` may be partial (built up incrementally by
+    :func:`_find_assignments`'s backtracking search): a group whose
+    ``template_ref``\\ s aren't all in ``assignment`` yet is skipped (neither
+    passes nor fails). This lets :func:`_find_assignments` call this function
+    after *every* tentative binding to prune invalid branches as early as
+    possible, rather than only once a complete assignment is built.
 
     :param pattern: The pattern whose
                      :attr:`~circuitgenome.recognizer.models.PatternDef.same_net`
                      groups to check. Each group is a list of
                      ``"template_ref.terminal"`` strings that must all resolve
                      to the same net under ``assignment``.
-    :param assignment: A candidate ``template_ref -> Device`` mapping covering
-                        every template device referenced by ``pattern.same_net``.
-    :returns: ``True`` if every group in
-              :attr:`~circuitgenome.recognizer.models.PatternDef.same_net`
-              resolves to a single net (groups of size 0 or 1 trivially pass);
-              ``False`` if any group resolves to more than one distinct net.
+    :param assignment: A (possibly partial) ``template_ref -> Device`` mapping.
+    :returns: ``False`` if any group whose refs are all present in
+              ``assignment`` resolves to more than one distinct net;
+              ``True`` otherwise (including groups of size 0 or 1, and groups
+              not yet fully assigned).
     """
     for group in pattern.same_net:
         nets = set()
         for ref_term in group:
             ref, term = ref_term.split(".")
-            nets.add(assignment[ref].terminals[term])
-        if len(nets) != 1:
-            return False
+            dev = assignment.get(ref)
+            if dev is None:
+                break
+            nets.add(dev.terminals[term])
+        else:
+            if len(nets) != 1:
+                return False
     return True
 
 
@@ -154,10 +164,13 @@ def _find_assignments(pattern: PatternDef, devices: list[Device]) -> Iterator[di
     A small backtracking search over
     :attr:`~circuitgenome.recognizer.models.PatternDef.devices` in order: each
     template device is tentatively bound to every not-yet-used netlist device
-    of matching :attr:`~circuitgenome.synthesizer.models.Device.type`, and a
-    complete assignment is checked against
-    :attr:`~circuitgenome.recognizer.models.PatternDef.same_net` via
-    :func:`_check_same_net` before being yielded.
+    of matching :attr:`~circuitgenome.synthesizer.models.Device.type`. After
+    each binding, :func:`_check_same_net` is called on the (possibly partial)
+    assignment so far -- any
+    :attr:`~circuitgenome.recognizer.models.PatternDef.same_net` group whose
+    refs are all bound is checked immediately, pruning that branch before
+    recursing further if it fails. By the time a complete assignment is
+    reached, every group has therefore already been checked.
 
     Assignments covering the same set of devices as a previously-yielded one
     are skipped, so symmetric templates (e.g. ``differential_pair_nmos``,
@@ -176,8 +189,7 @@ def _find_assignments(pattern: PatternDef, devices: list[Device]) -> Iterator[di
 
     def backtrack(i: int, assignment: dict[str, Device], used: set[str]) -> Iterator[dict[str, Device]]:
         if i == len(pattern.devices):
-            if _check_same_net(pattern, assignment):
-                yield dict(assignment)
+            yield dict(assignment)
             return
         template_dev = pattern.devices[i]
         for dev in devices:
@@ -185,7 +197,8 @@ def _find_assignments(pattern: PatternDef, devices: list[Device]) -> Iterator[di
                 continue
             assignment[template_dev.ref] = dev
             used.add(dev.ref)
-            yield from backtrack(i + 1, assignment, used)
+            if _check_same_net(pattern, assignment):
+                yield from backtrack(i + 1, assignment, used)
             used.discard(dev.ref)
             del assignment[template_dev.ref]
 
