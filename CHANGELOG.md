@@ -3,6 +3,42 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-17 (2)
+
+Issue [#32](https://github.com/analog-ml/CircuitGenome/issues/32), PR
+(this branch: `feat/sr-three-stage-coverage`).
+
+### Added
+
+- **Parametrized round-trip tests for all four 3-stage topologies** (40 new
+  tests, 73 total), completing the MVP scope — all 7 topologies now round-trip
+  from `synthesize()` through SR and FBR back to the original `variant_map`:
+  - `three_stage_opamp_nmc_single_ended` and
+    `three_stage_opamp_rnmc_single_ended`: 9 combos each, covering all 3
+    `compensation` variants on `comp1`/`comp2`, all 3 `second_stage` variants
+    on `second_stage`/`third_stage`, both input-pair polarities, and
+    degenerated variants.
+  - `three_stage_opamp_nmc_fully_differential` and
+    `three_stage_opamp_rnmc_fully_differential`: 11 combos each, covering
+    both `cmfb` variants, all 3 `compensation` variants across the 4 comp
+    slots (`comp1_p/comp2_p/comp1_n/comp2_n`), all 3 `second_stage` variants
+    across the 4 stage slots, cross-path asymmetry, and degenerated pairs.
+- **No new SR patterns required**: the existing 34 patterns are sufficient.
+  The `third_stage` slot reuses the `second_stage` pattern category; the 3-
+  stage compensation slots reuse the 3 existing `compensation` patterns.
+- **FBR handles >2 same-category slots correctly without code changes**:
+  the `assigned_ids` mechanism from #31, combined with connectivity scoring
+  on distinct per-slot nets, correctly disambiguates 4 `compensation` and
+  4 `second_stage` slots in the fully-differential 3-stage topologies.
+
+### Docs
+
+- `docs/overview.rst`: "SR pattern coverage" section extended with four new
+  bullets (one per 3-stage topology) explaining category reuse and
+  disambiguation; test count updated 33 → 73; deferred-3-stage language
+  removed.
+- `README.md`: recognizer description updated to mention all seven topologies.
+
 ## 2026-06-17
 
 Issue [#31](https://github.com/analog-ml/CircuitGenome/issues/31), PR

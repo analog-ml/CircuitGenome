@@ -91,7 +91,7 @@ def test_round_trip_one_stage_opamp(
         )
         assert assigned.pattern_name == variant.name, (
             f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
-        )  # end test_round_trip_one_stage_opamp
+        )
 
 
 # ─── two_stage_opamp_single_ended round-trip ────────────────────────────────
@@ -161,7 +161,7 @@ def test_round_trip_two_stage_opamp(
         )
         assert assigned.pattern_name == variant.name, (
             f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
-        )  # end test_round_trip_two_stage_opamp
+        )
 
 
 # ─── two_stage_opamp_fully_differential round-trip ──────────────────────────
@@ -242,3 +242,262 @@ def test_round_trip_two_stage_fully_diff(
         assert assigned.pattern_name == variant.name, (
             f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
         )
+
+
+# ── Three-stage topologies ───────────────────────────────────────────────────
+#
+# All four 3-stage topologies reuse the existing 34 SR patterns:
+#   - third_stage slot has category 'second_stage' → matched by second_stage patterns
+#   - comp1/comp2 (SE) and comp1_p/comp2_p/comp1_n/comp2_n (FD) use compensation patterns
+#
+# The simple_modules pool for 'second_stage' must include variants for BOTH
+# second_stage and third_stage slots; similarly 'compensation' must include
+# variants for all comp slots, since enumerate_circuits maps by slot.category.
+#
+# The FBR assigned_ids mechanism (from #31) correctly handles 4 same-category
+# slots — connectivity scoring on distinct nets (net_mid1/net_mid2, or
+# net_loadout1/net_loadout2/net_mid2_p/net_mid2_n) prevents any ties.
+
+_THREE_STAGE_SE_COMBOS = [
+    # (input_pair, load, tail_current, bias_gen, second_stage, third_stage, comp1, comp2)
+    # Polarity rule: pmos input pair → pmos_input-polarity loads (active_load_nmos,
+    # current_source_load_nmos, folded_cascode_load_pmos_*, telescopic_cascode_load_pmos).
+    # nmos input pair → nmos_input-polarity loads (active_load_pmos,
+    # current_source_load_pmos, folded_cascode_load_nmos_*, telescopic_cascode_load_nmos).
+    # Covers: all 3 comp variants, all 3 ss/ts variants, both polarities,
+    # degenerated pairs, several load types.
+    # Avoided: resistor_bias + current_mirror_tail_nmos (B1 ambiguity).
+    ("differential_pair_pmos", "active_load_nmos", "current_mirror_tail_pmos",
+     "diode_connected_mosfet_bias", "common_source", "common_source",
+     "miller_cap", "miller_cap"),
+    ("differential_pair_pmos", "active_load_nmos", "cascode_current_mirror_tail_pmos",
+     "magic_battery_bias", "common_drain", "common_drain",
+     "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
+    ("differential_pair_nmos", "active_load_pmos", "current_mirror_tail_nmos",
+     "diode_connected_mosfet_bias", "differential_ota_second_stage", "differential_ota_second_stage",
+     "indirect_compensation", "indirect_compensation"),
+    ("differential_pair_pmos", "current_source_load_nmos", "resistor_tail_vdd",
+     "diode_connected_mosfet_bias", "common_source", "common_drain",
+     "miller_cap", "indirect_compensation"),
+    ("differential_pair_nmos", "current_source_load_pmos", "resistor_tail_gnd",
+     "diode_connected_mosfet_bias", "common_drain", "common_source",
+     "indirect_compensation", "miller_cap"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_single_output",
+     "cascode_current_mirror_tail_pmos", "resistor_bias",
+     "differential_ota_second_stage", "common_source",
+     "miller_cap_with_nulling_resistor", "indirect_compensation"),
+    ("differential_pair_pmos_degenerated", "active_load_nmos",
+     "cascode_current_mirror_tail_pmos", "magic_battery_bias",
+     "common_source", "differential_ota_second_stage",
+     "miller_cap", "miller_cap_with_nulling_resistor"),
+    ("differential_pair_nmos_degenerated", "active_load_pmos",
+     "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias",
+     "common_drain", "differential_ota_second_stage",
+     "miller_cap_with_nulling_resistor", "miller_cap"),
+    ("differential_pair_pmos", "telescopic_cascode_load_pmos",
+     "current_mirror_tail_pmos", "diode_connected_mosfet_bias",
+     "differential_ota_second_stage", "common_drain",
+     "indirect_compensation", "miller_cap_with_nulling_resistor"),
+]
+
+_THREE_STAGE_FD_COMBOS = [
+    # (input_pair, load, tail_current, bias_gen, cmfb,
+    #  ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n)
+    # Covers: both cmfb variants, all 3 comp variants, all 3 ss/ts variants,
+    # both polarities, degenerated pairs, cross-path asymmetry.
+    # FBR assigns 4 same-category comp slots and 4 same-category ss slots via
+    # connectivity scoring on distinct nets.
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
+     "current_mirror_tail_pmos", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "common_source", "common_source", "miller_cap", "miller_cap",
+     "common_source", "common_source", "miller_cap", "miller_cap"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
+     "cascode_current_mirror_tail_pmos", "magic_battery_bias", "dda_cmfb",
+     "common_drain", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
+     "common_drain", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
+    ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
+     "current_mirror_tail_nmos", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "differential_ota_second_stage", "differential_ota_second_stage",
+     "indirect_compensation", "indirect_compensation",
+     "differential_ota_second_stage", "differential_ota_second_stage",
+     "indirect_compensation", "indirect_compensation"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
+     "resistor_tail_vdd", "diode_connected_mosfet_bias", "dda_cmfb",
+     "common_source", "common_source", "miller_cap", "miller_cap",
+     "common_source", "common_source", "indirect_compensation", "indirect_compensation"),
+    ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
+     "cascode_current_mirror_tail_nmos", "magic_battery_bias", "dda_cmfb",
+     "common_source", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
+     "common_drain", "common_source", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
+     "cascode_current_mirror_tail_pmos", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "common_source", "common_drain", "miller_cap", "miller_cap",
+     "common_source", "common_drain", "miller_cap", "miller_cap"),
+    ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
+     "resistor_tail_gnd", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "differential_ota_second_stage", "common_source", "indirect_compensation", "indirect_compensation",
+     "differential_ota_second_stage", "common_source", "indirect_compensation", "indirect_compensation"),
+    ("differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_differential_output",
+     "cascode_current_mirror_tail_pmos", "magic_battery_bias", "resistive_sense_cmfb",
+     "common_drain", "differential_ota_second_stage",
+     "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
+     "common_drain", "differential_ota_second_stage",
+     "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
+    ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_differential_output",
+     "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias", "dda_cmfb",
+     "differential_ota_second_stage", "common_drain", "indirect_compensation", "indirect_compensation",
+     "differential_ota_second_stage", "common_drain", "indirect_compensation", "indirect_compensation"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
+     "current_mirror_tail_pmos", "resistor_bias", "dda_cmfb",
+     "common_source", "common_source",
+     "miller_cap_with_nulling_resistor", "indirect_compensation",
+     "common_source", "common_source",
+     "miller_cap_with_nulling_resistor", "indirect_compensation"),
+    ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
+     "resistor_tail_gnd", "resistor_bias", "resistive_sense_cmfb",
+     "common_drain", "common_drain", "miller_cap", "miller_cap",
+     "common_drain", "common_drain", "miller_cap", "miller_cap"),
+]
+
+
+@pytest.fixture(scope="module")
+def three_stage_nmc_se_fixtures():
+    modules = load_modules()
+    topology = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_single_ended")
+    return modules, topology
+
+
+@pytest.fixture(scope="module")
+def three_stage_rnmc_se_fixtures():
+    modules = load_modules()
+    topology = next(t for t in load_topologies() if t.name == "three_stage_opamp_rnmc_single_ended")
+    return modules, topology
+
+
+@pytest.fixture(scope="module")
+def three_stage_nmc_fd_fixtures():
+    modules = load_modules()
+    topology = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
+    return modules, topology
+
+
+@pytest.fixture(scope="module")
+def three_stage_rnmc_fd_fixtures():
+    modules = load_modules()
+    topology = next(t for t in load_topologies() if t.name == "three_stage_opamp_rnmc_fully_differential")
+    return modules, topology
+
+
+def _run_three_stage_se(modules, topology, input_pair, load, tail_current, bias_gen,
+                        second_stage, third_stage, comp1, comp2):
+    simple_modules = {
+        "input_pair":      [v for v in modules["input_pair"]      if v.name == input_pair],
+        "load":            [v for v in modules["load"]            if v.name == load],
+        "tail_current":    [v for v in modules["tail_current"]    if v.name == tail_current],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_gen],
+        # third_stage slot has category 'second_stage'; both slots draw from this pool.
+        "second_stage":    [v for v in modules["second_stage"]    if v.name in (second_stage, third_stage)],
+        # comp1 and comp2 both have category 'compensation'; both slots draw from this pool.
+        "compensation":    [v for v in modules["compensation"]    if v.name in (comp1, comp2)],
+    }
+    circuit = next(enumerate_circuits(topology, simple_modules))
+    sr_result = recognize(parse(to_flat_spice(circuit)))
+    assert sr_result.unrecognized_devices == [], (
+        f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"
+    )
+    fbr_result = assign_slots(sr_result, topology)
+    for slot_name, variant in circuit.variant_map.items():
+        if not variant.devices:
+            continue
+        assigned = fbr_result.slot_assignments.get(slot_name)
+        assert assigned is not None, (
+            f"slot {slot_name!r} missing; expected {variant.name!r}"
+        )
+        assert assigned.pattern_name == variant.name, (
+            f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
+        )
+
+
+def _run_three_stage_fd(modules, topology, input_pair, load, tail_current, bias_gen, cmfb,
+                        ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n):
+    simple_modules = {
+        "input_pair":      [v for v in modules["input_pair"]      if v.name == input_pair],
+        "load":            [v for v in modules["load"]            if v.name == load],
+        "tail_current":    [v for v in modules["tail_current"]    if v.name == tail_current],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_gen],
+        "cmfb":            [v for v in modules["cmfb"]            if v.name == cmfb],
+        # 4 second_stage-category slots (ss_p, ts_p, ss_n, ts_n) all draw from this pool.
+        "second_stage":    [v for v in modules["second_stage"]    if v.name in (ss_p, ts_p, ss_n, ts_n)],
+        # 4 compensation-category slots (c1_p, c2_p, c1_n, c2_n) all draw from this pool.
+        "compensation":    [v for v in modules["compensation"]    if v.name in (c1_p, c2_p, c1_n, c2_n)],
+    }
+    circuit = next(enumerate_circuits(topology, simple_modules))
+    sr_result = recognize(parse(to_flat_spice(circuit)))
+    assert sr_result.unrecognized_devices == [], (
+        f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"
+    )
+    fbr_result = assign_slots(sr_result, topology)
+    for slot_name, variant in circuit.variant_map.items():
+        if not variant.devices:
+            continue
+        assigned = fbr_result.slot_assignments.get(slot_name)
+        assert assigned is not None, (
+            f"slot {slot_name!r} missing; expected {variant.name!r}"
+        )
+        assert assigned.pattern_name == variant.name, (
+            f"slot {slot_name!r}: expected {variant.name!r}, got {assigned.pattern_name!r}"
+        )
+
+
+@pytest.mark.parametrize(
+    "input_pair,load,tail_current,bias_gen,second_stage,third_stage,comp1,comp2",
+    _THREE_STAGE_SE_COMBOS,
+)
+def test_round_trip_three_stage_nmc_se(
+    three_stage_nmc_se_fixtures,
+    input_pair, load, tail_current, bias_gen, second_stage, third_stage, comp1, comp2,
+):
+    modules, topology = three_stage_nmc_se_fixtures
+    _run_three_stage_se(modules, topology, input_pair, load, tail_current, bias_gen,
+                        second_stage, third_stage, comp1, comp2)
+
+
+@pytest.mark.parametrize(
+    "input_pair,load,tail_current,bias_gen,second_stage,third_stage,comp1,comp2",
+    _THREE_STAGE_SE_COMBOS,
+)
+def test_round_trip_three_stage_rnmc_se(
+    three_stage_rnmc_se_fixtures,
+    input_pair, load, tail_current, bias_gen, second_stage, third_stage, comp1, comp2,
+):
+    modules, topology = three_stage_rnmc_se_fixtures
+    _run_three_stage_se(modules, topology, input_pair, load, tail_current, bias_gen,
+                        second_stage, third_stage, comp1, comp2)
+
+
+@pytest.mark.parametrize(
+    "input_pair,load,tail_current,bias_gen,cmfb,ss_p,ts_p,c1_p,c2_p,ss_n,ts_n,c1_n,c2_n",
+    _THREE_STAGE_FD_COMBOS,
+)
+def test_round_trip_three_stage_nmc_fd(
+    three_stage_nmc_fd_fixtures,
+    input_pair, load, tail_current, bias_gen, cmfb,
+    ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n,
+):
+    modules, topology = three_stage_nmc_fd_fixtures
+    _run_three_stage_fd(modules, topology, input_pair, load, tail_current, bias_gen, cmfb,
+                        ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n)
+
+
+@pytest.mark.parametrize(
+    "input_pair,load,tail_current,bias_gen,cmfb,ss_p,ts_p,c1_p,c2_p,ss_n,ts_n,c1_n,c2_n",
+    _THREE_STAGE_FD_COMBOS,
+)
+def test_round_trip_three_stage_rnmc_fd(
+    three_stage_rnmc_fd_fixtures,
+    input_pair, load, tail_current, bias_gen, cmfb,
+    ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n,
+):
+    modules, topology = three_stage_rnmc_fd_fixtures
+    _run_three_stage_fd(modules, topology, input_pair, load, tail_current, bias_gen, cmfb,
+                        ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n)
