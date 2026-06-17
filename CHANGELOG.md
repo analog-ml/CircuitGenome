@@ -3,6 +3,45 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-17
+
+Issue [#31](https://github.com/analog-ml/CircuitGenome/issues/31), PR
+(this branch: `feat/sr-fully-diff-coverage`).
+
+### Added
+
+- **4 new SR patterns** for `two_stage_opamp_fully_differential`, bringing the
+  total from 30 to 34:
+  - *load* (2): `folded_cascode_load_nmos_input_differential_output` and
+    `folded_cascode_load_pmos_input_differential_output` (8 devices each — 4
+    PMOS + 4 NMOS folded-cascode structures with dual differential outputs
+    ``out1``/``out2``). These are the only load variants that produce real CMFB
+    instances.
+  - *cmfb* (2): `resistive_sense_cmfb` (2 resistors + 5T OTA: resistive
+    averager feeds a differential pair whose output current-mirrors onto
+    ``out``), `dda_cmfb` (differential-difference amplifier: 4 NMOS + 2 PMOS
+    mirror + 2 NMOS tails, two input pairs sharing a diode-connected load).
+    Both expose ``{in1, in2, vref, bias, out}`` canonical pins.
+- **FBR same-category disambiguation fix** (`assign_slots` line 93): when
+  multiple topology slots share a category (e.g. `comp_p`/`comp_n` both in
+  `compensation`, `second_stage_p`/`second_stage_n` both in `second_stage`),
+  already-assigned SR candidates are now excluded from the pool when filling
+  the second slot, preventing double-assignment on equal-score ties.
+- **Parametrized round-trip test for `two_stage_opamp_fully_differential`**: 11
+  combos in `tests/test_recognizer.py` covering both `cmfb` variants, all 3
+  `compensation` variants (independently on `comp_p` and `comp_n`), all 3
+  `second_stage` variants (independently on `second_stage_p` and
+  `second_stage_n`), both input-pair polarities, and degenerated input pairs;
+  each asserting `unrecognized_devices == []` and full `variant_map` recovery.
+
+### Docs
+
+- `docs/overview.rst`: SR pattern table updated — `load` count 10 → 12 with
+  note about differential-output variants; new `cmfb` row (2 patterns); total
+  count 30 → 34 across seven categories; "SR pattern coverage" section extended
+  with `two_stage_opamp_fully_differential` bullet and test suite count 22 → 33.
+- `README.md`: pattern count 30 → 34.
+
 ## 2026-06-16 (2)
 
 Issue [#30](https://github.com/analog-ml/CircuitGenome/issues/30), PR

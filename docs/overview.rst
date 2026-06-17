@@ -520,7 +520,7 @@ and reuse its name, so a successful match's
 comparable to a
 :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
 entry's variant name. The library covers every reachable ``one_stage_opamp``
-and ``two_stage_opamp_single_ended`` variant -- 30 patterns across six
+and ``two_stage_opamp_single_ended`` variant -- 34 patterns across seven
 categories:
 
 .. list-table::
@@ -536,12 +536,13 @@ categories:
        PMOS+PMOS transistors + 2 source-degeneration resistors),
        ``inverter_based_input`` (2 CMOS inverters: 2 PMOS + 2 NMOS).
    * - ``load``
-     - 10
+     - 12
      - Resistor (VDD-side / GND-side), active current mirror (PMOS / NMOS),
        current-source (PMOS / NMOS), single-output folded cascode (NMOS-input /
        PMOS-input, 8 devices each), telescopic cascode (PMOS / NMOS, 6 devices
-       each). The 2 differential-output folded-cascode variants are excluded from
-       ``one_stage_opamp`` (single-ended topology only).
+       each). Plus 2 differential-output folded-cascode variants
+       (``folded_cascode_load_{nmos,pmos}_input_differential_output``, 8 devices
+       each) used exclusively by ``two_stage_opamp_fully_differential``.
    * - ``tail_current``
      - 6
      - Current mirror (PMOS / NMOS, 2 devices each), cascode current mirror
@@ -555,6 +556,14 @@ categories:
        use hooks (below) to discover however many output legs
        :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
        left in the netlist.
+   * - ``cmfb``
+     - 2
+     - ``resistive_sense_cmfb`` (2 resistors + 5T OTA: resistive averager feeds
+       a differential pair whose output mirrors onto ``out``),
+       ``dda_cmfb`` (differential-difference amplifier: 4 NMOS + 2 PMOS + 2 NMOS
+       tails, two input pairs sharing a diode-connected PMOS mirror). Both use
+       ``{in1, in2, vref, bias, out}`` pins. Present only when ``load`` has
+       ``output_cardinality: "differential"``; otherwise pruned to ``cmfb_absent``.
    * - ``compensation``
      - 3
      - ``miller_cap`` (1 capacitor across ``in``→``out``),
@@ -639,7 +648,7 @@ from SR.
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~
 
-The pattern library covers all 30 reachable variants across two topologies:
+The pattern library covers all 34 reachable variants across three topologies:
 
 - **one_stage_opamp**: 24 patterns (5 ``input_pair`` × 10 ``load`` × 6 real
   ``tail_current`` × 3 ``bias_generation``). The round-trip test is
@@ -648,8 +657,17 @@ The pattern library covers all 30 reachable variants across two topologies:
   3 ``second_stage``). The round-trip test adds 11 further combinations
   covering all 9 ``compensation``/``second_stage`` pairs and all 5
   ``input_pair`` variants.
+- **two_stage_opamp_fully_differential**: adds 4 new patterns — 2
+  differential-output ``load`` variants
+  (``folded_cascode_load_{nmos,pmos}_input_differential_output``) and 2
+  ``cmfb`` variants (``resistive_sense_cmfb``, ``dda_cmfb``). FBR's
+  ``assign_slots`` was also fixed to exclude already-assigned candidates when
+  processing same-category slot pairs (``comp_p``/``comp_n`` and
+  ``second_stage_p``/``second_stage_n``). The round-trip test adds 11 further
+  combinations covering both ``cmfb`` variants, all ``compensation`` and
+  ``second_stage`` pairings, and both differential input-pair polarities.
 
-All 22 test combos assert ``unrecognized_devices == []`` and full
+All 33 test combos assert ``unrecognized_devices == []`` and full
 ``variant_map`` recovery. Combos are chosen so every variant appears in at
 least one and every selected combo is structurally unambiguous for the SR/FBR
 pipeline. Known structural ambiguities -- ``resistor_bias`` paired with
@@ -658,8 +676,8 @@ transistor spuriously satisfies the ``magic_battery_bias`` NMOS leg template)
 and any ``magic_battery_bias`` or ``resistor_bias`` combination where
 bias-rail pruning reduces the ``bias_generation`` slot to 0 legs (making the
 two variants structurally identical) -- are avoided by careful combo selection
-rather than additional code. Broader topology coverage (fully-differential,
-3-stage), primitive/multi-level pattern composition, and topology
-identification from an arbitrary netlist are deferred to later milestones --
+rather than additional code. Primitive/multi-level pattern composition,
+topology identification from an arbitrary netlist, and 3-stage topology
+coverage are deferred to later milestones --
 see ``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
 details.

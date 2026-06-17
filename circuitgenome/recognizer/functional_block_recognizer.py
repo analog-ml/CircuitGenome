@@ -65,7 +65,10 @@ def assign_slots(
     SR's patterns can structurally overlap (e.g. ``current_mirror_tail_nmos``
     also matches the bias-generation reference's diode-connected pair), so a
     category can have multiple candidates regardless of how many slots need
-    it.
+    it. Once a candidate is assigned to a slot its id is added to
+    ``assigned_ids`` so it cannot be double-assigned to a second slot of the
+    same category (e.g. ``comp_p``/``comp_n`` in
+    ``two_stage_opamp_fully_differential``).
 
     :param sr_result: Layer 1's output -- every candidate
                        :class:`~circuitgenome.recognizer.models.RecognizedStructure`,
@@ -90,7 +93,8 @@ def assign_slots(
     assigned_ids: set[int] = set()
 
     for slot in topology.slots:
-        candidates = [s for s in sr_result.structures if s.category == slot.category]
+        candidates = [s for s in sr_result.structures
+                      if s.category == slot.category and id(s) not in assigned_ids]
         if not candidates:
             continue
         slot_connections = topology.slot_connections(slot.name)
