@@ -8,7 +8,7 @@ A Python toolkit for analog circuit topology synthesis and recognition, focused 
 Constructs complete op-amp circuits from modular building blocks. Given a topology configuration (number of stages, output type), it enumerates every valid combination of module variants and emits SPICE netlists.
 
 ### 2. Subcircuit Recognizer *(available, MVP)*
-Takes a flat SPICE netlist and identifies structural subcircuits (differential pairs, current mirrors, cascode loads, bias generators, CMFB circuits, compensation networks, second-stage amplifiers, etc.) via a YAML pattern library. The library covers 34 patterns across seven categories (input pair, load, tail current, bias generation, CMFB, compensation, second stage), spanning `one_stage_opamp`, `two_stage_opamp_single_ended`, and `two_stage_opamp_fully_differential`.
+Takes a flat SPICE netlist and identifies structural subcircuits (differential pairs, current mirrors, cascode loads, bias generators, CMFB circuits, compensation networks, second-stage amplifiers, etc.) via a YAML pattern library. The library covers 34 patterns across seven categories (input pair, load, tail current, bias generation, CMFB, compensation, second stage), spanning all seven topologies from `one_stage_opamp` through the four 3-stage NMC/RNMC variants.
 
 ### 3. Functional Block Recognizer *(available, MVP)*
 Takes the Subcircuit Recognizer's output plus a topology template and assigns each recognized structure to its functional slot (input stage, load, tail current, bias generation, etc.), recovering the original `variant_map`.

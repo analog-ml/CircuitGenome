@@ -648,7 +648,7 @@ from SR.
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~
 
-The pattern library covers all 34 reachable variants across three topologies:
+The pattern library covers all 34 patterns spanning all seven topologies:
 
 - **one_stage_opamp**: 24 patterns (5 ``input_pair`` × 10 ``load`` × 6 real
   ``tail_current`` × 3 ``bias_generation``). The round-trip test is
@@ -666,8 +666,24 @@ The pattern library covers all 34 reachable variants across three topologies:
   ``second_stage_p``/``second_stage_n``). The round-trip test adds 11 further
   combinations covering both ``cmfb`` variants, all ``compensation`` and
   ``second_stage`` pairings, and both differential input-pair polarities.
+- **three_stage_opamp_nmc_single_ended** and
+  **three_stage_opamp_rnmc_single_ended**: no new patterns needed. The
+  ``third_stage`` slot reuses the ``second_stage`` category (same three
+  pattern variants); ``comp1``/``comp2`` reuse the ``compensation`` category.
+  FBR's ``assigned_ids`` mechanism correctly disambiguates 2 same-category
+  ``second_stage`` slots and 2 same-category ``compensation`` slots via
+  connectivity scoring on the distinct intermediate nets
+  (``net_mid1``/``net_mid2``). 9 round-trip combos each.
+- **three_stage_opamp_nmc_fully_differential** and
+  **three_stage_opamp_rnmc_fully_differential**: no new patterns needed.
+  Each path (p/n) has independent ``second_stage``/``third_stage`` and
+  ``comp1``/``comp2`` slots — 4 slots per category. FBR correctly assigns
+  all 4 same-category ``compensation`` slots and all 4 same-category
+  ``second_stage`` slots via connectivity scoring on per-path distinct nets
+  (``net_loadout1``/``net_loadout2``, ``net_mid2_p``/``net_mid2_n``,
+  ``outp``/``outn``). 11 round-trip combos each.
 
-All 33 test combos assert ``unrecognized_devices == []`` and full
+All 73 test combos assert ``unrecognized_devices == []`` and full
 ``variant_map`` recovery. Combos are chosen so every variant appears in at
 least one and every selected combo is structurally unambiguous for the SR/FBR
 pipeline. Known structural ambiguities -- ``resistor_bias`` paired with
@@ -676,8 +692,8 @@ transistor spuriously satisfies the ``magic_battery_bias`` NMOS leg template)
 and any ``magic_battery_bias`` or ``resistor_bias`` combination where
 bias-rail pruning reduces the ``bias_generation`` slot to 0 legs (making the
 two variants structurally identical) -- are avoided by careful combo selection
-rather than additional code. Primitive/multi-level pattern composition,
-topology identification from an arbitrary netlist, and 3-stage topology
-coverage are deferred to later milestones --
+rather than additional code. Primitive/multi-level pattern composition and
+topology identification from an arbitrary netlist are deferred to later
+milestones --
 see ``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
 details.
