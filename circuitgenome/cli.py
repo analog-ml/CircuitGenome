@@ -35,6 +35,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     sub.add_parser("visualize", help="Launch the topology visualizer (Streamlit web UI)")
 
+    recog = sub.add_parser("recognize", help="Identify functional blocks in a SPICE netlist")
+    recog.add_argument("netlist_file", type=Path, metavar="NETLIST",
+                       help="Path to the flat SPICE netlist file")
+    recog.add_argument("--topology", help="Topology name for FBR slot assignment")
+
     return parser.parse_args(argv)
 
 
@@ -102,6 +107,50 @@ def _cmd_synthesize(args: argparse.Namespace) -> None:
         print(f" written to {args.output_dir}/")
 
 
+def _cmd_recognize(args: argparse.Namespace) -> None:
+    from .recognizer import parse, recognize, assign_slots
+
+    netlist_text = args.netlist_file.read_text()
+    parsed = parse(netlist_text)
+    sr_result = recognize(parsed)
+
+    print(f"Netlist: {args.netlist_file.name}")
+    print(f"\nRecognized structures ({len(sr_result.structures)}):")
+    for s in sr_result.structures:
+        device_names = ", ".join(d.ref for d in s.devices)
+        print(f"  [{s.category}]  {s.name}  (devices: {device_names})")
+
+    if sr_result.unrecognized_devices:
+        print(f"\nUnrecognized devices ({len(sr_result.unrecognized_devices)}):")
+        for d in sr_result.unrecognized_devices:
+            print(f"  {d.ref} ({d.type})")
+    else:
+        print("\nUnrecognized devices: none")
+
+    if not args.topology:
+        return
+
+    topology = next((t for t in load_topologies() if t.name == args.topology), None)
+    if topology is None:
+        print(f"Unknown topology: {args.topology}", file=sys.stderr)
+        sys.exit(1)
+
+    fbr_result = assign_slots(sr_result, topology)
+
+    print(f"\nSlot assignments (topology: {args.topology}):")
+    for slot in topology.slots:
+        assignment = fbr_result.slot_assignments.get(slot.name)
+        if assignment:
+            print(f"  {slot.name:<32}  {assignment.pattern_name}")
+        else:
+            print(f"  {slot.name:<32}  (unassigned)")
+
+    if fbr_result.unassigned_structures:
+        print(f"\nUnassigned structures ({len(fbr_result.unassigned_structures)}):")
+        for s in fbr_result.unassigned_structures:
+            print(f"  {s.name}  [{s.category}]")
+
+
 def _cmd_visualize(args: argparse.Namespace) -> None:
     try:
         import streamlit.web.cli as stcli
@@ -120,6 +169,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_synthesize(args)
     elif args.command == "visualize":
         _cmd_visualize(args)
+    elif args.command == "recognize":
+        _cmd_recognize(args)
 
 
 if __name__ == "__main__":

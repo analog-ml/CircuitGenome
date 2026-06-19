@@ -3,6 +3,26 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-17 (3)
+
+Issue [#36](https://github.com/analog-ml/CircuitGenome/issues/36), PR
+(this branch: `feat/recognize-cli`).
+
+### Added
+
+- **`circuitgenome recognize <NETLIST>` CLI subcommand** — runs the full
+  recognition pipeline (Layer 0 parse → SR → optionally FBR) on a flat SPICE
+  netlist file and prints results to stdout:
+  - Without `--topology`: prints recognized structures (name, category, devices)
+    and any unrecognized devices (SR-only mode).
+  - With `--topology NAME`: additionally runs FBR and prints per-slot
+    assignments, flagging any unassigned topology slots or unassigned
+    structures.
+- **`tests/test_cli.py`** with three tests: SR-only output, SR+FBR slot
+  assignment, and unknown-topology error handling.
+- **`docs/usage/cli.rst`** updated with a "Recognizing circuits" section and
+  options reference table for the new subcommand.
+
 ## 2026-06-17 (2)
 
 Issue [#32](https://github.com/analog-ml/CircuitGenome/issues/32), PR
