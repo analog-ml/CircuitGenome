@@ -2,7 +2,8 @@
 Layer 1 — Subcircuit Recognizer (SR).
 
 Matches the pattern library (``config/primitives.yaml`` +
-``config/subcircuit_patterns.yaml``, loaded by :func:`load_patterns`) against
+``config/structural_patterns.yaml`` + ``config/opamp_patterns.yaml``, loaded
+by :func:`load_patterns`) against
 a :class:`~circuitgenome.recognizer.models.ParsedNetlist`'s devices, producing
 a :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`.
 
@@ -49,8 +50,9 @@ from .models import (
     SubcircuitRecognitionResult,
 )
 
-_PRIMITIVES_PATH = Path(__file__).parent / "config" / "primitives.yaml"
-_PATTERNS_PATH = Path(__file__).parent / "config" / "subcircuit_patterns.yaml"
+_PRIMITIVES_PATH   = Path(__file__).parent / "config" / "primitives.yaml"
+_STRUCTURAL_PATH   = Path(__file__).parent / "config" / "structural_patterns.yaml"
+_OPAMP_PATH        = Path(__file__).parent / "config" / "opamp_patterns.yaml"
 
 HookFn = Callable[[dict[str, Device], dict[str, str], ParsedNetlist], "HookMatch | None"]
 
@@ -81,19 +83,30 @@ def _load_file(path: Path, key: str = "patterns") -> list[PatternDef]:
 def load_patterns(path: Path | None = None) -> list[PatternDef]:
     """Load the SR pattern library.
 
-    With no arguments, loads ``config/primitives.yaml`` (level-0 exclusive
-    patterns) followed by ``config/subcircuit_patterns.yaml`` (level-1+
-    structural composites and MVP composites). Pass an explicit path to load
-    a single-file library instead (legacy / testing use).
+    With no arguments, loads all three built-in files in dependency order:
 
-    :param path: If given, load only this file (top-level key ``"patterns"``).
-                  Defaults to loading both built-in files.
+    1. ``config/primitives.yaml`` — level-0 exclusive single-device patterns
+    2. ``config/structural_patterns.yaml`` — circuit-type-agnostic composites
+       (current mirrors, cascode pairs, etc.) shared across opamps, LDOs, etc.
+    3. ``config/opamp_patterns.yaml`` — opamp-specific functional patterns
+       (FBR categories: input_pair, load, tail_current, etc.)
+
+    Pass an explicit ``path`` to load a single custom file instead (the file
+    must have a top-level ``"patterns"`` key).
+
+    :param path: If given, load only this file. Defaults to all three
+                  built-in files.
     :returns: :class:`~circuitgenome.recognizer.models.PatternDef` instances
-              in load order (primitives first when using the default).
+              in load order (primitives → structural → opamp when using the
+              default).
     """
     if path is not None:
         return _load_file(path)
-    return _load_file(_PRIMITIVES_PATH, key="primitives") + _load_file(_PATTERNS_PATH)
+    return (
+        _load_file(_PRIMITIVES_PATH, key="primitives")
+        + _load_file(_STRUCTURAL_PATH)
+        + _load_file(_OPAMP_PATH)
+    )
 
 
 def _resolve_hook(path: str) -> HookFn:
@@ -305,7 +318,7 @@ def recognize(
                      typically :func:`~circuitgenome.recognizer.netlist_parser.parse`'s
                      output.
     :param patterns: Patterns to match. Defaults to :func:`load_patterns`'s
-                      built-in library (primitives + subcircuit_patterns).
+                      built-in library (primitives + structural + opamp).
     :returns: A :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`
               with one
               :class:`~circuitgenome.recognizer.models.RecognizedStructure` per

@@ -155,7 +155,8 @@ class ChildDef:
 @dataclass
 class PatternDef:
     """A single SR pattern definition, loaded from
-    ``config/primitives.yaml`` or ``config/subcircuit_patterns.yaml``.
+    ``config/primitives.yaml``, ``config/structural_patterns.yaml``, or
+    ``config/opamp_patterns.yaml``.
 
     A pattern is a small template graph: a handful of typed
     :class:`PatternDevice` slots, ``same_net`` equality constraints between

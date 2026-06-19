@@ -34,7 +34,7 @@ def diode_connected_mosfet_bias_legs(
     """Discover the output "legs" attached to a diode-connected bias reference.
 
     Hook for the ``diode_connected_mosfet_bias`` pattern
-    (``config/subcircuit_patterns.yaml``). That pattern's base template
+    (``config/opamp_patterns.yaml``). That pattern's base template
     matches only a single diode-connected nmos (template ref ``mref``: ``d
     == g``, tied to ``gnd`` via ``s``/``b``) -- the "shared reference" that
     every ``bias_generation`` variant has, regardless of how many of its
@@ -129,7 +129,7 @@ def magic_battery_bias_legs(
     """Discover the output "legs" attached to a magic-battery bias reference.
 
     Hook for the ``magic_battery_bias`` pattern
-    (``config/subcircuit_patterns.yaml``). That pattern's base template
+    (``config/opamp_patterns.yaml``). That pattern's base template
     matches only a single diode-connected pmos (template ref ``mref``: ``d
     == g``, tied to ``vdd`` via ``s``/``b``). This mirrors
     :func:`diode_connected_mosfet_bias_legs` with polarities flipped: a leg
@@ -216,7 +216,7 @@ def resistor_bias_legs(
     """Discover the output "legs" attached to a resistor-bias reference.
 
     Hook for the ``resistor_bias`` pattern
-    (``config/subcircuit_patterns.yaml``). Like
+    (``config/opamp_patterns.yaml``). Like
     :func:`magic_battery_bias_legs`, the base template matches only a single
     diode-connected pmos (``mref``: ``d == g``, tied to ``vdd`` via
     ``s``/``b``). Here, each leg is a ``(pmos, resistor)`` pair: a pmos
@@ -305,7 +305,7 @@ def resistor_tail_vdd_check(
 ) -> HookMatch | None:
     """Accept only if the matched resistor's ``t1`` is the global ``vdd!`` rail.
 
-    Hook for the ``resistor_tail_vdd`` pattern (``config/subcircuit_patterns.yaml``).
+    Hook for the ``resistor_tail_vdd`` pattern (``config/opamp_patterns.yaml``).
     That pattern's template is a single, unconstrained resistor -- without this
     check it would match *every* resistor in the netlist (e.g. a
     ``resistor_load_*``'s, a ``resistor_bias``'s, or a degenerated input pair's
