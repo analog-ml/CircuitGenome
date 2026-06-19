@@ -1,36 +1,32 @@
 """
 Layer 1 — Subcircuit Recognizer (SR).
 
-Matches the pattern library (``config/subcircuit_patterns.yaml``, loaded by
-:func:`load_patterns`) against a
-:class:`~circuitgenome.recognizer.models.ParsedNetlist`'s devices, producing
-a :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`
-(design doc section 5).
+Matches the pattern library (``config/primitives.yaml`` +
+``config/subcircuit_patterns.yaml``, loaded by :func:`load_patterns`) against
+a :class:`~circuitgenome.recognizer.models.ParsedNetlist`'s devices, producing
+a :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`.
 
-Each :class:`~circuitgenome.recognizer.models.PatternDef` is a small template
-graph: a handful of typed
-:class:`~circuitgenome.recognizer.models.PatternDevice` slots plus
-:attr:`~circuitgenome.recognizer.models.PatternDef.same_net` equality
-constraints between their terminals. For every pattern, in file order,
-:func:`recognize`:
+The recognition algorithm runs in multiple ordered passes determined by a
+topological sort of pattern :attr:`~circuitgenome.recognizer.models.PatternDef.children`
+references:
 
-1. enumerates candidate assignments from template device refs to actual
-   netlist devices via :func:`_find_assignments` -- filtered by
-   :attr:`~circuitgenome.recognizer.models.PatternDevice.type` and checked
-   against ``same_net`` via :func:`_check_same_net`;
-2. resolves each pattern's :attr:`~circuitgenome.recognizer.models.PatternDef.pins`
-   through the assignment via :func:`_resolve_pins`;
-3. if the pattern declares an :attr:`~circuitgenome.recognizer.models.PatternDef.hook`,
-   calls it (via :func:`_resolve_hook`) to accept-and-extend or reject the
-   match -- see :class:`~circuitgenome.recognizer.models.HookMatch`;
-4. records the result as a :class:`~circuitgenome.recognizer.models.RecognizedStructure`.
+**Pass 0 — exclusive per-device primitives.** For each device, the
+highest-priority :attr:`~circuitgenome.recognizer.models.PatternDef.exclusive`
+pattern that matches it is assigned. Each device is claimed by exactly one
+exclusive pattern. Exclusive patterns live in ``config/primitives.yaml``.
 
-``recognize`` does not pick a winner among overlapping candidates -- multiple
-``RecognizedStructure`` instances may cover the same device(s) if more than
-one pattern matches them. See
-:class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult` (design
-doc section 5.4); disambiguation is Layer 2's job
-(:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`).
+**Passes 1+ — multi-level composites.** Patterns whose computed level ≥ 1
+(i.e. they declare children) are tried in level order. A match is only
+accepted when all declared children are present as structures from the
+previous level's pass. Multiple parent structures may share the same child
+(DAG sharing).
+
+**Non-exclusive level-0 pass.** Patterns with no children and
+``exclusive=False`` run in a single pass using the original algorithm — every
+assignment is accepted regardless of exclusive device claims. This preserves
+backward compatibility with the 34 MVP composite patterns.
+
+See :class:`~circuitgenome.recognizer.models.PatternDef` for field semantics.
 """
 from __future__ import annotations
 
@@ -44,6 +40,7 @@ import yaml
 from circuitgenome.synthesizer.models import Device
 
 from .models import (
+    ChildDef,
     HookMatch,
     ParsedNetlist,
     PatternDef,
@@ -52,40 +49,51 @@ from .models import (
     SubcircuitRecognitionResult,
 )
 
+_PRIMITIVES_PATH = Path(__file__).parent / "config" / "primitives.yaml"
 _PATTERNS_PATH = Path(__file__).parent / "config" / "subcircuit_patterns.yaml"
 
 HookFn = Callable[[dict[str, Device], dict[str, str], ParsedNetlist], "HookMatch | None"]
 
 
-def load_patterns(path: Path | None = None) -> list[PatternDef]:
-    """Load the SR pattern library from YAML.
-
-    :param path: Path to a patterns YAML file with the same schema as
-                  ``config/subcircuit_patterns.yaml`` (a top-level
-                  ``patterns:`` list, each entry matching
-                  :class:`~circuitgenome.recognizer.models.PatternDef`'s
-                  fields). Defaults to the built-in
-                  ``config/subcircuit_patterns.yaml``.
-    :returns: The patterns in file order, as
-              :class:`~circuitgenome.recognizer.models.PatternDef` instances.
-              :attr:`~circuitgenome.recognizer.models.PatternDef.same_net` and
-              :attr:`~circuitgenome.recognizer.models.PatternDef.pins` default
-              to ``[]``/``{}`` if omitted from a pattern's YAML entry.
-    """
-    with open(path or _PATTERNS_PATH) as f:
+def _load_file(path: Path, key: str = "patterns") -> list[PatternDef]:
+    with open(path) as f:
         raw = yaml.safe_load(f)
     return [
         PatternDef(
             name=p["name"],
-            category=p["category"],
+            category=p.get("category"),
             devices=[PatternDevice(ref=d["ref"], type=d["type"]) for d in p["devices"]],
             same_net=p.get("same_net", []),
             pins=p.get("pins", {}),
             tech_type_from=p.get("tech_type_from"),
             hook=p.get("hook"),
+            children=[
+                ChildDef(pattern=c["pattern"], devices=c["devices"])
+                for c in p.get("children", [])
+            ],
+            exclusive=p.get("exclusive", False),
+            priority=p.get("priority", 0),
         )
-        for p in raw["patterns"]
+        for p in raw[key]
     ]
+
+
+def load_patterns(path: Path | None = None) -> list[PatternDef]:
+    """Load the SR pattern library.
+
+    With no arguments, loads ``config/primitives.yaml`` (level-0 exclusive
+    patterns) followed by ``config/subcircuit_patterns.yaml`` (level-1+
+    structural composites and MVP composites). Pass an explicit path to load
+    a single-file library instead (legacy / testing use).
+
+    :param path: If given, load only this file (top-level key ``"patterns"``).
+                  Defaults to loading both built-in files.
+    :returns: :class:`~circuitgenome.recognizer.models.PatternDef` instances
+              in load order (primitives first when using the default).
+    """
+    if path is not None:
+        return _load_file(path)
+    return _load_file(_PRIMITIVES_PATH, key="primitives") + _load_file(_PATTERNS_PATH)
 
 
 def _resolve_hook(path: str) -> HookFn:
@@ -109,7 +117,7 @@ def _check_same_net(pattern: PatternDef, assignment: dict[str, Device]) -> bool:
 
     ``assignment`` may be partial (built up incrementally by
     :func:`_find_assignments`'s backtracking search): a group whose
-    ``template_ref``\\ s aren't all in ``assignment`` yet is skipped (neither
+    ``template_ref``\\s aren't all in ``assignment`` yet is skipped (neither
     passes nor fails). This lets :func:`_find_assignments` call this function
     after *every* tentative binding to prune invalid branches as early as
     possible, rather than only once a complete assignment is built.
@@ -210,60 +218,191 @@ def _find_assignments(pattern: PatternDef, devices: list[Device]) -> Iterator[di
         yield assignment
 
 
+def _compute_levels(patterns: list[PatternDef]) -> dict[str, int]:
+    """Return ``{pattern_name: level}`` via topological sort of children refs.
+
+    Level is ``0`` for patterns with no children; for others, it is
+    ``max(child_levels) + 1``. Patterns within the same YAML file may
+    reference children defined in another file — the combined list from
+    :func:`load_patterns` must include all referenced names.
+
+    :param patterns: All patterns in the library (primitives + composites).
+    :returns: Mapping from pattern name to its computed level (0-based).
+    """
+    by_name = {p.name: p for p in patterns}
+    memo: dict[str, int] = {}
+
+    def level(name: str) -> int:
+        if name in memo:
+            return memo[name]
+        p = by_name[name]
+        lv = 0 if not p.children else max(level(c.pattern) for c in p.children) + 1
+        memo[name] = lv
+        return lv
+
+    for p in patterns:
+        level(p.name)
+    return memo
+
+
+def _match_children(
+    pattern: PatternDef,
+    assignment: dict[str, Device],
+    prev_structures: list[RecognizedStructure],
+) -> list[RecognizedStructure] | None:
+    """Return child structures if all of ``pattern.children`` are satisfied, else ``None``.
+
+    For each :class:`~circuitgenome.recognizer.models.ChildDef` in
+    ``pattern.children``, looks up a :class:`~circuitgenome.recognizer.models.RecognizedStructure`
+    from ``prev_structures`` whose name matches and whose device set equals
+    the child's device set (resolved through ``assignment``).
+
+    :param pattern: The pattern being matched.
+    :param assignment: A complete ``template_ref -> Device`` mapping for
+                        ``pattern``.
+    :param prev_structures: All structures recognized at the previous level
+                             (level N-1 when this pattern is at level N).
+    :returns: Ordered list of matched child structures (same order as
+              ``pattern.children``), or ``None`` if any child is unsatisfied.
+    """
+    if not pattern.children:
+        return []
+
+    by_devset: dict[frozenset, list[RecognizedStructure]] = {}
+    for s in prev_structures:
+        key = frozenset(d.ref for d in s.devices)
+        by_devset.setdefault(key, []).append(s)
+
+    child_matches: list[RecognizedStructure] = []
+    for child_def in pattern.children:
+        child_devset = frozenset(assignment[ref].ref for ref in child_def.devices)
+        candidates = [s for s in by_devset.get(child_devset, []) if s.name == child_def.pattern]
+        if not candidates:
+            return None
+        child_matches.append(candidates[0])
+    return child_matches
+
+
 def recognize(
     netlist: ParsedNetlist,
     patterns: list[PatternDef] | None = None,
 ) -> SubcircuitRecognitionResult:
     """Match every pattern in ``patterns`` against ``netlist.devices``.
 
-    For each pattern, every assignment yielded by :func:`_find_assignments` is
-    turned into a candidate :class:`~circuitgenome.recognizer.models.RecognizedStructure`
-    -- resolving :attr:`~circuitgenome.recognizer.models.PatternDef.pins` via
-    :func:`_resolve_pins`, then applying
-    :attr:`~circuitgenome.recognizer.models.PatternDef.hook` (if any) via
-    :func:`_resolve_hook`. A hook returning ``None`` drops that candidate
-    entirely; otherwise its
-    :attr:`~circuitgenome.recognizer.models.HookMatch.extra_devices` and
-    :attr:`~circuitgenome.recognizer.models.HookMatch.extra_pins` are merged
-    in. :attr:`~circuitgenome.recognizer.models.RecognizedStructure.tech_type`
-    is taken from the matched
-    :attr:`~circuitgenome.synthesizer.models.Device.type` of the template
-    device named by
-    :attr:`~circuitgenome.recognizer.models.PatternDef.tech_type_from`, if set.
+    Runs the multi-level recognition algorithm:
+
+    1. **Pass 0 (exclusive)** — assign each device to the highest-priority
+       exclusive (level-0 primitive) pattern that matches it.
+    2. **Passes 1+ (multi-level)** — for each level in topological order,
+       find all assignments that satisfy both the template constraints and the
+       children constraint (all declared children must be present from the
+       previous level's results).
+    3. **Non-exclusive level-0 pass** — run all non-exclusive, children-less
+       patterns in a single pass (the original MVP algorithm, backward-
+       compatible with the 34 existing composite patterns).
 
     :param netlist: The parsed netlist to search,
                      typically :func:`~circuitgenome.recognizer.netlist_parser.parse`'s
                      output.
-    :param patterns: Patterns to match, in the order they're tried (also the
-                      order of
-                      :attr:`~circuitgenome.recognizer.models.RecognizedStructure.index`
-                      assignment per pattern name). Defaults to
-                      :func:`load_patterns`'s built-in library.
+    :param patterns: Patterns to match. Defaults to :func:`load_patterns`'s
+                      built-in library (primitives + subcircuit_patterns).
     :returns: A :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`
               with one
               :class:`~circuitgenome.recognizer.models.RecognizedStructure` per
-              accepted candidate (possibly multiple overlapping candidates for
-              the same devices -- see
-              :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`)
-              and ``unrecognized_devices`` = every netlist device that is not
-              part of *any* accepted candidate's
-              :attr:`~circuitgenome.recognizer.models.RecognizedStructure.devices`.
+              accepted candidate (level-0 primitives, level-1+ composites, and
+              MVP composites) and ``unrecognized_devices`` = every netlist
+              device that is not part of *any* accepted candidate's device set.
     """
     patterns = patterns if patterns is not None else load_patterns()
-    structures: list[RecognizedStructure] = []
-    claimed_refs: set[str] = set()
-    instance_counters: dict[str, count] = {}
 
-    for pattern in patterns:
+    levels = _compute_levels(patterns)
+    max_level = max(levels.values(), default=0)
+    by_level: dict[int, list[PatternDef]] = {
+        lv: [p for p in patterns if levels[p.name] == lv]
+        for lv in range(max_level + 1)
+    }
+
+    instance_counters: dict[str, count] = {}
+    all_structures: list[RecognizedStructure] = []
+    device_map: dict[str, RecognizedStructure] = {}  # ref → level-0 primitive structure
+
+    # Pass 0: exclusive per-device (level-0 primitives, highest priority wins)
+    exclusive_patterns = sorted(
+        [p for p in by_level.get(0, []) if p.exclusive],
+        key=lambda p: -p.priority,
+    )
+    for device in netlist.devices:
+        for pattern in exclusive_patterns:
+            for assignment in _find_assignments(pattern, [device]):
+                pins = _resolve_pins(pattern, assignment)
+                tech_type = device.type[0] if pattern.tech_type_from else None
+                counter = instance_counters.setdefault(pattern.name, count())
+                s = RecognizedStructure(
+                    name=pattern.name,
+                    category=pattern.category,
+                    index=next(counter),
+                    tech_type=tech_type,
+                    pins=pins,
+                    devices=[device],
+                )
+                device_map[device.ref] = s
+                all_structures.append(s)
+                break
+            if device.ref in device_map:
+                break
+
+    # Passes 1+: multi-level composites (children verification required)
+    prev_level_structures = list(all_structures)  # level-0 structures for Pass 1
+    for lv in range(1, max_level + 1):
+        level_structures: list[RecognizedStructure] = []
+        for pattern in by_level.get(lv, []):
+            for assignment in _find_assignments(pattern, netlist.devices):
+                pins = _resolve_pins(pattern, assignment)
+                devices_list = list(assignment.values())
+
+                if pattern.hook:
+                    result = _resolve_hook(pattern.hook)(assignment, pins, netlist)
+                    if result is None:
+                        continue
+                    devices_list = devices_list + result.extra_devices
+                    pins = {**pins, **result.extra_pins}
+
+                children = _match_children(pattern, assignment, prev_level_structures)
+                if children is None:
+                    continue
+
+                tech_type = None
+                if pattern.tech_type_from:
+                    tech_type = assignment[pattern.tech_type_from].type[0]
+
+                counter = instance_counters.setdefault(pattern.name, count())
+                s = RecognizedStructure(
+                    name=pattern.name,
+                    category=pattern.category,
+                    index=next(counter),
+                    tech_type=tech_type,
+                    pins=pins,
+                    devices=devices_list,
+                    children=children,
+                )
+                level_structures.append(s)
+
+        all_structures.extend(level_structures)
+        prev_level_structures = level_structures
+
+    # Non-exclusive level-0 pass: MVP composites (no children, not exclusive)
+    # These run the original single-pass algorithm unchanged.
+    claimed_refs = {d.ref for s in all_structures for d in s.devices}
+    for pattern in [p for p in by_level.get(0, []) if not p.exclusive]:
         for assignment in _find_assignments(pattern, netlist.devices):
             pins = _resolve_pins(pattern, assignment)
-            devices = list(assignment.values())
+            devices_list = list(assignment.values())
 
             if pattern.hook:
                 result = _resolve_hook(pattern.hook)(assignment, pins, netlist)
                 if result is None:
                     continue
-                devices = devices + result.extra_devices
+                devices_list = devices_list + result.extra_devices
                 pins = {**pins, **result.extra_pins}
 
             tech_type = None
@@ -271,17 +410,16 @@ def recognize(
                 tech_type = assignment[pattern.tech_type_from].type[0]
 
             counter = instance_counters.setdefault(pattern.name, count())
-            structures.append(
-                RecognizedStructure(
-                    name=pattern.name,
-                    category=pattern.category,
-                    index=next(counter),
-                    tech_type=tech_type,
-                    pins=pins,
-                    devices=devices,
-                )
+            s = RecognizedStructure(
+                name=pattern.name,
+                category=pattern.category,
+                index=next(counter),
+                tech_type=tech_type,
+                pins=pins,
+                devices=devices_list,
             )
-            claimed_refs.update(d.ref for d in devices)
+            all_structures.append(s)
+            claimed_refs.update(d.ref for d in devices_list)
 
     unrecognized = [d for d in netlist.devices if d.ref not in claimed_refs]
-    return SubcircuitRecognitionResult(structures=structures, unrecognized_devices=unrecognized)
+    return SubcircuitRecognitionResult(structures=all_structures, unrecognized_devices=unrecognized)

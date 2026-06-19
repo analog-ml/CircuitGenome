@@ -3,8 +3,150 @@
 # Composite patterns correspond 1:1 to an opamp_modules.yaml variant and
 # reuse its name. `same_net` entries are the only required equalities;
 # unlisted terminals are not constrained.
+#
+# Level-1 structural patterns (no category, children = level-0 primitives)
+# and level-2 functional patterns (children = level-1 patterns) are listed
+# before the MVP composites. Pattern level is computed by topological sort
+# of children references, not by file order.
 
 patterns:
+  # ── Level-1: structural composites (no FBR category) ─────────────────────
+
+  - name: current_mirror_nmos
+    devices:
+      - {ref: m_ref, type: nmos}
+      - {ref: m_out, type: nmos}
+    same_net:
+      - [m_ref.d, m_ref.g]   # reference is diode-connected
+      - [m_ref.g, m_out.g]   # shared gate
+    pins: {input: m_ref.d, output: m_out.d, source: m_ref.s}
+    tech_type_from: m_ref
+    children:
+      - {pattern: diode_connected_nmos, devices: [m_ref]}
+      - {pattern: nmos, devices: [m_out]}
+
+  - name: current_mirror_pmos
+    devices:
+      - {ref: m_ref, type: pmos}
+      - {ref: m_out, type: pmos}
+    same_net:
+      - [m_ref.d, m_ref.g]   # reference is diode-connected
+      - [m_ref.g, m_out.g]   # shared gate
+    pins: {input: m_ref.d, output: m_out.d, source: m_ref.s}
+    tech_type_from: m_ref
+    children:
+      - {pattern: diode_connected_pmos, devices: [m_ref]}
+      - {pattern: pmos, devices: [m_out]}
+
+  - name: cascode_pair_nmos
+    devices:
+      - {ref: m_upper, type: nmos}
+      - {ref: m_lower, type: nmos}
+    same_net:
+      - [m_upper.s, m_lower.d]   # upper source = lower drain
+    pins:
+      drain: m_upper.d
+      inner: m_lower.d
+      source: m_lower.s
+      gate1: m_upper.g
+      gate2: m_lower.g
+    tech_type_from: m_upper
+    children:
+      - {pattern: nmos, devices: [m_upper]}
+      - {pattern: nmos, devices: [m_lower]}
+
+  - name: cascode_pair_pmos
+    devices:
+      - {ref: m_upper, type: pmos}
+      - {ref: m_lower, type: pmos}
+    same_net:
+      - [m_upper.s, m_lower.d]   # upper source = lower drain
+    pins:
+      drain: m_upper.d
+      inner: m_lower.d
+      source: m_lower.s
+      gate1: m_upper.g
+      gate2: m_lower.g
+    tech_type_from: m_upper
+    children:
+      - {pattern: pmos, devices: [m_upper]}
+      - {pattern: pmos, devices: [m_lower]}
+
+  - name: diode_stack_nmos
+    devices:
+      - {ref: m_upper, type: nmos}
+      - {ref: m_lower, type: nmos}
+    same_net:
+      - [m_upper.d, m_upper.g]   # upper diode-connected
+      - [m_upper.s, m_lower.d]   # upper source = lower drain
+      - [m_lower.d, m_lower.g]   # lower diode-connected
+    pins:
+      drain: m_upper.d
+      inner: m_lower.d
+      source: m_lower.s
+    tech_type_from: m_upper
+    children:
+      - {pattern: diode_connected_nmos, devices: [m_upper]}
+      - {pattern: diode_connected_nmos, devices: [m_lower]}
+
+  - name: gate_coupled_pair_pmos
+    devices:
+      - {ref: m1, type: pmos}
+      - {ref: m2, type: pmos}
+    same_net:
+      - [m1.g, m2.g]   # shared gate (bias)
+    pins:
+      gate: m1.g
+      drain1: m1.d
+      drain2: m2.d
+      source1: m1.s
+      source2: m2.s
+    tech_type_from: m1
+    children:
+      - {pattern: pmos, devices: [m1]}
+      - {pattern: pmos, devices: [m2]}
+
+  # ── Level-2: composite of level-1 structural patterns ─────────────────────
+
+  - name: cascode_current_mirror_nmos
+    devices:
+      - {ref: m_dr, type: nmos}   # diode-stack upper (cascode gate ref)
+      - {ref: m_dl, type: nmos}   # diode-stack lower (main ref)
+      - {ref: m_ou, type: nmos}   # output cascode upper
+      - {ref: m_ol, type: nmos}   # output cascode lower (main out)
+    same_net:
+      - [m_dr.d, m_dr.g]          # m_dr diode-connected
+      - [m_dr.s, m_dl.d]          # diode-stack cascode
+      - [m_dl.d, m_dl.g]          # m_dl diode-connected
+      - [m_ou.s, m_ol.d]          # output cascode
+      - [m_dr.g, m_ou.g]          # cascode gate bias shared
+      - [m_dl.g, m_ol.g]          # main gate bias shared
+    pins: {input: m_dr.d, output: m_ou.d, source: m_dl.s}
+    tech_type_from: m_dr
+    children:
+      - {pattern: diode_stack_nmos, devices: [m_dr, m_dl]}
+      - {pattern: cascode_pair_nmos, devices: [m_ou, m_ol]}
+
+  - name: cascoded_differential_pair_pmos
+    devices:
+      - {ref: m_dp1, type: pmos}
+      - {ref: m_dp2, type: pmos}
+      - {ref: m_gc1, type: pmos}
+      - {ref: m_gc2, type: pmos}
+    same_net:
+      - [m_dp1.s, m_dp2.s]         # shared tail
+      - [m_dp1.d, m_gc1.s]         # diff pair out1 → gate-coupled source1
+      - [m_dp2.d, m_gc2.s]         # diff pair out2 → gate-coupled source2
+    pins:
+      in1: m_dp1.g
+      in2: m_dp2.g
+      out1: m_gc1.d
+      out2: m_gc2.d
+      tail: m_dp1.s
+    tech_type_from: m_dp1
+    children:
+      - {pattern: differential_pair_pmos, devices: [m_dp1, m_dp2]}
+      - {pattern: gate_coupled_pair_pmos, devices: [m_gc1, m_gc2]}
   # inverter_based_input is listed first so it wins input_pair
   # connectivity-score ties against differential_pair_nmos/differential_pair_pmos:
   # its mn1/mn2 (resp. mp1/mp2) pair alone also satisfies those 2-device
@@ -35,6 +177,11 @@ patterns:
       out2: mp2.d
       vdd: mp1.s
       gnd: mn1.s
+    children:
+      - {pattern: pmos, devices: [mp1]}
+      - {pattern: nmos, devices: [mn1]}
+      - {pattern: pmos, devices: [mp2]}
+      - {pattern: nmos, devices: [mn2]}
 
   - name: differential_pair_nmos
     category: input_pair
@@ -52,6 +199,9 @@ patterns:
       tail: m1.s
       bulk: m1.b
     tech_type_from: m1   # tech_type = "n"
+    children:
+      - {pattern: nmos, devices: [m1]}
+      - {pattern: nmos, devices: [m2]}
 
   - name: active_load_pmos
     category: load
@@ -145,6 +295,9 @@ patterns:
       tail: m1.s
       bulk: m1.b
     tech_type_from: m1   # tech_type = "p"
+    children:
+      - {pattern: pmos, devices: [m1]}
+      - {pattern: pmos, devices: [m2]}
 
   - name: differential_pair_nmos_degenerated
     category: input_pair
