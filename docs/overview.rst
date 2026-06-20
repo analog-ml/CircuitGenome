@@ -663,31 +663,54 @@ as a topology-free disambiguation signal. The output,
 ``circuit_block → category → [candidates]`` mapping where the first candidate
 per category is the best topology-free guess.
 
-Before grouping, a filter pass removes three classes of spurious
-``gain_stage_*`` matches:
+The topology-free algorithm runs three passes:
 
-- **Class A** — ``in`` pin on an external port: input-pair transistors or bias
-  reference nmos devices are re-matched with their gate on ``in1``/``in2``/
-  ``ibias``.
-- **Class B** — ``bias`` pin on an external port: a pmos leg of a bias mirror
-  is re-matched with its gate on ``ibias``.
-- **Class C** — any nmos device in the candidate whose source terminal is not
-  ``gnd!``: cascode load devices share drain nodes with adjacent devices and
-  survive the pin-level checks because both their ``in`` (cascode nmos gate)
-  and ``bias`` (cascode pmos gate) pins connect to internal bias or cascode
-  output nodes — not external ports. The source-terminal check identifies them:
-  a cascode nmos has its source tied to an intermediate folding node, not
-  the global ground rail. Class C is applied only to single-category
-  ``gain_stage_*`` blocks; input-pair transistors (whose nmos source legitimately
-  connects to the tail-current net) are in multi-category ``gain_stage_1``
-  blocks and are never affected.
+**Pass 1 — Filter (single-category gain_stage_* blocks only)**
 
-After filtering, ``gain_stage_*`` blocks that contain exactly one category with
-more than one remaining candidate are split into consecutive ``gain_stage_N``
-groups ordered by ascending external-port adjacency. This enables disambiguation
-of a three-stage opamp's second and third gain stages without a topology: the
-intermediate stage (whose ``out`` pin connects only to internal nets) stays in
-``gain_stage_2``; the final stage (whose ``out`` pin connects to the external
+Removes three classes of spurious candidates in ``gain_stage_2``, ``gain_stage_3``,
+etc. (blocks with exactly one category, i.e. ``second_stage`` slots):
+
+- **Class A** — ``in`` pin on an external port: bias-reference nmos re-matched
+  with gate on ``ibias``.
+- **Class B** — ``bias`` pin on an external port: pmos leg of a bias mirror
+  re-matched with gate on ``ibias``.
+- **Class C** — any nmos device whose source is not ``gnd!``: cascode load
+  devices (source tied to an intermediate folding node) that survive the
+  pin-level checks.
+
+**Pass 2 — Multi-category ranking (gain_stage_1)**
+
+``gain_stage_1`` holds three categories simultaneously (``input_pair``,
+``load``, ``tail_current``), and the simple external-port score heuristic is
+inverted for all three: bias-generation devices score higher than the real
+functional devices because they connect to ``ibias`` (external bias port) and
+supply rails. Pass 2 corrects this in dependency order:
+
+1. *input_pair* — re-sorted by the count of **distinct** external ports among
+   ``{in1, in2}`` as the primary key. The real differential pair has both signal
+   inputs on distinct external ports (score 2); bias mirror pairs have
+   ``in1 = in2 = ibias`` (score 1); spurious second/third-stage device pairs have
+   ``in1``, ``in2`` on internal nets (score 0).
+
+2. *load* — candidates with ``in1``, ``in2``, or ``bias1`` on external ports are
+   dropped (spurious bias-gen matches). Among survivors, those whose ``in1``/
+   ``in2`` match the top ``input_pair`` candidate's ``out1``/``out2`` are
+   promoted via **signal-chain following**. The real load always receives its
+   differential inputs from the input pair's drain nodes.
+
+3. *tail_current* — candidates whose ``out`` connects to an external port are
+   dropped (spurious matches driving the circuit output instead of the internal
+   tail node). Among survivors, those whose ``out`` matches the top
+   ``input_pair`` candidate's ``tail`` pin are promoted via signal-chain
+   following.
+
+**Pass 3 — Split (single-category gain_stage_* blocks)**
+
+``gain_stage_*`` blocks with exactly one remaining category and more than one
+candidate are split into consecutive ``gain_stage_N`` groups ordered by ascending
+external-port adjacency. This enables disambiguation of a three-stage opamp's
+second and third gain stages: the intermediate stage (``out`` on an internal net)
+stays in ``gain_stage_2``; the final stage (``out`` connecting to the external
 output port) is promoted to ``gain_stage_3``.
 
 SR pattern coverage
