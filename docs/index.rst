@@ -52,6 +52,16 @@ design exploration, or topology studies.
    api/recognizer/hooks
 
 .. toctree::
+   :maxdepth: 2
+   :caption: API Reference - Sizer
+
+   api/sizer/models
+   api/sizer/sizer
+   api/sizer/equations
+   api/sizer/constraints
+   api/sizer/loader
+
+.. toctree::
    :maxdepth: 1
    :caption: About
 

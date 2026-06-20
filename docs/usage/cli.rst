@@ -243,3 +243,73 @@ Options reference
      - Topology name for named-slot FBR assignment; omit for topology-free
        grouped output
      - (topology-free)
+
+``circuitgenome size``
+~~~~~~~~~~~~~~~~~~~~~~
+
+Sizes transistors in a flat SPICE netlist to meet a set of DC performance
+specifications.  Requires the FBR result (slot assignments) and a YAML spec
+file.
+
+.. code-block:: bash
+
+   circuitgenome size NETLIST --topology NAME --spec SPEC_FILE
+
+Example:
+
+.. code-block:: bash
+
+   circuitgenome size \
+     circuits/two_stage_opamp_single_ended/circuit_0001_flat.ckt \
+     --topology two_stage_opamp_single_ended \
+     --spec examples/spec_two_stage_opamp.yaml
+
+Sample output:
+
+.. code-block:: text
+
+   Sizing: two_stage_opamp_single_ended
+   Status : OPTIMAL
+
+   Transistor sizes
+   ┌─────────────────────────────────┬──────────┬──────────┐
+   │ Device                          │  W (µm)  │  L (µm)  │
+   ├─────────────────────────────────┼──────────┼──────────┤
+   │ m1_input_pair  [input_pair]     │    3.00  │    0.25  │
+   │ m2_input_pair  [input_pair]     │    3.00  │    0.25  │
+   │ m1_load        [load]           │    0.50  │    0.25  │
+   │ m2_load        [load]           │    0.50  │    0.25  │
+   │ m1_tail_current [tail_current]  │    0.50  │    0.25  │
+   │ m2_tail_current [tail_current]  │    0.50  │    0.25  │
+   │ mn1_bias_gen   [bias_gen]       │    0.50  │    0.25  │
+   │ mn_second_stage [second_stage]  │   36.00  │    0.25  │
+   │ mp_second_stage [second_stage]  │    0.50  │    0.25  │
+   └─────────────────────────────────┴──────────┴──────────┘
+
+   Performance metrics
+     Cc          :   2.86 pF
+     GBW         :   2.50 MHz
+     Phase margin:  60.0 °
+     Slew rate   :   3.50 V/µs
+     DC gain     :  80.0 dB
+     Power       : 175.0 µW
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 45 20
+
+   * - Argument / Flag
+     - Description
+     - Default
+   * - ``NETLIST``
+     - Path to the flat SPICE netlist file
+     - (required)
+   * - ``--topology NAME``
+     - Topology name (used for FBR slot assignment)
+     - (required)
+   * - ``--spec PATH``
+     - Path to the YAML performance specification file
+     - (required)
+   * - ``--tech NAME``
+     - Technology configuration name (from built-in configs)
+     - ``generic_parameterized``

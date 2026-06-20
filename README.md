@@ -13,6 +13,9 @@ Takes a flat SPICE netlist and identifies structural subcircuits (differential p
 ### 3. Functional Block Recognizer *(available, MVP)*
 Takes the Subcircuit Recognizer's output plus a topology template and assigns each recognized structure to its functional slot (input stage, load, tail current, bias generation, etc.), recovering the original `variant_map`.
 
+### 4. Initial Sizer *(available)*
+Takes the Functional Block Recognizer's slot assignments plus a performance specification (gain, GBW, phase margin, slew rate, CMRR) and computes minimum transistor W/L values using an OR-Tools CP-SAT integer-programming solver. Currently supports two-stage Miller-compensated single-ended op-amps.
+
 ---
 
 ## Installation
@@ -27,7 +30,7 @@ Or install from source:
 pip install -e .
 ```
 
-Requires Python 3.9+ and PyYAML.
+Requires Python 3.9+, PyYAML, and OR-Tools (for the sizer module).
 
 ---
 
@@ -253,6 +256,27 @@ circuitgenome synthesize --topology three_stage_opamp_nmc_single_ended --output-
 circuitgenome synthesize --stages 3 --dry-run
 ```
 
+### Size transistors
+
+```bash
+circuitgenome size \
+  circuits/two_stage_opamp_single_ended/circuit_0001_flat.ckt \
+  --topology two_stage_opamp_single_ended \
+  --spec examples/spec_two_stage_opamp.yaml
+```
+
+The spec file is a YAML document with SI-unit values (see `examples/spec_two_stage_opamp.yaml`):
+
+```yaml
+vdd: 5.0
+ibias: 10.0e-6       # A
+cl: 20.0e-12         # F
+gain_min_db: 80
+gbw_min_hz: 2.5e+6   # Hz  — use e+6, not e6 (PyYAML parses bare e6 as a string)
+phase_margin_min_deg: 60
+slew_rate_min_vps: 3.5e+6
+```
+
 ### Visualize topologies
 
 ```bash
@@ -392,6 +416,41 @@ modules = load_modules("path/to/my_modules.yaml")
 topologies = load_topologies("path/to/my_topologies.yaml")
 for circuit in enumerate_circuits(topologies[0], modules):
     print(to_flat_spice(circuit))
+```
+
+### Initial Sizer
+
+```python
+from circuitgenome.recognizer import parse, recognize
+from circuitgenome.recognizer.functional_block_recognizer import assign_slots
+from circuitgenome.sizer import size_circuit
+from circuitgenome.sizer.models import SizingSpec
+from circuitgenome.sizer.loader import load_tech
+
+# Run SR + FBR first (see Recognizer section above)
+parsed = parse(netlist_text)
+sr_result = recognize(parsed)
+fbr_result = assign_slots(sr_result, topology)
+
+# Define performance specification
+spec = SizingSpec(
+    vdd=5.0, vss=0.0,
+    ibias=10e-6,               # 10 µA
+    cl=20e-12,                 # 20 pF
+    second_stage_current_ratio=2.5,
+    gain_min_db=80,
+    gbw_min_hz=2.5e6,
+    phase_margin_min_deg=60,
+    slew_rate_min_vps=3.5e6,
+)
+
+tech = load_tech("generic_parameterized")
+result = size_circuit(parsed, sr_result, fbr_result, topology, spec, tech)
+
+print(result.status)           # "OPTIMAL"
+for ref, (w_um, l_um) in result.sizes_um.items():
+    print(f"  {ref:30s}  W={w_um:.2f} µm  L={l_um:.2f} µm")
+print(f"Cc = {result.cc_pf:.2f} pF")
 ```
 
 ---
