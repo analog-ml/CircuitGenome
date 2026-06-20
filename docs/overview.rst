@@ -663,14 +663,32 @@ as a topology-free disambiguation signal. The output,
 ``circuit_block → category → [candidates]`` mapping where the first candidate
 per category is the best topology-free guess.
 
-**Limitation for repeated-category slots**: when the same ``category`` appears
-in multiple topology slots that share the same ``circuit_block`` annotation
-(e.g. a three-stage opamp's ``second_stage`` and ``third_stage`` slots both
-annotate their patterns with ``circuit_block: gain_stage_2`` and
-``category: second_stage``), all candidates collapse into a single group and
-only the top-scoring candidate is surfaced. To accurately assign both stages
-use :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
-with ``--topology``.
+Before grouping, a filter pass removes three classes of spurious
+``gain_stage_*`` matches:
+
+- **Class A** — ``in`` pin on an external port: input-pair transistors or bias
+  reference nmos devices are re-matched with their gate on ``in1``/``in2``/
+  ``ibias``.
+- **Class B** — ``bias`` pin on an external port: a pmos leg of a bias mirror
+  is re-matched with its gate on ``ibias``.
+- **Class C** — any nmos device in the candidate whose source terminal is not
+  ``gnd!``: cascode load devices share drain nodes with adjacent devices and
+  survive the pin-level checks because both their ``in`` (cascode nmos gate)
+  and ``bias`` (cascode pmos gate) pins connect to internal bias or cascode
+  output nodes — not external ports. The source-terminal check identifies them:
+  a cascode nmos has its source tied to an intermediate folding node, not
+  the global ground rail. Class C is applied only to single-category
+  ``gain_stage_*`` blocks; input-pair transistors (whose nmos source legitimately
+  connects to the tail-current net) are in multi-category ``gain_stage_1``
+  blocks and are never affected.
+
+After filtering, ``gain_stage_*`` blocks that contain exactly one category with
+more than one remaining candidate are split into consecutive ``gain_stage_N``
+groups ordered by ascending external-port adjacency. This enables disambiguation
+of a three-stage opamp's second and third gain stages without a topology: the
+intermediate stage (whose ``out`` pin connects only to internal nets) stays in
+``gain_stage_2``; the final stage (whose ``out`` pin connects to the external
+output port) is promoted to ``gain_stage_3``.
 
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~

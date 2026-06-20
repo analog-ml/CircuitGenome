@@ -35,15 +35,31 @@ Issue [#45](https://github.com/analog-ml/CircuitGenome/issues/45), PR
   with connectivity scoring) rather than being required for any FBR output.
   `assign_slots` and its behavior are unchanged.
 
-### Known Limitations
+### Three-stage topology-free support
 
-- **Three-stage topology-free mode**: in a three-stage opamp the `second_stage`
-  and `third_stage` topology slots both use `category: second_stage` patterns
-  annotated with `circuit_block: gain_stage_2`. Topology-free mode collapses
-  both into a single `[gain_stage_2] / second_stage` group and surfaces only
-  the best-scoring candidate. For accurate assignment of both gain stages use
-  `--topology` with a three-stage template (e.g.
-  `three_stage_opamp_nmc_single_ended`).
+`group_by_category` now correctly splits a three-stage opamp's two gain stages
+into separate `[gain_stage_2]` and `[gain_stage_3]` groups without a topology
+template. The implementation uses a two-pass algorithm:
+
+1. **Filter pass** — three classes of spurious `gain_stage_*` candidates are
+   dropped:
+   - **Class A** — `in` pin on an external port: input-pair nmos transistors
+     (gate on `in1`/`in2`) or bias-reference nmos devices (gate on `ibias`)
+     re-matched as gain stages.
+   - **Class B** — `bias` pin on an external port: pmos leg of a bias mirror
+     (gate on `ibias`) re-matched as a gain stage.
+   - **Class C** — any nmos device in the candidate has source ≠ `gnd!`:
+     cascode load devices (nmos cascode with source at an internal folding
+     node) that survive the pin-level checks because their `in` and `bias`
+     pins are on internal bias/cascode nets — not external ports. Applied
+     only to single-category `gain_stage_*` blocks to avoid incorrectly
+     filtering input-pair transistors (nmos source → tail-current net).
+
+2. **Split pass** — single-category `gain_stage_*` blocks with more than one
+   remaining candidate after filtering are split into consecutive `gain_stage_N`
+   groups ordered by ascending external-port adjacency. The intermediate stage
+   (`out` → internal net) stays at `gain_stage_2`; the final stage (`out` →
+   external output port) is promoted to `gain_stage_3`.
 
 ## 2026-06-17 (3)
 

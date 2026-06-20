@@ -102,7 +102,7 @@ optionally, maps them to a topology's named slots.
    circuitgenome recognize path/to/circuit.ckt \
      --topology two_stage_opamp_single_ended
 
-Sample output (topology-free)::
+Sample output (topology-free, two-stage circuit)::
 
    Netlist: circuit_0001_flat.ckt
 
@@ -124,6 +124,27 @@ Sample output (topology-free)::
        tail_current                      current_mirror_tail_pmos
 
      [gain_stage_2]
+       second_stage                      common_source
+
+     [bias]
+       bias_generation                   diode_connected_mosfet_bias
+
+     [compensation]
+       compensation                      miller_cap
+
+For a three-stage circuit the split pass automatically promotes the final gain stage::
+
+   Functional block groups (topology-free):
+
+     [gain_stage_1]
+       input_pair                        differential_pair_pmos
+       load                              resistor_load_gnd
+       tail_current                      current_mirror_tail_pmos
+
+     [gain_stage_2]
+       second_stage                      common_source
+
+     [gain_stage_3]
        second_stage                      common_source
 
      [bias]
