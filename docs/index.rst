@@ -28,17 +28,12 @@ design exploration, or topology studies.
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference - Core & I/O
+   :caption: API Reference - Synthesizer
 
    api/synthesizer
    api/models
    api/loader
    api/netlist
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference - Pipeline Filters & Pruning
-
    api/polarity_compatibility
    api/output_compatibility
    api/cmfb_compatibility

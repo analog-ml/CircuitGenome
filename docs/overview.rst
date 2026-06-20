@@ -474,7 +474,7 @@ produced it. It is organized as a 3-layer pipeline:
 The recognizer currently targets round-trip recognition of
 ``one_stage_opamp`` and ``two_stage_opamp_single_ended`` circuits synthesized
 by :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`. See
-``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for the
+``docs/plans/2026_06_15_subcircuit_and_functional_block_recognizer.md`` for the
 full design rationale.
 
 Netlist parsing (Layer 0)
@@ -695,5 +695,5 @@ two variants structurally identical) -- are avoided by careful combo selection
 rather than additional code. Primitive/multi-level pattern composition and
 topology identification from an arbitrary netlist are deferred to later
 milestones --
-see ``plans/design_doc/subcircuit_and_functional_block_recognizer.md`` for
+see ``docs/plans/2026_06_15_subcircuit_and_functional_block_recognizer.md`` for
 details.

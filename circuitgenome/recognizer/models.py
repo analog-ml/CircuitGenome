@@ -4,7 +4,7 @@ Core data models for the subcircuit and functional block recognizers.
 All structures are plain dataclasses — they carry no logic and can be freely
 inspected or passed between pipeline stages. They mirror the 3-layer
 pipeline described in the design doc
-(``plans/design_doc/subcircuit_and_functional_block_recognizer.md``):
+(``docs/plans/2026_06_15_subcircuit_and_functional_block_recognizer.md``):
 
 - :class:`ParsedNetlist` is the output of **Layer 0** (netlist parsing).
 - :class:`SubcircuitRecognitionResult` (made up of

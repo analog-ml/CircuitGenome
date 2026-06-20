@@ -2,7 +2,7 @@
 
 Status: **design only — no source-code changes in this issue.** This document is
 the design addendum for [issue #33](https://github.com/analog-ml/CircuitGenome/issues/33).
-Read `plans/design_doc/subcircuit_and_functional_block_recognizer.md` (§1–§5) first
+Read `2026_06_15_subcircuit_and_functional_block_recognizer.md` (§1–§5) first
 for the MVP architecture that this addendum extends.
 
 ---
