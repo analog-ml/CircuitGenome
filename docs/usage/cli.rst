@@ -119,51 +119,51 @@ Sample output (topology-free, two-stage circuit)::
    Functional block groups (topology-free):
 
      [gain_stage_1]
-       input_pair                        differential_pair_pmos
-       load                              active_load_nmos
-       tail_current                      current_mirror_tail_pmos
+       input_pair                        differential_pair_pmos  (devices: m1_input_pair, m2_input_pair)
+       load                              active_load_nmos  (devices: m1_load, m2_load)
+       tail_current                      current_mirror_tail_pmos  (devices: m1_tail_current, m2_tail_current)
 
      [gain_stage_2]
-       second_stage                      common_source
+       second_stage                      common_source  (devices: mn_second_stage, mp_second_stage)
 
      [bias]
-       bias_generation                   diode_connected_mosfet_bias
+       bias_generation                   diode_connected_mosfet_bias  (devices: mn1_bias_gen)
 
      [compensation]
-       compensation                      miller_cap
+       compensation                      miller_cap  (devices: c1_comp)
 
 For a three-stage circuit the split pass automatically promotes the final gain stage::
 
    Functional block groups (topology-free):
 
      [gain_stage_1]
-       input_pair                        differential_pair_pmos
-       load                              resistor_load_gnd
-       tail_current                      current_mirror_tail_pmos
+       input_pair                        differential_pair_pmos  (devices: m1_input_pair, m2_input_pair)
+       load                              resistor_load_gnd  (devices: r1_load, r2_load)
+       tail_current                      current_mirror_tail_pmos  (devices: m1_tail_current, m2_tail_current)
 
      [gain_stage_2]
-       second_stage                      common_source
+       second_stage                      common_source  (devices: mn1_second_stage, mp1_second_stage)
 
      [gain_stage_3]
-       second_stage                      common_source
+       second_stage                      common_source  (devices: mn1_third_stage, mp1_third_stage)
 
      [bias]
-       bias_generation                   diode_connected_mosfet_bias
+       bias_generation                   diode_connected_mosfet_bias  (devices: mn1_bias_gen)
 
      [compensation]
-       compensation                      miller_cap
+       compensation                      miller_cap  (devices: c1_comp1)
 
 Sample output (topology mode)::
 
    ... (same recognized structures as above) ...
 
    Slot assignments (topology: two_stage_opamp_single_ended):
-     input_pair                        differential_pair_pmos
-     load                              active_load_nmos
-     tail_current                      current_mirror_tail_pmos
-     bias_gen                          diode_connected_mosfet_bias
-     second_stage                      common_source
-     compensation                      miller_cap
+     input_pair                        differential_pair_pmos  (devices: m1_input_pair, m2_input_pair)
+     load                              active_load_nmos  (devices: m1_load, m2_load)
+     tail_current                      current_mirror_tail_pmos  (devices: m1_tail_current, m2_tail_current)
+     bias_gen                          diode_connected_mosfet_bias  (devices: mn1_bias_gen)
+     second_stage                      common_source  (devices: mn_second_stage, mp_second_stage)
+     compensation                      miller_cap  (devices: c1_comp)
 
 Visualizing topologies
 ----------------------
