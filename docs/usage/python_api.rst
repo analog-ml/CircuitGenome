@@ -115,10 +115,10 @@ Recognizer
 ----------
 
 :mod:`circuitgenome.recognizer` recovers a circuit's ``variant_map`` from its
-flat SPICE netlist -- the structural inverse of ``synthesize`` +
-``to_flat_spice``. The current MVP covers ``one_stage_opamp`` circuits built
-from ``differential_pair_nmos`` / ``active_load_pmos`` /
-``current_mirror_tail_nmos`` / ``diode_connected_mosfet_bias``:
+flat SPICE netlist — the structural inverse of ``synthesize`` + ``to_flat_spice``.
+It supports all seven topology templates via a 3-layer pipeline:
+
+**Topology mode** — requires a known topology, recovers the exact ``variant_map``:
 
 .. code-block:: python
 
@@ -128,22 +128,32 @@ from ``differential_pair_nmos`` / ``active_load_pmos`` /
    from circuitgenome.recognizer import parse, recognize, assign_slots
 
    modules = load_modules()
-   topology = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+   topology = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
    circuit = next(enumerate_circuits(topology, modules))
 
-   # Layer 0: flat SPICE -> ParsedNetlist
    parsed = parse(to_flat_spice(circuit))
-
-   # Layer 1: ParsedNetlist -> SubcircuitRecognitionResult
    sr_result = recognize(parsed)
    assert sr_result.unrecognized_devices == []
 
-   # Layer 2: SubcircuitRecognitionResult + TopologyTemplate -> variant_map
    fbr_result = assign_slots(sr_result, topology)
 
    for slot_name, variant in circuit.variant_map.items():
        recovered = fbr_result.slot_assignments[slot_name].pattern_name
        assert recovered == variant.name
 
-See :doc:`../overview` for the recognizer's 3-layer pipeline and pattern
-schema.
+**Topology-free mode** — no topology needed; groups structures by functional block:
+
+.. code-block:: python
+
+   from circuitgenome.recognizer import parse, recognize, group_by_category
+
+   parsed = parse(netlist_text)
+   sr_result = recognize(parsed)
+   fbr_result = group_by_category(sr_result, parsed)
+
+   for circuit_block, categories in fbr_result.groups.items():
+       for category, candidates in categories.items():
+           print(f"[{circuit_block}] {category}: {candidates[0].name}")
+
+See :doc:`../overview` for the recognizer's 3-layer pipeline, pattern schema,
+and topology-free disambiguation algorithm.
