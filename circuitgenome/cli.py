@@ -40,6 +40,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                        help="Path to the flat SPICE netlist file")
     recog.add_argument("--topology", help="Topology name for FBR slot assignment")
 
+    size = sub.add_parser("size", help="Compute initial transistor W/L values from a performance spec")
+    size.add_argument("netlist_file", type=Path, metavar="NETLIST",
+                      help="Path to the flat SPICE netlist file")
+    size.add_argument("--topology", required=True, help="Topology name (required for sizing)")
+    size.add_argument("--tech", type=Path, dest="tech_file",
+                      help="Technology YAML config (default: built-in generic)")
+    size.add_argument("--spec", type=Path, dest="spec_file", required=True,
+                      help="Performance specification YAML file")
+    size.add_argument("--time-limit", type=float, default=30.0, dest="time_limit",
+                      help="CP-SAT solver time limit in seconds (default: 30)")
+
     return parser.parse_args(argv)
 
 
@@ -159,6 +170,91 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
             print(f"  {s.name}  [{s.category}]")
 
 
+def _cmd_size(args: argparse.Namespace) -> None:
+    import yaml
+    from .recognizer import parse, recognize, assign_slots
+    from .sizer import load_tech, size_circuit, SizingSpec
+
+    netlist_text = args.netlist_file.read_text()
+    parsed = parse(netlist_text)
+    sr_result = recognize(parsed)
+
+    topology = next((t for t in load_topologies() if t.name == args.topology), None)
+    if topology is None:
+        print(f"Unknown topology: {args.topology}", file=sys.stderr)
+        sys.exit(1)
+
+    fbr_result = assign_slots(sr_result, topology)
+
+    tech = load_tech(args.tech_file)  # None → built-in generic
+
+    with open(args.spec_file) as f:
+        spec_data = yaml.safe_load(f)
+    spec = SizingSpec(**{k: v for k, v in spec_data.items() if k in SizingSpec.__dataclass_fields__})
+
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
+                          time_limit_s=args.time_limit)
+
+    print(f"Netlist: {args.netlist_file.name}  |  Topology: {args.topology}")
+    print(f"Tech: {tech.name}")
+    print(f"\nSolver: {result.solver_status}")
+
+    if not result.transistors:
+        print("No feasible sizing found — relax the performance spec or widen the W/L grid.")
+        sys.exit(1)
+
+    print("\nTransistor sizing:")
+    for ref, s in result.transistors.items():
+        print(f"  {ref:<30}  W={s.w_um:.0f}µm  L={s.l_um:.0f}µm  "
+              f"IDS={s.ids_a*1e6:.2f}µA  VGS={s.vgs_v:.3f}V  VDS_sat={s.vds_sat_v:.3f}V")
+
+    if result.cc_pf is not None:
+        print(f"  Cc = {result.cc_pf:.1f}pF")
+
+    if result.metrics:
+        print("\nPerformance metrics:")
+        _METRIC_LABELS = {
+            "gain_db": ("Open-loop gain", "dB", True),
+            "gbw_hz": ("GBW", "MHz", True),
+            "phase_margin_deg": ("Phase margin", "°", True),
+            "slew_rate_vps": ("Slew rate", "V/µs", True),
+            "power_w": ("Quiescent power", "mW", False),
+            "output_swing_max_v": ("Output swing max", "V", True),
+            "output_swing_min_v": ("Output swing min", "V", False),
+            "cmrr_db": ("CMRR", "dB", True),
+            "psrr_db": ("PSRR+", "dB", True),
+        }
+        _SCALE = {
+            "gbw_hz": 1e-6, "slew_rate_vps": 1e-6, "power_w": 1e3,
+        }
+        _SPEC_KEYS = {
+            "gain_db": "gain_min_db", "gbw_hz": "gbw_min_hz",
+            "phase_margin_deg": "phase_margin_min_deg",
+            "slew_rate_vps": "slew_rate_min_vps", "power_w": "power_max_w",
+            "output_swing_max_v": "output_swing_max_v",
+            "output_swing_min_v": "output_swing_min_v",
+            "cmrr_db": "cmrr_min_db", "psrr_db": "psrr_min_db",
+        }
+        for key, (label, unit, _is_min) in _METRIC_LABELS.items():
+            if key not in result.metrics:
+                continue
+            raw = result.metrics[key]
+            scale = _SCALE.get(key, 1.0)
+            val_str = f"{raw * scale:.2f} {unit}"
+            spec_key = _SPEC_KEYS.get(key)
+            spec_val = getattr(spec, spec_key, None) if spec_key else None
+            margin = result.margins.get(key)
+            if spec_val is not None and margin is not None:
+                op = "≥" if _is_min else "≤"
+                spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
+                sign = "+" if margin >= 0 else ""
+                margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
+                status = "✓" if margin >= 0 else "✗"
+                print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  {margin_str}  {status}")
+            else:
+                print(f"  {label:<22} {val_str}")
+
+
 def _cmd_visualize(args: argparse.Namespace) -> None:
     try:
         import streamlit.web.cli as stcli
@@ -179,6 +275,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_visualize(args)
     elif args.command == "recognize":
         _cmd_recognize(args)
+    elif args.command == "size":
+        _cmd_size(args)
 
 
 if __name__ == "__main__":

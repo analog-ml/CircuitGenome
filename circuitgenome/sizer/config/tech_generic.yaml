@@ -1,0 +1,30 @@
+# Generic parameterized CMOS technology config.
+# Replace values with actual PDK parameters for your target process.
+# Parameters here correspond to a typical 0.25µm CMOS process for illustration.
+name: generic_parameterized
+description: "Generic CMOS — replace with actual PDK values before use"
+
+nmos:
+  mu_cox: 270.0e-6   # A/V²  (µn·Cox, process transconductance parameter)
+  vth: 0.5           # V     (threshold voltage, positive for NMOS)
+  lam: 0.04          # 1/V   (channel-length modulation coefficient, positive)
+
+pmos:
+  mu_cox: 90.0e-6    # A/V²  (µp·Cox)
+  vth: -0.5          # V     (threshold voltage, negative for PMOS)
+  lam: 0.05          # 1/V
+
+width:
+  min: 1.0           # µm
+  max: 600.0         # µm
+  step: 1.0          # µm (discretization step for W)
+
+length:
+  min: 1.0           # µm
+  max: 10.0          # µm
+  step: 1.0          # µm (discretization step for L)
+
+cap:
+  min_pf: 0.1        # pF
+  max_pf: 50.0       # pF
+  step_pf: 0.1       # pF
