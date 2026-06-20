@@ -3,6 +3,38 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-20
+
+Issue [#45](https://github.com/analog-ml/CircuitGenome/issues/45), PR
+[#46](https://github.com/analog-ml/CircuitGenome/pull/46)
+(`feat/fbr-net-name-agnostic`).
+
+### Added
+
+- **`group_by_category(sr_result, netlist)`** — topology-free FBR mode that
+  works on any netlist without a `TopologyTemplate`. Structures are grouped
+  by `circuit_block` (outer) then `category` (inner); candidates within each
+  category are ranked by external-port adjacency (count of pins whose net
+  connects directly to a subcircuit external port).
+- **`CategoryGroupResult`** dataclass — return type for `group_by_category`.
+  Holds `groups: dict[str, dict[str, list[RecognizedStructure]]]` and
+  `unrecognized_devices`.
+- **`circuit_block` field** on `PatternDef` and `RecognizedStructure` —
+  encodes position in the signal chain for opamp patterns using `gain_stage_N`
+  naming (``gain_stage_1``, ``gain_stage_2``, ``gain_stage_3``) for gain
+  stages and plain names (``bias``, ``compensation``, ``cmfb``) for non-gain
+  blocks. The `gain_stage_N` prefix avoids collisions with existing `category`
+  values such as `second_stage`. All 34 opamp MVP patterns annotated.
+- **CLI topology-free mode**: `circuitgenome recognize <NETLIST>` without
+  `--topology` now calls `group_by_category` and prints the grouped output
+  (previously returned SR results only with no FBR grouping).
+
+### Changed
+
+- `--topology` is now documented as enhancing accuracy (named-slot assignment
+  with connectivity scoring) rather than being required for any FBR output.
+  `assign_slots` and its behavior are unchanged.
+
 ## 2026-06-17 (3)
 
 Issue [#36](https://github.com/analog-ml/CircuitGenome/issues/36), PR

@@ -467,9 +467,13 @@ produced it. It is organized as a 3-layer pipeline:
    ...) against the parsed devices, producing a
    :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`.
 3. **Layer 2 -- Functional Block Recognizer (FBR)**
-   (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
-   assigns each recognized structure to a topology slot (``input_pair``,
-   ``load``, ``tail_current``, ...), recovering the ``variant_map`` shape.
+   (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
+   or :func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`)
+   assigns each recognized structure to a functional role. With a topology
+   template, structures are assigned to named slots (``input_pair``, ``load``,
+   ...) recovering the ``variant_map`` shape. Without one, structures are
+   grouped by ``circuit_block`` (``gain_stage_1``, ``gain_stage_2``, ``bias``,
+   ``compensation``, ``cmfb``) and ``category`` for topology-free recognition.
 
 The recognizer currently targets round-trip recognition of
 ``one_stage_opamp`` and ``two_stage_opamp_single_ended`` circuits synthesized
@@ -620,13 +624,13 @@ coverage, this should be empty.
 Functional block recognition (Layer 2)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
-takes SR's output plus the
-:class:`~circuitgenome.synthesizer.models.TopologyTemplate` the netlist is
-known to have been synthesized from (the MVP does not attempt topology
-identification from an arbitrary netlist -- see "MVP scope" below), and
-assigns each :class:`~circuitgenome.synthesizer.models.Slot` in
-``topology.slots`` to its best-matching SR candidate:
+FBR operates in two modes depending on whether a topology template is available:
+
+**Topology mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`):
+takes SR's output plus a
+:class:`~circuitgenome.synthesizer.models.TopologyTemplate` and assigns each
+:class:`~circuitgenome.synthesizer.models.Slot` in ``topology.slots`` to its
+best-matching SR candidate:
 
 1. Filter SR's candidates to those whose ``category`` matches the slot's
    ``category``.
@@ -644,6 +648,22 @@ how many slots need that category. The output,
 shaped like ``variant_map`` (``{slot_name: SlotAssignment}``), plus any
 unassigned candidate structures and ``unrecognized_devices`` passed through
 from SR.
+
+**Topology-free mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`):
+works on any netlist with arbitrary net names without a topology template.
+Each opamp pattern carries a ``circuit_block`` annotation (``gain_stage_1``,
+``gain_stage_2``, ``gain_stage_3``, ``bias``, ``compensation``, ``cmfb``)
+alongside its ``category`` (``input_pair``, ``load``, ...). The ``gain_stage_N``
+prefix is distinct from category names like ``second_stage``, so the two fields
+never clash. The function groups SR structures by ``circuit_block`` then
+``category``, ranking candidates within each category by external-port
+adjacency (count of pins that connect directly to a subcircuit external port) as
+a topology-free disambiguation signal. The output,
+:class:`~circuitgenome.recognizer.models.CategoryGroupResult`, gives a
+``circuit_block → category → [candidates]`` mapping where the first candidate
+per category is the best topology-free guess. This mode cannot disambiguate
+repeated-category slots (e.g. two ``compensation`` slots in a fully-differential
+topology); for those cases, topology mode is still required.
 
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~
