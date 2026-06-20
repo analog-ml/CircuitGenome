@@ -64,6 +64,7 @@ def _load_file(path: Path, key: str = "patterns") -> list[PatternDef]:
         PatternDef(
             name=p["name"],
             category=p.get("category"),
+            circuit_block=p.get("circuit_block"),
             devices=[PatternDevice(ref=d["ref"], type=d["type"]) for d in p["devices"]],
             same_net=p.get("same_net", []),
             pins=p.get("pins", {}),
@@ -353,6 +354,7 @@ def recognize(
                 s = RecognizedStructure(
                     name=pattern.name,
                     category=pattern.category,
+                    circuit_block=pattern.circuit_block,
                     index=next(counter),
                     tech_type=tech_type,
                     pins=pins,
@@ -392,6 +394,7 @@ def recognize(
                 s = RecognizedStructure(
                     name=pattern.name,
                     category=pattern.category,
+                    circuit_block=pattern.circuit_block,
                     index=next(counter),
                     tech_type=tech_type,
                     pins=pins,
@@ -426,6 +429,7 @@ def recognize(
             s = RecognizedStructure(
                 name=pattern.name,
                 category=pattern.category,
+                circuit_block=pattern.circuit_block,
                 index=next(counter),
                 tech_type=tech_type,
                 pins=pins,

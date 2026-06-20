@@ -467,9 +467,13 @@ produced it. It is organized as a 3-layer pipeline:
    ...) against the parsed devices, producing a
    :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`.
 3. **Layer 2 -- Functional Block Recognizer (FBR)**
-   (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
-   assigns each recognized structure to a topology slot (``input_pair``,
-   ``load``, ``tail_current``, ...), recovering the ``variant_map`` shape.
+   (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
+   or :func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`)
+   assigns each recognized structure to a functional role. With a topology
+   template, structures are assigned to named slots (``input_pair``, ``load``,
+   ...) recovering the ``variant_map`` shape. Without one, structures are
+   grouped by ``circuit_block`` (``gain_stage_1``, ``gain_stage_2``, ``bias``,
+   ``compensation``, ``cmfb``) and ``category`` for topology-free recognition.
 
 The recognizer currently targets round-trip recognition of
 ``one_stage_opamp`` and ``two_stage_opamp_single_ended`` circuits synthesized
@@ -620,13 +624,13 @@ coverage, this should be empty.
 Functional block recognition (Layer 2)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
-takes SR's output plus the
-:class:`~circuitgenome.synthesizer.models.TopologyTemplate` the netlist is
-known to have been synthesized from (the MVP does not attempt topology
-identification from an arbitrary netlist -- see "MVP scope" below), and
-assigns each :class:`~circuitgenome.synthesizer.models.Slot` in
-``topology.slots`` to its best-matching SR candidate:
+FBR operates in two modes depending on whether a topology template is available:
+
+**Topology mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`):
+takes SR's output plus a
+:class:`~circuitgenome.synthesizer.models.TopologyTemplate` and assigns each
+:class:`~circuitgenome.synthesizer.models.Slot` in ``topology.slots`` to its
+best-matching SR candidate:
 
 1. Filter SR's candidates to those whose ``category`` matches the slot's
    ``category``.
@@ -644,6 +648,47 @@ how many slots need that category. The output,
 shaped like ``variant_map`` (``{slot_name: SlotAssignment}``), plus any
 unassigned candidate structures and ``unrecognized_devices`` passed through
 from SR.
+
+**Topology-free mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`):
+works on any netlist with arbitrary net names without a topology template.
+Each opamp pattern carries a ``circuit_block`` annotation (``gain_stage_1``,
+``gain_stage_2``, ``bias``, ``compensation``, ``cmfb``) alongside its
+``category`` (``input_pair``, ``load``, ...). The ``gain_stage_N`` prefix is
+distinct from category names like ``second_stage``, so the two fields never
+clash. The function groups SR structures by ``circuit_block`` then
+``category``, ranking candidates within each category by external-port
+adjacency (count of pins that connect directly to a subcircuit external port)
+as a topology-free disambiguation signal. The output,
+:class:`~circuitgenome.recognizer.models.CategoryGroupResult`, gives a
+``circuit_block → category → [candidates]`` mapping where the first candidate
+per category is the best topology-free guess.
+
+Before grouping, a filter pass removes three classes of spurious
+``gain_stage_*`` matches:
+
+- **Class A** — ``in`` pin on an external port: input-pair transistors or bias
+  reference nmos devices are re-matched with their gate on ``in1``/``in2``/
+  ``ibias``.
+- **Class B** — ``bias`` pin on an external port: a pmos leg of a bias mirror
+  is re-matched with its gate on ``ibias``.
+- **Class C** — any nmos device in the candidate whose source terminal is not
+  ``gnd!``: cascode load devices share drain nodes with adjacent devices and
+  survive the pin-level checks because both their ``in`` (cascode nmos gate)
+  and ``bias`` (cascode pmos gate) pins connect to internal bias or cascode
+  output nodes — not external ports. The source-terminal check identifies them:
+  a cascode nmos has its source tied to an intermediate folding node, not
+  the global ground rail. Class C is applied only to single-category
+  ``gain_stage_*`` blocks; input-pair transistors (whose nmos source legitimately
+  connects to the tail-current net) are in multi-category ``gain_stage_1``
+  blocks and are never affected.
+
+After filtering, ``gain_stage_*`` blocks that contain exactly one category with
+more than one remaining candidate are split into consecutive ``gain_stage_N``
+groups ordered by ascending external-port adjacency. This enables disambiguation
+of a three-stage opamp's second and third gain stages without a topology: the
+intermediate stage (whose ``out`` pin connects only to internal nets) stays in
+``gain_stage_2``; the final stage (whose ``out`` pin connects to the external
+output port) is promoted to ``gain_stage_3``.
 
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~

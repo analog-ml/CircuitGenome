@@ -108,7 +108,7 @@ def _cmd_synthesize(args: argparse.Namespace) -> None:
 
 
 def _cmd_recognize(args: argparse.Namespace) -> None:
-    from .recognizer import parse, recognize, assign_slots
+    from .recognizer import parse, recognize, assign_slots, group_by_category
 
     netlist_text = args.netlist_file.read_text()
     parsed = parse(netlist_text)
@@ -128,6 +128,12 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
         print("\nUnrecognized devices: none")
 
     if not args.topology:
+        fbr_result = group_by_category(sr_result, parsed)
+        print("\nFunctional block groups (topology-free):")
+        for cb, categories in fbr_result.groups.items():
+            print(f"\n  [{cb}]")
+            for cat, structs in categories.items():
+                print(f"    {cat:<32}  {structs[0].name}")
         return
 
     topology = next((t for t in load_topologies() if t.name == args.topology), None)

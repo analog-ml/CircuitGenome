@@ -44,6 +44,7 @@ patterns:
 
   - name: inverter_based_input
     category: input_pair
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mn1, type: nmos}
@@ -75,6 +76,7 @@ patterns:
 
   - name: differential_pair_nmos
     category: input_pair
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: nmos}
       - {ref: m2, type: nmos}
@@ -95,6 +97,7 @@ patterns:
 
   - name: differential_pair_pmos
     category: input_pair
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: pmos}
       - {ref: m2, type: pmos}
@@ -115,6 +118,7 @@ patterns:
 
   - name: differential_pair_nmos_degenerated
     category: input_pair
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: nmos}
       - {ref: m2, type: nmos}
@@ -134,6 +138,7 @@ patterns:
 
   - name: differential_pair_pmos_degenerated
     category: input_pair
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: pmos}
       - {ref: m2, type: pmos}
@@ -155,6 +160,7 @@ patterns:
 
   - name: active_load_pmos
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: pmos}
       - {ref: m2, type: pmos}
@@ -171,6 +177,7 @@ patterns:
 
   - name: active_load_nmos
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: nmos}
       - {ref: m2, type: nmos}
@@ -187,6 +194,7 @@ patterns:
 
   - name: resistor_load_vdd
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: r1, type: resistor}
       - {ref: r2, type: resistor}
@@ -199,6 +207,7 @@ patterns:
 
   - name: resistor_load_gnd
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: r1, type: resistor}
       - {ref: r2, type: resistor}
@@ -211,6 +220,7 @@ patterns:
 
   - name: current_source_load_pmos
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: pmos}
       - {ref: m2, type: pmos}
@@ -227,6 +237,7 @@ patterns:
 
   - name: current_source_load_nmos
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: nmos}
       - {ref: m2, type: nmos}
@@ -243,6 +254,7 @@ patterns:
 
   - name: folded_cascode_load_nmos_input_single_output
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -274,6 +286,7 @@ patterns:
 
   - name: folded_cascode_load_pmos_input_single_output
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -305,6 +318,7 @@ patterns:
 
   - name: folded_cascode_load_nmos_input_differential_output
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -345,6 +359,7 @@ patterns:
 
   - name: folded_cascode_load_pmos_input_differential_output
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -386,6 +401,7 @@ patterns:
 
   - name: telescopic_cascode_load_pmos
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -411,6 +427,7 @@ patterns:
 
   - name: telescopic_cascode_load_nmos
     category: load
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -438,6 +455,7 @@ patterns:
 
   - name: current_mirror_tail_nmos
     category: tail_current
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: nmos}
       - {ref: m2, type: nmos}
@@ -454,6 +472,7 @@ patterns:
 
   - name: current_mirror_tail_pmos
     category: tail_current
+    circuit_block: gain_stage_1
     devices:
       - {ref: m1, type: pmos}
       - {ref: m2, type: pmos}
@@ -470,6 +489,7 @@ patterns:
 
   - name: cascode_current_mirror_tail_pmos
     category: tail_current
+    circuit_block: gain_stage_1
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -487,6 +507,7 @@ patterns:
 
   - name: cascode_current_mirror_tail_nmos
     category: tail_current
+    circuit_block: gain_stage_1
     devices:
       - {ref: mn1, type: nmos}
       - {ref: mn2, type: nmos}
@@ -504,6 +525,7 @@ patterns:
 
   - name: resistor_tail_vdd
     category: tail_current
+    circuit_block: gain_stage_1
     devices:
       - {ref: r1, type: resistor}
     pins:
@@ -517,6 +539,7 @@ patterns:
 
   - name: resistor_tail_gnd
     category: tail_current
+    circuit_block: gain_stage_1
     devices:
       - {ref: r1, type: resistor}
     pins:
@@ -530,6 +553,7 @@ patterns:
 
   - name: diode_connected_mosfet_bias
     category: bias_generation
+    circuit_block: bias
     devices:
       - {ref: mref, type: nmos}
     same_net:
@@ -544,6 +568,7 @@ patterns:
 
   - name: magic_battery_bias
     category: bias_generation
+    circuit_block: bias
     devices:
       - {ref: mref, type: pmos}
     same_net:
@@ -558,6 +583,7 @@ patterns:
 
   - name: resistor_bias
     category: bias_generation
+    circuit_block: bias
     devices:
       - {ref: mref, type: pmos}
     same_net:
@@ -574,6 +600,7 @@ patterns:
 
   - name: miller_cap
     category: compensation
+    circuit_block: compensation
     devices:
       - {ref: c1, type: capacitor}
     pins:
@@ -582,6 +609,7 @@ patterns:
 
   - name: miller_cap_with_nulling_resistor
     category: compensation
+    circuit_block: compensation
     devices:
       - {ref: r1, type: resistor}
       - {ref: c1, type: capacitor}
@@ -594,6 +622,7 @@ patterns:
 
   - name: indirect_compensation
     category: compensation
+    circuit_block: compensation
     devices:
       - {ref: c1, type: capacitor}
       - {ref: r1, type: resistor}
@@ -608,6 +637,7 @@ patterns:
 
   - name: common_source
     category: second_stage
+    circuit_block: gain_stage_2
     devices:
       - {ref: mn1, type: nmos}
       - {ref: mp1, type: pmos}
@@ -621,6 +651,7 @@ patterns:
 
   - name: common_drain
     category: second_stage
+    circuit_block: gain_stage_2
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mn1, type: nmos}
@@ -635,6 +666,7 @@ patterns:
 
   - name: differential_ota_second_stage
     category: second_stage
+    circuit_block: gain_stage_2
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -660,6 +692,7 @@ patterns:
 
   - name: resistive_sense_cmfb
     category: cmfb
+    circuit_block: cmfb
     devices:
       - {ref: r1, type: resistor}
       - {ref: r2, type: resistor}
@@ -687,6 +720,7 @@ patterns:
 
   - name: dda_cmfb
     category: cmfb
+    circuit_block: cmfb
     devices:
       - {ref: m1, type: nmos}
       - {ref: m2, type: nmos}

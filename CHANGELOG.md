@@ -3,6 +3,64 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-20
+
+Issue [#45](https://github.com/analog-ml/CircuitGenome/issues/45), PR
+[#46](https://github.com/analog-ml/CircuitGenome/pull/46)
+(`feat/fbr-net-name-agnostic`).
+
+### Added
+
+- **`group_by_category(sr_result, netlist)`** — topology-free FBR mode that
+  works on any netlist without a `TopologyTemplate`. Structures are grouped
+  by `circuit_block` (outer) then `category` (inner); candidates within each
+  category are ranked by external-port adjacency (count of pins whose net
+  connects directly to a subcircuit external port).
+- **`CategoryGroupResult`** dataclass — return type for `group_by_category`.
+  Holds `groups: dict[str, dict[str, list[RecognizedStructure]]]` and
+  `unrecognized_devices`.
+- **`circuit_block` field** on `PatternDef` and `RecognizedStructure` —
+  encodes position in the signal chain for opamp patterns. Pattern-level
+  values: `gain_stage_1` (input_pair, load, tail_current patterns),
+  `gain_stage_2` (second_stage patterns), `bias`, `compensation`, `cmfb`.
+  The `gain_stage_N` prefix avoids collisions with existing `category` values
+  such as `second_stage`. All 34 opamp MVP patterns annotated.
+- **CLI topology-free mode**: `circuitgenome recognize <NETLIST>` without
+  `--topology` now calls `group_by_category` and prints the grouped output
+  (previously returned SR results only with no FBR grouping).
+
+### Changed
+
+- `--topology` is now documented as enhancing accuracy (named-slot assignment
+  with connectivity scoring) rather than being required for any FBR output.
+  `assign_slots` and its behavior are unchanged.
+
+### Three-stage topology-free support
+
+`group_by_category` now correctly splits a three-stage opamp's two gain stages
+into separate `[gain_stage_2]` and `[gain_stage_3]` groups without a topology
+template. The implementation uses a two-pass algorithm:
+
+1. **Filter pass** — three classes of spurious `gain_stage_*` candidates are
+   dropped:
+   - **Class A** — `in` pin on an external port: input-pair nmos transistors
+     (gate on `in1`/`in2`) or bias-reference nmos devices (gate on `ibias`)
+     re-matched as gain stages.
+   - **Class B** — `bias` pin on an external port: pmos leg of a bias mirror
+     (gate on `ibias`) re-matched as a gain stage.
+   - **Class C** — any nmos device in the candidate has source ≠ `gnd!`:
+     cascode load devices (nmos cascode with source at an internal folding
+     node) that survive the pin-level checks because their `in` and `bias`
+     pins are on internal bias/cascode nets — not external ports. Applied
+     only to single-category `gain_stage_*` blocks to avoid incorrectly
+     filtering input-pair transistors (nmos source → tail-current net).
+
+2. **Split pass** — single-category `gain_stage_*` blocks with more than one
+   remaining candidate after filtering are split into consecutive `gain_stage_N`
+   groups ordered by ascending external-port adjacency. The intermediate stage
+   (`out` → internal net) stays at `gain_stage_2`; the final stage (`out` →
+   external output port) is promoted to `gain_stage_3`.
+
 ## 2026-06-17 (3)
 
 Issue [#36](https://github.com/analog-ml/CircuitGenome/issues/36), PR

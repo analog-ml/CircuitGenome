@@ -1,24 +1,39 @@
 """
 Layer 2 — Functional Block Recognizer (FBR).
 
-MVP taxonomy: the ``opamp_modules.yaml`` categories (``input_pair``,
-``load``, ``tail_current``, ``bias_generation``, ``cmfb``, ``compensation``,
-``second_stage``) plus the matched
-:class:`~circuitgenome.synthesizer.models.TopologyTemplate` (design doc
-section 6.2). :func:`assign_slots` consumes a
-:class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult` (Layer
-1's output) and the topology that the netlist is known to have been
-synthesized from, and produces a
-:class:`~circuitgenome.recognizer.models.FunctionalBlockRecognitionResult`
-shaped like :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`,
-so the two can be compared directly in round-trip tests.
+Two modes:
+
+* **Topology mode** (:func:`assign_slots`): requires a
+  :class:`~circuitgenome.synthesizer.models.TopologyTemplate`. Assigns each
+  slot to its best-matching SR candidate using expected net connectivity
+  (``_connectivity_score``). Handles repeated-category slots (e.g. two
+  ``compensation`` slots in a fully-differential topology).
+
+* **Topology-free mode** (:func:`group_by_category`): no topology needed.
+  Groups SR structures by :attr:`~.models.RecognizedStructure.circuit_block`
+  (outer) and :attr:`~.models.RecognizedStructure.category` (inner) using a
+  two-pass algorithm: (1) filter pass — three classes of spurious
+  ``gain_stage_*`` candidates are dropped: (A) ``in`` pin on an external port
+  (input-pair or bias nmos re-matched with gate on ``in1``/``in2``/``ibias``);
+  (B) ``bias`` pin on an external port (pmos leg of a bias mirror re-matched
+  with gate on ``ibias``); (C) any nmos device whose source terminal is not
+  ``gnd!`` (cascode load devices whose source connects to an intermediate node,
+  not the supply rail) — Class C is applied only to single-category
+  ``gain_stage_*`` blocks to avoid filtering input-pair transistors whose
+  source legitimately connects to the tail-current net; (2) split pass —
+  single-category ``gain_stage_*`` blocks whose remaining candidate count
+  exceeds one are split into consecutive ``gain_stage_N`` groups ordered by
+  ascending external-port adjacency, enabling disambiguation of a three-stage
+  opamp's second and third gain stages without a topology.
 """
 from __future__ import annotations
 
 from circuitgenome.synthesizer.models import TopologyTemplate
 
 from .models import (
+    CategoryGroupResult,
     FunctionalBlockRecognitionResult,
+    ParsedNetlist,
     RecognizedStructure,
     SlotAssignment,
     SubcircuitRecognitionResult,
@@ -42,6 +57,140 @@ def _connectivity_score(structure: RecognizedStructure, slot_connections: dict[s
               two dicts share no keys).
     """
     return sum(1 for pin, net in structure.pins.items() if slot_connections.get(pin) == net)
+
+
+def _external_port_score(structure: RecognizedStructure, external_ports: set[str]) -> int:
+    """Count how many of ``structure``'s pins connect directly to an external port.
+
+    Used by :func:`group_by_category` to rank candidates within a category
+    when no topology template is available. Structures whose pins touch more
+    external ports (e.g. the input pair's ``in1``/``in2`` pins hit the
+    subcircuit's ``in1``/``in2`` ports directly) rank higher than internal
+    structures (e.g. a bias mirror that only touches internal nets).
+
+    :param structure: Candidate :class:`~.models.RecognizedStructure`.
+    :param external_ports: The subcircuit's external port names, from
+                            :attr:`~.models.ParsedNetlist.external_ports`.
+    :returns: Number of pins whose net name is in ``external_ports``.
+    """
+    return sum(1 for net in structure.pins.values() if net in external_ports)
+
+
+def group_by_category(
+    sr_result: SubcircuitRecognitionResult,
+    netlist: ParsedNetlist,
+) -> CategoryGroupResult:
+    """Group SR structures by circuit block and category without a topology.
+
+    Produces a :class:`~.models.CategoryGroupResult` whose ``groups`` dict is
+    keyed first by :attr:`~.models.RecognizedStructure.circuit_block` (e.g.
+    ``"gain_stage_1"``, ``"gain_stage_2"``, ``"bias"``) then by
+    :attr:`~.models.RecognizedStructure.category` (e.g. ``"input_pair"``,
+    ``"load"``). Structures with ``circuit_block=None`` (primitives, structural
+    composites) are excluded.
+
+    **Two-pass algorithm**:
+
+    1. *Filter pass* — for every ``gain_stage_*`` candidate that has an ``in``
+       pin, check whether that pin's net is an external port. Real gain stages
+       receive their input from an internal intermediate net (the previous
+       stage's output); spurious matches arise when an input-pair nmos or a
+       bias device is re-matched by a gain-stage pattern, putting ``in1``/
+       ``in2`` or ``ibias`` on the ``in`` pin. Removing those candidates
+       eliminates the majority of SR noise before the split pass.
+
+    2. *Split pass* — ``gain_stage_*`` blocks that have exactly **one**
+       remaining category and more than one remaining candidate are split into
+       consecutive ``gain_stage_N`` groups ordered by ascending
+       :func:`_external_port_score`. The instance whose ``out`` pin connects to
+       the external output port scores highest and is promoted to the
+       highest-numbered stage. Blocks with multiple categories (e.g.
+       ``gain_stage_1`` which holds ``input_pair``, ``load``, and
+       ``tail_current``) are never split; their candidates are simply sorted
+       descending and the top-1 is the best topology-free guess.
+
+    :param sr_result: Layer 1 output from
+                       :func:`~.subcircuit_recognizer.recognize`.
+    :param netlist: The parsed netlist, used to retrieve external port names
+                     for :func:`_external_port_score`.
+    :returns: :class:`~.models.CategoryGroupResult` with grouped, ranked
+              candidates and ``unrecognized_devices`` passed through unchanged.
+    """
+    ext = set(netlist.external_ports)
+
+    # --- Initial grouping, sorted descending by external-port score ---
+    groups: dict[str, dict[str, list[RecognizedStructure]]] = {}
+    for s in sr_result.structures:
+        if s.circuit_block is None or s.category is None:
+            continue
+        groups.setdefault(s.circuit_block, {}).setdefault(s.category, []).append(s)
+    for cb in groups:
+        for cat in groups[cb]:
+            groups[cb][cat].sort(key=lambda s: _external_port_score(s, ext), reverse=True)
+
+    # --- Filter pass: drop spurious gain_stage_* candidates ---
+    # Three classes of spurious gain-stage matches are eliminated:
+    #
+    # Class A — input-pair nmos / bias-reference nmos re-matched as gain stage:
+    #   'in' pin connects to an external port (in1, in2, ibias).
+    # Class B — pmos leg of magic_battery_bias re-matched as gain stage:
+    #   'bias' pin connects to an external port (ibias).
+    # Class C — cascode load devices re-matched as gain stage (e.g. nmos cascode
+    #   current source paired with diode-connected pmos cascode reference, drains
+    #   meeting at the cascode output node):
+    #   applied only to single-category gain_stage_* blocks (second_stage slots)
+    #   to avoid incorrectly filtering input-pair transistors (whose nmos source
+    #   connects to net_tail, not gnd!).
+    #   Any nmos device whose source terminal is not 'gnd!' indicates a cascode
+    #   intermediate device, not a rail-to-rail gain stage.
+    _GND = "gnd!"
+    for cb in list(groups.keys()):
+        if not cb.startswith("gain_stage_"):
+            continue
+        single_cat = len(groups[cb]) == 1
+        for cat in groups[cb]:
+            filtered = []
+            for s in groups[cb][cat]:
+                # Class A & B: pin-level external-port check
+                if s.pins.get("in") in ext or s.pins.get("bias") in ext:
+                    continue
+                # Class C: nmos source-terminal check (single-category blocks only)
+                if single_cat and any(
+                    d.type == "nmos" and d.terminals.get("s") != _GND
+                    for d in s.devices
+                ):
+                    continue
+                filtered.append(s)
+            groups[cb][cat] = filtered
+        groups[cb] = {cat: st for cat, st in groups[cb].items() if st}
+    groups = {cb: cats for cb, cats in groups.items() if cats}
+
+    # --- Split pass: split single-category gain_stage_* blocks with >1 candidate ---
+    to_remove: list[tuple[str, str]] = []
+    to_add: list[tuple[str, str, list[RecognizedStructure]]] = []
+    for cb, categories in list(groups.items()):
+        if not cb.startswith("gain_stage_") or len(categories) != 1:
+            continue
+        base = int(cb.split("_")[-1])
+        (cat, structs) = next(iter(categories.items()))
+        if len(structs) <= 1:
+            continue
+        structs.sort(key=lambda s: _external_port_score(s, ext))
+        to_remove.append((cb, cat))
+        for i, s in enumerate(structs):
+            to_add.append((f"gain_stage_{base + i}", cat, [s]))
+
+    for cb, cat in to_remove:
+        del groups[cb][cat]
+        if not groups[cb]:
+            del groups[cb]
+    for cb, cat, structs in to_add:
+        groups.setdefault(cb, {})[cat] = structs
+
+    return CategoryGroupResult(
+        groups=groups,
+        unrecognized_devices=sr_result.unrecognized_devices,
+    )
 
 
 def assign_slots(
