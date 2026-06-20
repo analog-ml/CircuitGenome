@@ -12,19 +12,23 @@ Two modes:
 * **Topology-free mode** (:func:`group_by_category`): no topology needed.
   Groups SR structures by :attr:`~.models.RecognizedStructure.circuit_block`
   (outer) and :attr:`~.models.RecognizedStructure.category` (inner) using a
-  two-pass algorithm: (1) filter pass — three classes of spurious
-  ``gain_stage_*`` candidates are dropped: (A) ``in`` pin on an external port
-  (input-pair or bias nmos re-matched with gate on ``in1``/``in2``/``ibias``);
-  (B) ``bias`` pin on an external port (pmos leg of a bias mirror re-matched
-  with gate on ``ibias``); (C) any nmos device whose source terminal is not
-  ``gnd!`` (cascode load devices whose source connects to an intermediate node,
-  not the supply rail) — Class C is applied only to single-category
-  ``gain_stage_*`` blocks to avoid filtering input-pair transistors whose
-  source legitimately connects to the tail-current net; (2) split pass —
-  single-category ``gain_stage_*`` blocks whose remaining candidate count
-  exceeds one are split into consecutive ``gain_stage_N`` groups ordered by
-  ascending external-port adjacency, enabling disambiguation of a three-stage
-  opamp's second and third gain stages without a topology.
+  three-pass algorithm: (1) filter pass for single-category ``gain_stage_*``
+  blocks — three classes of spurious candidates are dropped: (A) ``in`` pin on
+  an external port (bias nmos re-matched as a gain stage); (B) ``bias`` pin on
+  an external port (bias mirror pmos re-matched); (C) any nmos device whose
+  source is not ``gnd!`` (cascode load devices); (2) multi-category
+  ``gain_stage_*`` pass (``gain_stage_1``) — re-sorts ``input_pair``
+  candidates by the count of distinct external ports among ``{in1, in2}`` (real
+  differential pairs have both signal inputs on distinct external ports; bias
+  mirrors and spurious stage-device pairs do not), then uses the top
+  ``input_pair`` result to guide ``load`` and ``tail_current`` via signal-chain
+  following (``load.in1/in2`` matched against ``input_pair.out1/out2``;
+  ``tail_current.out`` matched against ``input_pair.tail``), with external-port
+  exclusion filters applied to each category first; (3) split pass —
+  single-category ``gain_stage_*`` blocks with more than one remaining candidate
+  are split into consecutive ``gain_stage_N`` groups ordered by ascending
+  external-port adjacency, enabling disambiguation of three-stage opamp stages
+  without a topology.
 """
 from __future__ import annotations
 
@@ -163,6 +167,87 @@ def group_by_category(
                 filtered.append(s)
             groups[cb][cat] = filtered
         groups[cb] = {cat: st for cat, st in groups[cb].items() if st}
+    groups = {cb: cats for cb, cats in groups.items() if cats}
+
+    # --- Multi-category gain_stage_* pass (gain_stage_1: input_pair, load, tail_current) ---
+    # The global _external_port_score ranking is inverted for these categories because
+    # bias-generation devices gate on ibias (external) and share supply rails, outscoring
+    # the real functional devices. Apply category-specific corrections in dependency order:
+    # input_pair first, then load and tail_current using the input_pair result for
+    # signal-chain following.
+    #
+    # input_pair: re-sort by count of *distinct* external ports among {in1, in2}.
+    #   Real differential pair: in1/in2 → two distinct signal ports (score 2).
+    #   Bias mirror: in1=in2=ibias (score 1). Spurious stage-pmos pairs: in1/in2 on
+    #   internal nets (score 0).
+    # load: drop candidates where in1, in2, or bias1 connect to external ports (spurious
+    #   bias-gen matches with ibias gate). Among survivors, prefer those whose in1/in2
+    #   match the input_pair's out1/out2 (signal-chain connection).
+    # tail_current: drop candidates where out is external (spurious match driving the
+    #   circuit output instead of the internal tail node). Among survivors, prefer those
+    #   whose out matches the input_pair's tail pin.
+    for cb, categories in list(groups.items()):
+        if not cb.startswith("gain_stage_") or len(categories) == 1:
+            continue
+
+        # Pass 1: input_pair
+        if "input_pair" in categories:
+            categories["input_pair"] = sorted(
+                categories["input_pair"],
+                key=lambda s: (
+                    len(({s.pins.get("in1"), s.pins.get("in2")} - {None}) & ext),
+                    _external_port_score(s, ext),
+                ),
+                reverse=True,
+            )
+
+        # Derive expected nets from the top input_pair candidate for chain following
+        ip_top = categories["input_pair"][0] if categories.get("input_pair") else None
+        ip_outputs: set[str] = (
+            {ip_top.pins.get("out1"), ip_top.pins.get("out2")} - {None}
+            if ip_top else set()
+        )
+        ip_tail: str | None = (
+            ip_top.pins.get("tail")
+            if ip_top and ip_top.pins.get("tail") not in ext else None
+        )
+
+        # Pass 2: load
+        if "load" in categories:
+            structs = [
+                s for s in categories["load"]
+                if s.pins.get("in1") not in ext
+                and s.pins.get("in2") not in ext
+                and s.pins.get("bias1") not in ext
+            ]
+            if ip_outputs:
+                structs = sorted(
+                    structs,
+                    key=lambda s: (
+                        sum(1 for p in ("in1", "in2") if s.pins.get(p) in ip_outputs),
+                        _external_port_score(s, ext),
+                    ),
+                    reverse=True,
+                )
+            categories["load"] = structs
+
+        # Pass 3: tail_current
+        if "tail_current" in categories:
+            structs = [
+                s for s in categories["tail_current"] if s.pins.get("out") not in ext
+            ]
+            if ip_tail:
+                structs = sorted(
+                    structs,
+                    key=lambda s: (
+                        1 if s.pins.get("out") == ip_tail else 0,
+                        _external_port_score(s, ext),
+                    ),
+                    reverse=True,
+                )
+            categories["tail_current"] = structs
+
+        groups[cb] = {cat: st for cat, st in categories.items() if st}
     groups = {cb: cats for cb, cats in groups.items() if cats}
 
     # --- Split pass: split single-category gain_stage_* blocks with >1 candidate ---
