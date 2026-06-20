@@ -64,6 +64,8 @@ class RecognizedStructure:
                   ``opamp_modules.yaml`` variant name.
     :param category: The matching pattern's category, e.g. ``"input_pair"``
                       (one of the ``opamp_modules.yaml`` module categories).
+                      ``None`` for level-0 primitives and structural
+                      composites that have no FBR counterpart.
     :param index: 0-based instance number, distinguishing repeated matches
                    of the same pattern (e.g. a second
                    ``differential_pair_nmos`` candidate elsewhere in the
@@ -80,12 +82,12 @@ class RecognizedStructure:
                      instances matched by this structure (the base template
                      assignment, plus any ``extra_devices`` from a
                      :class:`HookMatch`).
-    :param children: Sub-structures from multi-level composition. Always
-                      empty for the MVP's composite-only patterns; populated
-                      by a future milestone's primitive-to-composite matching.
+    :param children: Sub-structures from multi-level composition. Empty for
+                      level-0 primitives and MVP composite-only patterns;
+                      populated for level-1+ patterns.
     """
     name: str
-    category: str
+    category: str | None
     index: int
     tech_type: str | None
     pins: dict[str, str]
@@ -136,9 +138,25 @@ class PatternDevice:
 
 
 @dataclass
+class ChildDef:
+    """One required child in a multi-level composite pattern.
+
+    :param pattern: Name of the expected child :class:`PatternDef`, e.g.
+                     ``"diode_connected_nmos"``.
+    :param devices: Template device refs (from the enclosing
+                     :class:`PatternDef`) that together form this child.
+                     E.g. ``["m_ref"]`` for a single-device child or
+                     ``["m_dr", "m_dl"]`` for a two-device child.
+    """
+    pattern: str
+    devices: list[str]
+
+
+@dataclass
 class PatternDef:
     """A single SR pattern definition, loaded from
-    ``config/subcircuit_patterns.yaml``.
+    ``config/primitives.yaml``, ``config/structural_patterns.yaml``, or
+    ``config/opamp_patterns.yaml``.
 
     A pattern is a small template graph: a handful of typed
     :class:`PatternDevice` slots, ``same_net`` equality constraints between
@@ -146,13 +164,17 @@ class PatternDef:
     :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` for the
     matching algorithm.
 
-    **Composite patterns** correspond 1:1 to an ``opamp_modules.yaml`` module
-    variant and reuse its name (e.g. ``differential_pair_nmos``); their
-    ``devices``/``same_net``/``pins`` are derived from that variant's
-    ``devices``/``ports``. **Primitive patterns** (no
-    ``opamp_modules.yaml`` equivalent, e.g. ``diode_connected_pair``) are a
-    later-milestone concept and are not required for composite-only
-    matching.
+    **Level-0 primitive patterns** describe single-device topological facts
+    (e.g. ``diode_connected_nmos``). Exclusive primitives claim a device
+    for exactly one pattern (higher :attr:`priority` wins).
+
+    **Level-1+ composite patterns** declare :attr:`children` referencing
+    lower-level patterns they compose; the SR verifies those children are
+    present before accepting a match.
+
+    **MVP composite patterns** (no ``children``, not ``exclusive``) correspond
+    1:1 to an ``opamp_modules.yaml`` module variant and run in the same
+    single-pass loop as before.
 
     :param name: Unique pattern name, e.g. ``"differential_pair_nmos"``. For
                   composite patterns, also the ``opamp_modules.yaml`` variant
@@ -160,9 +182,10 @@ class PatternDef:
                   :attr:`RecognizedStructure.name` and
                   :attr:`SlotAssignment.pattern_name`.
     :param category: The ``opamp_modules.yaml`` module category this pattern
-                      represents, e.g. ``"input_pair"``. Copied into
-                      :attr:`RecognizedStructure.category` and used by FBR to
-                      filter candidates per :class:`~circuitgenome.synthesizer.models.Slot`.
+                      represents, e.g. ``"input_pair"``. ``None`` for
+                      primitives and structural composites without an FBR
+                      counterpart. Copied into
+                      :attr:`RecognizedStructure.category`.
     :param devices: The pattern's template devices. The matcher searches for
                      an injective assignment from these to actual netlist
                      devices of matching :attr:`PatternDevice.type`.
@@ -185,14 +208,30 @@ class PatternDef:
                   function (see :class:`HookMatch`), resolved dynamically by
                   :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize`.
                   Most patterns have no hook.
+    :param children: Required sub-structures for multi-level composition.
+                      Empty for level-0 patterns and MVP composites. When
+                      non-empty, ``recognize`` verifies each child is present
+                      as a matched structure at the previous level before
+                      accepting this pattern's match.
+    :param exclusive: If ``True``, this pattern claims its matched device(s)
+                       exclusively in Pass 0 -- each device is assigned to at
+                       most one exclusive pattern. Only level-0 primitives
+                       use this.
+    :param priority: Tie-breaking priority among ``exclusive`` patterns that
+                      match the same device; higher wins. E.g.
+                      ``diode_connected_nmos`` (priority 10) beats ``nmos``
+                      (priority 0).
     """
     name: str
-    category: str
+    category: str | None
     devices: list[PatternDevice]
     same_net: list[list[str]]
     pins: dict[str, str]
     tech_type_from: str | None = None
     hook: str | None = None
+    children: list[ChildDef] = field(default_factory=list)
+    exclusive: bool = False
+    priority: int = 0
 
 
 @dataclass

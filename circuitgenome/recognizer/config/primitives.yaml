@@ -1,0 +1,54 @@
+# Level-0 primitive patterns.
+#
+# Every device in a netlist gets exactly one exclusive primitive assignment
+# (highest priority wins). These form the leaves of the multi-level DAG.
+
+primitives:
+  # ── NMOS ────────────────────────────────────────────────────────────────
+  - name: diode_connected_nmos
+    devices: [{ref: m, type: nmos}]
+    same_net: [[m.d, m.g]]
+    pins: {drain: m.d, source: m.s, bulk: m.b}
+    tech_type_from: m
+    exclusive: true
+    priority: 10
+
+  - name: nmos
+    devices: [{ref: m, type: nmos}]
+    same_net: []
+    pins: {drain: m.d, gate: m.g, source: m.s, bulk: m.b}
+    tech_type_from: m
+    exclusive: true
+    priority: 0
+
+  # ── PMOS ────────────────────────────────────────────────────────────────
+  - name: diode_connected_pmos
+    devices: [{ref: m, type: pmos}]
+    same_net: [[m.d, m.g]]
+    pins: {drain: m.d, source: m.s, bulk: m.b}
+    tech_type_from: m
+    exclusive: true
+    priority: 10
+
+  - name: pmos
+    devices: [{ref: m, type: pmos}]
+    same_net: []
+    pins: {drain: m.d, gate: m.g, source: m.s, bulk: m.b}
+    tech_type_from: m
+    exclusive: true
+    priority: 0
+
+  # ── Passives ────────────────────────────────────────────────────────────
+  - name: resistor
+    devices: [{ref: r, type: resistor}]
+    same_net: []
+    pins: {p: r.t1, n: r.t2}
+    exclusive: true
+    priority: 10
+
+  - name: capacitor
+    devices: [{ref: c, type: capacitor}]
+    same_net: []
+    pins: {plus: c.p, minus: c.m}
+    exclusive: true
+    priority: 10

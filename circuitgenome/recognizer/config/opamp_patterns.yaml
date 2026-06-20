@@ -1,15 +1,47 @@
-# SR pattern library (design doc section 5.1-5.2).
+# Opamp-specific SR pattern library.
 #
-# Composite patterns correspond 1:1 to an opamp_modules.yaml variant and
-# reuse its name. `same_net` entries are the only required equalities;
-# unlisted terminals are not constrained.
+# Patterns here either carry an opamp FBR category (input_pair, load,
+# tail_current, bias_generation, compensation, second_stage, cmfb) or
+# reference opamp-specific children (e.g. cascoded_differential_pair_pmos
+# references differential_pair_pmos). Corresponds 1:1 with opamp_modules.yaml
+# variants for the MVP composite patterns.
+#
+# `same_net` entries are the only required equalities; unlisted terminals
+# are unconstrained.
 
 patterns:
+  # ── Opamp-adjacent structural composite (no FBR category) ─────────────────
+  # cascoded_differential_pair_pmos references differential_pair_pmos (below),
+  # making it opamp-specific despite having no category of its own.
+
+  - name: cascoded_differential_pair_pmos
+    devices:
+      - {ref: m_dp1, type: pmos}
+      - {ref: m_dp2, type: pmos}
+      - {ref: m_gc1, type: pmos}
+      - {ref: m_gc2, type: pmos}
+    same_net:
+      - [m_dp1.s, m_dp2.s]         # shared tail
+      - [m_dp1.d, m_gc1.s]         # diff pair out1 → gate-coupled source1
+      - [m_dp2.d, m_gc2.s]         # diff pair out2 → gate-coupled source2
+    pins:
+      in1: m_dp1.g
+      in2: m_dp2.g
+      out1: m_gc1.d
+      out2: m_gc2.d
+      tail: m_dp1.s
+    tech_type_from: m_dp1
+    children:
+      - {pattern: differential_pair_pmos, devices: [m_dp1, m_dp2]}
+      - {pattern: gate_coupled_pair_pmos, devices: [m_gc1, m_gc2]}
+
+  # ─── INPUT PAIR variants ────────────────────────────────────────────────────
   # inverter_based_input is listed first so it wins input_pair
   # connectivity-score ties against differential_pair_nmos/differential_pair_pmos:
   # its mn1/mn2 (resp. mp1/mp2) pair alone also satisfies those 2-device
   # templates (shared source/bulk), producing a same-scoring spurious
   # candidate that file order then has to break.
+
   - name: inverter_based_input
     category: input_pair
     devices:
@@ -35,6 +67,11 @@ patterns:
       out2: mp2.d
       vdd: mp1.s
       gnd: mn1.s
+    children:
+      - {pattern: pmos, devices: [mp1]}
+      - {pattern: nmos, devices: [mn1]}
+      - {pattern: pmos, devices: [mp2]}
+      - {pattern: nmos, devices: [mn2]}
 
   - name: differential_pair_nmos
     category: input_pair
@@ -52,82 +89,9 @@ patterns:
       tail: m1.s
       bulk: m1.b
     tech_type_from: m1   # tech_type = "n"
-
-  - name: active_load_pmos
-    category: load
-    devices:
-      - {ref: m1, type: pmos}
-      - {ref: m2, type: pmos}
-    same_net:
-      - [m1.d, m1.g]   # m1 is diode-connected
-      - [m1.g, m2.g]   # m2 mirrors m1's gate
-      - [m1.s, m2.s]   # shared vdd connection
-      - [m1.b, m2.b]
-    pins:
-      in1: m1.d
-      in2: m2.d
-      vdd: m1.s
-    tech_type_from: m1   # tech_type = "p"
-
-  - name: current_mirror_tail_nmos
-    category: tail_current
-    devices:
-      - {ref: m1, type: nmos}
-      - {ref: m2, type: nmos}
-    same_net:
-      - [m1.d, m1.g]   # m1 is diode-connected (bias reference)
-      - [m1.g, m2.g]   # m2 mirrors m1's gate
-      - [m1.s, m2.s]   # shared gnd connection
-      - [m1.b, m2.b]
-    pins:
-      bias: m1.g
-      out: m2.d
-      gnd: m1.s
-    tech_type_from: m1   # tech_type = "n"
-
-  - name: diode_connected_mosfet_bias
-    category: bias_generation
-    devices:
-      - {ref: mref, type: nmos}
-    same_net:
-      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
-    pins:
-      ibias: mref.g
-      gnd: mref.s
-    tech_type_from: mref   # tech_type = "n"
-    # Discovers however many output "legs" (nmos+pmos pairs mirroring mref)
-    # are present in the netlist and appends their devices/pins.
-    hook: "circuitgenome.recognizer.hooks:diode_connected_mosfet_bias_legs"
-
-  - name: magic_battery_bias
-    category: bias_generation
-    devices:
-      - {ref: mref, type: pmos}
-    same_net:
-      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
-    pins:
-      ibias: mref.g
-      vdd: mref.s
-    tech_type_from: mref   # tech_type = "p"
-    # Discovers however many output "legs" (pmos+nmos pairs mirroring mref)
-    # are present in the netlist and appends their devices/pins.
-    hook: "circuitgenome.recognizer.hooks:magic_battery_bias_legs"
-
-  - name: resistor_bias
-    category: bias_generation
-    devices:
-      - {ref: mref, type: pmos}
-    same_net:
-      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
-    pins:
-      ibias: mref.g
-      vdd: mref.s
-    tech_type_from: mref   # tech_type = "p"
-    # Discovers however many output "legs" (pmos mirror + resistor pairs)
-    # are present in the netlist and appends their devices/pins.
-    hook: "circuitgenome.recognizer.hooks:resistor_bias_legs"
-
-  # ─── INPUT PAIR variants ────────────────────────────────────────────────
+    children:
+      - {pattern: nmos, devices: [m1]}
+      - {pattern: nmos, devices: [m2]}
 
   - name: differential_pair_pmos
     category: input_pair
@@ -145,6 +109,9 @@ patterns:
       tail: m1.s
       bulk: m1.b
     tech_type_from: m1   # tech_type = "p"
+    children:
+      - {pattern: pmos, devices: [m1]}
+      - {pattern: pmos, devices: [m2]}
 
   - name: differential_pair_nmos_degenerated
     category: input_pair
@@ -184,7 +151,39 @@ patterns:
       tail: r1.t2
     tech_type_from: m1   # tech_type = "p"
 
-  # ─── LOAD variants ──────────────────────────────────────────────────────
+  # ─── LOAD variants ──────────────────────────────────────────────────────────
+
+  - name: active_load_pmos
+    category: load
+    devices:
+      - {ref: m1, type: pmos}
+      - {ref: m2, type: pmos}
+    same_net:
+      - [m1.d, m1.g]   # m1 is diode-connected
+      - [m1.g, m2.g]   # m2 mirrors m1's gate
+      - [m1.s, m2.s]   # shared vdd connection
+      - [m1.b, m2.b]
+    pins:
+      in1: m1.d
+      in2: m2.d
+      vdd: m1.s
+    tech_type_from: m1   # tech_type = "p"
+
+  - name: active_load_nmos
+    category: load
+    devices:
+      - {ref: m1, type: nmos}
+      - {ref: m2, type: nmos}
+    same_net:
+      - [m1.d, m1.g]   # m1 is diode-connected
+      - [m1.g, m2.g]   # m2 mirrors m1's gate
+      - [m1.s, m2.s]   # shared gnd connection
+      - [m1.b, m2.b]
+    pins:
+      in1: m1.d
+      in2: m2.d
+      gnd: m1.s
+    tech_type_from: m1   # tech_type = "n"
 
   - name: resistor_load_vdd
     category: load
@@ -209,22 +208,6 @@ patterns:
       in1: r1.t1
       in2: r2.t1
       gnd: r1.t2
-
-  - name: active_load_nmos
-    category: load
-    devices:
-      - {ref: m1, type: nmos}
-      - {ref: m2, type: nmos}
-    same_net:
-      - [m1.d, m1.g]   # m1 is diode-connected
-      - [m1.g, m2.g]   # m2 mirrors m1's gate
-      - [m1.s, m2.s]   # shared gnd connection
-      - [m1.b, m2.b]
-    pins:
-      in1: m1.d
-      in2: m2.d
-      gnd: m1.s
-    tech_type_from: m1   # tech_type = "n"
 
   - name: current_source_load_pmos
     category: load
@@ -451,7 +434,23 @@ patterns:
       vdd: mp1.s
       gnd: mn1.b
 
-  # ─── TAIL CURRENT variants ──────────────────────────────────────────────
+  # ─── TAIL CURRENT variants ──────────────────────────────────────────────────
+
+  - name: current_mirror_tail_nmos
+    category: tail_current
+    devices:
+      - {ref: m1, type: nmos}
+      - {ref: m2, type: nmos}
+    same_net:
+      - [m1.d, m1.g]   # m1 is diode-connected (bias reference)
+      - [m1.g, m2.g]   # m2 mirrors m1's gate
+      - [m1.s, m2.s]   # shared gnd connection
+      - [m1.b, m2.b]
+    pins:
+      bias: m1.g
+      out: m2.d
+      gnd: m1.s
+    tech_type_from: m1   # tech_type = "n"
 
   - name: current_mirror_tail_pmos
     category: tail_current
@@ -527,7 +526,51 @@ patterns:
     # isn't the global gnd! rail.
     hook: "circuitgenome.recognizer.hooks:resistor_tail_gnd_check"
 
-  # ─── COMPENSATION variants ──────────────────────────────────────────────────
+  # ─── BIAS GENERATION variants ────────────────────────────────────────────────
+
+  - name: diode_connected_mosfet_bias
+    category: bias_generation
+    devices:
+      - {ref: mref, type: nmos}
+    same_net:
+      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
+    pins:
+      ibias: mref.g
+      gnd: mref.s
+    tech_type_from: mref   # tech_type = "n"
+    # Discovers however many output "legs" (nmos+pmos pairs mirroring mref)
+    # are present in the netlist and appends their devices/pins.
+    hook: "circuitgenome.recognizer.hooks:diode_connected_mosfet_bias_legs"
+
+  - name: magic_battery_bias
+    category: bias_generation
+    devices:
+      - {ref: mref, type: pmos}
+    same_net:
+      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
+    pins:
+      ibias: mref.g
+      vdd: mref.s
+    tech_type_from: mref   # tech_type = "p"
+    # Discovers however many output "legs" (pmos+nmos pairs mirroring mref)
+    # are present in the netlist and appends their devices/pins.
+    hook: "circuitgenome.recognizer.hooks:magic_battery_bias_legs"
+
+  - name: resistor_bias
+    category: bias_generation
+    devices:
+      - {ref: mref, type: pmos}
+    same_net:
+      - [mref.d, mref.g]   # mref is diode-connected (shared bias reference)
+    pins:
+      ibias: mref.g
+      vdd: mref.s
+    tech_type_from: mref   # tech_type = "p"
+    # Discovers however many output "legs" (pmos mirror + resistor pairs)
+    # are present in the netlist and appends their devices/pins.
+    hook: "circuitgenome.recognizer.hooks:resistor_bias_legs"
+
+  # ─── COMPENSATION variants ───────────────────────────────────────────────────
 
   - name: miller_cap
     category: compensation
@@ -561,7 +604,7 @@ patterns:
       in: c1.p
       out: r1.t2
 
-  # ─── SECOND STAGE variants ──────────────────────────────────────────────────
+  # ─── SECOND STAGE variants ───────────────────────────────────────────────────
 
   - name: common_source
     category: second_stage
@@ -613,7 +656,7 @@ patterns:
       bias: mp1.g
       out: mp2.d
 
-  # ─── CMFB variants ──────────────────────────────────────────────────────────
+  # ─── CMFB variants ───────────────────────────────────────────────────────────
 
   - name: resistive_sense_cmfb
     category: cmfb
