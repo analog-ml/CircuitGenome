@@ -133,7 +133,8 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
         for cb, categories in fbr_result.groups.items():
             print(f"\n  [{cb}]")
             for cat, structs in categories.items():
-                print(f"    {cat:<32}  {structs[0].name}")
+                devices = ", ".join(d.ref for d in structs[0].devices)
+                print(f"    {cat:<32}  {structs[0].name}  (devices: {devices})")
         return
 
     topology = next((t for t in load_topologies() if t.name == args.topology), None)
@@ -147,7 +148,8 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
     for slot in topology.slots:
         assignment = fbr_result.slot_assignments.get(slot.name)
         if assignment:
-            print(f"  {slot.name:<32}  {assignment.pattern_name}")
+            devices = ", ".join(d.ref for d in assignment.structure.devices)
+            print(f"  {slot.name:<32}  {assignment.pattern_name}  (devices: {devices})")
         else:
             print(f"  {slot.name:<32}  (unassigned)")
 
