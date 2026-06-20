@@ -1,4 +1,5 @@
 from .models import (
+    CategoryGroupResult,
     FunctionalBlockRecognitionResult,
     ParsedNetlist,
     PatternDef,
@@ -9,7 +10,7 @@ from .models import (
 )
 from .netlist_parser import parse
 from .subcircuit_recognizer import recognize
-from .functional_block_recognizer import assign_slots
+from .functional_block_recognizer import assign_slots, group_by_category
 
 __all__ = [
     "ParsedNetlist",
@@ -19,7 +20,9 @@ __all__ = [
     "PatternDevice",
     "SlotAssignment",
     "FunctionalBlockRecognitionResult",
+    "CategoryGroupResult",
     "parse",
     "recognize",
     "assign_slots",
+    "group_by_category",
 ]

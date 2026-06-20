@@ -66,6 +66,12 @@ class RecognizedStructure:
                       (one of the ``opamp_modules.yaml`` module categories).
                       ``None`` for level-0 primitives and structural
                       composites that have no FBR counterpart.
+    :param circuit_block: High-level functional block, e.g. ``"gain_stage_1"``,
+                           ``"gain_stage_2"``, ``"bias"``, ``"compensation"``,
+                           or ``"cmfb"``. ``None`` for primitives and structural
+                           composites. Used by
+                           :func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`
+                           to group structures without a topology template.
     :param index: 0-based instance number, distinguishing repeated matches
                    of the same pattern (e.g. a second
                    ``differential_pair_nmos`` candidate elsewhere in the
@@ -88,6 +94,7 @@ class RecognizedStructure:
     """
     name: str
     category: str | None
+    circuit_block: str | None
     index: int
     tech_type: str | None
     pins: dict[str, str]
@@ -186,6 +193,13 @@ class PatternDef:
                       primitives and structural composites without an FBR
                       counterpart. Copied into
                       :attr:`RecognizedStructure.category`.
+    :param circuit_block: High-level functional block this pattern belongs to,
+                           e.g. ``"gain_stage_1"``, ``"gain_stage_2"``,
+                           ``"bias"``, ``"compensation"``, or ``"cmfb"``.
+                           Uses ``gain_stage_N`` naming (never ``second_stage``)
+                           to avoid clashing with :attr:`category` values.
+                           ``None`` for primitives and structural composites.
+                           Copied into :attr:`RecognizedStructure.circuit_block`.
     :param devices: The pattern's template devices. The matcher searches for
                      an injective assignment from these to actual netlist
                      devices of matching :attr:`PatternDevice.type`.
@@ -224,6 +238,7 @@ class PatternDef:
     """
     name: str
     category: str | None
+    circuit_block: str | None
     devices: list[PatternDevice]
     same_net: list[list[str]]
     pins: dict[str, str]
@@ -313,4 +328,28 @@ class FunctionalBlockRecognitionResult:
     """
     slot_assignments: dict[str, SlotAssignment]
     unassigned_structures: list[RecognizedStructure] = field(default_factory=list)
+    unrecognized_devices: list[Device] = field(default_factory=list)
+
+
+@dataclass
+class CategoryGroupResult:
+    """Layer 2 output when no :class:`~circuitgenome.synthesizer.models.TopologyTemplate`
+    is available.
+
+    Produced by
+    :func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`.
+    Structures are grouped first by :attr:`~RecognizedStructure.circuit_block`
+    (e.g. ``"gain_stage_1"``, ``"bias"``) then by
+    :attr:`~RecognizedStructure.category` (e.g. ``"input_pair"``, ``"load"``).
+    Within each category list, candidates are ranked by descending external-port
+    adjacency — how many of the structure's pins connect directly to a subcircuit
+    external port.
+
+    :param groups: ``circuit_block → category → candidates`` (ranked,
+                   best-guess first). Structures with ``circuit_block=None``
+                   are excluded.
+    :param unrecognized_devices: Passed through unchanged from
+                                  :attr:`SubcircuitRecognitionResult.unrecognized_devices`.
+    """
+    groups: dict[str, dict[str, list[RecognizedStructure]]]
     unrecognized_devices: list[Device] = field(default_factory=list)

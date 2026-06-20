@@ -1,24 +1,28 @@
 """
 Layer 2 — Functional Block Recognizer (FBR).
 
-MVP taxonomy: the ``opamp_modules.yaml`` categories (``input_pair``,
-``load``, ``tail_current``, ``bias_generation``, ``cmfb``, ``compensation``,
-``second_stage``) plus the matched
-:class:`~circuitgenome.synthesizer.models.TopologyTemplate` (design doc
-section 6.2). :func:`assign_slots` consumes a
-:class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult` (Layer
-1's output) and the topology that the netlist is known to have been
-synthesized from, and produces a
-:class:`~circuitgenome.recognizer.models.FunctionalBlockRecognitionResult`
-shaped like :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`,
-so the two can be compared directly in round-trip tests.
+Two modes:
+
+* **Topology mode** (:func:`assign_slots`): requires a
+  :class:`~circuitgenome.synthesizer.models.TopologyTemplate`. Assigns each
+  slot to its best-matching SR candidate using expected net connectivity
+  (``_connectivity_score``). Handles repeated-category slots (e.g. two
+  ``compensation`` slots in a fully-differential topology).
+
+* **Topology-free mode** (:func:`group_by_category`): no topology needed.
+  Groups SR structures by :attr:`~.models.RecognizedStructure.circuit_block`
+  (outer) and :attr:`~.models.RecognizedStructure.category` (inner). Ranks
+  candidates within each category by external-port adjacency
+  (``_external_port_score``). Cannot disambiguate repeated-category slots.
 """
 from __future__ import annotations
 
 from circuitgenome.synthesizer.models import TopologyTemplate
 
 from .models import (
+    CategoryGroupResult,
     FunctionalBlockRecognitionResult,
+    ParsedNetlist,
     RecognizedStructure,
     SlotAssignment,
     SubcircuitRecognitionResult,
@@ -42,6 +46,69 @@ def _connectivity_score(structure: RecognizedStructure, slot_connections: dict[s
               two dicts share no keys).
     """
     return sum(1 for pin, net in structure.pins.items() if slot_connections.get(pin) == net)
+
+
+def _external_port_score(structure: RecognizedStructure, external_ports: set[str]) -> int:
+    """Count how many of ``structure``'s pins connect directly to an external port.
+
+    Used by :func:`group_by_category` to rank candidates within a category
+    when no topology template is available. Structures whose pins touch more
+    external ports (e.g. the input pair's ``in1``/``in2`` pins hit the
+    subcircuit's ``in1``/``in2`` ports directly) rank higher than internal
+    structures (e.g. a bias mirror that only touches internal nets).
+
+    :param structure: Candidate :class:`~.models.RecognizedStructure`.
+    :param external_ports: The subcircuit's external port names, from
+                            :attr:`~.models.ParsedNetlist.external_ports`.
+    :returns: Number of pins whose net name is in ``external_ports``.
+    """
+    return sum(1 for net in structure.pins.values() if net in external_ports)
+
+
+def group_by_category(
+    sr_result: SubcircuitRecognitionResult,
+    netlist: ParsedNetlist,
+) -> CategoryGroupResult:
+    """Group SR structures by circuit block and category without a topology.
+
+    Produces a :class:`~.models.CategoryGroupResult` whose ``groups`` dict is
+    keyed first by :attr:`~.models.RecognizedStructure.circuit_block` (e.g.
+    ``"gain_stage_1"``, ``"gain_stage_2"``, ``"bias"``) then by
+    :attr:`~.models.RecognizedStructure.category` (e.g. ``"input_pair"``,
+    ``"load"``). Structures with ``circuit_block=None`` (primitives, structural
+    composites) are excluded.
+
+    Within each category list, candidates are sorted by descending
+    :func:`_external_port_score` — structures whose pins directly touch the
+    subcircuit's external ports are ranked first, giving a topology-free best
+    guess at the "true" instance when multiple candidates exist.
+
+    For circuits where each ``circuit_block``/``category`` pair has exactly one
+    candidate, the output is structurally equivalent to :func:`assign_slots`
+    (one winner per category). For repeated-category cases (e.g. two
+    ``compensation`` slots), all candidates are returned in the list and the
+    caller must disambiguate using domain knowledge or topology.
+
+    :param sr_result: Layer 1 output from
+                       :func:`~.subcircuit_recognizer.recognize`.
+    :param netlist: The parsed netlist, used to retrieve external port names
+                     for :func:`_external_port_score`.
+    :returns: :class:`~.models.CategoryGroupResult` with grouped, ranked
+              candidates and ``unrecognized_devices`` passed through unchanged.
+    """
+    ext = set(netlist.external_ports)
+    groups: dict[str, dict[str, list[RecognizedStructure]]] = {}
+    for s in sr_result.structures:
+        if s.circuit_block is None or s.category is None:
+            continue
+        groups.setdefault(s.circuit_block, {}).setdefault(s.category, []).append(s)
+    for cb in groups:
+        for cat in groups[cb]:
+            groups[cb][cat].sort(key=lambda s: _external_port_score(s, ext), reverse=True)
+    return CategoryGroupResult(
+        groups=groups,
+        unrecognized_devices=sr_result.unrecognized_devices,
+    )
 
 
 def assign_slots(
