@@ -652,18 +652,25 @@ from SR.
 **Topology-free mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`):
 works on any netlist with arbitrary net names without a topology template.
 Each opamp pattern carries a ``circuit_block`` annotation (``gain_stage_1``,
-``gain_stage_2``, ``gain_stage_3``, ``bias``, ``compensation``, ``cmfb``)
-alongside its ``category`` (``input_pair``, ``load``, ...). The ``gain_stage_N``
-prefix is distinct from category names like ``second_stage``, so the two fields
-never clash. The function groups SR structures by ``circuit_block`` then
+``gain_stage_2``, ``bias``, ``compensation``, ``cmfb``) alongside its
+``category`` (``input_pair``, ``load``, ...). The ``gain_stage_N`` prefix is
+distinct from category names like ``second_stage``, so the two fields never
+clash. The function groups SR structures by ``circuit_block`` then
 ``category``, ranking candidates within each category by external-port
-adjacency (count of pins that connect directly to a subcircuit external port) as
-a topology-free disambiguation signal. The output,
+adjacency (count of pins that connect directly to a subcircuit external port)
+as a topology-free disambiguation signal. The output,
 :class:`~circuitgenome.recognizer.models.CategoryGroupResult`, gives a
 ``circuit_block → category → [candidates]`` mapping where the first candidate
-per category is the best topology-free guess. This mode cannot disambiguate
-repeated-category slots (e.g. two ``compensation`` slots in a fully-differential
-topology); for those cases, topology mode is still required.
+per category is the best topology-free guess.
+
+**Limitation for repeated-category slots**: when the same ``category`` appears
+in multiple topology slots that share the same ``circuit_block`` annotation
+(e.g. a three-stage opamp's ``second_stage`` and ``third_stage`` slots both
+annotate their patterns with ``circuit_block: gain_stage_2`` and
+``category: second_stage``), all candidates collapse into a single group and
+only the top-scoring candidate is surfaced. To accurately assign both stages
+use :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
+with ``--topology``.
 
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~

@@ -12,8 +12,11 @@ Two modes:
 * **Topology-free mode** (:func:`group_by_category`): no topology needed.
   Groups SR structures by :attr:`~.models.RecognizedStructure.circuit_block`
   (outer) and :attr:`~.models.RecognizedStructure.category` (inner). Ranks
-  candidates within each category by external-port adjacency
-  (``_external_port_score``). Cannot disambiguate repeated-category slots.
+  candidates within each category by external-port adjacency. When multiple
+  slots share the same category (e.g. a three-stage opamp's ``second_stage``
+  and ``third_stage`` slots both use ``second_stage``-category patterns), all
+  candidates collapse into the same group; use ``--topology`` for accurate
+  per-slot assignment in those cases.
 """
 from __future__ import annotations
 
@@ -83,11 +86,14 @@ def group_by_category(
     subcircuit's external ports are ranked first, giving a topology-free best
     guess at the "true" instance when multiple candidates exist.
 
-    For circuits where each ``circuit_block``/``category`` pair has exactly one
-    candidate, the output is structurally equivalent to :func:`assign_slots`
-    (one winner per category). For repeated-category cases (e.g. two
-    ``compensation`` slots), all candidates are returned in the list and the
-    caller must disambiguate using domain knowledge or topology.
+    **Limitation for repeated-category slots**: when the same ``category``
+    appears multiple times in a single ``gain_stage_*`` block (e.g. a
+    three-stage opamp's ``second_stage`` and ``third_stage`` slots both use
+    ``second_stage``-category patterns and share ``circuit_block:
+    gain_stage_2``), all candidates collapse into the same group and only the
+    top-scoring candidate is surfaced as the best guess. For accurate
+    assignment of both stages use
+    :func:`assign_slots` with ``--topology``.
 
     :param sr_result: Layer 1 output from
                        :func:`~.subcircuit_recognizer.recognize`.
