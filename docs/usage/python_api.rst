@@ -157,3 +157,62 @@ It supports all seven topology templates via a 3-layer pipeline:
 
 See :doc:`../overview` for the recognizer's 3-layer pipeline, pattern schema,
 and topology-free disambiguation algorithm.
+
+Initial Sizer
+-------------
+
+The sizer takes the FBR result (from :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
+plus a :class:`~circuitgenome.sizer.models.SizingSpec` and returns minimum
+W/L values for every transistor.
+
+.. code-block:: python
+
+   from circuitgenome.synthesizer.loader import load_modules, load_topologies
+   from circuitgenome.synthesizer import enumerate_circuits, to_flat_spice
+   from circuitgenome.recognizer import parse, recognize
+   from circuitgenome.recognizer.functional_block_recognizer import assign_slots
+   from circuitgenome.sizer import size_circuit
+   from circuitgenome.sizer.models import SizingSpec
+   from circuitgenome.sizer.loader import load_tech
+
+   # 1. Build / load a netlist and run SR + FBR
+   topology = next(
+       t for t in load_topologies()
+       if t.name == "two_stage_opamp_single_ended"
+   )
+   circuit = next(enumerate_circuits(topology, load_modules()))
+   netlist_text = to_flat_spice(circuit)
+
+   parsed = parse(netlist_text)
+   sr_result = recognize(parsed)
+   fbr_result = assign_slots(sr_result, topology)
+
+   # 2. Define performance specification
+   spec = SizingSpec(
+       vdd=5.0,
+       vss=0.0,
+       ibias=10e-6,          # 10 µA tail current
+       cl=20e-12,            # 20 pF load
+       second_stage_current_ratio=2.5,
+       gain_min_db=80,
+       gbw_min_hz=2.5e6,     # 2.5 MHz
+       phase_margin_min_deg=60,
+       slew_rate_min_vps=3.5e6,  # 3.5 V/µs
+       power_max_w=1e-3,
+   )
+
+   # 3. Load technology and run the sizer
+   tech = load_tech("generic_parameterized")
+   result = size_circuit(parsed, sr_result, fbr_result, topology, spec, tech)
+
+   print(result.status)          # "OPTIMAL"
+   for ref, (w_um, l_um) in result.sizes_um.items():
+       print(f"  {ref:30s}  W={w_um:.2f} µm  L={l_um:.2f} µm")
+   print(f"  Cc = {result.cc_pf:.2f} pF")
+
+The spec YAML file (used by the CLI) mirrors ``SizingSpec`` field names
+directly.  See ``examples/spec_two_stage_opamp.yaml`` for an annotated
+example.
+
+See :doc:`../overview` for the sizer's constraint derivation order and
+CP-SAT linearisation details.

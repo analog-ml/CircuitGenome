@@ -28,6 +28,12 @@ design exploration, or topology studies.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Theory
+
+   theory/sizing_flow
+
+.. toctree::
+   :maxdepth: 2
    :caption: API Reference - Synthesizer
 
    api/synthesizer
@@ -50,6 +56,16 @@ design exploration, or topology studies.
    api/recognizer/subcircuit_recognizer
    api/recognizer/functional_block_recognizer
    api/recognizer/hooks
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference - Sizer
+
+   api/sizer/models
+   api/sizer/sizer
+   api/sizer/equations
+   api/sizer/constraints
+   api/sizer/loader
 
 .. toctree::
    :maxdepth: 1

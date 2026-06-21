@@ -1,7 +1,7 @@
 Overview
 ========
 
-CircuitGenome is structured around three modules, each addressing a different
+CircuitGenome is structured around four modules, each addressing a different
 direction of the analog circuit design problem.
 
 .. list-table::
@@ -23,6 +23,11 @@ direction of the analog circuit design problem.
      - Available
      - Identifies the functional role of each part of a flat SPICE netlist
        (input stage, load, bias generation, etc.).
+   * - Initial Sizer
+     - Available
+     - Computes minimum transistor W/L values that satisfy DC performance
+       specifications (gain, GBW, phase margin, slew rate, CMRR) using an
+       OR-Tools CP-SAT integer-programming solver.
 
 Topology Synthesizer
 --------------------
@@ -760,3 +765,102 @@ bias-rail pruning reduces the ``bias_generation`` slot to 0 legs (making the
 two variants structurally identical) -- are avoided by careful combo selection
 rather than additional code. Primitive/multi-level pattern composition and topology identification from an
 arbitrary netlist are deferred to later milestones.
+
+Initial Sizer
+-------------
+
+The sizer takes the FBR result (slot assignments) plus a performance
+specification and returns minimum W/L values for every transistor in the
+circuit.  It targets two-stage Miller-compensated op-amps with the following
+supported topologies:
+
+- ``two_stage_opamp_single_ended``
+
+Supported performance specs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``SizingSpec`` dataclass accepts:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Field
+     - Unit
+     - Description
+   * - ``vdd`` / ``vss``
+     - V
+     - Supply rails
+   * - ``ibias``
+     - A
+     - Tail bias current (each input device carries ``ibias/2``)
+   * - ``cl``
+     - F
+     - Output load capacitance
+   * - ``second_stage_current_ratio``
+     - —
+     - ``iDS_2 = ratio × ibias`` (default 2.0)
+   * - ``gain_min_db``
+     - dB
+     - Minimum open-loop DC voltage gain
+   * - ``gbw_min_hz``
+     - Hz
+     - Minimum unity-gain bandwidth
+   * - ``phase_margin_min_deg``
+     - °
+     - Minimum phase margin (dominant-pole model)
+   * - ``slew_rate_min_vps``
+     - V/s
+     - Minimum slew rate (``ibias / Cc``)
+   * - ``cmrr_min_db``
+     - dB
+     - Minimum common-mode rejection ratio
+   * - ``power_max_w``
+     - W
+     - Maximum quiescent power
+   * - ``output_swing_max_v`` / ``output_swing_min_v``
+     - V
+     - Output voltage swing limits
+
+Sizing algorithm
+~~~~~~~~~~~~~~~~
+
+The sizer uses a Level-1 MOSFET model where ``gm = √(2·µCox·(W/L)·IDS)``
+and ``gd = λ·|IDS|``.  Because ``IDS`` is topology-determined by KCL and the
+bias current, the ``gm ≥ gm_req`` constraint linearises to
+``2·µCox·IDS·W ≥ gm_req²·L``, which is a linear integer constraint once W
+and L are discrete grid variables.
+
+The required transconductances are derived in a fixed order to ensure mutual
+consistency after the integer grid rounds values up:
+
+1. **CMRR** — sets ``gm1`` lower bound from the tail's output conductance
+   (independent of ``Cc``; computed first so the bound propagates correctly).
+2. **SR → Cc** — ``Cc ≥ ibias / SR_min`` (initial upper bound on ``Cc``).
+3. **GBW + gm1 → Cc** — ``Cc ≥ gm1 / (2π · GBW_min)``; ``Cc`` may grow if
+   CMRR pushes ``gm1`` up.
+4. **Gain → gm2** — open-loop gain ``A0 = gm1·Rout1·gm2·Rout2``; gain drives
+   ``gm2`` (not ``gm1``) to keep ``gm1`` small and preserve the SR bound.
+5. **PM (worst-case gm1) → gm2** — the integer grid ceiling-rounds ``W1`` up,
+   increasing the actual ``gm1``; ``gm2`` is computed from the ceiling-rounded
+   value so the phase margin holds on the discrete grid.
+
+CP-SAT integer solver
+~~~~~~~~~~~~~~~~~~~~~
+
+W and L for each transistor are integer variables (in units of the
+technology grid step).  The solver minimises total gate width (proxy for
+power and area) subject to the linearised ``gm`` and ``VDS_sat`` constraints,
+plus symmetry constraints (matched pairs within ``input_pair``, ``load``, and
+``tail_current`` slots).  The branching heuristic prioritises ``bias_gen``
+transistors first, then all others.
+
+Spec compatibility notes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The three specs ``CMRR``, ``GBW``, and ``SR`` share the same variables
+(``ibias``, ``Cc``, ``gm1``) and can be **mutually exclusive** for small bias
+currents.  Specifically, ``CMRR_min + GBW_min`` together fix ``Cc ≥ gm1_cmrr /
+(2π · GBW_min)``; if that ``Cc`` exceeds ``ibias / SR_min``, the slew-rate
+spec cannot be met.  In that case the solver returns ``INFEASIBLE``.  The
+recommended approach is to specify at most two of the three, or relax ``ibias``.

@@ -3,6 +3,66 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-21
+
+Issue [#51](https://github.com/analog-ml/CircuitGenome/issues/51), PR
+[#52](https://github.com/analog-ml/CircuitGenome/pull/52)
+(`feat/initial-sizer`).
+
+### Added
+
+- **`circuitgenome.sizer` module** — Layer 3 of the CircuitGenome pipeline:
+  computes minimum transistor W/L values (on a technology grid) that meet a
+  set of DC performance specifications.  Powered by an OR-Tools CP-SAT
+  integer-programming solver.
+
+- **`SizingSpec` dataclass** (`circuitgenome/sizer/models.py`) — performance
+  specification: ``vdd``, ``vss``, ``ibias``, ``cl``,
+  ``second_stage_current_ratio``, ``gain_min_db``, ``gbw_min_hz``,
+  ``phase_margin_min_deg``, ``slew_rate_min_vps``, ``cmrr_min_db``,
+  ``power_max_w``, ``output_swing_max_v``, ``output_swing_min_v``.
+
+- **`TechParams` / `MosfetParams` / `GridSpec`** (`circuitgenome/sizer/models.py`) —
+  technology description: per-type µCox, Vth, λ and discrete W/L/Cap grids.
+
+- **`SizingResult`** (`circuitgenome/sizer/models.py`) — return type holding
+  ``status`` (``"OPTIMAL"`` / ``"FEASIBLE"`` / ``"INFEASIBLE"``),
+  ``sizes_um`` (dict ``ref → (W_µm, L_µm)``), ``cc_pf``, and computed
+  performance metrics.
+
+- **`size_circuit()`** (`circuitgenome/sizer/sizer.py`) — top-level entry
+  point.  Derives the required gm1/gm2/Cc from the spec (in the order
+  CMRR → SR → GBW → gain → PM) and delegates W/L solving to the CP-SAT model
+  builder.
+
+- **`build_model()`** (`circuitgenome/sizer/constraints.py`) — translates the
+  ``gm ≥ gm_req`` and ``VDS_sat ≤ VDS_sat_max`` constraints into linear integer
+  constraints (``2·µCox·IDS·W ≥ gm_req²·L``) with an integer-scaled coefficient
+  scheme (scale = 10¹²).  Symmetry constraints enforce matched pairs within
+  ``input_pair``, ``load``, and ``tail_current`` slots.
+
+- **`load_tech()`** (`circuitgenome/sizer/loader.py`) — loads a technology
+  YAML configuration from the built-in ``circuitgenome/sizer/config/`` directory.
+
+- **`circuitgenome size` CLI subcommand** (`circuitgenome/cli.py`) — sizes a
+  flat SPICE netlist given a topology name and a YAML spec file.
+
+- **`examples/spec_two_stage_opamp.yaml`** — annotated example spec for a
+  5 V / 10 µA two-stage Miller-compensated op-amp
+  (GBW = 2.5 MHz, PM ≥ 60°, SR ≥ 3.5 V/µs, gain ≥ 80 dB).
+
+- **`ortools>=9.8`** added to ``pyproject.toml`` dependencies.
+
+### Notes
+
+- Currently supported topologies: ``two_stage_opamp_single_ended``.
+- CMRR, GBW, and SR specs share the same variables (``ibias``, ``Cc``,
+  ``gm1``) and can be mutually exclusive for small bias currents; the solver
+  returns ``INFEASIBLE`` in that case.  Specify at most two of the three, or
+  relax ``ibias``.
+- PyYAML parses bare positive scientific notation (``2.5e6``) as a string;
+  use ``2.5e+6`` (explicit ``+``) in YAML spec files.
+
 ## 2026-06-20
 
 Issue [#45](https://github.com/analog-ml/CircuitGenome/issues/45), PR
