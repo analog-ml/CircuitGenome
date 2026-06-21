@@ -100,7 +100,7 @@ class TransistorSizing:
     :param l_um: Gate length in µm.
     :param ids_a: Quiescent drain-source current in A.
     :param vgs_v: Quiescent gate-source voltage in V.
-    :param vds_sat_v: Minimum |VDS| for saturation in V.
+    :param vds_sat_v: Minimum \|VDS\| for saturation in V.
     """
     ref: str
     w_um: float

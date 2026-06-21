@@ -2,13 +2,9 @@
 Level-1 MOSFET equations (Shichman-Hodges) and op-amp performance formulas.
 
 All functions operate on SI units unless the name suffix states otherwise.
-Consistent units:
-  - Currents in A
-  - Voltages in V
-  - Transconductances in A/V (S)
-  - Dimensions (W, L) in µm (dimensionless ratio W/L is used where needed)
-  - Frequencies in Hz
-  - Power in W
+Consistent units: currents in A, voltages in V, transconductances in A/V (S),
+dimensions (W, L) in µm (dimensionless ratio W/L is used where needed),
+frequencies in Hz, power in W.
 """
 from __future__ import annotations
 
@@ -22,7 +18,7 @@ import math
 def gm(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
     """Transconductance gm in A/V.
 
-    gm = √(2·µCox·(W/L)·|IDS|)
+    gm = √(2·µCox·(W/L)·\|IDS\|)
 
     :param mu_cox: Process transconductance µCox in A/V².
     :param w_um: Gate width in µm.
@@ -35,7 +31,7 @@ def gm(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
 def gd(lam: float, ids_a: float) -> float:
     """Output conductance gd in A/V.
 
-    gd = λ·|IDS|
+    gd = λ·\|IDS\|
 
     :param lam: Channel-length modulation coefficient λ in 1/V (positive).
     :param ids_a: Drain-source current in A.
@@ -70,9 +66,9 @@ def vgs_from_ids(
 
 
 def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
-    """Minimum |VDS| for saturation in V.
+    """Minimum \|VDS\| for saturation in V.
 
-    VDS_sat = VGS − Vth = √(2·|IDS|·L / (µCox·W))
+    VDS_sat = VGS − Vth = √(2·\|IDS\|·L / (µCox·W))
 
     :returns: Always positive.
     """

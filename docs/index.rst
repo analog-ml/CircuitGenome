@@ -28,6 +28,12 @@ design exploration, or topology studies.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Theory
+
+   theory/sizing_flow
+
+.. toctree::
+   :maxdepth: 2
    :caption: API Reference - Synthesizer
 
    api/synthesizer
