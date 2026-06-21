@@ -364,3 +364,133 @@ def test_infeasible_spec(two_stage_fbr):
                           time_limit_s=5.0)
     assert result.solver_status == "INFEASIBLE"
     assert result.transistors == {}
+
+
+# ---------------------------------------------------------------------------
+# End-to-end sizing: two_stage_opamp_fully_differential
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def two_stage_fd_fbr():
+    return _fbr("two_stage_opamp_fully_differential", {
+        "input_pair":     "differential_pair_pmos",
+        "load":           "folded_cascode_load_pmos_input_differential_output",
+        "tail_current":   "current_mirror_tail_pmos",
+        "bias_gen":       "diode_connected_mosfet_bias",
+        "cmfb":           "resistive_sense_cmfb",
+        "comp_p":         "miller_cap",
+        "comp_n":         "miller_cap",
+        "second_stage_p": "common_source",
+        "second_stage_n": "common_source",
+    })
+
+
+def test_size_fd_basic(two_stage_fd_fbr):
+    """FD two-stage: solver returns OPTIMAL/FEASIBLE with Cc and valid W/L."""
+    parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
+    tech = _tech()
+    spec = SizingSpec(
+        vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+        second_stage_current_ratio=2.5,
+        gain_min_db=80,
+        gbw_min_hz=2.5e6,
+        phase_margin_min_deg=60,
+        slew_rate_min_vps=3.5e6,
+        power_max_w=2e-3,
+        output_swing_max_v=4.6,
+        output_swing_min_v=0.4,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.transistors
+    assert result.cc_pf is not None and result.cc_pf > 0
+
+    for ref, s in result.transistors.items():
+        assert tech.width.min <= s.w_um <= tech.width.max, f"{ref}: W out of bounds"
+        assert tech.length.min <= s.l_um <= tech.length.max, f"{ref}: L out of bounds"
+        assert s.vds_sat_v > 0
+
+
+def test_fd_specs_met(two_stage_fd_fbr):
+    """FD: gain, GBW, PM, and SR all meet the spec."""
+    parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
+    tech = _tech()
+    spec = SizingSpec(
+        vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+        second_stage_current_ratio=2.5,
+        gain_min_db=80,
+        gbw_min_hz=2.5e6,
+        phase_margin_min_deg=60,
+        slew_rate_min_vps=3.5e6,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    if "gain_db" in result.metrics:
+        assert result.metrics["gain_db"] >= spec.gain_min_db, "Gain not met"
+    if "gbw_hz" in result.metrics:
+        assert result.metrics["gbw_hz"] >= spec.gbw_min_hz, "GBW not met"
+    if "phase_margin_deg" in result.metrics:
+        assert result.metrics["phase_margin_deg"] >= spec.phase_margin_min_deg - 1.0, "PM not met"
+    if "slew_rate_vps" in result.metrics:
+        assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
+
+
+def test_fd_second_stage_symmetry(two_stage_fd_fbr):
+    """second_stage_p and second_stage_n must have equal W and L per transistor type."""
+    parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
+    tech = _tech()
+    spec = SizingSpec(
+        vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+        second_stage_current_ratio=2.5,
+        gain_min_db=80, gbw_min_hz=2.5e6, phase_margin_min_deg=60,
+        slew_rate_min_vps=3.5e6,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+
+    p_devs = {r: s for r, s in result.transistors.items() if "second_stage_p" in r}
+    n_devs = {r: s for r, s in result.transistors.items() if "second_stage_n" in r}
+    assert p_devs and n_devs, "Both second_stage_p and second_stage_n must be sized"
+
+    # Strip slot suffix to match corresponding devices across the two slots.
+    p_bases = {r.replace("_second_stage_p", ""): s for r, s in p_devs.items()}
+    n_bases = {r.replace("_second_stage_n", ""): s for r, s in n_devs.items()}
+    matched = {b for b in p_bases if b in n_bases}
+    assert matched, "No matching base refs found between second_stage_p and second_stage_n"
+    for base in matched:
+        assert p_bases[base].w_um == n_bases[base].w_um, f"{base}: W mismatch p vs n"
+        assert p_bases[base].l_um == n_bases[base].l_um, f"{base}: L mismatch p vs n"
+
+
+def test_fd_power_two_second_stages(two_stage_fd_fbr):
+    """FD power should include current from both second-stage paths."""
+    parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
+    tech = _tech()
+    ratio = 2.5
+    spec = SizingSpec(
+        vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+        second_stage_current_ratio=ratio,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # Minimum expected power: tail (ibias) + 2 × second_stage (ids_2) on 5V supply
+    ids_2 = spec.ibias * ratio
+    min_expected_power = spec.vdd * (spec.ibias + 2 * ids_2)
+    assert result.metrics["power_w"] >= min_expected_power * 0.9
+
+
+def test_fd_cc_from_sr(two_stage_fd_fbr):
+    """FD: Cc should satisfy the slew-rate constraint (Cc ≤ ibias / SR)."""
+    parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
+    tech = _tech()
+    spec = SizingSpec(
+        vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+        slew_rate_min_vps=3.5e6, gbw_min_hz=2.5e6, phase_margin_min_deg=60,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.cc_pf is not None
+    cc_f = result.cc_pf * 1e-12
+    cc_max_from_sr = spec.ibias / spec.slew_rate_min_vps
+    assert cc_f <= cc_max_from_sr * 1.001

@@ -123,6 +123,22 @@ def build_model(
                 model.add(W[group[i].ref] == W[group[0].ref])
                 model.add(L[group[i].ref] == L[group[0].ref])
 
+    # --- Cross-slot symmetry: second_stage_p ↔ second_stage_n (FD only) ---
+    ss_p = slot_transistors.get("second_stage_p", [])
+    ss_n = slot_transistors.get("second_stage_n", [])
+    if ss_p and ss_n:
+        for dtype in ("nmos", "pmos"):
+            p_group = [d for d in ss_p if d.type == dtype and d.ref in W]
+            n_group = [d for d in ss_n if d.type == dtype and d.ref in W]
+            if p_group and n_group:
+                anchor = p_group[0].ref
+                for d in p_group[1:]:
+                    model.add(W[d.ref] == W[anchor])
+                    model.add(L[d.ref] == L[anchor])
+                for d in n_group:
+                    model.add(W[d.ref] == W[anchor])
+                    model.add(L[d.ref] == L[anchor])
+
     # --- Objective: minimise total gate width (proxy for power and area) ---
     model.minimize(sum(W.values()))
 

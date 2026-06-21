@@ -63,6 +63,42 @@ Issue [#51](https://github.com/analog-ml/CircuitGenome/issues/51), PR
 - PyYAML parses bare positive scientific notation (``2.5e6``) as a string;
   use ``2.5e+6`` (explicit ``+``) in YAML spec files.
 
+PR [#53](https://github.com/analog-ml/CircuitGenome/pull/53)
+(`feat/sizer-fd-support`).
+
+### Added
+
+- **Fully-differential two-stage opamp sizing** — `size_circuit()` now
+  handles `two_stage_opamp_fully_differential` in addition to the existing
+  single-ended and one-stage topologies.
+
+- **`_SECOND_STAGE_SLOTS` constant** (`circuitgenome/sizer/sizer.py`) —
+  frozenset ``{"second_stage", "second_stage_p", "second_stage_n"}`` used at
+  all four per-slot dispatch sites so FD slot names are treated identically
+  to the SE ``second_stage`` slot for IDS assignment, gm requirement mapping,
+  VDS_sat constraints, and metric evaluation.
+
+- **Cross-slot symmetry constraint** (`circuitgenome/sizer/constraints.py`) —
+  CP-SAT equality constraints tie ``second_stage_p`` and ``second_stage_n`` to
+  identical W and L for each transistor type, enforcing balanced differential
+  outputs.
+
+- **FD power accounting** — ``_evaluate_metrics`` sums ``ids_2 × n_ss`` (where
+  ``n_ss`` = number of active second-stage slots: 1 for SE, 2 for FD) so both
+  output-stage current paths are reflected in the power estimate.
+
+- **Five new integration tests** (`tests/test_sizer.py`) —
+  ``test_size_fd_basic``, ``test_fd_specs_met``,
+  ``test_fd_second_stage_symmetry``, ``test_fd_power_two_second_stages``,
+  ``test_fd_cc_from_sr``.
+
+### Notes
+
+- Supported topologies now: ``one_stage_opamp``,
+  ``two_stage_opamp_single_ended``, ``two_stage_opamp_fully_differential``.
+- Physics (GBW, PM, SR, gain derivation order) is identical for SE and FD;
+  FD simply runs two second-stage paths simultaneously.
+
 ## 2026-06-20
 
 Issue [#45](https://github.com/analog-ml/CircuitGenome/issues/45), PR

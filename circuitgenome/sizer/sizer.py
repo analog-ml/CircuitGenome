@@ -43,7 +43,9 @@ _HALF_BIAS_SLOTS = frozenset({"input_pair", "load"})
 # Slots whose transistors each carry the full iBias.
 _FULL_BIAS_SLOTS = frozenset({"tail_current", "bias_gen"})
 # Slots with no bias assignment (capacitors etc.).
-_CAP_SLOTS = frozenset({"compensation"})
+_CAP_SLOTS = frozenset({"compensation", "comp_p", "comp_n"})
+# All second-stage slot names (SE: "second_stage"; FD: "second_stage_p"/"second_stage_n").
+_SECOND_STAGE_SLOTS = frozenset({"second_stage", "second_stage_p", "second_stage_n"})
 
 # External supply / bias net names — gate connected to these → current-source load.
 _BIAS_NETS = frozenset({"vdd!", "vss!", "gnd!", "ibias"})
@@ -71,7 +73,8 @@ def _deduplicate(
     *first* slot encountered wins for the purpose of iDS assignment.
     Priority order: input_pair > load > tail_current > second_stage > bias_gen.
     """
-    priority = ["input_pair", "load", "tail_current", "second_stage", "bias_gen"]
+    priority = ["input_pair", "load", "tail_current",
+                "second_stage", "second_stage_p", "second_stage_n", "bias_gen"]
     ordered = sorted(
         slot_transistors.keys(),
         key=lambda s: priority.index(s) if s in priority else len(priority),
@@ -100,7 +103,7 @@ def _assign_ids(
             ids_map[ref] = spec.ibias / max(n, 1)
         elif slot in _FULL_BIAS_SLOTS:
             ids_map[ref] = spec.ibias
-        elif slot == "second_stage":
+        elif slot in _SECOND_STAGE_SLOTS:
             ids_map[ref] = ids_2
         else:
             ids_map[ref] = spec.ibias  # conservative default
@@ -118,7 +121,8 @@ def _compute_requirements(
 
     Returns ``(gm_req_map, vod_max_map, cc_pf)``.
     """
-    has_second_stage = "second_stage" in slot_transistors
+    is_fd = ("second_stage_p" in slot_transistors or "second_stage_n" in slot_transistors)
+    has_second_stage = ("second_stage" in slot_transistors) or is_fd
     ids_2 = spec.ibias * spec.second_stage_current_ratio
 
     # --- Output conductances at the operating point ---
@@ -132,7 +136,13 @@ def _compute_requirements(
     gd_ld = eq.gd(_lam(ld_devices[0]), spec.ibias / 2) if ld_devices else 0.0
     rout1 = eq.rout(gd_ip, gd_ld)
 
-    ss_devices = slot_transistors.get("second_stage", [])
+    # For FD topologies use second_stage_p as the representative path (symmetric).
+    ss_devices = (
+        slot_transistors.get("second_stage")
+        or slot_transistors.get("second_stage_p")
+        or slot_transistors.get("second_stage_n")
+        or []
+    )
     ss_nmos = next((d for d in ss_devices if d.type == "nmos"), None)
     ss_pmos = next((d for d in ss_devices if d.type == "pmos"), None)
     gd_n2 = eq.gd(tech.nmos.lam, ids_2) if ss_nmos else 0.0
@@ -227,7 +237,7 @@ def _compute_requirements(
     for ref, (device, slot) in all_transistors.items():
         if slot == "input_pair":
             gm_req_map[ref] = gm1_req
-        elif slot == "second_stage":
+        elif slot in _SECOND_STAGE_SLOTS:
             # Only the signal transistor (gate driven by first-stage output)
             # needs a gm requirement; the load transistor is a current source.
             gate = device.terminals.get("g", "")
@@ -239,28 +249,35 @@ def _compute_requirements(
     vdd = spec.vdd
     vss = spec.vss
 
+    # All second-stage device lists (one for SE, two for FD).
+    all_ss_device_lists = [
+        slot_transistors[s] for s in _SECOND_STAGE_SLOTS if s in slot_transistors
+    ]
+
     if spec.output_swing_max_v is not None:
         vds_sat_max = vdd - spec.output_swing_max_v
         if vds_sat_max > 0.0:
             # Load transistors constrain the high-side swing.
             for d in ld_devices:
                 vod_max_map[d.ref] = vds_sat_max
-            # Second-stage PMOS (current-source load) also constrains swing.
-            for d in ss_devices:
-                if d.type == "pmos":
-                    vod_max_map[d.ref] = min(
-                        vod_max_map.get(d.ref, float("inf")), vds_sat_max
-                    )
+            # Second-stage PMOS (current-source load) constrains swing on every path.
+            for devs in all_ss_device_lists:
+                for d in devs:
+                    if d.type == "pmos":
+                        vod_max_map[d.ref] = min(
+                            vod_max_map.get(d.ref, float("inf")), vds_sat_max
+                        )
 
     if spec.output_swing_min_v is not None:
         vds_sat_max_low = spec.output_swing_min_v - vss
         if vds_sat_max_low > 0.0:
-            # Second-stage NMOS constrains the low-side swing.
-            for d in ss_devices:
-                if d.type == "nmos":
-                    vod_max_map[d.ref] = min(
-                        vod_max_map.get(d.ref, float("inf")), vds_sat_max_low
-                    )
+            # Second-stage NMOS constrains the low-side swing on every path.
+            for devs in all_ss_device_lists:
+                for d in devs:
+                    if d.type == "nmos":
+                        vod_max_map[d.ref] = min(
+                            vod_max_map.get(d.ref, float("inf")), vds_sat_max_low
+                        )
 
     return gm_req_map, vod_max_map, cc_pf
 
@@ -275,7 +292,8 @@ def _evaluate_metrics(
     """Compute performance metrics and safety margins from the solution."""
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
-    has_second_stage = "second_stage" in slot_transistors
+    is_fd = ("second_stage_p" in slot_transistors or "second_stage_n" in slot_transistors)
+    has_second_stage = ("second_stage" in slot_transistors) or is_fd
 
     def _sz(ref: str) -> TransistorSizing | None:
         return transistor_sizing.get(ref)
@@ -317,8 +335,13 @@ def _evaluate_metrics(
         d = tc_devs[0]
         gd_tail = eq.gd(_lam(d), spec.ibias)
 
-    # --- Second stage ---
-    ss_devs = slot_transistors.get("second_stage", [])
+    # --- Second stage (SE: "second_stage"; FD: use second_stage_p as representative) ---
+    ss_devs = (
+        slot_transistors.get("second_stage")
+        or slot_transistors.get("second_stage_p")
+        or slot_transistors.get("second_stage_n")
+        or []
+    )
     gm2 = 0.0
     gd_ss_n, gd_ss_p = 0.0, 0.0
     ss_pmos_bias_gd = 0.0
@@ -380,7 +403,8 @@ def _evaluate_metrics(
     n_bias_legs = len([d for d in bg_devs if d.type in ("nmos", "pmos")])
     supply_currents = [spec.ibias]  # tail
     if has_second_stage:
-        supply_currents.append(ids_2)
+        n_ss = sum(1 for s in _SECOND_STAGE_SLOTS if s in slot_transistors)
+        supply_currents.append(ids_2 * n_ss)
     supply_currents.append(spec.ibias * max(n_bias_legs, 1))  # bias gen approx
     power = eq.quiescent_power(spec.vdd, spec.vss, supply_currents)
     metrics["power_w"] = power
