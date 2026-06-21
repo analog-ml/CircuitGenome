@@ -199,6 +199,9 @@ def _cmd_size(args: argparse.Namespace) -> None:
     print(f"Tech: {tech.name}")
     print(f"\nSolver: {result.solver_status}")
 
+    for w in result.warnings:
+        print(f"⚠ {w}")
+
     if not result.transistors:
         print("No feasible sizing found — relax the performance spec or widen the W/L grid.")
         sys.exit(1)

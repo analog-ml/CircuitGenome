@@ -123,6 +123,8 @@ class SizingResult:
         min specs, spec/actual for max specs). Values > 1 mean spec is met.
     :param solver_status: OR-Tools CP-SAT status string:
         ``"OPTIMAL"``, ``"FEASIBLE"``, ``"INFEASIBLE"``, or ``"UNKNOWN"``.
+    :param warnings: Advisory messages, e.g. a likely ``--topology``/netlist
+        mismatch. Empty when the netlist cleanly matches the topology.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -130,3 +132,4 @@ class SizingResult:
     margins: dict[str, float]
     solver_status: str
     cc2_pf: float | None = None
+    warnings: list[str] = field(default_factory=list)

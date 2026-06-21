@@ -48,14 +48,41 @@ PR [#54](https://github.com/analog-ml/CircuitGenome/pull/54)
   CP-SAT constraints tie ``third_stage_p`` and ``third_stage_n`` to identical
   W and L, enforcing balanced differential outputs.
 
-- **Ten new integration tests** (`tests/test_sizer.py`) — covering NMC SE,
+- **Twelve new integration tests** (`tests/test_sizer.py`) — covering NMC SE,
   RNMC SE, NMC FD, RNMC FD; assertions include Cc2/Cc1 ratio, all four
   performance specs, cross-slot symmetry for both second and third stages,
-  and power (tail + 2×ids_2 + 2×ids_3 for FD).
+  power (tail + 2×ids_2 + 2×ids_3 for FD), plus PMOS-common-source metric
+  reporting (`test_three_stage_pmos_cs_metrics_present`) and the
+  topology-mismatch guard (`test_topology_mismatch_warns`).
 
 - **Three-stage section in `docs/theory/sizing_flow.rst`** — block diagram,
   design variable table, PM derivation with LaTeX, numerical example, FD
   power formula, and operating-point mapping.
+
+- **Example performance specs** (`examples/`) —
+  `spec_three_stage_opamp_single_ended.yaml` and
+  `spec_three_stage_opamp_fully_differential.yaml`, ready-to-run targets that
+  demonstrate `third_stage_current_ratio` and the three-stage sizing flow.
+
+- **`warnings` field** (`SizingResult`) — advisory messages surfaced by the
+  `size` CLI with a `⚠` prefix; empty when the netlist cleanly matches the
+  topology.
+
+### Fixed
+
+- **Metrics dropped for PMOS-common-source stages** — `_evaluate_metrics` read
+  `gm2`/`gm3` only from the NMOS device, so any stage whose signal transistor is
+  the PMOS (~1/3 of enumerated three-stage circuits, plus two-stage PMOS-CS)
+  silently lost `gain_db`, `phase_margin_deg`, and `psrr_db`. It now reads
+  `gm2`/`gm3` from the **signal transistor regardless of polarity** and uses the
+  current-source load's `gd` for the PSRR estimate. The CP-SAT sizing was already
+  correct; only the reported metrics were affected.
+
+- **Silent topology mismatch** — sizing a netlist against the wrong `--topology`
+  (e.g. a single-ended netlist as fully-differential) shoehorns bias devices into
+  `*_p` stage slots and dropped the gain/PM/PSRR metrics with no explanation.
+  `size_circuit()` now detects gain-stage slots that contain no signal transistor
+  and reports a warning instead of failing silently.
 
 ### Notes
 

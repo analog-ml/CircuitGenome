@@ -55,6 +55,20 @@ _THIRD_STAGE_SLOTS = frozenset({"third_stage", "third_stage_p", "third_stage_n"}
 # External supply / bias net names — gate connected to these → current-source load.
 _BIAS_NETS = frozenset({"vdd!", "vss!", "gnd!", "ibias"})
 
+# All gain-stage slot names (used by the topology-mismatch guard).
+_STAGE_SLOTS = _SECOND_STAGE_SLOTS | _THIRD_STAGE_SLOTS
+
+
+def _is_signal_dev(device: Device) -> bool:
+    """True if ``device``'s gate is driven by a signal net (not a bias rail).
+
+    The signal transistor of a gain stage is the one whose gate is the previous
+    stage's output; the partner device is a current-source load (gate on a bias
+    net). Used to pick the gm-contributing device regardless of NMOS/PMOS polarity.
+    """
+    gate = device.terminals.get("g", "")
+    return bool(gate) and gate not in _BIAS_NETS and not gate.startswith("net_bias")
+
 
 def _extract_slot_transistors(
     fbr_result: FunctionalBlockRecognitionResult,
@@ -66,6 +80,29 @@ def _extract_slot_transistors(
         if mosfets:
             result[slot_name] = mosfets
     return result
+
+
+def _check_topology_match(
+    slot_transistors: dict[str, list[Device]], topology_name: str
+) -> list[str]:
+    """Warn when the netlist does not realise the chosen topology.
+
+    Every gain-stage slot of a valid circuit holds exactly one signal
+    transistor. A stage slot with **no** signal device (e.g. bias-generator
+    leftovers shoehorned into ``second_stage_p`` when a single-ended netlist is
+    sized against a fully-differential topology) signals a ``--topology``
+    mismatch — which would otherwise silently drop the gain/PM/PSRR metrics.
+    """
+    warnings: list[str] = []
+    for slot in sorted(_STAGE_SLOTS):
+        devs = slot_transistors.get(slot)
+        if devs and not any(_is_signal_dev(d) for d in devs):
+            warnings.append(
+                f"stage slot '{slot}' has no signal transistor — the netlist may "
+                f"not match topology '{topology_name}' (check --topology, e.g. "
+                f"single-ended vs fully-differential)."
+            )
+    return warnings
 
 
 def _deduplicate(
@@ -402,25 +439,25 @@ def _evaluate_metrics(
     )
     gm2 = 0.0
     gd_ss_n, gd_ss_p = 0.0, 0.0
-    ss_pmos_bias_gd = 0.0
+    ss_load_gd = 0.0  # output conductance of the current-source load (for PSRR)
     ids_2 = spec.ibias * spec.second_stage_current_ratio
 
     if has_second_stage:
-        ss_nmos = next((d for d in ss_devs if d.type == "nmos"), None)
-        ss_pmos = next((d for d in ss_devs if d.type == "pmos"), None)
-        if ss_nmos:
-            s = _sz(ss_nmos.ref)
-            if s:
-                gate = ss_nmos.terminals.get("g", "")
-                is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
-                if is_signal:
-                    gm2 = eq.gm(_mu(ss_nmos), s.w_um, s.l_um, s.ids_a)
-                gd_ss_n = eq.gd(tech.nmos.lam, s.ids_a)
-        if ss_pmos:
-            s = _sz(ss_pmos.ref)
-            if s:
-                gd_ss_p = eq.gd(tech.pmos.lam, s.ids_a)
-                ss_pmos_bias_gd = gd_ss_p
+        # gm2 comes from the signal transistor, which may be the NMOS (NMOS-CS
+        # stage) or the PMOS (PMOS-CS stage); the partner device is the load.
+        for d in ss_devs:
+            s = _sz(d.ref)
+            if not s:
+                continue
+            g_d = eq.gd(_lam(d), s.ids_a)
+            if d.type == "nmos":
+                gd_ss_n = g_d
+            else:
+                gd_ss_p = g_d
+            if _is_signal_dev(d):
+                gm2 = eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a)
+            else:
+                ss_load_gd = g_d
         rout2 = eq.rout(gd_ss_n, gd_ss_p) if (gd_ss_n + gd_ss_p) > 0 else float("inf")
     else:
         rout2 = float("inf")
@@ -436,20 +473,18 @@ def _evaluate_metrics(
     gd_ts_n, gd_ts_p = 0.0, 0.0
     ids_3 = spec.ibias * spec.third_stage_current_ratio
     if is_three_stage:
-        ts_nmos = next((d for d in ts_devs if d.type == "nmos"), None)
-        ts_pmos = next((d for d in ts_devs if d.type == "pmos"), None)
-        if ts_nmos:
-            s = _sz(ts_nmos.ref)
-            if s:
-                gate = ts_nmos.terminals.get("g", "")
-                is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
-                if is_signal:
-                    gm3 = eq.gm(_mu(ts_nmos), s.w_um, s.l_um, s.ids_a)
-                gd_ts_n = eq.gd(tech.nmos.lam, s.ids_a)
-        if ts_pmos:
-            s = _sz(ts_pmos.ref)
-            if s:
-                gd_ts_p = eq.gd(tech.pmos.lam, s.ids_a)
+        # gm3 comes from the signal transistor (NMOS-CS or PMOS-CS output stage).
+        for d in ts_devs:
+            s = _sz(d.ref)
+            if not s:
+                continue
+            g_d = eq.gd(_lam(d), s.ids_a)
+            if d.type == "nmos":
+                gd_ts_n = g_d
+            else:
+                gd_ts_p = g_d
+            if _is_signal_dev(d):
+                gm3 = eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a)
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
     else:
         rout3 = float("inf")
@@ -536,8 +571,8 @@ def _evaluate_metrics(
             margins["cmrr_db"] = cmrr - spec.cmrr_min_db
 
     # --- PSRR (approximate, two-stage) ---
-    if has_second_stage and gm2 > 0 and ss_pmos_bias_gd > 0:
-        psrr = eq.psrr_db_approx(gm2, ss_pmos_bias_gd)
+    if has_second_stage and gm2 > 0 and ss_load_gd > 0:
+        psrr = eq.psrr_db_approx(gm2, ss_load_gd)
         metrics["psrr_db"] = psrr
         if spec.psrr_min_db is not None:
             margins["psrr_db"] = psrr - spec.psrr_min_db
@@ -571,6 +606,7 @@ def size_circuit(
         compensation cap, computed metrics, and safety margins.
     """
     slot_transistors = _extract_slot_transistors(fbr_result)
+    topology_warnings = _check_topology_match(slot_transistors, topology.name)
     all_transistors = _deduplicate(slot_transistors)
     ids_map = _assign_ids(slot_transistors, all_transistors, spec)
     gm_req_map, vod_max_map, cc_pf, cc2_pf = _compute_requirements(
@@ -594,6 +630,7 @@ def size_circuit(
             margins={},
             solver_status=status_name,
             cc2_pf=cc2_pf,
+            warnings=topology_warnings,
         )
 
     # Extract solution: convert integer step-units back to µm.
@@ -621,4 +658,5 @@ def size_circuit(
         margins=margins,
         solver_status=status_name,
         cc2_pf=cc2_pf,
+        warnings=topology_warnings,
     )

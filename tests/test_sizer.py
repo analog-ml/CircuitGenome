@@ -722,3 +722,59 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.cc_pf is not None
     assert result.cc2_pf is not None
+
+
+# ---------------------------------------------------------------------------
+# Polarity-agnostic metrics & topology-mismatch guard
+# ---------------------------------------------------------------------------
+
+def _fbr_pmos_cs_second_stage(topology_name: str):
+    """Return the FBR tuple for the first variant whose second-stage signal
+    transistor is a PMOS (a PMOS-common-source stage)."""
+    from circuitgenome.sizer.sizer import _extract_slot_transistors, _is_signal_dev
+
+    modules = load_modules()
+    topology = next(t for t in load_topologies() if t.name == topology_name)
+    for circuit in enumerate_circuits(topology, modules):
+        parsed = parse(to_flat_spice(circuit))
+        sr_result = recognize(parsed)
+        fbr_result = assign_slots(sr_result, topology)
+        ss = _extract_slot_transistors(fbr_result).get("second_stage", [])
+        signal = next((d for d in ss if _is_signal_dev(d)), None)
+        if signal is not None and signal.type == "pmos":
+            return parsed, sr_result, fbr_result, topology
+    raise AssertionError(f"no PMOS-CS second-stage variant found for {topology_name}")
+
+
+def test_three_stage_pmos_cs_metrics_present():
+    """PMOS-common-source stages must still report gain, PM, and PSRR+.
+
+    Regression: metrics were previously read only from the NMOS device, so a
+    PMOS-CS stage yielded gm2=gm3=0 and silently dropped these three metrics.
+    """
+    parsed, sr_result, fbr_result, topology = _fbr_pmos_cs_second_stage(
+        "three_stage_opamp_nmc_single_ended"
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(),
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    for key in ("gain_db", "phase_margin_deg", "psrr_db"):
+        assert key in result.metrics, f"{key} missing for PMOS-CS stage"
+        assert result.metrics[key] > 0
+
+
+def test_topology_mismatch_warns():
+    """Sizing a single-ended netlist against a fully-differential topology
+    yields stage slots with no signal device — surface a warning, not silence."""
+    _, se_circuit = _make_circuit("three_stage_opamp_nmc_single_ended")
+    parsed = parse(to_flat_spice(se_circuit))
+    sr_result = recognize(parsed)
+    fd_topology = next(
+        t for t in load_topologies()
+        if t.name == "three_stage_opamp_nmc_fully_differential"
+    )
+    fbr_result = assign_slots(sr_result, fd_topology)
+    result = size_circuit(parsed, sr_result, fbr_result, fd_topology, _tech(),
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.warnings
+    assert any("_p" in w for w in result.warnings)
