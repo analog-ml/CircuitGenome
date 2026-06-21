@@ -43,9 +43,14 @@ _HALF_BIAS_SLOTS = frozenset({"input_pair", "load"})
 # Slots whose transistors each carry the full iBias.
 _FULL_BIAS_SLOTS = frozenset({"tail_current", "bias_gen"})
 # Slots with no bias assignment (capacitors etc.).
-_CAP_SLOTS = frozenset({"compensation", "comp_p", "comp_n"})
+_CAP_SLOTS = frozenset({
+    "compensation", "comp_p", "comp_n",
+    "comp1", "comp2", "comp1_p", "comp1_n", "comp2_p", "comp2_n",
+})
 # All second-stage slot names (SE: "second_stage"; FD: "second_stage_p"/"second_stage_n").
 _SECOND_STAGE_SLOTS = frozenset({"second_stage", "second_stage_p", "second_stage_n"})
+# All third-stage slot names (SE: "third_stage"; FD: "third_stage_p"/"third_stage_n").
+_THIRD_STAGE_SLOTS = frozenset({"third_stage", "third_stage_p", "third_stage_n"})
 
 # External supply / bias net names — gate connected to these → current-source load.
 _BIAS_NETS = frozenset({"vdd!", "vss!", "gnd!", "ibias"})
@@ -74,7 +79,8 @@ def _deduplicate(
     Priority order: input_pair > load > tail_current > second_stage > bias_gen.
     """
     priority = ["input_pair", "load", "tail_current",
-                "second_stage", "second_stage_p", "second_stage_n", "bias_gen"]
+                "second_stage", "second_stage_p", "second_stage_n",
+                "third_stage", "third_stage_p", "third_stage_n", "bias_gen"]
     ordered = sorted(
         slot_transistors.keys(),
         key=lambda s: priority.index(s) if s in priority else len(priority),
@@ -105,6 +111,8 @@ def _assign_ids(
             ids_map[ref] = spec.ibias
         elif slot in _SECOND_STAGE_SLOTS:
             ids_map[ref] = ids_2
+        elif slot in _THIRD_STAGE_SLOTS:
+            ids_map[ref] = spec.ibias * spec.third_stage_current_ratio
         else:
             ids_map[ref] = spec.ibias  # conservative default
     return ids_map
@@ -116,13 +124,15 @@ def _compute_requirements(
     ids_map: dict[str, float],
     tech: TechParams,
     spec: SizingSpec,
-) -> tuple[dict[str, float], dict[str, float], float | None]:
-    """Compute required gm and max VDS_sat per transistor; also Cc.
+) -> tuple[dict[str, float], dict[str, float], float | None, float | None]:
+    """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
-    Returns ``(gm_req_map, vod_max_map, cc_pf)``.
+    Returns ``(gm_req_map, vod_max_map, cc_pf, cc2_pf)``.
     """
-    is_fd = ("second_stage_p" in slot_transistors or "second_stage_n" in slot_transistors)
-    has_second_stage = ("second_stage" in slot_transistors) or is_fd
+    is_three_stage = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
+    has_second_stage = (
+        any(s in slot_transistors for s in _SECOND_STAGE_SLOTS) or is_three_stage
+    )
     ids_2 = spec.ibias * spec.second_stage_current_ratio
 
     # --- Output conductances at the operating point ---
@@ -149,9 +159,24 @@ def _compute_requirements(
     gd_p2 = eq.gd(tech.pmos.lam, ids_2) if ss_pmos else 0.0
     rout2 = eq.rout(gd_n2, gd_p2) if (gd_n2 + gd_p2) > 0 else float("inf")
 
+    # Third-stage output conductances (three-stage topologies only).
+    ids_3 = spec.ibias * spec.third_stage_current_ratio
+    ts_devices = (
+        slot_transistors.get("third_stage")
+        or slot_transistors.get("third_stage_p")
+        or slot_transistors.get("third_stage_n")
+        or []
+    )
+    ts_nmos = next((d for d in ts_devices if d.type == "nmos"), None)
+    ts_pmos = next((d for d in ts_devices if d.type == "pmos"), None)
+    gd_n3 = eq.gd(tech.nmos.lam, ids_3) if ts_nmos else 0.0
+    gd_p3 = eq.gd(tech.pmos.lam, ids_3) if ts_pmos else 0.0
+    rout3 = eq.rout(gd_n3, gd_p3) if (gd_n3 + gd_p3) > 0 else float("inf")
+
     # --- gm1 lower bound from CMRR (independent of Cc — compute first) ---
     gm1_req = 0.0
     gm2_req = 0.0
+    gm3_req = 0.0
     if spec.cmrr_min_db:
         tc_devices = slot_transistors.get("tail_current", [])
         if tc_devices:
@@ -174,53 +199,77 @@ def _compute_requirements(
         )
         cc_f = max(cc_min_f, min(cc_from_sr, cc_max_f))
 
+    # Cc2 for three-stage (inner cap = Cc1/4); None for two-stage and one-stage.
+    cc2_pf: float | None = None
+    cc2_f: float = 0.0
+
     if has_second_stage and cc_f > 0:
         # From GBW: gm1 = 2π·GBW·Cc  (with the SR-bounded Cc).
-        # This is the primary gm1 driver for two-stage; Cc stays within the
-        # SR bound because we do NOT inflate Cc here to accommodate gain.
+        # This is the primary gm1 driver; Cc stays within the SR bound because
+        # we do NOT inflate Cc here to accommodate gain.
         if spec.gbw_min_hz:
             gm1_req = max(gm1_req, 2.0 * math.pi * spec.gbw_min_hz * cc_f)
 
-        # Cc is now fixed (from SR and initial GBW-with-SR Cc).  Recompute
-        # only if CMRR pushed gm1 above the GBW baseline, which would require
-        # a larger Cc to maintain GBW.
+        # Recompute Cc only if CMRR pushed gm1 above the GBW baseline.
         if spec.gbw_min_hz and gm1_req > 0.0:
             cc_f = max(cc_f, gm1_req / (2.0 * math.pi * spec.gbw_min_hz))
             cc_f = min(cc_f, cc_max_f)
 
-        # From gain: A0 = gm1·Rout1·gm2·Rout2.
-        # gm1 is now fixed; solve for the gm2 needed to meet total gain.
-        if spec.gain_min_db and rout1 < float("inf") and rout2 < float("inf"):
-            A0 = 10.0 ** (spec.gain_min_db / 20.0)
-            if gm1_req > 0.0 and rout1 * rout2 > 0:
-                # Derive gm2 from the gain that gm1 hasn't covered.
-                gm2_from_gain = A0 / (gm1_req * rout1 * rout2)
-                gm2_req = max(gm2_req, gm2_from_gain)
-            else:
-                # Fallback: equal-gain split when gm1 isn't yet known.
-                per_stage = math.sqrt(A0 / (rout1 * rout2))
-                gm1_req = max(gm1_req, per_stage)
-                gm2_req = max(gm2_req, per_stage)
+        if is_three_stage:
+            # Three-stage: inner cap = Cc1/4.
+            cc2_f = cc_f / 4.0
+            cc2_pf = cc2_f * 1e12
 
-        # From PM: gm2 = gm1·CL / (Cc·tan(90°−PM)).
-        # Use the worst-case (ceiling) gm1 that the integer W grid can produce,
-        # so that gm2 stays large enough even when gm1 is rounded up.
-        if spec.phase_margin_min_deg and gm1_req > 0.0 and ip_devices:
-            ip_dev = ip_devices[0]
-            ip_params = tech.nmos if ip_dev.type == "nmos" else tech.pmos
-            ids_ip = spec.ibias / max(
-                len([d for d in ip_devices if d.type == ip_dev.type]), 1
-            )
-            lhs = 2.0 * ip_params.mu_cox * ids_ip  # coefficient of W in gm² constraint
-            l_min_int = round(tech.length.min / tech.length.step)
-            w_ceil_int = math.ceil(gm1_req ** 2 * l_min_int / lhs)
-            w_ceil_int = min(w_ceil_int, round(tech.width.max / tech.width.step))
-            gm1_worst = math.sqrt(lhs * w_ceil_int / l_min_int)
-            pm_rad = math.radians(spec.phase_margin_min_deg)
-            gm2_req = max(
-                gm2_req,
-                gm1_worst * spec.cl / (cc_f * math.tan(math.pi / 2.0 - pm_rad)),
-            )
+            # Phase margin (split phase budget equally between two non-dominant poles).
+            # Inner pole: ωp2 ≈ gm2/Cc2; output pole: ωp3 ≈ gm3/CL.
+            if spec.phase_margin_min_deg and gm1_req > 0.0:
+                half_lag = math.radians((90.0 - spec.phase_margin_min_deg) / 2.0)
+                t = math.tan(half_lag)
+                gm2_req = max(gm2_req, gm1_req * cc2_f / (cc_f * t))
+                gm3_req = max(gm3_req, gm1_req * spec.cl / (cc_f * t))
+
+            # Gain: A0 = gm1·Rout1·gm2·Rout2·gm3·Rout3.
+            # With gm2_req now determined, solve for the gm3 needed for gain.
+            if (spec.gain_min_db
+                    and rout1 < float("inf")
+                    and rout2 < float("inf")
+                    and rout3 < float("inf")
+                    and gm1_req > 0.0
+                    and gm2_req > 0.0):
+                A0 = 10.0 ** (spec.gain_min_db / 20.0)
+                gm3_from_gain = A0 / (gm1_req * rout1 * gm2_req * rout2 * rout3)
+                gm3_req = max(gm3_req, gm3_from_gain)
+
+        else:
+            # Two-stage: gain A0 = gm1·Rout1·gm2·Rout2.
+            if spec.gain_min_db and rout1 < float("inf") and rout2 < float("inf"):
+                A0 = 10.0 ** (spec.gain_min_db / 20.0)
+                if gm1_req > 0.0 and rout1 * rout2 > 0:
+                    gm2_from_gain = A0 / (gm1_req * rout1 * rout2)
+                    gm2_req = max(gm2_req, gm2_from_gain)
+                else:
+                    per_stage = math.sqrt(A0 / (rout1 * rout2))
+                    gm1_req = max(gm1_req, per_stage)
+                    gm2_req = max(gm2_req, per_stage)
+
+            # From PM: gm2 = gm1·CL / (Cc·tan(90°−PM)).
+            # Use worst-case (ceiling) gm1 from the integer W grid.
+            if spec.phase_margin_min_deg and gm1_req > 0.0 and ip_devices:
+                ip_dev = ip_devices[0]
+                ip_params = tech.nmos if ip_dev.type == "nmos" else tech.pmos
+                ids_ip = spec.ibias / max(
+                    len([d for d in ip_devices if d.type == ip_dev.type]), 1
+                )
+                lhs = 2.0 * ip_params.mu_cox * ids_ip
+                l_min_int = round(tech.length.min / tech.length.step)
+                w_ceil_int = math.ceil(gm1_req ** 2 * l_min_int / lhs)
+                w_ceil_int = min(w_ceil_int, round(tech.width.max / tech.width.step))
+                gm1_worst = math.sqrt(lhs * w_ceil_int / l_min_int)
+                pm_rad = math.radians(spec.phase_margin_min_deg)
+                gm2_req = max(
+                    gm2_req,
+                    gm1_worst * spec.cl / (cc_f * math.tan(math.pi / 2.0 - pm_rad)),
+                )
 
         cc_pf = cc_f * 1e12
 
@@ -243,15 +292,21 @@ def _compute_requirements(
             gate = device.terminals.get("g", "")
             is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
             gm_req_map[ref] = gm2_req if is_signal else 0.0
+        elif slot in _THIRD_STAGE_SLOTS:
+            gate = device.terminals.get("g", "")
+            is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
+            gm_req_map[ref] = gm3_req if is_signal else 0.0
         # All other slots: no explicit gm requirement (sized by min W/L)
 
     # --- VDS_sat upper bounds from output swing specs ---
     vdd = spec.vdd
     vss = spec.vss
 
-    # All second-stage device lists (one for SE, two for FD).
+    # All second- and third-stage device lists (constrain output swing on every path).
     all_ss_device_lists = [
-        slot_transistors[s] for s in _SECOND_STAGE_SLOTS if s in slot_transistors
+        slot_transistors[s]
+        for s in (*_SECOND_STAGE_SLOTS, *_THIRD_STAGE_SLOTS)
+        if s in slot_transistors
     ]
 
     if spec.output_swing_max_v is not None:
@@ -279,7 +334,7 @@ def _compute_requirements(
                             vod_max_map.get(d.ref, float("inf")), vds_sat_max_low
                         )
 
-    return gm_req_map, vod_max_map, cc_pf
+    return gm_req_map, vod_max_map, cc_pf, cc2_pf
 
 
 def _evaluate_metrics(
@@ -288,12 +343,15 @@ def _evaluate_metrics(
     cc_pf: float | None,
     tech: TechParams,
     spec: SizingSpec,
+    cc2_pf: float | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Compute performance metrics and safety margins from the solution."""
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
-    is_fd = ("second_stage_p" in slot_transistors or "second_stage_n" in slot_transistors)
-    has_second_stage = ("second_stage" in slot_transistors) or is_fd
+    is_three_stage = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
+    has_second_stage = (
+        any(s in slot_transistors for s in _SECOND_STAGE_SLOTS) or is_three_stage
+    )
 
     def _sz(ref: str) -> TransistorSizing | None:
         return transistor_sizing.get(ref)
@@ -367,8 +425,39 @@ def _evaluate_metrics(
     else:
         rout2 = float("inf")
 
+    # --- Third stage (SE: "third_stage"; FD: "third_stage_p" representative) ---
+    ts_devs = (
+        slot_transistors.get("third_stage")
+        or slot_transistors.get("third_stage_p")
+        or slot_transistors.get("third_stage_n")
+        or []
+    )
+    gm3 = 0.0
+    gd_ts_n, gd_ts_p = 0.0, 0.0
+    ids_3 = spec.ibias * spec.third_stage_current_ratio
+    if is_three_stage:
+        ts_nmos = next((d for d in ts_devs if d.type == "nmos"), None)
+        ts_pmos = next((d for d in ts_devs if d.type == "pmos"), None)
+        if ts_nmos:
+            s = _sz(ts_nmos.ref)
+            if s:
+                gate = ts_nmos.terminals.get("g", "")
+                is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
+                if is_signal:
+                    gm3 = eq.gm(_mu(ts_nmos), s.w_um, s.l_um, s.ids_a)
+                gd_ts_n = eq.gd(tech.nmos.lam, s.ids_a)
+        if ts_pmos:
+            s = _sz(ts_pmos.ref)
+            if s:
+                gd_ts_p = eq.gd(tech.pmos.lam, s.ids_a)
+        rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
+    else:
+        rout3 = float("inf")
+
     # --- Gain ---
-    if has_second_stage and rout2 < float("inf"):
+    if is_three_stage and rout2 < float("inf") and rout3 < float("inf"):
+        stage_gains = [gm1 * rout1, gm2 * rout2, gm3 * rout3]
+    elif has_second_stage and rout2 < float("inf"):
         stage_gains = [gm1 * rout1, gm2 * rout2]
     else:
         stage_gains = [gm1 * rout1]
@@ -378,16 +467,22 @@ def _evaluate_metrics(
         if spec.gain_min_db is not None:
             margins["gain_db"] = gain_db - spec.gain_min_db  # +ve → meets spec
 
-    # --- GBW, PM, SR (two-stage only) ---
+    # --- GBW, PM, SR ---
     cc_f = (cc_pf * 1e-12) if cc_pf else None
+    cc2_f = (cc2_pf * 1e-12) if cc2_pf else None
     if has_second_stage and cc_f and gm1 > 0:
         gbw = eq.unity_gain_bw(gm1, cc_f)
         metrics["gbw_hz"] = gbw
         if spec.gbw_min_hz is not None:
             margins["gbw_hz"] = gbw - spec.gbw_min_hz
 
-        if gm2 > 0:
+        if is_three_stage and gm2 > 0 and gm3 > 0 and cc2_f:
+            pm = eq.phase_margin_three_stage_deg(gm1, gm2, gm3, cc_f, cc2_f, spec.cl)
+        elif gm2 > 0:
             pm = eq.phase_margin_two_stage_deg(gm1, gm2, cc_f, spec.cl)
+        else:
+            pm = None
+        if pm is not None:
             metrics["phase_margin_deg"] = pm
             if spec.phase_margin_min_deg is not None:
                 margins["phase_margin_deg"] = pm - spec.phase_margin_min_deg
@@ -405,6 +500,9 @@ def _evaluate_metrics(
     if has_second_stage:
         n_ss = sum(1 for s in _SECOND_STAGE_SLOTS if s in slot_transistors)
         supply_currents.append(ids_2 * n_ss)
+    if is_three_stage:
+        n_ts = sum(1 for s in _THIRD_STAGE_SLOTS if s in slot_transistors)
+        supply_currents.append(ids_3 * n_ts)
     supply_currents.append(spec.ibias * max(n_bias_legs, 1))  # bias gen approx
     power = eq.quiescent_power(spec.vdd, spec.vss, supply_currents)
     metrics["power_w"] = power
@@ -475,7 +573,7 @@ def size_circuit(
     slot_transistors = _extract_slot_transistors(fbr_result)
     all_transistors = _deduplicate(slot_transistors)
     ids_map = _assign_ids(slot_transistors, all_transistors, spec)
-    gm_req_map, vod_max_map, cc_pf = _compute_requirements(
+    gm_req_map, vod_max_map, cc_pf, cc2_pf = _compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec
     )
 
@@ -495,6 +593,7 @@ def size_circuit(
             metrics={},
             margins={},
             solver_status=status_name,
+            cc2_pf=cc2_pf,
         )
 
     # Extract solution: convert integer step-units back to µm.
@@ -513,7 +612,7 @@ def size_circuit(
         )
 
     metrics, margins = _evaluate_metrics(
-        transistor_sizing, slot_transistors, cc_pf, tech, spec
+        transistor_sizing, slot_transistors, cc_pf, tech, spec, cc2_pf=cc2_pf
     )
     return SizingResult(
         transistors=transistor_sizing,
@@ -521,4 +620,5 @@ def size_circuit(
         metrics=metrics,
         margins=margins,
         solver_status=status_name,
+        cc2_pf=cc2_pf,
     )

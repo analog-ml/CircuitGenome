@@ -80,6 +80,7 @@ class SizingSpec:
     ibias: float
     cl: float
     second_stage_current_ratio: float = 2.0
+    third_stage_current_ratio: float = 5.0
     gain_min_db: float | None = None
     gbw_min_hz: float | None = None
     phase_margin_min_deg: float | None = None
@@ -128,3 +129,4 @@ class SizingResult:
     metrics: dict[str, float]
     margins: dict[str, float]
     solver_status: str
+    cc2_pf: float | None = None

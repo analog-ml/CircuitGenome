@@ -494,3 +494,231 @@ def test_fd_cc_from_sr(two_stage_fd_fbr):
     cc_f = result.cc_pf * 1e-12
     cc_max_from_sr = spec.ibias / spec.slew_rate_min_vps
     assert cc_f <= cc_max_from_sr * 1.001
+
+
+# ---------------------------------------------------------------------------
+# End-to-end sizing: three-stage opamps (NMC + RNMC, SE + FD)
+# ---------------------------------------------------------------------------
+
+_THREE_STAGE_SPEC = dict(
+    vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+    second_stage_current_ratio=2.5,
+    third_stage_current_ratio=5.0,
+    gain_min_db=100,
+    gbw_min_hz=2.5e6,
+    phase_margin_min_deg=60,
+    slew_rate_min_vps=3.5e6,
+)
+
+
+@pytest.fixture(scope="module")
+def three_stage_nmc_se_fbr():
+    return _fbr("three_stage_opamp_nmc_single_ended", {
+        "input_pair":   "differential_pair_pmos",
+        "load":         "folded_cascode_load_pmos_input_single_output",
+        "tail_current": "current_mirror_tail_pmos",
+        "bias_gen":     "diode_connected_mosfet_bias",
+        "second_stage": "common_source",
+        "third_stage":  "common_source",
+        "comp1":        "miller_cap",
+        "comp2":        "miller_cap",
+    })
+
+
+@pytest.fixture(scope="module")
+def three_stage_rnmc_se_fbr():
+    return _fbr("three_stage_opamp_rnmc_single_ended", {
+        "input_pair":   "differential_pair_pmos",
+        "load":         "folded_cascode_load_pmos_input_single_output",
+        "tail_current": "current_mirror_tail_pmos",
+        "bias_gen":     "diode_connected_mosfet_bias",
+        "second_stage": "common_source",
+        "third_stage":  "common_source",
+        "comp1":        "miller_cap",
+        "comp2":        "miller_cap",
+    })
+
+
+@pytest.fixture(scope="module")
+def three_stage_nmc_fd_fbr():
+    return _fbr("three_stage_opamp_nmc_fully_differential", {
+        "input_pair":      "differential_pair_pmos",
+        "load":            "folded_cascode_load_pmos_input_differential_output",
+        "tail_current":    "current_mirror_tail_pmos",
+        "bias_gen":        "diode_connected_mosfet_bias",
+        "cmfb":            "resistive_sense_cmfb",
+        "second_stage_p":  "common_source",
+        "second_stage_n":  "common_source",
+        "third_stage_p":   "common_source",
+        "third_stage_n":   "common_source",
+        "comp1_p":         "miller_cap",
+        "comp1_n":         "miller_cap",
+        "comp2_p":         "miller_cap",
+        "comp2_n":         "miller_cap",
+    })
+
+
+@pytest.fixture(scope="module")
+def three_stage_rnmc_fd_fbr():
+    return _fbr("three_stage_opamp_rnmc_fully_differential", {
+        "input_pair":      "differential_pair_pmos",
+        "load":            "folded_cascode_load_pmos_input_differential_output",
+        "tail_current":    "current_mirror_tail_pmos",
+        "bias_gen":        "diode_connected_mosfet_bias",
+        "cmfb":            "resistive_sense_cmfb",
+        "second_stage_p":  "common_source",
+        "second_stage_n":  "common_source",
+        "third_stage_p":   "common_source",
+        "third_stage_n":   "common_source",
+        "comp1_p":         "miller_cap",
+        "comp1_n":         "miller_cap",
+        "comp2_p":         "miller_cap",
+        "comp2_n":         "miller_cap",
+    })
+
+
+# --- SE NMC ---
+
+def test_size_three_stage_se_basic(three_stage_nmc_se_fbr):
+    """Three-stage NMC SE: solver returns OPTIMAL/FEASIBLE; both caps present."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.transistors
+    assert result.cc_pf is not None and result.cc_pf > 0
+    assert result.cc2_pf is not None and result.cc2_pf > 0
+    for ref, s in result.transistors.items():
+        assert tech.width.min <= s.w_um <= tech.width.max, f"{ref}: W out of bounds"
+        assert tech.length.min <= s.l_um <= tech.length.max, f"{ref}: L out of bounds"
+
+
+def test_three_stage_se_cc2_ratio(three_stage_nmc_se_fbr):
+    """cc2_pf must equal cc_pf / 4 (Cc2 = Cc1/4 heuristic)."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.cc_pf is not None and result.cc2_pf is not None
+    assert result.cc2_pf == pytest.approx(result.cc_pf / 4.0, rel=1e-9)
+
+
+def test_three_stage_se_specs_met(three_stage_nmc_se_fbr):
+    """Three-stage NMC SE: gain, GBW, PM, and SR all meet spec."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    tech = _tech()
+    spec = SizingSpec(**_THREE_STAGE_SPEC)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    if "gain_db" in result.metrics:
+        assert result.metrics["gain_db"] >= spec.gain_min_db, "Gain not met"
+    if "gbw_hz" in result.metrics:
+        assert result.metrics["gbw_hz"] >= spec.gbw_min_hz, "GBW not met"
+    if "phase_margin_deg" in result.metrics:
+        assert result.metrics["phase_margin_deg"] >= spec.phase_margin_min_deg - 1.0, "PM not met"
+    if "slew_rate_vps" in result.metrics:
+        assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
+
+
+def test_three_stage_se_power(three_stage_nmc_se_fbr):
+    """Power accounts for tail + second stage + third stage."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    tech = _tech()
+    spec = SizingSpec(**_THREE_STAGE_SPEC)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    ids_2 = spec.ibias * spec.second_stage_current_ratio
+    ids_3 = spec.ibias * spec.third_stage_current_ratio
+    min_expected = spec.vdd * (spec.ibias + ids_2 + ids_3)
+    assert result.metrics["power_w"] >= min_expected * 0.9
+
+
+# --- SE RNMC ---
+
+def test_size_three_stage_rnmc_se_basic(three_stage_rnmc_se_fbr):
+    """Three-stage RNMC SE: same conservative equations → OPTIMAL/FEASIBLE."""
+    parsed, sr_result, fbr_result, topology = three_stage_rnmc_se_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.cc_pf is not None
+    assert result.cc2_pf is not None
+
+
+# --- FD NMC ---
+
+def test_size_three_stage_fd_basic(three_stage_nmc_fd_fbr):
+    """Three-stage NMC FD: OPTIMAL/FEASIBLE; both caps present."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.transistors
+    assert result.cc_pf is not None and result.cc_pf > 0
+    assert result.cc2_pf is not None and result.cc2_pf > 0
+
+
+def test_three_stage_fd_second_stage_symmetry(three_stage_nmc_fd_fbr):
+    """second_stage_p and second_stage_n must have equal W and L."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    p_devs = {r.replace("_second_stage_p", ""): s
+              for r, s in result.transistors.items() if "second_stage_p" in r}
+    n_devs = {r.replace("_second_stage_n", ""): s
+              for r, s in result.transistors.items() if "second_stage_n" in r}
+    for base in p_devs:
+        if base in n_devs:
+            assert p_devs[base].w_um == n_devs[base].w_um, f"{base}: W mismatch"
+            assert p_devs[base].l_um == n_devs[base].l_um, f"{base}: L mismatch"
+
+
+def test_three_stage_fd_third_stage_symmetry(three_stage_nmc_fd_fbr):
+    """third_stage_p and third_stage_n must have equal W and L."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    p_devs = {r.replace("_third_stage_p", ""): s
+              for r, s in result.transistors.items() if "third_stage_p" in r}
+    n_devs = {r.replace("_third_stage_n", ""): s
+              for r, s in result.transistors.items() if "third_stage_n" in r}
+    assert p_devs and n_devs, "Both third_stage_p and third_stage_n must be sized"
+    matched = {b for b in p_devs if b in n_devs}
+    assert matched
+    for base in matched:
+        assert p_devs[base].w_um == n_devs[base].w_um, f"{base}: W mismatch"
+        assert p_devs[base].l_um == n_devs[base].l_um, f"{base}: L mismatch"
+
+
+def test_three_stage_fd_power(three_stage_nmc_fd_fbr):
+    """FD three-stage power accounts for 2×second + 2×third stage currents."""
+    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    tech = _tech()
+    spec = SizingSpec(**_THREE_STAGE_SPEC)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    ids_2 = spec.ibias * spec.second_stage_current_ratio
+    ids_3 = spec.ibias * spec.third_stage_current_ratio
+    min_expected = spec.vdd * (spec.ibias + 2 * ids_2 + 2 * ids_3)
+    assert result.metrics["power_w"] >= min_expected * 0.9
+
+
+# --- FD RNMC ---
+
+def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
+    """Three-stage RNMC FD: OPTIMAL/FEASIBLE; both caps present."""
+    parsed, sr_result, fbr_result, topology = three_stage_rnmc_fd_fbr
+    tech = _tech()
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
+                          SizingSpec(**_THREE_STAGE_SPEC))
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.cc_pf is not None
+    assert result.cc2_pf is not None

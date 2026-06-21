@@ -19,9 +19,10 @@ with a concrete numerical walkthrough using the values from
 Scope and circuit topology
 --------------------------
 
-The sizer currently targets **two-stage Miller-compensated single-ended
-op-amps** (topology ``two_stage_opamp_single_ended``).  The small-signal
-model used throughout is **Level-1 (Shichman-Hodges)**: square-law drain
+The sizer targets all seven op-amp topology templates supported by CircuitGenome:
+one-stage, two-stage (single-ended and fully-differential), and three-stage
+NMC/RNMC (single-ended and fully-differential).
+The small-signal model used throughout is **Level-1 (Shichman-Hodges)**: square-law drain
 current in saturation, constant channel-length modulation coefficient λ,
 no short-channel or velocity-saturation effects.
 
@@ -625,3 +626,175 @@ The CP-SAT solver returns ``INFEASIBLE`` in this case.
    without affecting the CMRR-derived :math:`g_{m1}` floor.
 3. Relax the CMRR target — this lowers :math:`g_{m1,\min}`, reducing the
    :math:`C_c` required to maintain GBW.
+
+----
+
+Three-Stage NMC / RNMC
+-----------------------
+
+The sizer also supports all four three-stage topologies
+(``three_stage_opamp_nmc_single_ended``, ``three_stage_opamp_rnmc_single_ended``,
+``three_stage_opamp_nmc_fully_differential``,
+``three_stage_opamp_rnmc_fully_differential``).  The same conservative
+equations are applied to both NMC and RNMC.
+
+Circuit topology
+~~~~~~~~~~~~~~~~
+
+.. code-block:: text
+
+   ibias ──► [Tail] ──► [Input pair + Load] ──► Rout1 ──► [2nd stage] ──► Rout2 ──► [3rd stage] ──► out
+                                          ▲                          ▲
+                                          │◄─────────── Cc1 ─────────┼──────────────────────────────┘
+                                          │                          │◄──── Cc2 ──────────────────┘
+
+*NMC:* :math:`C_{c1}` closes the outer loop (stage-3 output → stage-1 output);
+:math:`C_{c2}` closes the inner loop (stage-3 output → stage-2 output).
+
+*RNMC:* :math:`C_{c1}` closes the inner loop (stage-3 output → stage-2 output);
+:math:`C_{c2}` closes the reversed outer loop (stage-2 output → stage-1 output).
+The sizer uses the same conservative equations for both schemes.
+
+Design variables
+~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Variable
+     - Source
+   * - :math:`C_{c1}` (outer)
+     - :math:`\min(I_{bias}/SR,\; g_{m1}/(2\pi \cdot GBW))`
+   * - :math:`C_{c2}` (inner)
+     - :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic)
+   * - :math:`g_{m1}`
+     - CMRR + GBW (same as two-stage)
+   * - :math:`g_{m2}`
+     - Inner-pole PM condition (see below)
+   * - :math:`g_{m3}`
+     - Gain + outer-pole PM condition (see below)
+
+Phase margin derivation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+With two non-dominant poles, the phase margin is:
+
+.. math::
+
+   \text{PM} \approx 90^{\circ}
+       - \arctan\!\left(\frac{\omega_t \cdot C_{c2}}{g_{m2}}\right)
+       - \arctan\!\left(\frac{\omega_t \cdot C_L}{g_{m3}}\right)
+
+where :math:`\omega_t = g_{m1}/C_{c1}` is the unity-gain frequency
+(implemented in :func:`~circuitgenome.sizer.equations.phase_margin_three_stage_deg`).
+
+For a target :math:`\text{PM}_{\min}`, the sizer **splits the phase budget
+equally** between the two poles — each is allowed to contribute at most
+:math:`(90^{\circ} - \text{PM}_{\min})/2` of lag:
+
+.. math::
+
+   \theta = \frac{90^{\circ} - \text{PM}_{\min}}{2}
+
+This leads to two independent lower bounds:
+
+.. math::
+
+   g_{m2} \;\geq\; \frac{g_{m1} \cdot C_{c2}}{C_{c1} \cdot \tan\theta}
+   \qquad \text{(inner pole)}
+
+.. math::
+
+   g_{m3} \;\geq\; \frac{g_{m1} \cdot C_L}{C_{c1} \cdot \tan\theta}
+   \qquad \text{(output pole)}
+
+For :math:`\text{PM}_{\min} = 60^{\circ}`: :math:`\theta = 15^{\circ}`,
+:math:`\tan\theta \approx 0.268`, so each non-dominant pole must be placed
+at :math:`\approx 3.73 \times \omega_t`.
+
+.. note::
+
+   These are **sufficient conditions** — both poles are individually bounded,
+   so the actual PM will be ≥ :math:`\text{PM}_{\min}` even if one pole is
+   at its minimum.
+
+Gain requirement
+~~~~~~~~~~~~~~~~
+
+Once :math:`g_{m2}` is determined from the inner-pole condition, the
+three-stage gain formula is used to derive :math:`g_{m3}`:
+
+.. math::
+
+   A_0 = g_{m1} \cdot R_{out1} \cdot g_{m2} \cdot R_{out2} \cdot g_{m3} \cdot R_{out3}
+
+   \Rightarrow\quad g_{m3} \;\geq\; \frac{A_0}{g_{m1} \cdot R_{out1} \cdot g_{m2} \cdot R_{out2} \cdot R_{out3}}
+
+The sizer takes :math:`g_{m3,\text{req}} = \max(g_{m3,\text{gain}},\; g_{m3,\text{PM}})`.
+
+Numerical example
+~~~~~~~~~~~~~~~~~
+
+Specification: :math:`I_{bias}=10\,\mu\text{A}`,
+:math:`C_L=20\,\text{pF}`, :math:`SR=3.5\,\text{V/µs}`,
+:math:`GBW=2.5\,\text{MHz}`, :math:`\text{PM}\geq 60^{\circ}`,
+:math:`A_0 \geq 100\,\text{dB}`, :math:`I_{D2}/I_{bias}=2.5`,
+:math:`I_{D3}/I_{bias}=5`.
+
+1. **Cc1 from SR:** :math:`C_{c1} = 10\,\mu\text{A} / 3.5\,\text{V/µs} = 2.857\,\text{pF}`
+2. **Cc2:** :math:`C_{c2} = 2.857/4 = 0.714\,\text{pF}`
+3. **gm1 from GBW:** :math:`g_{m1} = 2\pi \times 2.5\,\text{MHz} \times 2.857\,\text{pF} = 44.88\,\mu\text{A/V}`
+4. **θ for PM=60°:** :math:`\theta = 15^{\circ}`, :math:`\tan\theta = 0.2679`
+5. **gm2 (inner pole):** :math:`g_{m2} \geq 44.88 \times 0.714/(2.857 \times 0.2679) = 41.9\,\mu\text{A/V}`
+6. **gm3 (output pole, PM):** :math:`g_{m3} \geq 44.88 \times 20/(2.857 \times 0.2679) = 1175\,\mu\text{A/V}`
+7. **gm3 (gain, 100 dB → 10⁵):** Using typical :math:`R_{out}\sim100\,\text{k}\Omega` per stage:
+   :math:`g_{m3,\text{gain}} = 10^5/(44.88 \times 10^5 \times 41.9 \times 10^5 \times 10^5) \ll g_{m3,\text{PM}}`
+   → PM dominates.
+8. **Binding constraint:** :math:`g_{m3,\text{req}} = 1175\,\mu\text{A/V}` (output pole PM)
+
+.. note::
+
+   The output-stage :math:`g_{m3}` requirement for three-stage is much larger
+   than the two-stage :math:`g_{m2}` at the same spec because the phase budget
+   is split — each non-dominant pole must be ~3.7× farther than the single
+   pole in the two-stage case.
+
+Fully-differential three-stage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For FD topologies, the sizer applies the same equations to each output path
+independently (using ``second_stage_p``/``third_stage_p`` as the representative
+path).  Power is computed as:
+
+.. math::
+
+   P = V_{DD} \times \bigl(I_{bias} + 2\,I_{D2} + 2\,I_{D3} + I_{bias,gen}\bigr)
+
+Cross-slot symmetry constraints (``second_stage_p`` ↔ ``second_stage_n``
+and ``third_stage_p`` ↔ ``third_stage_n``) force identical W/L on both
+output paths, ensuring balanced differential swing.
+
+Operating-point mapping for three-stage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Slot
+     - :math:`I_{DS}` assignment
+   * - ``input_pair``
+     - :math:`I_{bias}/2` per transistor
+   * - ``load``
+     - :math:`I_{bias}/2` per transistor
+   * - ``tail_current``
+     - :math:`I_{bias}`
+   * - ``second_stage``
+     - :math:`I_{D2} = \text{ratio}_2 \times I_{bias}`
+   * - ``third_stage``
+     - :math:`I_{D3} = \text{ratio}_3 \times I_{bias}`
+   * - ``comp1`` / ``comp2``
+     - capacitors — no :math:`I_{DS}`
+   * - ``bias_gen``
+     - :math:`I_{bias}` (conservative)

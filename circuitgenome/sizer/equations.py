@@ -119,6 +119,28 @@ def phase_margin_two_stage_deg(
     return 90.0 - math.degrees(math.atan(gm1 * cl_f / (gm2 * cc_f)))
 
 
+def phase_margin_three_stage_deg(
+    gm1: float, gm2: float, gm3: float,
+    cc1_f: float, cc2_f: float, cl_f: float,
+) -> float:
+    """Phase margin in degrees for three-stage NMC/RNMC (two non-dominant poles).
+
+    PM ≈ 90° − arctan(ωt·Cc2/gm2) − arctan(ωt·CL/gm3)
+    where ωt = gm1/Cc1.
+
+    :param gm1: Input-pair transconductance in A/V.
+    :param gm2: Second-stage signal transistor gm in A/V.
+    :param gm3: Third-stage signal transistor gm in A/V.
+    :param cc1_f: Outer (primary) compensation capacitor in F.
+    :param cc2_f: Inner compensation capacitor in F (Cc2 = Cc1/4 by default).
+    :param cl_f: Output load capacitance in F.
+    """
+    wt = gm1 / cc1_f
+    lag2 = math.degrees(math.atan(wt * cc2_f / gm2))
+    lag3 = math.degrees(math.atan(wt * cl_f / gm3))
+    return 90.0 - lag2 - lag3
+
+
 def slew_rate_vps(ibias_a: float, cc_f: float) -> float:
     """Slew rate in V/s.
 
