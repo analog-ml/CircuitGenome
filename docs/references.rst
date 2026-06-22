@@ -15,4 +15,4 @@ The design of CircuitGenome draws on the following publications:
    used for the functional block recognition rules and the hierarchical
    decomposition of flat netlists.
 
-Full PDFs are available in the ``literatures/`` directory of the repository.
+Full PDFs are available in the ``docs/papers/`` directory of the repository.

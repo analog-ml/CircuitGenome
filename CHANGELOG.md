@@ -3,6 +3,32 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-22 (docs restructure)
+
+PR [#55](https://github.com/analog-ml/CircuitGenome/pull/55)
+(`docs/restructure-papers-examples`).
+
+### Changed
+
+- **Reference PDFs moved** — `literatures/` → `docs/papers/`. The
+  Constraint-Programmed Initial Sizing paper (the sizer reference) is now tracked
+  alongside the three previously-committed papers.
+
+- **ACST reference artifacts grouped** —
+  `examples/functional_blocks.xml`, `examples/netlist.ckt`, and
+  `examples/subcircuits.xml` moved under `examples/acst_results/`.
+
+- **`docs/references.rst`** now points at ``docs/papers/`` instead of
+  ``literatures/``.
+
+- **`tests/test_sr_netlist.py`** resolves the test netlist at its new location
+  (`examples/acst_results/netlist.ckt`).
+
+### Notes
+
+- The dated design docs under `docs/plans/` keep their original `examples/…`
+  paths as historical records — they are not part of the Sphinx build.
+
 ## 2026-06-21 (three-stage)
 
 PR [#54](https://github.com/analog-ml/CircuitGenome/pull/54)

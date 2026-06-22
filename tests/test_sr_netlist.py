@@ -1,4 +1,4 @@
-"""Tests for multi-level SR against examples/netlist.ckt."""
+"""Tests for multi-level SR against examples/acst_results/netlist.ckt."""
 from pathlib import Path
 
 import pytest
@@ -6,7 +6,7 @@ import pytest
 from circuitgenome.recognizer.netlist_parser import parse
 from circuitgenome.recognizer.subcircuit_recognizer import recognize
 
-_NETLIST_PATH = Path(__file__).parent.parent / "examples" / "netlist.ckt"
+_NETLIST_PATH = Path(__file__).parent.parent / "examples" / "acst_results" / "netlist.ckt"
 
 
 @pytest.fixture(scope="module")
