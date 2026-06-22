@@ -8,6 +8,7 @@
 #   (effective square-law fit; mu_cox/lam are bias/length dependent).
 name: ptm16_hp
 description: "PTM 16nm HP (BSIM4 bulk PREDICTIVE planar extrapolation; real 16nm silicon is FinFET)"
+spice_model: models/ptm_16nm_HP.pm   # BSIM4 card for SPICE verification
 
 nmos:
   mu_cox: 1.999255e-04   # A/V²  (effective µn·Cox)

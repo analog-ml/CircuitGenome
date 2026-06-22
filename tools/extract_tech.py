@@ -216,6 +216,7 @@ def write_yaml(node: str, params: dict) -> Path:
 #   (effective square-law fit; mu_cox/lam are bias/length dependent).
 name: ptm{node}_hp
 description: "{cfg['desc']}"
+spice_model: models/{cfg['card']}   # BSIM4 card for SPICE verification
 
 nmos:
   mu_cox: {n['mu_cox']:.6e}   # A/V²  (effective µn·Cox)

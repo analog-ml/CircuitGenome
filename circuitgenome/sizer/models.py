@@ -44,6 +44,10 @@ class TechParams:
     :param width: Transistor width grid in µm.
     :param length: Transistor length grid in µm.
     :param cap: Compensation capacitor grid in pF.
+    :param spice_model: Optional path (relative to the config dir, or absolute)
+        to a SPICE ``.model`` card whose ``nmos``/``pmos`` models match the
+        netlist (e.g. a BSIM4 ``.pm`` file). When ``None``, the SPICE-verification
+        path synthesises a Level-1 model from ``mu_cox``/``vth``/``lam``.
     """
     name: str
     nmos: MosfetParams
@@ -51,6 +55,7 @@ class TechParams:
     width: GridSpec
     length: GridSpec
     cap: GridSpec
+    spice_model: str | None = None
 
 
 @dataclass

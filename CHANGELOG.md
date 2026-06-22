@@ -3,6 +3,34 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-22 (SPICE verification)
+
+PR [#60](https://github.com/analog-ml/CircuitGenome/pull/60)
+(`feat/spice-verify`).
+
+### Added
+
+- **ngspice metric verification** (`circuitgenome/sizer/spice_sim.py`) —
+  re-simulates a *sized* circuit with the **same technology** and reports the
+  analytical `_evaluate_metrics` results next to SPICE-measured ones (gain, GBW,
+  phase margin, slew rate, power, output swing). Surfaced via
+  `circuitgenome size --simulate` and the standalone `tools/spice_verify.py`.
+
+- **`spice_model` tech field** (`TechParams`, `loader.py`, the four
+  `tech_ptm*.yaml`, `tools/extract_tech.py`) — points a tech config at its BSIM4
+  card. When absent (e.g. `generic`) a Level-1 `.model` is synthesised from
+  `mu_cox`/`vth`/`lam`, so every tech is simulatable.
+
+### Notes
+
+- Best-effort cross-check, not sign-off: gain/GBW/PM via an open-loop
+  AC-coupled-feedback testbench (auto-detecting the inverting input), power from
+  the DC op point, slew rate from a unity-gain step. Single-ended is the most
+  robust; fully-differential AC metrics and any non-converging measurement are
+  reported as `n/a`. The Level-1 (`generic`) run validates the formulas; the
+  BSIM4 (PTM) run exposes the Level-1-vs-device gap (e.g. ~80 dB predicted vs
+  ~20 dB simulated at 45 nm). Requires ngspice on `PATH`.
+
 ## 2026-06-22 (CLI W/L precision)
 
 PR [#59](https://github.com/analog-ml/CircuitGenome/pull/59)

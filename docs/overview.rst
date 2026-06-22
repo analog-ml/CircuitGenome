@@ -916,3 +916,23 @@ configs or add a node with ``tools/extract_tech.py`` (requires ngspice).
 Source / citation: ASU Predictive Technology Model, https://ptm.asu.edu
 (W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for Sub-45nm
 Design Exploration," ISQED 2006).
+
+SPICE verification
+~~~~~~~~~~~~~~~~~~
+
+``circuitgenome size --simulate`` (and the standalone ``tools/spice_verify.py``)
+re-simulate the *sized* circuit in **ngspice** using the **same technology** and
+print the analytical metrics next to the SPICE-measured ones, with the delta.
+The model is taken from the tech: a BSIM4 ``.pm`` card for the PTM nodes (via the
+``spice_model`` field), or a synthesised Level-1 ``.model`` from
+``mu_cox``/``vth``/``lam`` for ``generic``.  Because the analytical metrics *are*
+Level-1, the Level-1 SPICE run roughly validates the formulas, while the BSIM4
+run exposes the Level-1-vs-device gap (e.g. a deep-submicron design predicted at
+~80 dB may simulate at ~20 dB).
+
+This is a **best-effort cross-check**, not sign-off.  Gain/GBW/PM are measured
+with an open-loop AC-coupled-feedback testbench; power from the DC operating
+point; slew rate from a unity-gain step.  Single-ended op-amps are the most
+robust; fully-differential AC metrics (which depend on the on-chip CMFB
+operating point) and any non-converging measurement are reported as ``n/a``
+rather than as wrong numbers.  Requires ngspice on ``PATH``.
