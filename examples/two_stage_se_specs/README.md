@@ -22,6 +22,6 @@ Example:
 ```bash
 circuitgenome size circuits/two_stage_opamp_single_ended/circuit_0001_flat.ckt \
   --topology two_stage_opamp_single_ended \
-  --spec examples/tech_node_specs/spec_ptm45.yaml \
+  --spec examples/two_stage_se_specs/spec_ptm45.yaml \
   --tech ptm45
 ```

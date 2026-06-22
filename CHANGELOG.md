@@ -30,9 +30,11 @@ PR [#58](https://github.com/analog-ml/CircuitGenome/pull/58)
 - **Tests** — `tests/test_sizer.py` parametrizes a feasible two-stage sizing
   across all four PTM nodes.
 
-- **Per-node example specs** — `examples/tech_node_specs/spec_{generic,ptm45,
-  ptm32,ptm22,ptm16}.yaml`, each a ready-to-run, feasible two-stage spec for its
-  node (with a README index).
+- **Per-node example specs** — ready-to-run, feasible specs for every
+  opamp type × technology node (generic + ptm45/32/22/16), grouped one directory
+  per type under `examples/`: `one_stage_specs/`, `two_stage_se_specs/`,
+  `two_stage_fd_specs/`, `three_stage_se_specs/`, `three_stage_fd_specs/` (each
+  with a README index). 25 specs total, all verified to size OPTIMAL.
 
 ## 2026-06-22 (sizer docs)
 
