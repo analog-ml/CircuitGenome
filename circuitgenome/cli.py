@@ -216,6 +216,8 @@ def _cmd_size(args: argparse.Namespace) -> None:
 
     if result.cc_pf is not None:
         print(f"  Cc = {result.cc_pf:.1f}pF")
+    for ref, ohms in result.resistors.items():
+        print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
     if result.metrics:
         print("\nPerformance metrics:")

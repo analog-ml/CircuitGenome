@@ -130,6 +130,9 @@ class SizingResult:
         ``"OPTIMAL"``, ``"FEASIBLE"``, ``"INFEASIBLE"``, or ``"UNKNOWN"``.
     :param warnings: Advisory messages, e.g. a likely ``--topology``/netlist
         mismatch. Empty when the netlist cleanly matches the topology.
+    :param resistors: Sized load-resistor values in ohms, keyed by device
+        reference (e.g. ``{"r1_load": 1.06e5}``). Empty when there are no
+        sized resistors.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -138,3 +141,4 @@ class SizingResult:
     solver_status: str
     cc2_pf: float | None = None
     warnings: list[str] = field(default_factory=list)
+    resistors: dict[str, float] = field(default_factory=dict)
