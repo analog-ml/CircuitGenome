@@ -1,0 +1,35 @@
+# PTM 45nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)
+# Level-1 parameters (mu_cox, vth, lam) EXTRACTED with ngspice from the BSIM4
+# card models/ptm_45nm_HP.pm by tools/extract_tech.py.
+# Source: ASU Predictive Technology Model (PTM), https://ptm.asu.edu
+#   W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for
+#   Sub-45nm Design Exploration," ISQED 2006.  Mirror: https://mec.umn.edu/ptm
+# Extraction point: Vdd=1.0 V, W=1.0 um, L=0.09 um
+#   (effective square-law fit; mu_cox/lam are bias/length dependent).
+name: ptm45_hp
+description: "PTM 45nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)"
+
+nmos:
+  mu_cox: 3.501367e-04   # A/V²  (effective µn·Cox)
+  vth: 0.3740            # V
+  lam: 0.1976            # 1/V
+
+pmos:
+  mu_cox: 1.593293e-04   # A/V²  (effective µp·Cox)
+  vth: -0.4305           # V
+  lam: 0.2577            # 1/V
+
+width:
+  min: 0.1
+  max: 100.0
+  step: 0.05
+
+length:
+  min: 0.045
+  max: 1.0
+  step: 0.005
+
+cap:
+  min_pf: 0.01
+  max_pf: 10.0
+  step_pf: 0.01

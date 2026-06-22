@@ -311,5 +311,18 @@ Sample output:
      - Path to the YAML performance specification file
      - (required)
    * - ``--tech NAME``
-     - Technology configuration name (from built-in configs)
-     - ``generic_parameterized``
+     - Built-in config name or path to a technology YAML
+     - ``generic``
+
+``--tech`` accepts either a path to a technology YAML or the short name of a
+built-in config: ``generic`` (default), ``ptm45``, ``ptm32``, ``ptm22``, or
+``ptm16`` (ASU Predictive Technology Model planar-bulk nodes; ``ptm16`` is a
+predictive extrapolation — real 16 nm is FinFET).  See *Initial Sizer →
+Technology configurations* in the :doc:`Overview </overview>` for details and
+how to add a node with ``tools/extract_tech.py``.
+
+.. code-block:: bash
+
+   circuitgenome size circuit_0001_flat.ckt \
+     --topology two_stage_opamp_single_ended \
+     --spec spec.yaml --tech ptm45

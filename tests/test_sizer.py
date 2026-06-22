@@ -778,3 +778,42 @@ def test_topology_mismatch_warns():
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.warnings
     assert any("_p" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
+# PTM technology configs (45/32/22/16 nm bulk, ngspice-extracted)
+# ---------------------------------------------------------------------------
+
+def _config_dir():
+    from pathlib import Path
+    import circuitgenome.sizer as _sz
+    return Path(_sz.__file__).parent / "config"
+
+
+# node -> nominal Vdd (V)
+_PTM_NODES = {"45": 1.0, "32": 0.9, "22": 0.8, "16": 0.7}
+
+
+@pytest.mark.parametrize("node,vdd", sorted(_PTM_NODES.items()))
+def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
+    """Each PTM tech config parses and yields a feasible node-appropriate sizing."""
+    tech = load_tech(_config_dir() / f"tech_ptm{node}.yaml")
+    # sanity on parsed params: NMOS µCox > PMOS µCox > 0; |Vth| reasonable; λ > 0
+    assert tech.nmos.mu_cox > tech.pmos.mu_cox > 0
+    assert 0.2 < tech.nmos.vth < 0.6 and -0.6 < tech.pmos.vth < -0.2
+    assert tech.nmos.lam > 0 and tech.pmos.lam > 0
+
+    parsed, sr_result, fbr_result, topology = two_stage_fbr
+    spec = SizingSpec(
+        vdd=vdd, vss=0.0, ibias=10e-6, cl=1e-12,
+        second_stage_current_ratio=2.5,
+        gain_min_db=40, gbw_min_hz=2.5e6,
+        phase_margin_min_deg=60, slew_rate_min_vps=1e6,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.transistors
+    # every device sits inside the node's W/L grid
+    for s in result.transistors.values():
+        assert tech.width.min <= s.w_um <= tech.width.max
+        assert tech.length.min <= s.l_um <= tech.length.max

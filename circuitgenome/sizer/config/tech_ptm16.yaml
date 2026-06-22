@@ -1,0 +1,35 @@
+# PTM 16nm HP (BSIM4 bulk PREDICTIVE planar extrapolation; real 16nm silicon is FinFET)
+# Level-1 parameters (mu_cox, vth, lam) EXTRACTED with ngspice from the BSIM4
+# card models/ptm_16nm_HP.pm by tools/extract_tech.py.
+# Source: ASU Predictive Technology Model (PTM), https://ptm.asu.edu
+#   W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for
+#   Sub-45nm Design Exploration," ISQED 2006.  Mirror: https://mec.umn.edu/ptm
+# Extraction point: Vdd=0.7 V, W=1.0 um, L=0.032 um
+#   (effective square-law fit; mu_cox/lam are bias/length dependent).
+name: ptm16_hp
+description: "PTM 16nm HP (BSIM4 bulk PREDICTIVE planar extrapolation; real 16nm silicon is FinFET)"
+
+nmos:
+  mu_cox: 1.999255e-04   # A/V²  (effective µn·Cox)
+  vth: 0.3824            # V
+  lam: 0.4308            # 1/V
+
+pmos:
+  mu_cox: 6.030303e-05   # A/V²  (effective µp·Cox)
+  vth: -0.3666           # V
+  lam: 0.5730            # 1/V
+
+width:
+  min: 0.05
+  max: 40.0
+  step: 0.05
+
+length:
+  min: 0.016
+  max: 0.4
+  step: 0.002
+
+cap:
+  min_pf: 0.01
+  max_pf: 10.0
+  step_pf: 0.01
