@@ -3,6 +3,26 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-22 (sizer docs)
+
+PR [#57](https://github.com/analog-ml/CircuitGenome/pull/57)
+(`docs/sizer-overview-scope`).
+
+### Changed
+
+- **Initial Sizer overview** (`docs/overview.rst`) — corrected the stale scope:
+  the sizer no longer "targets two-stage Miller-compensated op-amps" but
+  **supports all seven topology templates** (one-stage, two-stage single-ended
+  and fully differential, and the four three-stage NMC/RNMC variants). Replaced
+  the single-entry topology list with all seven names.
+
+- **`SizingSpec` field table** — added the missing ``third_stage_current_ratio``
+  row (``iDS_3 = ratio × ibias``, three-stage only, default 5.0).
+
+- **Sizing-algorithm walkthrough** — scoped the step-by-step derivation as a
+  two-stage illustration and pointed readers to the Sizing Flow theory page
+  (`docs/theory/sizing_flow.rst`) for the complete all-topologies derivation.
+
 ## 2026-06-22 (docs restructure)
 
 PR [#55](https://github.com/analog-ml/CircuitGenome/pull/55)
