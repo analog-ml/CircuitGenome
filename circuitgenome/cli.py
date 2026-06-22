@@ -208,7 +208,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
 
     print("\nTransistor sizing:")
     for ref, s in result.transistors.items():
-        print(f"  {ref:<30}  W={s.w_um:.0f}µm  L={s.l_um:.0f}µm  "
+        print(f"  {ref:<30}  W={s.w_um:.3f}µm  L={s.l_um:.3f}µm  "
               f"IDS={s.ids_a*1e6:.2f}µA  VGS={s.vgs_v:.3f}V  VDS_sat={s.vds_sat_v:.3f}V")
 
     if result.cc_pf is not None:

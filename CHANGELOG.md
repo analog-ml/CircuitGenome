@@ -3,6 +3,20 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-22 (CLI W/L precision)
+
+PR [#59](https://github.com/analog-ml/CircuitGenome/pull/59)
+(`fix/cli-submicron-wl-precision`).
+
+### Fixed
+
+- **`size` CLI printed sub-micron W/L as `0µm`** — the transistor-sizing table
+  formatted W and L with `%.0f` µm, which was fine for the ~0.25 µm `generic`
+  config but collapsed the sub-micron geometries of the nm-node PTM configs
+  (e.g. `L = 0.045 µm`) to `0µm`. Now formatted with three decimals
+  (`%.3f` µm) so values like `W=0.100µm L=0.045µm` print correctly. Display-only
+  change — the solved sizes in `SizingResult.transistors` were always correct.
+
 ## 2026-06-22 (PTM technologies)
 
 PR [#58](https://github.com/analog-ml/CircuitGenome/pull/58)
