@@ -3,6 +3,95 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-21 (three-stage)
+
+PR [#54](https://github.com/analog-ml/CircuitGenome/pull/54)
+(`feat/sizer-three-stage`).
+
+### Added
+
+- **Three-stage opamp sizing** — `size_circuit()` now supports all four
+  three-stage topologies: `three_stage_opamp_nmc_single_ended`,
+  `three_stage_opamp_rnmc_single_ended`,
+  `three_stage_opamp_nmc_fully_differential`,
+  `three_stage_opamp_rnmc_fully_differential`.
+  The same conservative equations are applied to both NMC and RNMC.
+
+- **`third_stage_current_ratio` field** (`SizingSpec`) — quiescent
+  drain current for the third stage as a multiple of `ibias`
+  (``ids_3 = ratio × ibias``; default 5.0).
+
+- **`cc2_pf` field** (`SizingResult`) — inner Miller capacitor value in pF,
+  set to ``cc_pf / 4`` for three-stage topologies, ``None`` otherwise
+  (Eschauzier–Huijsing heuristic, no user-facing API parameter needed).
+
+- **`_THIRD_STAGE_SLOTS` constant** (`circuitgenome/sizer/sizer.py`) —
+  frozenset ``{"third_stage", "third_stage_p", "third_stage_n"}`` used at
+  all dispatch sites (IDS assignment, gm requirement mapping, VDS_sat
+  constraints, power accounting).
+
+- **Phase-margin split** (`_compute_requirements`) — for three-stage, the
+  allowed phase lag is split equally between the inner pole
+  (``gm2/Cc2``) and the output pole (``gm3/CL``):
+  ``gm2 ≥ gm1·Cc2/(Cc1·tan(θ))`` and ``gm3 ≥ gm1·CL/(Cc1·tan(θ))``
+  where ``θ = (90° − PM_min) / 2``.
+
+- **Three-stage gain formula** (`_compute_requirements`) —
+  ``A0 = gm1·Rout1·gm2·Rout2·gm3·Rout3``; gm3 is solved after gm2 is
+  determined from the inner-pole PM condition.
+
+- **`phase_margin_three_stage_deg()`** (`circuitgenome/sizer/equations.py`) —
+  evaluates the actual PM post-sizing:
+  ``PM = 90° − arctan(ωt·Cc2/gm2) − arctan(ωt·CL/gm3)``.
+
+- **Cross-slot symmetry for third stage** (`circuitgenome/sizer/constraints.py`) —
+  CP-SAT constraints tie ``third_stage_p`` and ``third_stage_n`` to identical
+  W and L, enforcing balanced differential outputs.
+
+- **Twelve new integration tests** (`tests/test_sizer.py`) — covering NMC SE,
+  RNMC SE, NMC FD, RNMC FD; assertions include Cc2/Cc1 ratio, all four
+  performance specs, cross-slot symmetry for both second and third stages,
+  power (tail + 2×ids_2 + 2×ids_3 for FD), plus PMOS-common-source metric
+  reporting (`test_three_stage_pmos_cs_metrics_present`) and the
+  topology-mismatch guard (`test_topology_mismatch_warns`).
+
+- **Three-stage section in `docs/theory/sizing_flow.rst`** — block diagram,
+  design variable table, PM derivation with LaTeX, numerical example, FD
+  power formula, and operating-point mapping.
+
+- **Example performance specs** (`examples/`) —
+  `spec_three_stage_opamp_single_ended.yaml` and
+  `spec_three_stage_opamp_fully_differential.yaml`, ready-to-run targets that
+  demonstrate `third_stage_current_ratio` and the three-stage sizing flow.
+
+- **`warnings` field** (`SizingResult`) — advisory messages surfaced by the
+  `size` CLI with a `⚠` prefix; empty when the netlist cleanly matches the
+  topology.
+
+### Fixed
+
+- **Metrics dropped for PMOS-common-source stages** — `_evaluate_metrics` read
+  `gm2`/`gm3` only from the NMOS device, so any stage whose signal transistor is
+  the PMOS (~1/3 of enumerated three-stage circuits, plus two-stage PMOS-CS)
+  silently lost `gain_db`, `phase_margin_deg`, and `psrr_db`. It now reads
+  `gm2`/`gm3` from the **signal transistor regardless of polarity** and uses the
+  current-source load's `gd` for the PSRR estimate. The CP-SAT sizing was already
+  correct; only the reported metrics were affected.
+
+- **Silent topology mismatch** — sizing a netlist against the wrong `--topology`
+  (e.g. a single-ended netlist as fully-differential) shoehorns bias devices into
+  `*_p` stage slots and dropped the gain/PM/PSRR metrics with no explanation.
+  `size_circuit()` now detects gain-stage slots that contain no signal transistor
+  and reports a warning instead of failing silently.
+
+### Notes
+
+- Supported topologies: all seven (one-stage, SE/FD two-stage, four three-stage).
+- NMC and RNMC share the same conservative PM formula; RNMC circuits are
+  slightly over-designed at the sizing level (acceptable for initial sizing).
+- ``cc2_pf`` is always ``None`` for one- and two-stage results —
+  backward compatible.
+
 ## 2026-06-21
 
 Issue [#51](https://github.com/analog-ml/CircuitGenome/issues/51), PR
