@@ -1,20 +1,24 @@
+<p align="center">
+  <img src="docs/images/logo_transparent.png" alt="CircuitGenome logo" width="200"/>
+</p>
+
 # CircuitGenome
 
 A Python toolkit for analog circuit topology synthesis and recognition, focused on op-amp design.
 
 ## Modules
 
-### 1. Topology Synthesizer *(available)*
+### 1. Topology Synthesizer
 Constructs complete op-amp circuits from modular building blocks. Given a topology configuration (number of stages, output type), it enumerates every valid combination of module variants and emits SPICE netlists.
 
-### 2. Subcircuit Recognizer *(available, MVP)*
-Takes a flat SPICE netlist and identifies structural subcircuits (differential pairs, current mirrors, cascode loads, bias generators, CMFB circuits, compensation networks, second-stage amplifiers, etc.) via a YAML pattern library. The library covers 34 patterns across seven categories (input pair, load, tail current, bias generation, CMFB, compensation, second stage), spanning all seven topologies from `one_stage_opamp` through the four 3-stage NMC/RNMC variants.
+### 2. Subcircuit Recognizer
+Takes a flat SPICE netlist and identifies structural subcircuits — differential pairs, current mirrors, cascode loads, bias generators, CMFB circuits, compensation networks, and gain stages — using a YAML pattern library that spans all seven supported topologies.
 
-### 3. Functional Block Recognizer *(available, MVP)*
-Takes the Subcircuit Recognizer's output plus a topology template and assigns each recognized structure to its functional slot (input stage, load, tail current, bias generation, etc.), recovering the original `variant_map`.
+### 3. Functional Block Recognizer
+Takes the Subcircuit Recognizer's output plus a topology template and assigns each recognized structure to its functional slot (input pair, load, tail current, bias generation, etc.), recovering the circuit's `variant_map`.
 
-### 4. Initial Sizer *(available)*
-Takes the Functional Block Recognizer's slot assignments plus a performance specification (gain, GBW, phase margin, slew rate, CMRR) and computes minimum transistor W/L values using an OR-Tools CP-SAT integer-programming solver. Currently supports two-stage Miller-compensated single-ended op-amps.
+### 4. Initial Sizer
+Takes the slot assignments plus a performance specification (gain, GBW, phase margin, slew rate, CMRR) and computes minimum transistor W/L values with an OR-Tools CP-SAT integer-programming solver. Supports one-, two-, and three-stage op-amps, both single-ended and fully differential.
 
 ---
 
@@ -82,131 +86,17 @@ The synthesizer works by combining **module variants** according to a **topology
 | `three_stage_opamp_nmc_fully_differential` | 3 | Fully differential | Nested Miller (NMC) |
 | `three_stage_opamp_rnmc_fully_differential` | 3 | Fully differential | Reversed Nested Miller (RNMC) |
 
-Of the 5 × 12 × 6 = 360 possible `input_pair` / `load` / `tail_current`
-combinations, only 144 have compatible PMOS/NMOS polarities (see "Polarity
-compatibility filter" below) — the rest are filtered out by
-`enumerate_circuits`. Of those 144, 72 use `inverter_based_input`, whose
-self-biased design never references its `tail` port: the "Tail-current
-compatibility filter" below collapses those 72 combinations' 6
-`tail_current` choices down to 1 canonical choice (72 -> 12), leaving **84**
-effective combinations (the 72 combinations using a `differential_pair_*`
-variant are unaffected). Of those 84, the "Output-cardinality compatibility
-filter" below further splits them by which output type the `load` supports:
-**70** are valid for single-ended topologies and **56** are valid for
-fully-differential topologies. A 1-stage topology therefore yields
-**210 unique circuits** (70 × 3). A 2-stage single-ended topology yields
-**1890 circuits** (70 × 3 × 3 × 3); a 2-stage fully-differential topology
-also has a `cmfb` slot, but (per the "CMFB compatibility filter" below) only
-the 14-of-56 combinations using a `"differential"`-cardinality `load` keep
-both `cmfb` variants -- 28 + 42 = 70 effective load/cmfb combinations, so it
-yields **17 010 circuits** (70 × 3⁵). Each 3-stage single-ended topology adds
-two more `second_stage` slots (gm2, gm3) and two `compensation` slots (Cm1,
-Cm2), yielding **17 010 circuits** (70 × 3⁵). Each 3-stage
-fully-differential topology duplicates those four slots per output path
-(keeping the single `cmfb` slot), yielding **1 377 810 circuits** (70 × 3⁹).
+### Compatibility filters and compensation schemes
 
-### Polarity compatibility filter
+Not every module combination forms a valid circuit, so `enumerate_circuits`
+applies a set of compatibility filters — **polarity**, **output-cardinality**,
+**CMFB**, and **tail-current** — that prune invalid or redundant combinations,
+and the two three-stage compensation schemes (**NMC** and **RNMC**) reuse the
+existing second-stage and compensation modules. The exact per-topology circuit
+counts, the rules behind each filter, and how to extend them are documented in
+detail in the Sphinx documentation:
 
-A circuit only has a real DC current path if its `input_pair`, `load`, and
-`tail_current` agree on polarity. For example, `differential_pair_nmos`
-draws current out of `out1`/`out2` into the tail, so it needs a `load` that
-*sources* current into `out1`/`out2` from vdd and a `tail_current` that
-*sinks* the tail node to gnd — pairing it with `active_load_nmos` (which also
-sinks to gnd) or `current_mirror_tail_pmos` (which also sources into the
-tail) leaves a node with no current path.
-
-Each `input_pair`, `load`, and `tail_current` variant declares a `polarity`
-field in `opamp_modules.yaml`: `pmos_input`, `nmos_input`, or omitted for
-variants that work with either (`inverter_based_input`, and currently all
-`bias_generation` variants). `enumerate_circuits` skips any combination where
-`load`/`tail_current`'s `polarity` (if set) doesn't match `input_pair`'s. To
-extend the filter to a new or edited variant, just add the matching
-`polarity:` tag in YAML — no code changes needed
-(`circuitgenome/synthesizer/polarity_compatibility.py`).
-
-### Output-cardinality compatibility filter
-
-`load.in1`/`in2` (the folding nodes fed by `input_pair.out1`/`out2`) and
-`load.out`/`out1`/`out2` (the load's actual output node(s)) are wired to
-*separate* nets by every topology. Whether the output-side ports get a net at
-all depends on the topology's `output_type`: `load.out1`/`out2` are wired to
-`net_loadout1`/`net_loadout2` only in `fully_differential` topologies (sensed
-by `cmfb`/`second_stage*`/`comp*`), and `load.out`/`out2` are wired to the
-stage's output node only in `single_ended` topologies.
-
-Folded-cascode/telescopic-cascode loads with a single output
-(`folded_cascode_load_*_input_single_output`,
-`telescopic_cascode_load_{pmos,nmos}`) declare `out` as mandatory, so they'd
-be left floating in a `fully_differential` topology. Folded-cascode loads
-with differential outputs (`folded_cascode_load_*_input_differential_output`)
-declare `out1`/`out2` as mandatory cascode-output nodes, so they'd be left
-floating in a `single_ended` topology (where `net_loadout1`/`net_loadout2`
-aren't defined).
-
-These 6 `load` variants declare an `output_cardinality` field in
-`opamp_modules.yaml`: `"single"` (compatible only with `single_ended`) or
-`"differential"` (compatible only with `fully_differential`); the other 6
-`load` variants (resistor/active/current-source) declare `out1`/`out2` as
-`alias_of: in1`/`in2` — a net-merge pass (`net_aliasing.py`) collapses their
-`out1`/`out2` net back onto `in1`/`in2`'s after assembly, restoring a single
-shared in/out node regardless of `output_type`. They're untagged and
-compatible with either. `enumerate_circuits` skips any combination where
-`load`'s `output_cardinality` (if set) doesn't match the topology's
-`output_type`. To extend the filter to a new or edited `load` variant, just
-add the matching `output_cardinality:` tag in YAML — no code changes needed
-(`circuitgenome/synthesizer/output_compatibility.py`).
-
-### CMFB compatibility filter
-
-`fully_differential` topologies have a `cmfb` slot, wired
-`cmfb.out -> net_cmfb_out -> load.bias_cmfb`. Of the 12 `load` variants, only
-the 2 tagged `output_cardinality: "differential"`
-(`folded_cascode_load_*_input_differential_output`) declare `bias_cmfb` as a
-real consumer (gating `mn3`/`mn4` or `mp1`/`mp2`); the other 10 declare it
-`optional` and never reference it, so `net_cmfb_out` would drive nothing.
-
-For a `load` whose `output_cardinality` isn't `"differential"`,
-`enumerate_circuits` only allows the canonical `resistive_sense_cmfb` variant
-through (avoiding a duplicate-circuit enumeration of `dda_cmfb`), then prunes
-it to an empty placeholder — it contributes no devices, `cmfb.bias` is no
-longer a needed bias rail, and the `vcm_ref` external port is left
-unconnected for these circuits. To extend: tag a new or edited `load` variant
-with `output_cardinality: "differential"` (and give it a real `bias_cmfb`
-consumer) to make it a genuine `cmfb` consumer — no code changes needed
-(`circuitgenome/synthesizer/cmfb_compatibility.py`).
-
-### Tail-current compatibility filter
-
-Every topology has a `tail_current` slot, wired `input_pair.tail ->
-net_tail <- tail_current.out`. Of the 5 `input_pair` variants, only the 4
-`differential_pair_*` variants reference their `tail` port from a device
-terminal; `inverter_based_input` — two back-to-back CMOS inverters — is
-self-biased by design and never references `tail`, so without this filter
-`net_tail` would be a floating, single-terminal node and `tail_current` would
-drive nothing.
-
-For an `input_pair` that doesn't reference `tail`, `enumerate_circuits` only
-allows the canonical `current_mirror_tail_pmos` variant through (avoiding a
-duplicate-circuit enumeration of the other 5 `tail_current` variants), then
-prunes it to an empty placeholder — it contributes no devices, `net_tail` is
-no longer floating, and `tail_current.bias` is no longer a needed bias rail.
-To extend: wire a new or edited `input_pair` variant's tail-side device
-terminal(s) to `tail` to make it a genuine `tail_current` consumer — no code
-changes needed (`circuitgenome/synthesizer/tail_current_compatibility.py`).
-
-### Three-stage compensation schemes
-
-Both 3-stage templates reuse the existing `second_stage` modules for the
-second (gm2) and third (gm3) gain stages, and the existing `compensation`
-modules for the two Miller capacitors Cm1/Cm2 — no new module variants are
-required.
-
-- **Nested Miller (NMC)** — both Cm1 and Cm2 return to the final output node:
-  Cm1 spans gm2+gm3 (outer loop), Cm2 spans gm3 only (inner loop).
-- **Reversed Nested Miller (RNMC)** — Cm1 spans gm3 only (gm2's output to the
-  final output), while Cm2 spans gm2 only (gm1's output to gm2's output)
-  instead of returning to the final output. This reduces output-node loading,
-  which is useful when gm3 is a low-gain buffer.
+**https://circuitgenome.readthedocs.io/**
 
 ---
 
@@ -490,8 +380,35 @@ python3 -m pytest tests/ -v
 
 ---
 
+## Contributing
+
+CircuitGenome is an open research project and contributions are very welcome —
+new module variants, topology templates, recognizer patterns, sizing
+heuristics, bug fixes, and documentation improvements.
+
+- Browse or open issues: <https://github.com/analog-ml/CircuitGenome/issues>
+- Fork the repo, create a feature branch, and open a pull request against `main`.
+- Run the test suite before submitting: `python3 -m pytest tests/ -v`.
+- Adding a new module variant usually needs **no code changes** — just edit
+  `opamp_modules.yaml` (see "Extending with custom modules" above).
+
+Full developer and API documentation lives in the Sphinx docs:
+<https://circuitgenome.readthedocs.io/>
+
+---
+
 ## References
 
-- *A Data-Driven Analog Circuit Synthesizer with Automatic Topology Selection and Sizing*
-- *FUBOCO: Structure Synthesis of Basic Op-Amps by FUnctional BlOck COmposition*
-- *A Functional Block Decomposition Method for Automatic Op-Amp Design*
+1. **A Data-Driven Analog Circuit Synthesizer with Automatic Topology Selection
+   and Sizing** — S. Poddar, A. F. Budak, L. Zhao, C.-H. Hsu, S. Maji, K. Zhu,
+   Y. Jia, D. Z. Pan. *Design, Automation & Test in Europe (DATE)*, 2024.
+2. **FUBOCO: Structure Synthesis of Basic Op-Amps by FUnctional BlOck
+   COmposition** — I. Abel, H. Graeb. *ACM Transactions on Design Automation of
+   Electronic Systems (TODAES)*, 2022.
+3. **A Functional Block Decomposition Method for Automatic Op-Amp Design** —
+   I. Abel, M. Neuner, H. Graeb. *Integration, the VLSI Journal* (Elsevier), 2022.
+4. **Constraint-Programmed Initial Sizing of Analog Operational Amplifiers** —
+   I. Abel, M. Neuner, H. Graeb. *IEEE International Conference on Computer
+   Design (ICCD)*, 2019.
+
+PDFs of all four papers are in [`docs/papers/`](docs/papers/).

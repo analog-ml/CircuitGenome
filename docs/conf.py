@@ -24,6 +24,7 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 html_theme = "alabaster"
 html_theme_options = {
+    "logo": "logo_transparent.png",
     "description": "Analog circuit topology synthesis and recognition",
     "github_user": "analog-ml",
     "github_repo": "CircuitGenome",
@@ -43,5 +44,5 @@ html_sidebars = {
         "searchbox.html",
     ]
 }
-html_static_path = ["_static"]
+html_static_path = ["_static", "images"]
 html_title = "CircuitGenome"
