@@ -3,6 +3,39 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-22 (PTM technologies)
+
+PR [#58](https://github.com/analog-ml/CircuitGenome/pull/58)
+(`feat/sizer-tech-ptm`).
+
+### Added
+
+- **PTM technology configs** (`circuitgenome/sizer/config/`) — `tech_ptm45`,
+  `tech_ptm32`, `tech_ptm22`, and `tech_ptm16`, planar-bulk nodes from the ASU
+  Predictive Technology Model. The Level-1 sizer parameters (`mu_cox`, `vth`,
+  `lam`) are **extracted with ngspice** from the BSIM4 cards
+  (`config/models/ptm_*nm_HP.pm`, vendored with attribution). `tech_ptm16` is a
+  predictive planar extrapolation — real 16 nm silicon is FinFET.
+
+- **`tools/extract_tech.py`** — reusable ngspice-driven extractor that fits the
+  effective Level-1 `mu_cox` / `vth` / `lam` from a BSIM4 card via transfer and
+  output DC sweeps and writes a `tech_*.yaml`.
+
+- **Built-in tech-name resolution** — `load_tech()` (and `size --tech`) now
+  accept a short config name (`ptm45`, `generic`, …) in addition to a file path.
+
+- **Docs** — Overview "Technology configurations" table and CLI `--tech` notes
+  listing the available configs and the planar-bulk/square-law scope.
+
+- **Tests** — `tests/test_sizer.py` parametrizes a feasible two-stage sizing
+  across all four PTM nodes.
+
+- **Per-node example specs** — ready-to-run, feasible specs for every
+  opamp type × technology node (generic + ptm45/32/22/16), grouped one directory
+  per type under `examples/`: `one_stage_specs/`, `two_stage_se_specs/`,
+  `two_stage_fd_specs/`, `three_stage_se_specs/`, `three_stage_fd_specs/` (each
+  with a README index). 25 specs total, all verified to size OPTIMAL.
+
 ## 2026-06-22 (sizer docs)
 
 PR [#57](https://github.com/analog-ml/CircuitGenome/pull/57)

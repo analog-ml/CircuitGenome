@@ -7,7 +7,7 @@ Miller-compensated single-ended op-amp.  It covers the device model,
 the five-step constraint derivation order, the CP-SAT integer
 linearisation, and the post-sizing performance metric evaluation —
 with a concrete numerical walkthrough using the values from
-``examples/spec_two_stage_opamp.yaml``.
+``examples/two_stage_se_specs/spec_generic.yaml``.
 
 .. contents:: On this page
    :depth: 2
@@ -161,7 +161,7 @@ Reference: :func:`~circuitgenome.sizer.sizer._compute_requirements`
 
 Each step below follows the same structure: **equation → derivation →
 intuition → why this position in the ordering → numerical example** using
-``ibias`` = 10 µA, ``cl`` = 20 pF (``examples/spec_two_stage_opamp.yaml``).
+``ibias`` = 10 µA, ``cl`` = 20 pF (``examples/two_stage_se_specs/spec_generic.yaml``).
 
 Step 1 — CMRR sets the gm\ :sub:`1` floor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -206,7 +206,7 @@ but shown here for illustration):
 
 .. note::
 
-   ``examples/spec_two_stage_opamp.yaml`` does *not* specify ``cmrr_min_db``
+   ``examples/two_stage_se_specs/spec_generic.yaml`` does *not* specify ``cmrr_min_db``
    because CMRR = 50 dB + GBW = 2.5 MHz + SR = 3.5 V/µs are mutually
    exclusive at :math:`I_{bias}` = 10 µA (see `Spec compatibility`_).
    The bound above is shown purely to illustrate the formula.

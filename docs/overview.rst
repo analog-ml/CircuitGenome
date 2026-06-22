@@ -881,3 +881,38 @@ currents.  Specifically, ``CMRR_min + GBW_min`` together fix ``Cc ≥ gm1_cmrr /
 (2π · GBW_min)``; if that ``Cc`` exceeds ``ibias / SR_min``, the slew-rate
 spec cannot be met.  In that case the solver returns ``INFEASIBLE``.  The
 recommended approach is to specify at most two of the three, or relax ``ibias``.
+
+Technology configurations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The sizer reads its device parameters from a technology YAML, selected with
+``circuitgenome size --tech <file>`` (default: the built-in
+``tech_generic``).  Built-in configs live in
+``circuitgenome/sizer/config/``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 32 16 52
+
+   * - Config
+     - Node
+     - Notes
+   * - ``tech_generic``
+     - ~0.25 µm
+     - Illustrative defaults; the built-in fallback.
+   * - ``tech_ptm45`` / ``tech_ptm32`` / ``tech_ptm22``
+     - 45 / 32 / 22 nm
+     - Planar-bulk BSIM4 from the ASU Predictive Technology Model; the Level-1
+       parameters (``mu_cox``, ``vth``, ``lam``) are extracted with ngspice.
+   * - ``tech_ptm16``
+     - 16 nm
+     - PTM 16 nm **bulk** — a *predictive planar extrapolation* (real 16 nm
+       silicon is FinFET); for exploration only.
+
+These Level-1 values are *effective* square-law fits to the BSIM4 devices, so
+they suit **initial** sizing of planar-bulk designs.  FinFET nodes (≤16 nm in
+silicon) need a different device model and are not covered.  Regenerate the
+configs or add a node with ``tools/extract_tech.py`` (requires ngspice).
+Source / citation: ASU Predictive Technology Model, https://ptm.asu.edu
+(W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for Sub-45nm
+Design Exploration," ISQED 2006).

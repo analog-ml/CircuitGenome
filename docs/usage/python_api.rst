@@ -211,7 +211,7 @@ W/L values for every transistor.
    print(f"  Cc = {result.cc_pf:.2f} pF")
 
 The spec YAML file (used by the CLI) mirrors ``SizingSpec`` field names
-directly.  See ``examples/spec_two_stage_opamp.yaml`` for an annotated
+directly.  See ``examples/two_stage_se_specs/spec_generic.yaml`` for an annotated
 example.
 
 See :doc:`../overview` for the sizer's constraint derivation order and

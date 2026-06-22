@@ -152,10 +152,10 @@ circuitgenome synthesize --stages 3 --dry-run
 circuitgenome size \
   circuits/two_stage_opamp_single_ended/circuit_0001_flat.ckt \
   --topology two_stage_opamp_single_ended \
-  --spec examples/spec_two_stage_opamp.yaml
+  --spec examples/two_stage_se_specs/spec_generic.yaml
 ```
 
-The spec file is a YAML document with SI-unit values (see `examples/spec_two_stage_opamp.yaml`):
+The spec file is a YAML document with SI-unit values (see `examples/two_stage_se_specs/spec_generic.yaml`):
 
 ```yaml
 vdd: 5.0
