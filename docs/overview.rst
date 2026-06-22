@@ -771,10 +771,17 @@ Initial Sizer
 
 The sizer takes the FBR result (slot assignments) plus a performance
 specification and returns minimum W/L values for every transistor in the
-circuit.  It targets two-stage Miller-compensated op-amps with the following
-supported topologies:
+circuit.  It supports all seven op-amp topology templates — one-stage,
+two-stage (single-ended and fully differential), and the four three-stage
+NMC/RNMC variants (single-ended and fully differential):
 
+- ``one_stage_opamp``
 - ``two_stage_opamp_single_ended``
+- ``two_stage_opamp_fully_differential``
+- ``three_stage_opamp_nmc_single_ended``
+- ``three_stage_opamp_rnmc_single_ended``
+- ``three_stage_opamp_nmc_fully_differential``
+- ``three_stage_opamp_rnmc_fully_differential``
 
 Supported performance specs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -800,6 +807,9 @@ The ``SizingSpec`` dataclass accepts:
    * - ``second_stage_current_ratio``
      - —
      - ``iDS_2 = ratio × ibias`` (default 2.0)
+   * - ``third_stage_current_ratio``
+     - —
+     - ``iDS_3 = ratio × ibias`` (three-stage only; default 5.0)
    * - ``gain_min_db``
      - dB
      - Minimum open-loop DC voltage gain
@@ -824,6 +834,13 @@ The ``SizingSpec`` dataclass accepts:
 
 Sizing algorithm
 ~~~~~~~~~~~~~~~~
+
+.. note::
+
+   The requirement-derivation order below is shown for the **two-stage** case
+   as an illustration. The complete derivation for all seven topologies —
+   including the three-stage inner-pole and :math:`g_{m3}` steps — is covered
+   in :doc:`theory/sizing_flow`.
 
 The sizer uses a Level-1 MOSFET model where ``gm = √(2·µCox·(W/L)·IDS)``
 and ``gd = λ·|IDS|``.  Because ``IDS`` is topology-determined by KCL and the
