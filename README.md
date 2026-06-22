@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/logo_transparent.png" alt="CircuitGenome logo" width="200"/>
+</p>
+
 # CircuitGenome
 
 A Python toolkit for analog circuit topology synthesis and recognition, focused on op-amp design.
