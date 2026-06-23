@@ -9,6 +9,7 @@
 name: ptm45_hp
 description: "PTM 45nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)"
 spice_model: models/ptm_45nm_HP.pm   # BSIM4 card for SPICE verification
+gmid_lut: models/ptm45_gmid.npz   # gm/Id LUT for the procedural PTM sizer
 
 nmos:
   mu_cox: 3.501367e-04   # A/V²  (effective µn·Cox)

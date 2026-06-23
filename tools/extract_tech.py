@@ -246,11 +246,170 @@ cap:
     return out
 
 
+# ---------------------------------------------------------------------------
+# gm/Id lookup-table characterization
+# ---------------------------------------------------------------------------
+# The gm/Id sizing path drives geometry from a SPICE-characterized table instead
+# of the square law.  For each polarity and channel length we sweep Vgs in
+# saturation (Vds = Vdd/2) at a fixed extraction width and read the BSIM4
+# operating-point parameters, then invert onto a uniform gm/Id axis.
+
+# Uniform gm/Id axis (1/V): weak inversion (~24) down to strong inversion (~6).
+_GMID_AXIS = np.round(np.arange(6.0, 24.0 + 1e-9, 0.5), 3)
+
+
+def _gmid_sweep(card: Path, dev: str, vdd: float, w_um: float, l_um: float):
+    """Sweep Vgs at Vds=Vdd/2; return per-point (gm_id, id_w, gm_gds, ft, vdsat, vgs).
+
+    ``id_w`` is Id per µm of width (A/µm); ``vgs`` is the gate-source voltage
+    magnitude (positive for both polarities).  All quantities are magnitudes.
+    """
+    w, l = w_um * _UM, l_um * _UM
+    vds = vdd / 2.0
+    step = vdd / 400.0
+    saves = ".save @m1[id] @m1[gm] @m1[gds] @m1[cgg] @m1[vdsat]\n"
+    cols = "@m1[id] @m1[gm] @m1[gds] @m1[cgg] @m1[vdsat]"
+    if dev == "nmos":
+        deck = f"""* gmid nmos
+.include "{card}"
+Vd d 0 {vds:.6e}
+Vg g 0 0
+M1 d g 0 0 nmos W={w:.6e} L={l:.6e}
+{saves}.dc Vg 0 {vdd} {step:.6e}
+.control
+run
+wrdata __OUT__ {cols}
+.endc
+.end
+"""
+    else:
+        deck = f"""* gmid pmos
+.include "{card}"
+Vs s 0 {vdd}
+Vd d 0 {vdd - vds:.6e}
+Vg g 0 {vdd}
+M1 d g s s pmos W={w:.6e} L={l:.6e}
+{saves}.dc Vg {vdd} 0 {-step:.6e}
+.control
+run
+wrdata __OUT__ {cols}
+.endc
+.end
+"""
+    data = _run_ngspice(deck)
+    # wrdata writes a scale column before each vector: [vg, id, vg, gm, vg, gds, ...].
+    vg = data[:, 0]
+    idr = np.abs(data[:, 1])
+    gm = np.abs(data[:, 3])
+    gds = np.abs(data[:, 5])
+    cgg = np.abs(data[:, 7])
+    vdsat = np.abs(data[:, 9])
+    vgs = vg if dev == "nmos" else (vdd - vg)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gm_id = gm / idr
+        id_w = idr / w_um
+        gm_gds = gm / gds
+        ft = gm / (2.0 * np.pi * cgg)
+    return gm_id, id_w, gm_gds, ft, vdsat, vgs
+
+
+def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Resample per-point fields onto the uniform gm/Id axis at one L.
+
+    ``gm_id`` decreases as Vgs rises; we keep the strictly-decreasing, finite,
+    in-window samples, sort ascending, and linearly interpolate (np.interp
+    clamps out-of-range axis points to the endpoints).
+    """
+    g = gm_id
+    good = np.isfinite(g)
+    for v in fields.values():
+        good &= np.isfinite(v)
+    good &= (g >= _GMID_AXIS[0] - 2.0) & (g <= _GMID_AXIS[-1] + 4.0)
+    g = g[good]
+    order = np.argsort(g)
+    g = g[order]
+    # Deduplicate equal gm/Id (flat weak-inversion tail) so np.interp is well posed.
+    keep = np.concatenate(([True], np.diff(g) > 1e-9))
+    g = g[keep]
+    out: dict[str, np.ndarray] = {}
+    for name, v in fields.items():
+        vv = v[good][order][keep]
+        out[name] = np.interp(_GMID_AXIS, g, vv)
+    return out
+
+
+def extract_gmid(node: str) -> dict:
+    """Build the gm/Id LUT arrays for one node (both polarities)."""
+    cfg = NODES[node]
+    card = _MODELS / cfg["card"]
+    vdd, w = cfg["vdd"], cfg["w_ext_um"]
+    lmin, lmax, lstep = cfg["length"]
+    # ~10 log-spaced lengths from L_min to L_max, snapped to the length grid.
+    raw = np.geomspace(lmin, lmax, 10)
+    l_axis = np.unique(np.round(np.round(raw / lstep) * lstep, 6))
+    data: dict[str, np.ndarray] = {"gm_id_axis": _GMID_AXIS, "l_axis": l_axis}
+    for dev in ("nmos", "pmos"):
+        cube = {k: [] for k in ("id_w", "gm_gds", "ft", "vdsat", "vgs")}
+        for l_um in l_axis:
+            gm_id, id_w, gm_gds, ft, vdsat, vgs = _gmid_sweep(card, dev, vdd, w, float(l_um))
+            row = _invert_to_axis(
+                gm_id,
+                {"id_w": id_w, "gm_gds": gm_gds, "ft": ft, "vdsat": vdsat, "vgs": vgs},
+            )
+            for k in cube:
+                cube[k].append(row[k])
+        for k, rows in cube.items():
+            data[f"{dev}_{k}"] = np.asarray(rows)  # shape (n_L, n_gmid)
+    return data
+
+
+def write_npz(node: str, data: dict) -> Path:
+    out = _MODELS / f"ptm{node}_gmid.npz"
+    np.savez(out, **data)
+    return out
+
+
+def inject_gmid_lut_yaml(node: str, npz_name: str) -> None:
+    """Add/update a ``gmid_lut:`` line in the node's tech YAML (after spice_model)."""
+    yml = _CONFIG / f"tech_ptm{node}.yaml"
+    if not yml.exists():
+        return
+    lines = yml.read_text().splitlines(keepends=True)
+    rel = f"models/{npz_name}"
+    if any(l.lstrip().startswith("gmid_lut:") for l in lines):
+        lines = [
+            (f"gmid_lut: {rel}   # gm/Id LUT for the procedural PTM sizer\n"
+             if l.lstrip().startswith("gmid_lut:") else l)
+            for l in lines
+        ]
+    else:
+        idx = next((i for i, l in enumerate(lines)
+                    if l.lstrip().startswith("spice_model:")), None)
+        new = f"gmid_lut: {rel}   # gm/Id LUT for the procedural PTM sizer\n"
+        if idx is not None:
+            lines.insert(idx + 1, new)
+        else:
+            lines.append(new)
+    yml.write_text("".join(lines))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--node", choices=sorted(NODES), help="One node (default: all)")
+    ap.add_argument("--gm-id", action="store_true",
+                    help="Characterize the gm/Id LUT (write *_gmid.npz + YAML gmid_lut:) "
+                         "instead of the Level-1 fit.")
     args = ap.parse_args()
     nodes = [args.node] if args.node else sorted(NODES)
+    if args.gm_id:
+        for node in nodes:
+            data = extract_gmid(node)
+            path = write_npz(node, data)
+            inject_gmid_lut_yaml(node, path.name)
+            ax = data["gm_id_axis"]
+            print(f"{node}nm gm/Id LUT: {data['l_axis'].size} lengths × "
+                  f"{ax.size} gm/Id points [{ax[0]}..{ax[-1]}/V]  ->  {path.name}")
+        return
     for node in nodes:
         params = extract(node)
         path = write_yaml(node, params)

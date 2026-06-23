@@ -36,6 +36,8 @@ from circuitgenome.synthesizer.models import Device, TopologyTemplate
 
 from . import equations as eq
 from .constraints import build_model
+from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel, build_device_model
+from .gmid_geometry import assign_geometry_gmid
 from .models import SizingResult, SizingSpec, TechParams, TransistorSizing
 
 # Slots that carry iBias/2 per transistor (both sides of the differential pair).
@@ -213,11 +215,14 @@ def _compute_requirements(
     ids_map: dict[str, float],
     tech: TechParams,
     spec: SizingSpec,
+    model: DeviceModel,
     gd_load_r: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float], float | None, float | None]:
     """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
-    Returns ``(gm_req_map, vod_max_map, cc_pf, cc2_pf)``.
+    Returns ``(gm_req_map, vod_max_map, cc_pf, cc2_pf)``.  Output conductances
+    come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
+    model reproduces the geometry-free ``λ·Id`` exactly.
     """
     is_three_stage = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
     has_second_stage = (
@@ -229,11 +234,13 @@ def _compute_requirements(
     ip_devices = slot_transistors.get("input_pair", [])
     ld_devices = slot_transistors.get("load", [])
 
-    def _lam(device: Device) -> float:
-        return tech.nmos.lam if device.type == "nmos" else tech.pmos.lam
+    def _gds_est(device: Device, ids: float) -> float:
+        """Pre-geometry gds estimate, role-aware (signal vs current source)."""
+        role = SIGNAL if _is_signal_dev(device) else CURRENT_SOURCE
+        return model.gds_estimate(device.type, ids, role)
 
-    gd_ip = eq.gd(_lam(ip_devices[0]), spec.ibias / 2) if ip_devices else 0.0
-    gd_ld = eq.gd(_lam(ld_devices[0]), spec.ibias / 2) if ld_devices else 0.0
+    gd_ip = _gds_est(ip_devices[0], spec.ibias / 2) if ip_devices else 0.0
+    gd_ld = _gds_est(ld_devices[0], spec.ibias / 2) if ld_devices else 0.0
     # Resistor-load conductance (1/R) loads the first-stage output node.
     rout1 = eq.rout(gd_ip, gd_ld + gd_load_r)
 
@@ -246,8 +253,8 @@ def _compute_requirements(
     )
     ss_nmos = next((d for d in ss_devices if d.type == "nmos"), None)
     ss_pmos = next((d for d in ss_devices if d.type == "pmos"), None)
-    gd_n2 = eq.gd(tech.nmos.lam, ids_2) if ss_nmos else 0.0
-    gd_p2 = eq.gd(tech.pmos.lam, ids_2) if ss_pmos else 0.0
+    gd_n2 = _gds_est(ss_nmos, ids_2) if ss_nmos else 0.0
+    gd_p2 = _gds_est(ss_pmos, ids_2) if ss_pmos else 0.0
     rout2 = eq.rout(gd_n2, gd_p2) if (gd_n2 + gd_p2) > 0 else float("inf")
 
     # Third-stage output conductances (three-stage topologies only).
@@ -260,8 +267,8 @@ def _compute_requirements(
     )
     ts_nmos = next((d for d in ts_devices if d.type == "nmos"), None)
     ts_pmos = next((d for d in ts_devices if d.type == "pmos"), None)
-    gd_n3 = eq.gd(tech.nmos.lam, ids_3) if ts_nmos else 0.0
-    gd_p3 = eq.gd(tech.pmos.lam, ids_3) if ts_pmos else 0.0
+    gd_n3 = _gds_est(ts_nmos, ids_3) if ts_nmos else 0.0
+    gd_p3 = _gds_est(ts_pmos, ids_3) if ts_pmos else 0.0
     rout3 = eq.rout(gd_n3, gd_p3) if (gd_n3 + gd_p3) > 0 else float("inf")
 
     # --- gm1 lower bound from CMRR (independent of Cc — compute first) ---
@@ -271,7 +278,7 @@ def _compute_requirements(
     if spec.cmrr_min_db:
         tc_devices = slot_transistors.get("tail_current", [])
         if tc_devices:
-            gd_tail = eq.gd(_lam(tc_devices[0]), spec.ibias)
+            gd_tail = _gds_est(tc_devices[0], spec.ibias)
             cmrr_lin = 10.0 ** (spec.cmrr_min_db / 20.0)
             gm1_req = max(gm1_req, cmrr_lin * 2.0 * gd_tail)
 
@@ -344,22 +351,28 @@ def _compute_requirements(
                     gm2_req = max(gm2_req, per_stage)
 
             # From PM: gm2 = gm1·CL / (Cc·tan(90°−PM)).
-            # Use worst-case (ceiling) gm1 from the integer W grid.
             if spec.phase_margin_min_deg and gm1_req > 0.0 and ip_devices:
-                ip_dev = ip_devices[0]
-                ip_params = tech.nmos if ip_dev.type == "nmos" else tech.pmos
-                ids_ip = spec.ibias / max(
-                    len([d for d in ip_devices if d.type == ip_dev.type]), 1
-                )
-                lhs = 2.0 * ip_params.mu_cox * ids_ip
-                l_min_int = round(tech.length.min / tech.length.step)
-                w_ceil_int = math.ceil(gm1_req ** 2 * l_min_int / lhs)
-                w_ceil_int = min(w_ceil_int, round(tech.width.max / tech.width.step))
-                gm1_worst = math.sqrt(lhs * w_ceil_int / l_min_int)
+                if model.is_gmid:
+                    # Procedural geometry snaps then evaluates PM from the actual
+                    # geometry, so use gm1_req directly (no grid-ceiling inflation).
+                    gm1_eff = gm1_req
+                else:
+                    # Level-1 + CP-SAT: anticipate W rounding up to the grid by
+                    # using the worst-case (ceiling) gm1 from the integer W grid.
+                    ip_dev = ip_devices[0]
+                    ip_params = tech.nmos if ip_dev.type == "nmos" else tech.pmos
+                    ids_ip = spec.ibias / max(
+                        len([d for d in ip_devices if d.type == ip_dev.type]), 1
+                    )
+                    lhs = 2.0 * ip_params.mu_cox * ids_ip
+                    l_min_int = round(tech.length.min / tech.length.step)
+                    w_ceil_int = math.ceil(gm1_req ** 2 * l_min_int / lhs)
+                    w_ceil_int = min(w_ceil_int, round(tech.width.max / tech.width.step))
+                    gm1_eff = math.sqrt(lhs * w_ceil_int / l_min_int)
                 pm_rad = math.radians(spec.phase_margin_min_deg)
                 gm2_req = max(
                     gm2_req,
-                    gm1_worst * spec.cl / (cc_f * math.tan(math.pi / 2.0 - pm_rad)),
+                    gm1_eff * spec.cl / (cc_f * math.tan(math.pi / 2.0 - pm_rad)),
                 )
 
         cc_pf = cc_f * 1e12
@@ -377,19 +390,27 @@ def _compute_requirements(
     # binding clamp means the spec needs more bias current than the device can
     # physically deliver, surfaced as a warning (the shortfall also shows in the
     # reported margins).
+    def _ceil(ids: float, devs: list[Device]) -> float:
+        sig = next((d for d in devs if _is_signal_dev(d)), devs[0] if devs else None)
+        dtype = sig.type if sig else "nmos"
+        return model.gm_ceiling(dtype, ids, tech.length.min)
+
     gm_ceiling_warnings: list[str] = []
-    if gm1_req > eq.gm_ceiling(spec.ibias / 2.0):
-        gm1_req = eq.gm_ceiling(spec.ibias / 2.0)
+    gm1_ceil = _ceil(spec.ibias / 2.0, ip_devices)
+    if gm1_req > gm1_ceil:
+        gm1_req = gm1_ceil
         gm_ceiling_warnings.append(
             "input-pair gm requirement exceeds the weak-inversion ceiling at "
             "ibias/2 — increase ibias or relax GBW/gain (the design will fall short).")
-    if gm2_req > eq.gm_ceiling(spec.ibias * spec.second_stage_current_ratio):
-        gm2_req = eq.gm_ceiling(spec.ibias * spec.second_stage_current_ratio)
+    gm2_ceil = _ceil(spec.ibias * spec.second_stage_current_ratio, ss_devices)
+    if gm2_req > gm2_ceil:
+        gm2_req = gm2_ceil
         gm_ceiling_warnings.append(
             "second-stage gm requirement exceeds the weak-inversion ceiling — "
             "increase second_stage_current_ratio/ibias or relax gain.")
-    if gm3_req > eq.gm_ceiling(spec.ibias * spec.third_stage_current_ratio):
-        gm3_req = eq.gm_ceiling(spec.ibias * spec.third_stage_current_ratio)
+    gm3_ceil = _ceil(spec.ibias * spec.third_stage_current_ratio, ts_devices)
+    if gm3_req > gm3_ceil:
+        gm3_req = gm3_ceil
         gm_ceiling_warnings.append(
             "third-stage gm requirement exceeds the weak-inversion ceiling — "
             "increase third_stage_current_ratio/ibias or relax gain.")
@@ -458,10 +479,15 @@ def _evaluate_metrics(
     cc_pf: float | None,
     tech: TechParams,
     spec: SizingSpec,
+    model: DeviceModel,
     cc2_pf: float | None = None,
     gd_load_r: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float]]:
-    """Compute performance metrics and safety margins from the solution."""
+    """Compute performance metrics and safety margins from the solution.
+
+    Small-signal parameters come through ``model`` evaluated at the *solved*
+    geometry — exact for both Level-1 (geometry-free λ·Id) and gm/Id (LUT).
+    """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
     is_three_stage = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
@@ -472,34 +498,29 @@ def _evaluate_metrics(
     def _sz(ref: str) -> TransistorSizing | None:
         return transistor_sizing.get(ref)
 
-    def _mu(device: Device) -> float:
-        return tech.nmos.mu_cox if device.type == "nmos" else tech.pmos.mu_cox
+    def _gm(d: Device, s: TransistorSizing) -> float:
+        return min(model.gm(d.type, s.w_um, s.l_um, s.ids_a),
+                   model.gm_ceiling(d.type, s.ids_a, s.l_um))
 
-    def _lam(device: Device) -> float:
-        return tech.nmos.lam if device.type == "nmos" else tech.pmos.lam
+    def _gds(d: Device, s: TransistorSizing) -> float:
+        return model.gds(d.type, s.w_um, s.l_um, s.ids_a)
 
     # --- Input pair gm ---
     ip_devs = slot_transistors.get("input_pair", [])
     gm1 = 0.0
-    if ip_devs:
-        d = ip_devs[0]
-        s = _sz(d.ref)
-        if s:
-            gm1 = min(eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a), eq.gm_ceiling(s.ids_a))
+    s_ip = _sz(ip_devs[0].ref) if ip_devs else None
+    if s_ip:
+        gm1 = _gm(ip_devs[0], s_ip)
 
     # --- Load ---
     ld_devs = slot_transistors.get("load", [])
     gd_ld = 0.0
     if ld_devs:
-        d = ld_devs[0]
-        s = _sz(d.ref)
+        s = _sz(ld_devs[0].ref)
         if s:
-            gd_ld = eq.gd(_lam(d), s.ids_a)
+            gd_ld = _gds(ld_devs[0], s)
 
-    gd_ip = eq.gd(
-        tech.nmos.lam if ip_devs and ip_devs[0].type == "nmos" else tech.pmos.lam,
-        spec.ibias / 2,
-    ) if ip_devs else 0.0
+    gd_ip = _gds(ip_devs[0], s_ip) if s_ip else 0.0
     rout1 = (eq.rout(gd_ip, gd_ld + gd_load_r)
              if (gd_ip + gd_ld + gd_load_r) > 0 else float("inf"))
 
@@ -507,8 +528,9 @@ def _evaluate_metrics(
     tc_devs = slot_transistors.get("tail_current", [])
     gd_tail = 0.0
     if tc_devs:
-        d = tc_devs[0]
-        gd_tail = eq.gd(_lam(d), spec.ibias)
+        s = _sz(tc_devs[0].ref)
+        if s:
+            gd_tail = _gds(tc_devs[0], s)
 
     # --- Second stage (SE: "second_stage"; FD: use second_stage_p as representative) ---
     ss_devs = (
@@ -529,13 +551,13 @@ def _evaluate_metrics(
             s = _sz(d.ref)
             if not s:
                 continue
-            g_d = eq.gd(_lam(d), s.ids_a)
+            g_d = _gds(d, s)
             if d.type == "nmos":
                 gd_ss_n = g_d
             else:
                 gd_ss_p = g_d
             if _is_signal_dev(d):
-                gm2 = min(eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a), eq.gm_ceiling(s.ids_a))
+                gm2 = _gm(d, s)
             else:
                 ss_load_gd = g_d
         rout2 = eq.rout(gd_ss_n, gd_ss_p) if (gd_ss_n + gd_ss_p) > 0 else float("inf")
@@ -558,13 +580,13 @@ def _evaluate_metrics(
             s = _sz(d.ref)
             if not s:
                 continue
-            g_d = eq.gd(_lam(d), s.ids_a)
+            g_d = _gds(d, s)
             if d.type == "nmos":
                 gd_ts_n = g_d
             else:
                 gd_ts_p = g_d
             if _is_signal_dev(d):
-                gm3 = min(eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a), eq.gm_ceiling(s.ids_a))
+                gm3 = _gm(d, s)
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
     else:
         rout3 = float("inf")
@@ -692,49 +714,64 @@ def size_circuit(
     # Size resistor loads (deterministic) and model them in the first-stage Rout.
     resistors = _size_load_resistors(_extract_slot_resistors(fbr_result), spec, tech)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
+
+    # gm/Id model for PTM nodes (LUT present); Level-1 otherwise.
+    dev_model = build_device_model(tech)
     gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = _compute_requirements(
-        slot_transistors, all_transistors, ids_map, tech, spec, gd_load_r
+        slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
     )
     all_warnings = topology_warnings + gm_ceiling_warnings
 
-    model, W_vars, L_vars = build_model(
-        all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
-    )
-
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = time_limit_s
-    status = solver.solve(model)
-    status_name = solver.status_name(status)
-
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return SizingResult(
-            transistors={},
-            cc_pf=cc_pf,
-            metrics={},
-            margins={},
-            solver_status=status_name,
-            cc2_pf=cc2_pf,
-            warnings=all_warnings,
-            resistors=resistors,
+    if dev_model.is_gmid:
+        # Procedural forward pass — geometry is computed, not searched.
+        role_map = {
+            ref: (SIGNAL if _is_signal_dev(device) else CURRENT_SOURCE)
+            for ref, (device, _slot) in all_transistors.items()
+        }
+        transistor_sizing, geom_warnings = assign_geometry_gmid(
+            dev_model, all_transistors, slot_transistors, ids_map,
+            role_map, gm_req_map, tech,
         )
-
-    # Extract solution: convert integer step-units back to µm.
-    w_step = tech.width.step
-    l_step = tech.length.step
-    transistor_sizing: dict[str, TransistorSizing] = {}
-    for ref, (device, _slot) in all_transistors.items():
-        w_um = solver.value(W_vars[ref]) * w_step
-        l_um = solver.value(L_vars[ref]) * l_step
-        ids_a = ids_map[ref]
-        params = tech.nmos if device.type == "nmos" else tech.pmos
-        vgs = eq.vgs_from_ids(params.mu_cox, w_um, l_um, ids_a, params.vth)
-        vds = eq.vds_sat(params.mu_cox, w_um, l_um, ids_a)
-        transistor_sizing[ref] = TransistorSizing(
-            ref=ref, w_um=w_um, l_um=l_um, ids_a=ids_a, vgs_v=vgs, vds_sat_v=vds
+        all_warnings = all_warnings + geom_warnings
+        status_name = "GMID"
+    else:
+        # Level-1: discrete W/L via CP-SAT.
+        cp_mdl, W_vars, L_vars = build_model(
+            all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
         )
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = time_limit_s
+        status = solver.solve(cp_mdl)
+        status_name = solver.status_name(status)
+
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return SizingResult(
+                transistors={},
+                cc_pf=cc_pf,
+                metrics={},
+                margins={},
+                solver_status=status_name,
+                cc2_pf=cc2_pf,
+                warnings=all_warnings,
+                resistors=resistors,
+            )
+
+        # Extract solution: convert integer step-units back to µm.
+        w_step = tech.width.step
+        l_step = tech.length.step
+        transistor_sizing = {}
+        for ref, (device, _slot) in all_transistors.items():
+            w_um = solver.value(W_vars[ref]) * w_step
+            l_um = solver.value(L_vars[ref]) * l_step
+            ids_a = ids_map[ref]
+            transistor_sizing[ref] = TransistorSizing(
+                ref=ref, w_um=w_um, l_um=l_um, ids_a=ids_a,
+                vgs_v=dev_model.vgs(device.type, w_um, l_um, ids_a),
+                vds_sat_v=dev_model.vds_sat(device.type, w_um, l_um, ids_a),
+            )
 
     metrics, margins = _evaluate_metrics(
-        transistor_sizing, slot_transistors, cc_pf, tech, spec,
+        transistor_sizing, slot_transistors, cc_pf, tech, spec, dev_model,
         cc2_pf=cc2_pf, gd_load_r=gd_load_r,
     )
     return SizingResult(
