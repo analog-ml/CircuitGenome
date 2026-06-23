@@ -48,6 +48,10 @@ class TechParams:
         to a SPICE ``.model`` card whose ``nmos``/``pmos`` models match the
         netlist (e.g. a BSIM4 ``.pm`` file). When ``None``, the SPICE-verification
         path synthesises a Level-1 model from ``mu_cox``/``vth``/``lam``.
+    :param gmid_lut: Optional path (relative to the config dir, or absolute) to a
+        committed gm/Id lookup table (``*_gmid.npz`` from
+        ``tools/extract_tech.py --gm-id``). When present, sizing uses the
+        procedural gm/Id path instead of the Level-1 analytical sizer.
     """
     name: str
     nmos: MosfetParams
@@ -56,6 +60,7 @@ class TechParams:
     length: GridSpec
     cap: GridSpec
     spice_model: str | None = None
+    gmid_lut: str | None = None
 
 
 @dataclass

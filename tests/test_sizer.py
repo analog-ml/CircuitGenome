@@ -885,9 +885,30 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
         phase_margin_min_deg=60, slew_rate_min_vps=1e6,
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # ptm45 carries a gm/Id LUT → procedural "GMID" path; the others fall back
+    # to the Level-1 CP-SAT solver.
+    expected = ("GMID",) if tech.gmid_lut else ("OPTIMAL", "FEASIBLE")
+    assert result.solver_status in expected
     assert result.transistors
     # every device sits inside the node's W/L grid
     for s in result.transistors.values():
         assert tech.width.min <= s.w_um <= tech.width.max
         assert tech.length.min <= s.l_um <= tech.length.max
+
+
+def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
+    """ptm45 routes through the procedural gm/Id sizer with matched input pair."""
+    tech = load_tech("ptm45")
+    assert tech.gmid_lut  # LUT present → gm/Id path
+    parsed, sr_result, fbr_result, topology = two_stage_fbr
+    spec = SizingSpec(
+        vdd=1.0, vss=0.0, ibias=20e-6, cl=2e-12,
+        second_stage_current_ratio=2.5,
+        gain_min_db=50, gbw_min_hz=5e6, phase_margin_min_deg=60,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status == "GMID"
+    ip = sorted(r for r in result.transistors if "input_pair" in r)
+    assert len(ip) == 2
+    a, b = (result.transistors[r] for r in ip)
+    assert a.w_um == b.w_um and a.l_um == b.l_um  # matched differential pair

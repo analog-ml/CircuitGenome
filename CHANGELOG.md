@@ -3,6 +3,61 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-23 (gm/Id sizing for PTM)
+
+PR [#72](https://github.com/analog-ml/CircuitGenome/pull/72)
+(`feat/gmid-sizing`).
+
+### Added
+
+- **gm/Id-based sizing for PTM technologies** — a procedural sizing path that
+  drives transistor geometry from a SPICE-characterized lookup table instead of
+  the Level-1 square law. Selected per-tech: a tech carrying a gm/Id LUT (PTM
+  nodes) uses it; the card-less `generic` tech keeps the unchanged Level-1
+  CP-SAT sizer. On ptm45 two-stage this cuts the analytical-vs-SPICE
+  gain-prediction error from ~41 dB to ~9.5 dB and ~triples the achieved SPICE
+  gain; phase-margin prediction tracks SPICE to ~1°.
+  - **`tools/extract_tech.py --gm-id`** — sweeps the BSIM4 card in ngspice
+    (`.save @m1[gm/gds/cgg/id/vdsat]`), inverts onto a uniform gm/Id axis, and
+    writes a committed `config/models/ptm45_gmid.npz` (10 lengths × 37 gm/Id
+    points, both polarities) plus the `gmid_lut:` line in the tech YAML.
+  - **`gmid_lut.py`** (`GmIdLut`) — bilinear `(gm/Id, L)` interpolation of
+    `id_w`/`gm_gds`/`ft`/`vdsat`/`vgs`, the `gm_id_from_idw` inverse, and the
+    `max_gm_id` weak-inversion ceiling.
+  - **`device_model.py`** — a `DeviceModel` interface so the topology math in
+    `_compute_requirements`/`_evaluate_metrics` stays single-source.
+    `Level1Model` wraps `equations.*` byte-identically (generic path unchanged);
+    `GmIdModel` reads the primitives from the LUT — most importantly
+    `gds = gm/(gm/gds)` with the intrinsic-gain ratio a real function of `L`
+    rather than a constant `λ`. Includes the geometry inversion and the
+    `GmIdPolicy` L-selection policy.
+  - **`gmid_geometry.py`** (`assign_geometry_gmid`) — replaces CP-SAT for the
+    gm/Id path: geometry is computed, not searched. A deterministic forward pass
+    — per-device geometry from the LUT, grid snap, matched-pair symmetry, and
+    **exact** current-mirror ratios.
+  - **`gmid_lut` tech field** (`TechParams`, `loader.py`, `tech_ptm45.yaml`) —
+    points a tech at its committed LUT; `build_device_model` switches paths on
+    its presence.
+  - **Docs** — Sphinx API pages for the three new modules
+    (`docs/api/sizer/{device_model,gmid_lut,gmid_geometry}.rst` + index toctree)
+    and a "gm/Id model (PTM nodes)" subsection in
+    `docs/theory/sizing_flow.rst`.
+  - **Tests** — `tests/test_gmid_lut.py` (interpolation/inverse round-trip,
+    `Level1Model`-equals-`equations.*` regression guard) and
+    `tests/test_gmid_geometry.py` (grid alignment, matched pairs, exact mirror
+    ratios, ceiling-clamp warning); `tests/test_sizer.py` asserts ptm45 routes
+    through the `"GMID"` path.
+
+### Notes
+
+- Scope: LUT characterized for **ptm45** only (32/22/16 nm still fall back to
+  Level-1); validated on **two-stage single-ended** and **one-stage**. The
+  gm/Id path reports `solver_status = "GMID"` (no solver).
+- Follow-ups tracked as issues #73 (LUTs for 32/22/16 nm), #74 (re-tune example
+  specs now that the weak-inversion gm ceiling is enforced), #75 (FD /
+  three-stage gm/Id coverage), #76 (residual gain/GBW gap & SPICE AC-rig
+  convergence), #77 (configurable L-policy).
+
 ## 2026-06-23 (gm weak-inversion ceiling)
 
 PR [#70](https://github.com/analog-ml/CircuitGenome/pull/70)
