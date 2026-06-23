@@ -370,6 +370,30 @@ def _compute_requirements(
             A0 = 10.0 ** (spec.gain_min_db / 20.0)
             gm1_req = max(gm1_req, A0 / rout1)
 
+    # --- Cap gm requirements at the physical (weak-inversion) ceiling ---
+    # The square-law model has no gm ceiling, so without this the sizer would size
+    # for a gm the device can only reach by sliding into weak inversion (where the
+    # real gm is far lower).  Clamp each requirement to gm ≤ gm_ceiling(IDS); a
+    # binding clamp means the spec needs more bias current than the device can
+    # physically deliver, surfaced as a warning (the shortfall also shows in the
+    # reported margins).
+    gm_ceiling_warnings: list[str] = []
+    if gm1_req > eq.gm_ceiling(spec.ibias / 2.0):
+        gm1_req = eq.gm_ceiling(spec.ibias / 2.0)
+        gm_ceiling_warnings.append(
+            "input-pair gm requirement exceeds the weak-inversion ceiling at "
+            "ibias/2 — increase ibias or relax GBW/gain (the design will fall short).")
+    if gm2_req > eq.gm_ceiling(spec.ibias * spec.second_stage_current_ratio):
+        gm2_req = eq.gm_ceiling(spec.ibias * spec.second_stage_current_ratio)
+        gm_ceiling_warnings.append(
+            "second-stage gm requirement exceeds the weak-inversion ceiling — "
+            "increase second_stage_current_ratio/ibias or relax gain.")
+    if gm3_req > eq.gm_ceiling(spec.ibias * spec.third_stage_current_ratio):
+        gm3_req = eq.gm_ceiling(spec.ibias * spec.third_stage_current_ratio)
+        gm_ceiling_warnings.append(
+            "third-stage gm requirement exceeds the weak-inversion ceiling — "
+            "increase third_stage_current_ratio/ibias or relax gain.")
+
     # --- Map requirements to individual transistors ---
     gm_req_map: dict[str, float] = {}
     vod_max_map: dict[str, float] = {}
@@ -425,7 +449,7 @@ def _compute_requirements(
                             vod_max_map.get(d.ref, float("inf")), vds_sat_max_low
                         )
 
-    return gm_req_map, vod_max_map, cc_pf, cc2_pf
+    return gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings
 
 
 def _evaluate_metrics(
@@ -461,7 +485,7 @@ def _evaluate_metrics(
         d = ip_devs[0]
         s = _sz(d.ref)
         if s:
-            gm1 = eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a)
+            gm1 = min(eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a), eq.gm_ceiling(s.ids_a))
 
     # --- Load ---
     ld_devs = slot_transistors.get("load", [])
@@ -511,7 +535,7 @@ def _evaluate_metrics(
             else:
                 gd_ss_p = g_d
             if _is_signal_dev(d):
-                gm2 = eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a)
+                gm2 = min(eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a), eq.gm_ceiling(s.ids_a))
             else:
                 ss_load_gd = g_d
         rout2 = eq.rout(gd_ss_n, gd_ss_p) if (gd_ss_n + gd_ss_p) > 0 else float("inf")
@@ -540,7 +564,7 @@ def _evaluate_metrics(
             else:
                 gd_ts_p = g_d
             if _is_signal_dev(d):
-                gm3 = eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a)
+                gm3 = min(eq.gm(_mu(d), s.w_um, s.l_um, s.ids_a), eq.gm_ceiling(s.ids_a))
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
     else:
         rout3 = float("inf")
@@ -668,9 +692,10 @@ def size_circuit(
     # Size resistor loads (deterministic) and model them in the first-stage Rout.
     resistors = _size_load_resistors(_extract_slot_resistors(fbr_result), spec, tech)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
-    gm_req_map, vod_max_map, cc_pf, cc2_pf = _compute_requirements(
+    gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = _compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec, gd_load_r
     )
+    all_warnings = topology_warnings + gm_ceiling_warnings
 
     model, W_vars, L_vars = build_model(
         all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
@@ -689,7 +714,7 @@ def size_circuit(
             margins={},
             solver_status=status_name,
             cc2_pf=cc2_pf,
-            warnings=topology_warnings,
+            warnings=all_warnings,
             resistors=resistors,
         )
 
@@ -719,6 +744,6 @@ def size_circuit(
         margins=margins,
         solver_status=status_name,
         cc2_pf=cc2_pf,
-        warnings=topology_warnings,
+        warnings=all_warnings,
         resistors=resistors,
     )

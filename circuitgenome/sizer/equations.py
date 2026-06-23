@@ -28,6 +28,19 @@ def gm(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
     return math.sqrt(2.0 * mu_cox * (w_um / l_um) * abs(ids_a))
 
 
+# Maximum transconductance efficiency gm/IDS in 1/V (weak-inversion ceiling).
+# gm is physically bounded by gm ≤ IDS/(n·φt); with n ≈ 1.5 and φt ≈ 0.0259 V at
+# 300 K this is ≈ 25.8 /V (matches measured gm/Id ≈ 25 for the PTM devices). The
+# square-law gm formula ignores this ceiling and would otherwise let the sizer
+# promise a gm the device can only reach by sliding into weak inversion.
+_GM_OVER_ID_MAX = 25.0
+
+
+def gm_ceiling(ids_a: float) -> float:
+    """Physical upper bound on gm in A/V (weak-inversion limit)."""
+    return _GM_OVER_ID_MAX * abs(ids_a)
+
+
 def gd(lam: float, ids_a: float) -> float:
     """Output conductance gd in A/V.
 
