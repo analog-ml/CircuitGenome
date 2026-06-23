@@ -66,6 +66,9 @@ design exploration, or topology studies.
    api/sizer/equations
    api/sizer/constraints
    api/sizer/loader
+   api/sizer/device_model
+   api/sizer/gmid_lut
+   api/sizer/gmid_geometry
 
 .. toctree::
    :maxdepth: 1

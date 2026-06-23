@@ -11,6 +11,7 @@ weak-inversion ceiling heuristic with measured BSIM4 behaviour.
 Axes (both per polarity, fields shaped ``(n_L, n_gmid)``):
     ``gm_id_axis``  uniform gm/Id grid in 1/V (weak → strong inversion)
     ``l_axis``      channel lengths in µm
+
 Fields: ``id_w`` (A/µm), ``gm_gds`` (V/V), ``ft`` (Hz), ``vdsat`` (V),
 ``vgs`` (V, magnitude).
 """
@@ -27,6 +28,7 @@ class GmIdLut:
     """Interpolating gm/Id table for both NMOS and PMOS."""
 
     def __init__(self, path: Path | str):
+        """Load the committed ``*_gmid.npz`` table from ``path``."""
         data = np.load(path)
         self.gm_id_axis: np.ndarray = data["gm_id_axis"]
         self.l_axis: np.ndarray = data["l_axis"]
@@ -74,7 +76,7 @@ class GmIdLut:
         return self._lookup(dtype, "ft", gm_id, l_um)
 
     def vdsat(self, dtype: str, gm_id: float, l_um: float) -> float:
-        """Saturation overdrive |VDS,sat| in V."""
+        """Saturation overdrive ``VDS,sat`` in V."""
         return self._lookup(dtype, "vdsat", gm_id, l_um)
 
     def vgs(self, dtype: str, gm_id: float, l_um: float) -> float:

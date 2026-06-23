@@ -116,6 +116,35 @@ biased at :math:`I_{DS}` = 5 µA each:
    R_{out,1} = \frac{1}{0.05 \times 5\,\mu\text{A} + 0.04 \times 5\,\mu\text{A}}
              = \frac{1}{0.45\,\mu\text{A/V}} = 2.22\,\text{M}\Omega
 
+gm/Id model (PTM nodes)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The single fitted :math:`(\mu C_{ox}, V_{th}, \lambda)` triple above cannot
+capture moderate/weak inversion, velocity saturation, or
+:math:`\lambda \propto 1/L` — so on deep-submicron PTM nodes the Level-1
+predictions diverge sharply from SPICE.  A technology that carries a
+**gm/Id lookup table** (the ``gmid_lut`` field of
+:class:`~circuitgenome.sizer.models.TechParams`, e.g. ``ptm45``) instead drives
+sizing from a SPICE-characterized table indexed by :math:`(g_m/I_{DS}, L)`.
+
+In this path the small-signal primitives :math:`g_m`, :math:`g_{ds}`,
+:math:`V_{DS,sat}` and :math:`V_{GS}` are read from the table — most importantly
+:math:`g_{ds} = g_m / (g_m/g_{ds})`, with the intrinsic-gain ratio
+:math:`g_m/g_{ds}` a genuine function of :math:`L` rather than a constant
+:math:`\lambda`.  Because :math:`I_{DS}` is fixed by KCL, a target :math:`g_m`
+fixes :math:`g_m/I_{DS}` and the table yields :math:`I_{DS}/W \rightarrow W`
+directly, so geometry is **computed, not searched** (no CP-SAT): a deterministic
+forward pass with grid snapping, matched-pair symmetry, and exact current-mirror
+ratios.
+
+The model is selected per-tech by
+:func:`~circuitgenome.sizer.device_model.build_device_model`
+(:class:`~circuitgenome.sizer.device_model.Level1Model` vs
+:class:`~circuitgenome.sizer.device_model.GmIdModel`); the table interface is
+:class:`~circuitgenome.sizer.gmid_lut.GmIdLut` and the geometry pass is
+:func:`~circuitgenome.sizer.gmid_geometry.assign_geometry_gmid`.  The Level-1
+flow described below is unchanged for the card-less generic tech.
+
 ----
 
 Operating-point assignment
