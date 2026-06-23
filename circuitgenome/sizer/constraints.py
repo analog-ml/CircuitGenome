@@ -21,6 +21,8 @@ to integers so that µA/V² and µA magnitudes map to small integer values.
 """
 from __future__ import annotations
 
+from fractions import Fraction
+
 from ortools.sat.python import cp_model
 
 from .models import MosfetParams, TechParams
@@ -154,6 +156,42 @@ def build_model(
                 for d in n_group:
                     model.add(W[d.ref] == W[anchor])
                     model.add(L[d.ref] == L[anchor])
+
+    # --- Current-mirror ratio constraints (bias-current consistency) ---
+    # Group MOSFETs by (gate-net, type).  A diode-connected member (g == d) is
+    # the mirror reference; the others are outputs.  Without this, an output's
+    # W/L is set only by its own gm/VDS_sat target, so the mirror sources an
+    # arbitrary current (I_out = I_ref · (W/L)_out/(W/L)_ref).  Pinning the ratio
+    # makes the bias network actually produce the assumed currents.
+    mirror_groups: dict[tuple, list[str]] = {}
+    for ref, (device, _slot) in transistors.items():
+        if device.type not in ("nmos", "pmos"):
+            continue
+        gate = device.terminals.get("g")
+        if gate:
+            mirror_groups.setdefault((gate, device.type), []).append(ref)
+    for members in mirror_groups.values():
+        if len(members) < 2:
+            continue
+        diodes = [m for m in members
+                  if transistors[m][0].terminals.get("g")
+                  == transistors[m][0].terminals.get("d")]
+        if not diodes:
+            continue
+        ref0 = diodes[0]
+        i_ref = ids_map.get(ref0, 0.0)
+        if i_ref <= 0:
+            continue
+        for m in members:
+            if m == ref0:
+                continue
+            i_m = ids_map.get(m, 0.0)
+            if i_m <= 0:
+                continue
+            # I_out / I_ref = (W/L)_out / (W/L)_ref; matched length, scaled width.
+            frac = Fraction(i_m / i_ref).limit_denominator(100)
+            model.add(L[m] == L[ref0])
+            model.add(frac.denominator * W[m] == frac.numerator * W[ref0])
 
     # --- Objective: minimise total gate width (proxy for power and area) ---
     model.minimize(sum(W.values()))

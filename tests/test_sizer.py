@@ -360,6 +360,26 @@ def test_size_two_stage_symmetry(two_stage_fbr):
                 assert s.l_um == vals[0].l_um, f"{prefix}: L mismatch"
 
 
+def test_current_mirror_ratios_enforced(two_stage_fbr):
+    """Current-mirror output W/L tracks its reference by the current ratio so the
+    bias network produces the assumed currents (issue #67)."""
+    parsed, sr_result, fbr_result, topology = two_stage_fbr
+    tech = _tech()
+    spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=80,
+                      gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=3.5e6)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    t = result.transistors
+    # 2nd-stage PMOS current-source load mirrors mp5_bias_gen at ratio 2.5.
+    load, ref = t["mp1_second_stage"], t["mp5_bias_gen"]
+    assert load.l_um == ref.l_um
+    assert load.w_um == pytest.approx(2.5 * ref.w_um, rel=1e-6)
+    # Tail mirror is 1:1 (output == reference).
+    assert t["m2_tail_current"].w_um == pytest.approx(t["m1_tail_current"].w_um)
+    assert t["m2_tail_current"].l_um == pytest.approx(t["m1_tail_current"].l_um)
+
+
 def test_size_two_stage_metrics_complete(two_stage_fbr):
     """All major performance metrics are reported in the result.
 
