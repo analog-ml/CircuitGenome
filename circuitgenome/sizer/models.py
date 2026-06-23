@@ -44,6 +44,10 @@ class TechParams:
     :param width: Transistor width grid in µm.
     :param length: Transistor length grid in µm.
     :param cap: Compensation capacitor grid in pF.
+    :param spice_model: Optional path (relative to the config dir, or absolute)
+        to a SPICE ``.model`` card whose ``nmos``/``pmos`` models match the
+        netlist (e.g. a BSIM4 ``.pm`` file). When ``None``, the SPICE-verification
+        path synthesises a Level-1 model from ``mu_cox``/``vth``/``lam``.
     """
     name: str
     nmos: MosfetParams
@@ -51,6 +55,7 @@ class TechParams:
     width: GridSpec
     length: GridSpec
     cap: GridSpec
+    spice_model: str | None = None
 
 
 @dataclass
@@ -125,6 +130,9 @@ class SizingResult:
         ``"OPTIMAL"``, ``"FEASIBLE"``, ``"INFEASIBLE"``, or ``"UNKNOWN"``.
     :param warnings: Advisory messages, e.g. a likely ``--topology``/netlist
         mismatch. Empty when the netlist cleanly matches the topology.
+    :param resistors: Sized load-resistor values in ohms, keyed by device
+        reference (e.g. ``{"r1_load": 1.06e5}``). Empty when there are no
+        sized resistors.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -133,3 +141,4 @@ class SizingResult:
     solver_status: str
     cc2_pf: float | None = None
     warnings: list[str] = field(default_factory=list)
+    resistors: dict[str, float] = field(default_factory=dict)

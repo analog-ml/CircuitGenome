@@ -46,6 +46,13 @@ def load_tech(path: Path | str | None = None) -> TechParams:
         )
 
     cap_d = data["cap"]
+    spice_model = data.get("spice_model")
+    if spice_model:
+        # Resolve relative to the config file's directory.
+        sm = Path(spice_model)
+        if not sm.is_absolute():
+            sm = Path(path).parent / sm
+        spice_model = str(sm)
     return TechParams(
         name=str(data["name"]),
         nmos=_mosfet(data["nmos"]),
@@ -57,4 +64,5 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             max=float(cap_d["max_pf"]),
             step=float(cap_d["step_pf"]),
         ),
+        spice_model=spice_model,
     )

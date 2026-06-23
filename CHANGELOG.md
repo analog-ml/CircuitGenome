@@ -3,6 +3,79 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-23 (enforce current-mirror ratios)
+
+PR [#68](https://github.com/analog-ml/CircuitGenome/pull/68)
+(`fix/enforce-mirror-ratios`). Closes #67. Stacked on #66.
+
+### Fixed
+
+- **Current-mirror ratios are now enforced** so the bias network produces the
+  assumed currents. Previously a current-source device sized by the output-swing
+  constraint became an arbitrary-ratio mirror of its reference (e.g.
+  `mp1_second_stage` was a **142×** mirror of `mp5_bias_gen`, sourcing ~1 mA
+  instead of 25 µA; the tail mirror starved the input pair to 0.6 µA), so SPICE
+  bias currents were 8–43× off and the analytical metrics were far above SPICE.
+  - `build_model` (`constraints.py`) now groups MOSFETs by (gate-net, type),
+    treats the diode-connected member as the mirror reference, and constrains each
+    output to matched length + `(W/L)_out = (I_out/I_ref)·(W/L)_ref`.
+  - Effect: SPICE quiescent **power now matches** analytical (was +140%), and the
+    bias currents drop from 8–43× errors to ~2× (the residual is the inherent
+    reference↔output VDS/λ mismatch the Level-1 model can't capture — distinct
+    from this ratio bug).
+
+## 2026-06-22 (size resistor loads)
+
+PR [#66](https://github.com/analog-ml/CircuitGenome/pull/66)
+(`fix/size-resistor-loads`). Closes #64. Stacked on #60.
+
+### Fixed
+
+- **Resistor loads are now sized and modelled.** Previously the load resistors of
+  `resistor_load_gnd`/`vdd` (and one-stage resistor loads) kept a hardcoded 1 kΩ
+  placeholder, which the sizer ignored — so the analytical gain was wildly
+  optimistic (the resistor was absent from `Rout1`) and the circuit didn't bias
+  in SPICE (5 mV at the first-stage output → next stage off → `--simulate` showed
+  `n/a`).
+  - **Size**: `size_circuit` now chooses each load resistor so its DC drop biases
+    the driven device on (`R = (Vth + 0.15 V) / (ibias/2)`), returned in the new
+    `SizingResult.resistors` and printed by the `size` CLI.
+  - **Model**: the load-resistor conductance is included in `Rout1` in both
+    `_compute_requirements` and `_evaluate_metrics`, so gm requirements and the
+    reported gain account for it.
+  - **Verify**: `spice_sim` injects the sized R, so resistor-load circuits bias
+    and `--simulate` reports real gain/GBW/PM instead of `n/a`.
+  - Out of scope (kept at placeholder): source-degeneration, CMFB-sense, and bias
+    resistors. Active-load circuits are unaffected.
+
+## 2026-06-22 (SPICE verification)
+
+PR [#60](https://github.com/analog-ml/CircuitGenome/pull/60)
+(`feat/spice-verify`).
+
+### Added
+
+- **ngspice metric verification** (`circuitgenome/sizer/spice_sim.py`) —
+  re-simulates a *sized* circuit with the **same technology** and reports the
+  analytical `_evaluate_metrics` results next to SPICE-measured ones (gain, GBW,
+  phase margin, slew rate, power, output swing). Surfaced via
+  `circuitgenome size --simulate` and the standalone `tools/spice_verify.py`.
+
+- **`spice_model` tech field** (`TechParams`, `loader.py`, the four
+  `tech_ptm*.yaml`, `tools/extract_tech.py`) — points a tech config at its BSIM4
+  card. When absent (e.g. `generic`) a Level-1 `.model` is synthesised from
+  `mu_cox`/`vth`/`lam`, so every tech is simulatable.
+
+### Notes
+
+- Best-effort cross-check, not sign-off: gain/GBW/PM via an open-loop
+  AC-coupled-feedback testbench (auto-detecting the inverting input), power from
+  the DC op point, slew rate from a unity-gain step. Single-ended is the most
+  robust; fully-differential AC metrics and any non-converging measurement are
+  reported as `n/a`. The Level-1 (`generic`) run validates the formulas; the
+  BSIM4 (PTM) run exposes the Level-1-vs-device gap (e.g. ~80 dB predicted vs
+  ~20 dB simulated at 45 nm). Requires ngspice on `PATH`.
+
 ## 2026-06-22 (CLI W/L precision)
 
 PR [#59](https://github.com/analog-ml/CircuitGenome/pull/59)

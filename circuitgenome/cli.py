@@ -50,6 +50,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                       help="Performance specification YAML file")
     size.add_argument("--time-limit", type=float, default=30.0, dest="time_limit",
                       help="CP-SAT solver time limit in seconds (default: 30)")
+    size.add_argument("--simulate", action="store_true",
+                      help="After sizing, verify metrics with an ngspice simulation "
+                           "(same technology) and print analytical vs SPICE")
 
     return parser.parse_args(argv)
 
@@ -213,6 +216,8 @@ def _cmd_size(args: argparse.Namespace) -> None:
 
     if result.cc_pf is not None:
         print(f"  Cc = {result.cc_pf:.1f}pF")
+    for ref, ohms in result.resistors.items():
+        print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
     if result.metrics:
         print("\nPerformance metrics:")
@@ -256,6 +261,35 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  {margin_str}  {status}")
             else:
                 print(f"  {label:<22} {val_str}")
+
+    if args.simulate:
+        from .sizer.spice_sim import ngspice_available, simulate_metrics
+        print("\nSPICE verification (ngspice):")
+        if not ngspice_available():
+            print("  ngspice not found on PATH — install it (e.g. `brew install ngspice`).")
+        else:
+            sim = simulate_metrics(args.netlist_file.read_text(), result, tech, spec)
+            cols = [
+                ("gain_db", "Open-loop gain", "dB", 1.0, "{:.2f}"),
+                ("gbw_hz", "GBW", "MHz", 1e-6, "{:.3f}"),
+                ("phase_margin_deg", "Phase margin", "°", 1.0, "{:.1f}"),
+                ("slew_rate_vps", "Slew rate", "V/µs", 1e-6, "{:.3f}"),
+                ("power_w", "Quiescent power", "mW", 1e3, "{:.4f}"),
+                ("output_swing_max_v", "Output swing max", "V", 1.0, "{:.3f}"),
+                ("output_swing_min_v", "Output swing min", "V", 1.0, "{:.3f}"),
+            ]
+            print(f"  {'metric':<20}{'analytical':>15}{'SPICE':>15}{'Δ':>10}")
+            for key, label, unit, scl, fmt in cols:
+                a = result.metrics.get(key)
+                s = sim.get(key)
+                a_str = f"{fmt.format(a*scl)} {unit}" if a is not None else "n/a"
+                s_str = f"{fmt.format(s*scl)} {unit}" if s is not None else "n/a"
+                if a not in (None, 0) and s is not None:
+                    d_str = f"{(s-a)/abs(a)*100:+.0f}%"
+                else:
+                    d_str = "—"
+                print(f"  {label:<20}{a_str:>15}{s_str:>15}{d_str:>10}")
+            print("  (SPICE = best-effort cross-check; FD AC metrics may show n/a)")
 
 
 def _cmd_visualize(args: argparse.Namespace) -> None:

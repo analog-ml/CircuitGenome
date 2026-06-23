@@ -8,6 +8,7 @@
 #   (effective square-law fit; mu_cox/lam are bias/length dependent).
 name: ptm22_hp
 description: "PTM 22nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)"
+spice_model: models/ptm_22nm_HP.pm   # BSIM4 card for SPICE verification
 
 nmos:
   mu_cox: 2.663423e-04   # A/V²  (effective µn·Cox)

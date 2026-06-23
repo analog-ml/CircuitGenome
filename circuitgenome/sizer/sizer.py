@@ -82,6 +82,58 @@ def _extract_slot_transistors(
     return result
 
 
+def _extract_slot_resistors(
+    fbr_result: FunctionalBlockRecognitionResult,
+) -> dict[str, list[Device]]:
+    """Return {slot_name: [resistor_Device, ...]} from the FBR assignments."""
+    result: dict[str, list[Device]] = {}
+    for slot_name, sa in fbr_result.slot_assignments.items():
+        rs = [d for d in sa.structure.devices if d.type == "resistor"]
+        if rs:
+            result[slot_name] = rs
+    return result
+
+
+# Overdrive (V) used when sizing a load resistor so its DC drop biases the
+# driven device into conduction: V_node ≈ Vth + this.
+_RESISTOR_LOAD_OVERDRIVE = 0.15
+
+
+def _size_load_resistors(
+    slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
+) -> dict[str, float]:
+    """Size resistor-load devices so the first-stage output biases on.
+
+    Each load resistor carries the input-pair branch current ``ibias/2``.  The
+    value is chosen so the DC drop places the first-stage output node at a level
+    that turns the driven device on:
+
+    * resistor to **gnd** (PMOS-input loads): ``V_node = vth_n + Vov`` →
+      ``R = V_node / (ibias/2)``.
+    * resistor from **vdd** (NMOS-input loads): drop ``= |vth_p| + Vov`` →
+      ``R = drop / (ibias/2)``.
+
+    Only the ``load`` slot is sized; other resistor roles keep their netlist
+    value.  Returns ``{ref: ohms}``.
+    """
+    out: dict[str, float] = {}
+    branch_i = spec.ibias / 2.0
+    if branch_i <= 0:
+        return out
+    vov = _RESISTOR_LOAD_OVERDRIVE
+    for r in slot_resistors.get("load", []):
+        nets = [str(n).lower() for n in r.terminals.values()]
+        if any("gnd" in n or n in ("0", "vss!") for n in nets):
+            v = tech.nmos.vth + vov
+        elif any("vdd" in n for n in nets):
+            v = abs(tech.pmos.vth) + vov
+        else:
+            continue  # not a rail-referenced load resistor
+        if v > 0:
+            out[r.ref] = v / branch_i
+    return out
+
+
 def _check_topology_match(
     slot_transistors: dict[str, list[Device]], topology_name: str
 ) -> list[str]:
@@ -161,6 +213,7 @@ def _compute_requirements(
     ids_map: dict[str, float],
     tech: TechParams,
     spec: SizingSpec,
+    gd_load_r: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float], float | None, float | None]:
     """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
@@ -181,7 +234,8 @@ def _compute_requirements(
 
     gd_ip = eq.gd(_lam(ip_devices[0]), spec.ibias / 2) if ip_devices else 0.0
     gd_ld = eq.gd(_lam(ld_devices[0]), spec.ibias / 2) if ld_devices else 0.0
-    rout1 = eq.rout(gd_ip, gd_ld)
+    # Resistor-load conductance (1/R) loads the first-stage output node.
+    rout1 = eq.rout(gd_ip, gd_ld + gd_load_r)
 
     # For FD topologies use second_stage_p as the representative path (symmetric).
     ss_devices = (
@@ -381,6 +435,7 @@ def _evaluate_metrics(
     tech: TechParams,
     spec: SizingSpec,
     cc2_pf: float | None = None,
+    gd_load_r: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Compute performance metrics and safety margins from the solution."""
     metrics: dict[str, float] = {}
@@ -421,7 +476,8 @@ def _evaluate_metrics(
         tech.nmos.lam if ip_devs and ip_devs[0].type == "nmos" else tech.pmos.lam,
         spec.ibias / 2,
     ) if ip_devs else 0.0
-    rout1 = eq.rout(gd_ip, gd_ld) if (gd_ip + gd_ld) > 0 else float("inf")
+    rout1 = (eq.rout(gd_ip, gd_ld + gd_load_r)
+             if (gd_ip + gd_ld + gd_load_r) > 0 else float("inf"))
 
     # --- Tail current ---
     tc_devs = slot_transistors.get("tail_current", [])
@@ -609,8 +665,11 @@ def size_circuit(
     topology_warnings = _check_topology_match(slot_transistors, topology.name)
     all_transistors = _deduplicate(slot_transistors)
     ids_map = _assign_ids(slot_transistors, all_transistors, spec)
+    # Size resistor loads (deterministic) and model them in the first-stage Rout.
+    resistors = _size_load_resistors(_extract_slot_resistors(fbr_result), spec, tech)
+    gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
     gm_req_map, vod_max_map, cc_pf, cc2_pf = _compute_requirements(
-        slot_transistors, all_transistors, ids_map, tech, spec
+        slot_transistors, all_transistors, ids_map, tech, spec, gd_load_r
     )
 
     model, W_vars, L_vars = build_model(
@@ -631,6 +690,7 @@ def size_circuit(
             solver_status=status_name,
             cc2_pf=cc2_pf,
             warnings=topology_warnings,
+            resistors=resistors,
         )
 
     # Extract solution: convert integer step-units back to µm.
@@ -649,7 +709,8 @@ def size_circuit(
         )
 
     metrics, margins = _evaluate_metrics(
-        transistor_sizing, slot_transistors, cc_pf, tech, spec, cc2_pf=cc2_pf
+        transistor_sizing, slot_transistors, cc_pf, tech, spec,
+        cc2_pf=cc2_pf, gd_load_r=gd_load_r,
     )
     return SizingResult(
         transistors=transistor_sizing,
@@ -659,4 +720,5 @@ def size_circuit(
         solver_status=status_name,
         cc2_pf=cc2_pf,
         warnings=topology_warnings,
+        resistors=resistors,
     )
