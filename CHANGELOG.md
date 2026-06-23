@@ -3,6 +3,30 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-23 (gm weak-inversion ceiling)
+
+PR [#70](https://github.com/analog-ml/CircuitGenome/pull/70)
+(`fix/gm-ceiling`). Closes #69.
+
+### Fixed
+
+- **Modelled gm is now capped at the weak-inversion ceiling** `gm ≤ Id/(n·φt)`
+  (`equations.gm_ceiling`, ≈ 25·Id). The square-law model had no gm ceiling, so
+  the sizer could hit a gm target by growing W/L until the device slid into weak
+  inversion — promising a gm the device can't deliver and over-reporting gain/GBW
+  (e.g. analytical 80 dB vs SPICE 15 dB).
+  - `_evaluate_metrics` caps gm1/gm2/gm3 → reported gain/GBW now track SPICE far
+    more closely.
+  - `_compute_requirements` clamps each gm *requirement* to the ceiling and emits
+    a warning when it binds (e.g. "input-pair gm requirement exceeds the
+    weak-inversion ceiling at ibias/2 — increase ibias or relax GBW/gain").
+  - **Behaviour change**: a spec that needs an impossible gm now yields a
+    best-effort design with an honest negative margin + warning (was a silent
+    optimistic pass; the impossible-gain test was updated accordingly).
+  - Residual analytical-vs-SPICE gap is now dominated by the inherent
+    reference↔output current/VDS mismatch (Level-1 limit; see #65/#67), not a
+    missing gm bound.
+
 ## 2026-06-23 (enforce current-mirror ratios)
 
 PR [#68](https://github.com/analog-ml/CircuitGenome/pull/68)

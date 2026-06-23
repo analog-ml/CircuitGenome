@@ -8,6 +8,7 @@ from circuitgenome.sizer.equations import (
     cmrr_db,
     gd,
     gm,
+    gm_ceiling,
     open_loop_gain_db,
     phase_margin_two_stage_deg,
     rout,
@@ -92,6 +93,15 @@ def test_gm_pmos():
 def test_gd_formula():
     result = gd(0.04, 5e-6)
     assert result == pytest.approx(0.04 * 5e-6)
+
+
+def test_gm_ceiling():
+    # gm ceiling = gm/Id_max * |Id| (weak-inversion limit), and it caps the
+    # square-law gm for an over-wide / low-current device.
+    assert gm_ceiling(5e-6) == pytest.approx(25.0 * 5e-6)
+    assert gm_ceiling(-5e-6) == pytest.approx(25.0 * 5e-6)  # sign-agnostic
+    # An oversized device at low current: square-law gm exceeds the ceiling.
+    assert gm(90e-6, 7.0, 0.045, 5e-6) > gm_ceiling(5e-6)
 
 
 def test_rout_formula():
@@ -406,19 +416,25 @@ def test_size_two_stage_metrics_complete(two_stage_fbr):
 # Infeasible spec
 # ---------------------------------------------------------------------------
 
-def test_infeasible_spec(two_stage_fbr):
-    """An impossibly tight spec should return INFEASIBLE."""
+def test_impossible_gain_flagged_not_infeasible(two_stage_fbr):
+    """An impossible gain spec is sized to the achievable maximum and flagged,
+    not silently passed.  The gm ceiling (issue #69) caps the gm requirement at
+    the weak-inversion limit, so the solver stays feasible but the reported gain
+    falls short (negative margin) and a gm-ceiling warning is emitted."""
     parsed, sr_result, fbr_result, topology = two_stage_fbr
     tech = _tech()
     spec = SizingSpec(
         vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
-        # Require W ≥ 1e6 µm which far exceeds the 600 µm grid max
         gain_min_db=300,  # ~10^15 linear gain — physically impossible
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
                           time_limit_s=5.0)
-    assert result.solver_status == "INFEASIBLE"
-    assert result.transistors == {}
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    # Honest shortfall: reported gain is far below spec, and it's flagged.
+    assert result.metrics["gain_db"] < spec.gain_min_db
+    assert result.margins["gain_db"] < 0
+    assert any("weak-inversion ceiling" in w for w in result.warnings)
+    assert result.transistors  # a best-effort design is still produced
 
 
 # ---------------------------------------------------------------------------
