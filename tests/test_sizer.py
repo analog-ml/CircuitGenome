@@ -248,6 +248,41 @@ def two_stage_fbr():
     })
 
 
+@pytest.fixture(scope="module")
+def two_stage_resistor_load_fbr():
+    return _fbr("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_pmos",
+        "load": "resistor_load_gnd",
+        "tail_current": "current_mirror_tail_pmos",
+        "second_stage": "common_source",
+        "bias_gen": "diode_connected_mosfet_bias",
+        "compensation": "miller_cap",
+    })
+
+
+def test_resistor_load_is_sized_and_modeled(two_stage_resistor_load_fbr, two_stage_fbr):
+    """Load resistors get a sized value and lower the modelled gain vs an
+    active load (the resistor now appears in Rout1)."""
+    parsed, sr, fbr, topo = two_stage_resistor_load_fbr
+    tech = _tech()
+    spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=40,
+                      gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=3.5e6)
+    r = size_circuit(parsed, sr, fbr, topo, tech, spec)
+    assert r.solver_status in ("OPTIMAL", "FEASIBLE")
+    # Both load resistors sized to a finite, non-placeholder value.
+    assert set(r.resistors) == {"r1_load", "r2_load"}
+    assert all(1e3 < ohms < 1e8 for ohms in r.resistors.values())
+    # R sets V_node ≈ Vth_n + Vov at the branch current → R = V/(ibias/2).
+    expected = (tech.nmos.vth + 0.15) / (spec.ibias / 2)
+    assert abs(r.resistors["r1_load"] - expected) / expected < 1e-6
+
+    # Modelling the resistor lowers gain vs the equivalent active-load circuit.
+    pa, sa, fa, ta = two_stage_fbr
+    ra = size_circuit(pa, sa, fa, ta, tech, spec)
+    assert r.metrics["gain_db"] < ra.metrics["gain_db"]
+
+
 def test_size_two_stage_all_specs(two_stage_fbr):
     """Verify gain, GBW, PM, SR, power, and swing specs are jointly achievable.
 
@@ -739,9 +774,12 @@ def _fbr_pmos_cs_second_stage(topology_name: str):
         parsed = parse(to_flat_spice(circuit))
         sr_result = recognize(parsed)
         fbr_result = assign_slots(sr_result, topology)
-        ss = _extract_slot_transistors(fbr_result).get("second_stage", [])
+        slot_t = _extract_slot_transistors(fbr_result)
+        ss = slot_t.get("second_stage", [])
         signal = next((d for d in ss if _is_signal_dev(d)), None)
-        if signal is not None and signal.type == "pmos":
+        # Require an active (transistor) load so the high three-stage gain target
+        # is achievable — resistor-load variants are intentionally gain-limited.
+        if signal is not None and signal.type == "pmos" and slot_t.get("load"):
             return parsed, sr_result, fbr_result, topology
     raise AssertionError(f"no PMOS-CS second-stage variant found for {topology_name}")
 

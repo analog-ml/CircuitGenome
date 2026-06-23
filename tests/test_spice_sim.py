@@ -75,3 +75,27 @@ def test_ptm_bsim4_runs():
     assert sim["power_w"] is not None
     # Real 45nm gain is well below the optimistic Level-1 prediction.
     assert sim["gain_db"] is None or sim["gain_db"] < result.metrics["gain_db"]
+
+
+@ngspice
+def test_resistor_load_biases_in_spice():
+    """With the load resistor sized, a resistor-load circuit biases correctly so
+    SPICE can measure its open-loop gain (was n/a with the 1k placeholder)."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+            "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
+            "bias_gen": "diode_connected_mosfet_bias", "compensation": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k).name == v for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("generic")
+    spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=40,
+                      gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=3.5e6)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.resistors  # load resistors were sized
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    assert sim["gain_db"] is not None  # circuit biases → AC measurable

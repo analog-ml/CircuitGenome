@@ -63,7 +63,7 @@ def _parse_subckt(netlist_text: str):
 
 
 def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
-    """Append ``W=/L=`` to MOSFET lines and set compensation-cap values."""
+    """Set sized W/L (MOSFETs), Cc (comp caps) and R (sized load resistors)."""
     cc1 = result.cc_pf
     cc2 = result.cc2_pf if result.cc2_pf is not None else cc1
     out = []
@@ -74,6 +74,9 @@ def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
         if len(tok) >= 6 and tok[5].lower() in _MOS_MODELS and ref in result.transistors:
             s = result.transistors[ref]
             out.append(f"{line.rstrip()} W={s.w_um:.5f}u L={s.l_um:.5f}u")
+        elif ref in result.resistors and len(tok) >= 4:
+            # sized load resistor: replace the placeholder value with R (ohms)
+            out.append(f"{tok[0]} {tok[1]} {tok[2]} {result.resistors[ref]:.4f}")
         elif low.startswith("c") and "comp" in low and len(tok) >= 4:
             val = cc2 if "comp2" in low else cc1
             if val:

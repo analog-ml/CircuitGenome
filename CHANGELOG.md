@@ -3,6 +3,30 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-22 (size resistor loads)
+
+PR [#66](https://github.com/analog-ml/CircuitGenome/pull/66)
+(`fix/size-resistor-loads`). Closes #64. Stacked on #60.
+
+### Fixed
+
+- **Resistor loads are now sized and modelled.** Previously the load resistors of
+  `resistor_load_gnd`/`vdd` (and one-stage resistor loads) kept a hardcoded 1 kΩ
+  placeholder, which the sizer ignored — so the analytical gain was wildly
+  optimistic (the resistor was absent from `Rout1`) and the circuit didn't bias
+  in SPICE (5 mV at the first-stage output → next stage off → `--simulate` showed
+  `n/a`).
+  - **Size**: `size_circuit` now chooses each load resistor so its DC drop biases
+    the driven device on (`R = (Vth + 0.15 V) / (ibias/2)`), returned in the new
+    `SizingResult.resistors` and printed by the `size` CLI.
+  - **Model**: the load-resistor conductance is included in `Rout1` in both
+    `_compute_requirements` and `_evaluate_metrics`, so gm requirements and the
+    reported gain account for it.
+  - **Verify**: `spice_sim` injects the sized R, so resistor-load circuits bias
+    and `--simulate` reports real gain/GBW/PM instead of `n/a`.
+  - Out of scope (kept at placeholder): source-degeneration, CMFB-sense, and bias
+    resistors. Active-load circuits are unaffected.
+
 ## 2026-06-22 (SPICE verification)
 
 PR [#60](https://github.com/analog-ml/CircuitGenome/pull/60)
