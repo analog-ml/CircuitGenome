@@ -10,10 +10,10 @@
 
 vdd: 1.0          # V — positive supply (PTM 45 nm nominal Vdd)
 vss: 0.0          # V — ground
-ibias: 10.0e-6    # A — input bias current
+ibias: 15.0e-6    # A — input bias current
 cl: 2.0e-12       # F — output load capacitance
 
-second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 25 µA
+second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 37.5 µA
 
 # DC and frequency performance
 gain_min_db: 60           # dB — minimum open-loop DC gain
@@ -23,5 +23,5 @@ slew_rate_min_vps: 5.0e+5 # V/s — minimum slew rate (ibias / Cc)
 
 # Power and swing
 power_max_w: 5.0e-4       # W  — maximum total quiescent power
-output_swing_max_v: 0.9   # V  — 0.1 V headroom from VDD
-output_swing_min_v: 0.1   # V  — 0.1 V headroom from VSS
+output_swing_max_v: 0.85   # V  — 0.15 V headroom from VDD
+output_swing_min_v: 0.15   # V  — 0.15 V headroom from VSS

@@ -891,3 +891,44 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
     for s in result.transistors.values():
         assert tech.width.min <= s.w_um <= tech.width.max
         assert tech.length.min <= s.l_um <= tech.length.max
+
+
+# ---------------------------------------------------------------------------
+# PTM example specs stay feasible AND meet their margins (regression for #69)
+# ---------------------------------------------------------------------------
+
+_PTM_EXAMPLE_NODES = ["ptm45", "ptm32", "ptm22", "ptm16"]
+
+
+def _assert_example_spec_met(fbr_tuple, spec_dir, node):
+    """Load examples/<spec_dir>/spec_<node>.yaml, size it on the reference
+    circuit, and assert it sizes feasibly with every margin satisfied."""
+    from pathlib import Path
+    import yaml
+    parsed, sr_result, fbr_result, topology = fbr_tuple
+    path = Path(__file__).parent.parent / "examples" / spec_dir / f"spec_{node}.yaml"
+    spec = SizingSpec(**yaml.safe_load(path.read_text()))
+    result = size_circuit(parsed, sr_result, fbr_result, topology, load_tech(node), spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE"), f"{spec_dir}/{node}: {result.solver_status}"
+    bad = {k: m for k, m in result.margins.items() if m is not None and m < 0}
+    assert not bad, f"{spec_dir}/{node}: unmet margins {bad}"
+
+
+@pytest.mark.parametrize("node", _PTM_EXAMPLE_NODES)
+def test_ptm_spec_two_stage_se_met(two_stage_fbr, node):
+    _assert_example_spec_met(two_stage_fbr, "two_stage_se_specs", node)
+
+
+@pytest.mark.parametrize("node", _PTM_EXAMPLE_NODES)
+def test_ptm_spec_two_stage_fd_met(two_stage_fd_fbr, node):
+    _assert_example_spec_met(two_stage_fd_fbr, "two_stage_fd_specs", node)
+
+
+@pytest.mark.parametrize("node", _PTM_EXAMPLE_NODES)
+def test_ptm_spec_three_stage_se_met(three_stage_nmc_se_fbr, node):
+    _assert_example_spec_met(three_stage_nmc_se_fbr, "three_stage_se_specs", node)
+
+
+@pytest.mark.parametrize("node", _PTM_EXAMPLE_NODES)
+def test_ptm_spec_three_stage_fd_met(three_stage_nmc_fd_fbr, node):
+    _assert_example_spec_met(three_stage_nmc_fd_fbr, "three_stage_fd_specs", node)

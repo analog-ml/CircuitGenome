@@ -3,6 +3,29 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-23 (feasible PTM example specs)
+
+PR [#71](https://github.com/analog-ml/CircuitGenome/pull/71)
+(`fix/ptm-spec-feasible`). Stacked on #70.
+
+### Changed
+
+- **Re-tuned the PTM example specs to be feasible *and* met** under the gm-ceiling
+  model (#69). After that fix the PTM specs missed their 2.5 MHz GBW (gm capped at
+  the weak-inversion ceiling for ibias = 10 µA). The physical fix is more current,
+  not a lower bandwidth target:
+  - `ibias 10 → 15 µA` for the two-stage SE/FD and three-stage SE/FD PTM specs;
+    output-swing headroom `0.1 → 0.15 V` for the two-stage specs (three-stage
+    already used 0.15 V) so the lowest node (0.7 V) stays feasible.
+  - **three-stage ptm16** uses `ibias = 13 µA` (at 0.7 V the 5× output-stage
+    current can't meet swing at 15 µA); a per-node nudge, not a uniform bump.
+  - Generic and one-stage specs are unchanged (already feasible).
+- **Regression test** (`tests/test_sizer.py`): every PTM example spec sizes
+  OPTIMAL on its topology's active-load reference circuit with all margins ≥ 0, so
+  the examples can't silently drift to "not met" again.
+- Note: `--simulate` still reads lower than the (now-met) analytical margins —
+  the residual current/VDS mismatch is a Level-1 limit (#65/#67), not a spec issue.
+
 ## 2026-06-23 (gm weak-inversion ceiling)
 
 PR [#70](https://github.com/analog-ml/CircuitGenome/pull/70)

@@ -10,11 +10,11 @@
 
 vdd: 0.8            # V — positive supply
 vss: 0.0            # V — ground
-ibias: 10.0e-6      # A — input bias current
+ibias: 15.0e-6      # A — input bias current
 cl: 2.0e-12       # F — output load capacitance
 
-second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 25 µA
-third_stage_current_ratio: 5.0    # iDS_3 = ratio × ibias = 50 µA
+second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 37.5 µA
+third_stage_current_ratio: 5.0    # iDS_3 = ratio × ibias = 75 µA
 
 # DC and frequency performance
 gain_min_db: 65           # dB — minimum open-loop DC gain
