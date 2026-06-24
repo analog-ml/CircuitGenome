@@ -514,6 +514,8 @@ def _evaluate_metrics(
     rout1_override: float | None = None,
     rout2_override: float | None = None,
     rout3_override: float | None = None,
+    gm1_factor: float = 1.0,
+    gd_tail_override: float | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Compute performance metrics and safety margins from the solution.
 
@@ -541,12 +543,12 @@ def _evaluate_metrics(
     def _gds(d: Device, s: TransistorSizing) -> float:
         return model.gds(d.type, s.w_um, s.l_um, s.ids_a)
 
-    # --- Input pair gm ---
+    # --- Input pair gm (gm1_factor < 1 for source degeneration) ---
     ip_devs = slot_transistors.get("input_pair", [])
     gm1 = 0.0
     s_ip = _sz(ip_devs[0].ref) if ip_devs else None
     if s_ip:
-        gm1 = _gm(ip_devs[0], s_ip)
+        gm1 = _gm(ip_devs[0], s_ip) * gm1_factor
 
     # --- Load ---
     ld_devs = slot_transistors.get("load", [])
@@ -570,6 +572,8 @@ def _evaluate_metrics(
         s = _sz(tc_devs[0].ref)
         if s:
             gd_tail = _gds(tc_devs[0], s)
+    if gd_tail_override is not None:   # resistor tail: gd_tail = 1/R
+        gd_tail = gd_tail_override
 
     # --- Second stage (SE: "second_stage"; FD: use second_stage_p as representative) ---
     ss_devs = (

@@ -37,6 +37,9 @@ class GmIdIntent:
     :param current_source_l_mult: current-source L multiple (longer → higher
         output resistance).
     :param cascode_l_mult: cascode-device L multiple.
+    :param degeneration_factor: ``gm1·R`` for a source-degenerated input pair —
+        sets each degeneration resistor to ``factor/gm1`` and the effective input
+        transconductance to ``gm1/(1+factor)`` (0 = no degeneration).
     """
     signal_gm_id: float = 14.0
     current_source_gm_id: float = 10.0
@@ -44,6 +47,7 @@ class GmIdIntent:
     signal_l_mult: float = 2.0
     current_source_l_mult: float = 4.0
     cascode_l_mult: float = 3.0
+    degeneration_factor: float = 0.5  # gm1·R for a degenerated input pair (0 = none)
 
 
 DEFAULT_INTENT = GmIdIntent()
