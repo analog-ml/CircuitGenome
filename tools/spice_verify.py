@@ -73,6 +73,8 @@ def main() -> None:
         s_str = f"{fmt.format(s*scl)} {unit}" if s is not None else "n/a"
         d_str = f"{(s-a)/abs(a)*100:+.0f}%" if (a not in (None, 0) and s is not None) else "-"
         print(f"  {label:<20}{a_str:>15}{s_str:>15}{d_str:>10}")
+    for note in sim.get("notes", []) or []:
+        print(f"  (i) {note}")
     print("  (SPICE = best-effort cross-check; FD AC metrics may show n/a)")
 
 

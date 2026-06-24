@@ -896,6 +896,27 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
         assert tech.length.min <= s.l_um <= tech.length.max
 
 
+def test_first_stage_gain_factor():
+    """k_fs is 1.0 for a current-mirror/FD first stage, 0.5 for non-mirror SE."""
+    from circuitgenome.sizer.sizer import _first_stage_gain_factor
+    from circuitgenome.synthesizer.models import Device
+
+    mirror = {"load": [
+        Device(ref="m1_load", type="nmos", terminals={"g": "x", "d": "x", "s": "0"}),
+        Device(ref="m2_load", type="nmos", terminals={"g": "x", "d": "y", "s": "0"}),
+    ]}
+    current_source = {"load": [
+        Device(ref="m1_load", type="nmos", terminals={"g": "net_bias1", "d": "y", "s": "0"}),
+    ]}
+    resistor = {"load": []}  # resistor load has no load MOSFETs
+    fully_diff = {"second_stage_p": [], "load": []}
+
+    assert _first_stage_gain_factor(mirror) == 1.0
+    assert _first_stage_gain_factor(current_source) == 0.5
+    assert _first_stage_gain_factor(resistor) == 0.5
+    assert _first_stage_gain_factor(fully_diff) == 1.0
+
+
 def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
     """ptm45 routes through the procedural gm/Id sizer with matched input pair."""
     tech = load_tech("ptm45")

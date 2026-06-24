@@ -3,6 +3,69 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (honest --simulate reporting)
+
+PR [#79](https://github.com/analog-ml/CircuitGenome/pull/79)
+(`fix/spice-report-honest`). Stacked on #78.
+
+### Fixed
+
+- **`--simulate` no longer hides a non-amplifying circuit behind `n/a`.** A
+  circuit that can't bias (e.g. a folded-cascode stage that doesn't fit the 1.0 V
+  PTM headroom budget — input pair/cascodes in triode, bias legs starved) has a
+  measured open-loop gain ≤ 0 dB. `_measure_ac` (`spice_sim.py`) previously
+  discarded any result with `gain_db ≤ 0`, so gain/GBW/PM all printed `n/a`,
+  looking like a measurement glitch.
+  - `_measure_ac` now keeps the higher-gain input polarity and **reports the
+    measured gain regardless of sign** (GBW/PM stay `n/a` when there is no 0-dB
+    crossing), returning a `reason` string.
+  - `simulate_metrics` adds a **bias diagnostic** when AC finds no gain — it
+    reuses `read_op_operating_point` to name the devices in triode / starved
+    (<0.1 µA) — and carries the AC reason + diagnostic out via a new `notes`
+    list, printed beneath the table by `circuitgenome size --simulate` and
+    `tools/spice_verify.py`.
+  - So the reported command now shows e.g. `Open-loop gain −45.5 dB` plus
+    "measured gain ≤ 0 dB — circuit does not amplify as biased" and
+    "bias diagnostic — in triode: m1_input_pair, …; starved: mp1_bias_gen, …",
+    instead of a bare `n/a`. Root-cause headroom feasibility stays tracked under
+    #74 / #76.
+
+## 2026-06-24 (gm/Id gain/GBW accuracy)
+
+PR [#78](https://github.com/analog-ml/CircuitGenome/pull/78)
+(`fix/gmid-bias-headroom`). Closes #76.
+
+### Fixed
+
+Diagnosed (op-point + AC ngspice probing) and closed the residual gm/Id
+analytical-vs-SPICE gap. The gm/Id LUT itself was already accurate
+(`GBW = gm1/(2πCc)` is exact in SPICE; active-load gain predicts to +0.5 dB);
+the gap had two distinct causes, now addressed:
+
+- **First-stage gain over-counted 2× for non-mirror loads (gain).** The sizer
+  used the active-mirror formula `gm1·Rout1` for every first stage, but a
+  resistor- or current-source-loaded differential pair tapped single-ended only
+  delivers `gm1·Rout1/2` (and a Miller-loop transconductance of `gm1/2`). A new
+  `_first_stage_gain_factor` (`sizer.py`) applies `k_fs = 1.0` for a
+  current-mirror or fully-differential first stage and `0.5` for a single-ended
+  non-mirror load, in both `_compute_requirements` and `_evaluate_metrics`
+  (corrects the Level-1 path too).
+- **Bias current collapses from unmodeled DC headroom (GBW).** At low supply the
+  input pair lifts its source node toward the rail, leaving the tail current
+  source below its `Vdsat` → triode → the assumed KCL current doesn't flow, so
+  `gm1` (hence GBW) falls several×.
+  - **A1 — analytical headroom budget** (`headroom.py`): estimates the tail's
+    saturation headroom from the LUT `Vgs`/`Vdsat`, lowers the tail mirror
+    group's `Vdsat` (raises its gm/Id, keeping mirror ratios) when that fits, and
+    otherwise emits an honest warning. Runs in the gm/Id path after geometry.
+  - **A2 — SPICE-in-the-loop op-point refinement** (`refine.py`,
+    `circuitgenome size --refine`): runs one feedback-biased `.op`, reads the
+    actual per-device current, and re-evaluates the metrics at that operating
+    point (flagging any triode device). On the active-load ptm45 two-stage the
+    refined GBW tracks SPICE to ~1% (was −79%). Reuses a new
+    `spice_sim.read_op_operating_point` helper; single-ended, skips gracefully
+    without ngspice.
+
 ## 2026-06-23 (gm/Id sizing for PTM)
 
 PR [#72](https://github.com/analog-ml/CircuitGenome/pull/72)

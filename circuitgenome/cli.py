@@ -53,6 +53,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     size.add_argument("--simulate", action="store_true",
                       help="After sizing, verify metrics with an ngspice simulation "
                            "(same technology) and print analytical vs SPICE")
+    size.add_argument("--refine", action="store_true",
+                      help="After sizing, re-evaluate metrics at the actual SPICE "
+                           "operating point (corrects for bias currents that don't "
+                           "fully flow, e.g. a headroom-starved tail). Single-ended.")
 
     return parser.parse_args(argv)
 
@@ -198,6 +202,15 @@ def _cmd_size(args: argparse.Namespace) -> None:
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
                           time_limit_s=args.time_limit)
 
+    if getattr(args, "refine", False) and result.transistors:
+        from .sizer.refine import refine_with_spice
+        from .sizer.sizer import _extract_slot_transistors
+        from .sizer.device_model import build_device_model
+        slot_t = _extract_slot_transistors(fbr_result)
+        gd_load_r = (1.0 / min(result.resistors.values())) if result.resistors else 0.0
+        result = refine_with_spice(result, netlist_text, slot_t, tech, spec,
+                                   build_device_model(tech), gd_load_r)
+
     print(f"Netlist: {args.netlist_file.name}  |  Topology: {args.topology}")
     print(f"Tech: {tech.name}")
     print(f"\nSolver: {result.solver_status}")
@@ -289,6 +302,8 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 else:
                     d_str = "—"
                 print(f"  {label:<20}{a_str:>15}{s_str:>15}{d_str:>10}")
+            for note in sim.get("notes", []) or []:
+                print(f"  ⓘ {note}")
             print("  (SPICE = best-effort cross-check; FD AC metrics may show n/a)")
 
 
