@@ -16,11 +16,11 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
-from ..device_model import CURRENT_SOURCE, SIGNAL, GmIdModel
+from ..device_model import CASCODE, CURRENT_SOURCE, SIGNAL, GmIdModel
 from ..device_model import GmIdPolicy
 from ..gmid_lut import GmIdLut
 from ..models import SizingResult, SizingSpec, TechParams
-from .blocks import _is_signal_dev, build_blocks
+from .blocks import _is_signal_dev, build_blocks, cascode_device_refs, node_rout
 from .dc_op import check_dc_operating_point
 from .intent import DEFAULT_INTENT, GmIdIntent
 
@@ -32,6 +32,8 @@ def _model_for(tech: TechParams, intent: GmIdIntent) -> GmIdModel:
         cs_l_mult=intent.current_source_l_mult,
         cs_gmid=intent.current_source_gm_id,
         signal_nominal_gmid=intent.signal_gm_id,
+        cascode_l_mult=intent.cascode_l_mult,
+        cascode_gmid=intent.cascode_gm_id,
     )
     return GmIdModel(tech, GmIdLut(tech.gmid_lut), policy)
 
@@ -75,10 +77,15 @@ def size_gmid(
         slot_transistors, all_transistors, ids_map, tech, spec, model, gd_load_r
     )
 
-    role_map = {
-        ref: (SIGNAL if _is_signal_dev(device) else CURRENT_SOURCE)
-        for ref, (device, _slot) in all_transistors.items()
-    }
+    cascodes = cascode_device_refs(slot_transistors)
+    role_map = {}
+    for ref, (device, _slot) in all_transistors.items():
+        if _is_signal_dev(device):
+            role_map[ref] = SIGNAL
+        elif ref in cascodes:
+            role_map[ref] = CASCODE
+        else:
+            role_map[ref] = CURRENT_SOURCE
     transistor_sizing, geom_warnings = assign_geometry_gmid(
         model, all_transistors, slot_transistors, ids_map, role_map, gm_req_map, tech
     )
@@ -88,9 +95,20 @@ def size_gmid(
         transistor_sizing, spec, tech
     )
 
+    # Cascode loads: the single-device-gds estimate misses the gm·ro·ro boost, so
+    # compute the first-stage output resistance cascode-aware from the blocks.
+    rout1_override = None
+    if blocks.has_cascode_load():
+        out_net = blocks.first_stage_out_net()
+        if out_net:
+            tail = blocks.tail_net()
+            all_mos = [device for device, _slot in all_transistors.values()]
+            stop = frozenset({tail}) if tail else frozenset()
+            rout1_override = node_rout(out_net, all_mos, model, transistor_sizing, stop)
+
     metrics, margins = _evaluate_metrics(
         transistor_sizing, slot_transistors, cc_pf, tech, spec, model,
-        cc2_pf=cc2_pf, gd_load_r=gd_load_r,
+        cc2_pf=cc2_pf, gd_load_r=gd_load_r, rout1_override=rout1_override,
     )
 
     return SizingResult(

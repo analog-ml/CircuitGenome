@@ -511,11 +511,18 @@ def _evaluate_metrics(
     model: DeviceModel,
     cc2_pf: float | None = None,
     gd_load_r: float = 0.0,
+    rout1_override: float | None = None,
+    rout2_override: float | None = None,
+    rout3_override: float | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Compute performance metrics and safety margins from the solution.
 
     Small-signal parameters come through ``model`` evaluated at the *solved*
     geometry — exact for both Level-1 (geometry-free λ·Id) and gm/Id (LUT).
+
+    ``rout{1,2,3}_override`` let a caller (the gm/Id pipeline) supply
+    cascode-aware stage output resistances; when ``None`` (the Level-1 default)
+    the single-device-gds estimate is used unchanged.
     """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
@@ -550,8 +557,11 @@ def _evaluate_metrics(
             gd_ld = _gds(ld_devs[0], s)
 
     gd_ip = _gds(ip_devs[0], s_ip) if s_ip else 0.0
-    rout1 = (eq.rout(gd_ip, gd_ld + gd_load_r)
-             if (gd_ip + gd_ld + gd_load_r) > 0 else float("inf"))
+    if rout1_override is not None:
+        rout1 = rout1_override
+    else:
+        rout1 = (eq.rout(gd_ip, gd_ld + gd_load_r)
+                 if (gd_ip + gd_ld + gd_load_r) > 0 else float("inf"))
 
     # --- Tail current ---
     tc_devs = slot_transistors.get("tail_current", [])
@@ -590,6 +600,8 @@ def _evaluate_metrics(
             else:
                 ss_load_gd = g_d
         rout2 = eq.rout(gd_ss_n, gd_ss_p) if (gd_ss_n + gd_ss_p) > 0 else float("inf")
+        if rout2_override is not None:
+            rout2 = rout2_override
     else:
         rout2 = float("inf")
 
@@ -617,6 +629,8 @@ def _evaluate_metrics(
             if _is_signal_dev(d):
                 gm3 = _gm(d, s)
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
+        if rout3_override is not None:
+            rout3 = rout3_override
     else:
         rout3 = float("inf")
 

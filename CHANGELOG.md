@@ -3,10 +3,33 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
-## 2026-06-24 (gm/Id pipeline redesign — phase 1)
+## 2026-06-24 (gm/Id pipeline redesign — phase 2a: cascodes)
 
-PR [#81](https://github.com/analog-ml/CircuitGenome/pull/81)
-(`feat/gmid-pipeline-phase1`). Targets `feat/gmid-sizing-redesign`.
+PR [#82](https://github.com/analog-ml/CircuitGenome/pull/82)
+(`feat/gmid-cascodes`). Stacked on #81; targets `feat/gmid-sizing-redesign`.
+
+### Fixed
+
+The gm/Id path mis-modelled cascode loads: `_evaluate_metrics` took a single load
+device's `gds` for `rout1`, ignoring the cascode `gm·ro·ro` boost (so every
+folded-/telescopic-cascode load got a far-too-low gain).
+
+- **Cascode-aware output resistance** (`gmid/blocks.py::node_rout`): traces each
+  branch into the stage output node — a cascode device (source on another
+  device's drain) contributes `ro·(1+gm·R_below)`, a plain device just `ro`;
+  branches combine in parallel, with the input-pair tail treated as an AC ground.
+- **Metrics override** (`_evaluate_metrics` gains optional `rout{1,2,3}_override`,
+  default `None` → Level-1 path byte-identical); `gmid_sizer` computes the
+  first-stage `rout` cascode-aware via the blocks and passes it in.
+- **`CASCODE` sizing role** (`device_model`, `intent.cascode_gm_id`/`cascode_l_mult`):
+  cascode devices are now sized in a smaller-Vdsat region (strong inversion) for
+  headroom, instead of as plain current sources.
+
+Parity: non-cascode circuits unchanged; the Level-1 path is untouched (no override
+passed). Note: at the 1.0 V PTM supply most cascode stacks are headroom-tight and
+flag `bias_feasible=False` (the gain is computed correctly but won't be reached
+until the supply/CM allows the stack to bias). Full cascode-stack headroom in
+`dc_op` (beyond the tail) and resistor sizing land in phase 2b.
 
 ### Changed
 
