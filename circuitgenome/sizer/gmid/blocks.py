@@ -22,6 +22,7 @@ from circuitgenome.synthesizer.models import Device
 _SECOND_STAGE_SLOTS = frozenset({"second_stage", "second_stage_p", "second_stage_n"})
 _THIRD_STAGE_SLOTS = frozenset({"third_stage", "third_stage_p", "third_stage_n"})
 _BIAS_NETS = frozenset({"vdd!", "vss!", "gnd!", "ibias"})
+_RAILS = frozenset({"vdd!", "vss!", "gnd!", "0"})
 
 
 def _is_signal_dev(device: Device) -> bool:
@@ -49,6 +50,69 @@ def _has_cascode(devs: list[Device]) -> bool:
     mos = [d for d in devs if d.type in ("nmos", "pmos")]
     drains = {d.terminals.get("d") for d in mos}
     return any(d.terminals.get("s") in drains for d in mos)
+
+
+def cascode_device_refs(slot_transistors: dict[str, list[Device]]) -> set[str]:
+    """Refs of cascode devices: a non-signal device whose *source* sits on
+    another same-slot device's *drain* (i.e. it is stacked on a device below)."""
+    out: set[str] = set()
+    for devs in slot_transistors.values():
+        mos = [d for d in devs if d.type in ("nmos", "pmos")]
+        drains = {d.terminals.get("d") for d in mos}
+        for d in mos:
+            src = d.terminals.get("s")
+            if src not in _RAILS and src in drains and not _is_signal_dev(d):
+                out.add(d.ref)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Cascode-aware output resistance
+# --------------------------------------------------------------------------- #
+def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
+    """Resistance (Ω) looking into ``device``'s drain, cascode-aware.
+
+    A cascode device (source on another device's drain) boosts its own ``ro`` by
+    ``1 + gm·R_source`` where ``R_source`` is the resistance below it; a device
+    whose source is a rail or in ``stop`` (e.g. the input-pair tail node, an AC
+    ground for the differential half-circuit) contributes just ``ro``.  Shallow
+    recursion handles multi-high stacks.
+    """
+    s = sizing.get(device.ref)
+    if s is None:
+        return float("inf")
+    gds = model.gds(device.type, s.w_um, s.l_um, s.ids_a)
+    ro = 1.0 / gds if gds > 0 else float("inf")
+    src = device.terminals.get("s")
+    if src in _RAILS or src in stop or src is None:
+        return ro
+    below = by_drain.get(src)
+    if below is not None and below.ref != device.ref and below.type == device.type:
+        gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
+        r_src = _looking_in_drain(below, by_drain, model, sizing, stop)
+        return ro * (1.0 + gm * r_src) if r_src != float("inf") else float("inf")
+    return ro
+
+
+def node_rout(out_net: str, mosfets: list[Device], model, sizing,
+              stop: frozenset = frozenset()) -> float:
+    """Cascode-aware output resistance (Ω) at ``out_net`` = parallel of every
+    device whose drain is ``out_net`` (each looking-in, cascode-boosted).
+
+    ``stop`` lists nets to treat as AC ground (typically the input-pair tail node)
+    so the input pair contributes ``ro``, not a tail-degenerated cascode.
+    """
+    by_drain: dict[str, Device] = {}
+    for d in mosfets:
+        if d.type in ("nmos", "pmos"):
+            by_drain.setdefault(d.terminals.get("d"), d)
+    g = 0.0
+    for d in mosfets:
+        if d.type in ("nmos", "pmos") and d.terminals.get("d") == out_net:
+            r = _looking_in_drain(d, by_drain, model, sizing, stop)
+            if r > 0:
+                g += 1.0 / r
+    return 1.0 / g if g > 0 else float("inf")
 
 
 def classify_load(mosfets: list[Device], resistors: list[Device]) -> LoadKind:
@@ -109,6 +173,28 @@ class OpAmpBlocks:
         if ld and ld.load_kind in (LoadKind.MIRROR, LoadKind.CASCODE):
             return 1.0
         return 0.5
+
+    def has_cascode_load(self) -> bool:
+        ld = self.load
+        return bool(ld and ld.load_kind == LoadKind.CASCODE)
+
+    def first_stage_out_net(self) -> str | None:
+        """First-stage output node = the next stage's signal-device gate.
+
+        ``None`` for a one-stage opamp (no downstream stage to read it from).
+        """
+        for slot in ("second_stage", "second_stage_p", "second_stage_n",
+                     "third_stage", "third_stage_p", "third_stage_n"):
+            b = self.blocks.get(slot)
+            sig = b.signal_device if b else None
+            if sig is not None:
+                return sig.terminals.get("g")
+        return None
+
+    def tail_net(self) -> str | None:
+        """The input-pair source (tail) node."""
+        ip = self.input_pair
+        return ip.mosfets[0].terminals.get("s") if ip and ip.mosfets else None
 
 
 def build_blocks(slot_transistors: dict[str, list[Device]],

@@ -75,6 +75,7 @@ design exploration, or topology studies.
    api/sizer/gmid/blocks
    api/sizer/gmid/intent
    api/sizer/gmid/dc_op
+   api/sizer/gmid/resistors
 
 .. toctree::
    :maxdepth: 1

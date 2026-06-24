@@ -32,6 +32,7 @@ from .models import MosfetParams, TechParams
 
 SIGNAL = "signal"
 CURRENT_SOURCE = "current_source"
+CASCODE = "cascode"
 
 
 class DeviceModel(Protocol):
@@ -134,6 +135,8 @@ class GmIdPolicy:
     cs_l_mult: float = 4.0           # current-source L as a multiple of L_min
     cs_gmid: float = 10.0            # nominal current-source gm/Id (1/V)
     signal_nominal_gmid: float = 14.0  # gm/Id used for pre-geometry gds estimate
+    cascode_l_mult: float = 3.0      # cascode-device L as a multiple of L_min
+    cascode_gmid: float = 8.0        # cascode gm/Id (strong inversion → small Vdsat)
 
 
 @dataclass
@@ -172,8 +175,14 @@ class GmIdModel:
 
     def role_length(self, role: str) -> float:
         """Channel length for ``role`` from the L-policy multiplier (µm, snapped)."""
-        mult = self.policy.cs_l_mult if role == CURRENT_SOURCE else self.policy.signal_l_mult
+        mult = {CURRENT_SOURCE: self.policy.cs_l_mult,
+                CASCODE: self.policy.cascode_l_mult}.get(role, self.policy.signal_l_mult)
         return self._snap_l(mult * self.tech.length.min)
+
+    def _role_gm_id(self, role: str) -> float:
+        """Nominal gm/Id for a non-signal role (current source / cascode)."""
+        return (self.policy.cascode_gmid if role == CASCODE
+                else self.policy.cs_gmid)
 
     def _gm_id_at(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
         """Recover the operating gm/Id from a solved (W, L, Id) via the LUT inverse."""
@@ -209,7 +218,8 @@ class GmIdModel:
     def gds_estimate(self, dtype, ids, role):
         """Geometry-free gds from the role's nominal operating point."""
         l_um = self.role_length(role)
-        gm_id = self.policy.cs_gmid if role == CURRENT_SOURCE else self.policy.signal_nominal_gmid
+        gm_id = (self.policy.signal_nominal_gmid if role == SIGNAL
+                 else self._role_gm_id(role))
         gm = gm_id * abs(ids)
         return gm / self.lut.gm_gds(dtype, gm_id, l_um)
 
@@ -219,13 +229,14 @@ class GmIdModel:
     ) -> GeomResult:
         """Compute (W, L) for a device from its role and (optional) gm target.
 
-        ``current_source`` devices use the policy gm/Id; ``signal`` devices set
-        gm/Id = gm_target/Id, clamped to the table's weak-inversion ceiling.
+        ``current_source``/``cascode`` devices use the policy gm/Id (cascodes at a
+        smaller-Vdsat region); ``signal`` devices set gm/Id = gm_target/Id, clamped
+        to the table's weak-inversion ceiling.
         """
         l_um = self.role_length(role)
         capped = False
-        if role == CURRENT_SOURCE or not gm_target or ids <= 0:
-            gm_id = self.policy.cs_gmid
+        if role != SIGNAL or not gm_target or ids <= 0:
+            gm_id = self._role_gm_id(role)
         else:
             gm_id = gm_target / abs(ids)
             ceiling = self.lut.max_gm_id(dtype, l_um)
