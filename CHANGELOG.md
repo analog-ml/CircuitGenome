@@ -3,6 +3,34 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (re-tune PTM example specs)
+
+PR [#80](https://github.com/analog-ml/CircuitGenome/pull/80)
+(`fix/retune-ptm-specs`). Closes #74.
+
+### Fixed
+
+- **Re-tuned all 20 PTM example specs to size feasibly again.** After the
+  weak-inversion gm-ceiling and gm/Id headroom checks landed, the committed specs
+  flagged a gm-ceiling shortfall (capped gm → missed GBW) and ptm45 missed output
+  swing at 1.0 V. Re-tuned per the precedent a4e6d35 (current is the physical
+  fix):
+  - **raise `ibias`** (10 → 15 µA; 12 µA for the lowest-supply three-stage nodes)
+    to lift the gm-ceiling (`= 25·ibias/2`);
+  - **relax `output_swing`** to node-appropriate headroom (0.15–0.25 V) and the
+    lowest nodes' GBW where the small supply forbids the old targets.
+  - **ptm45 (gm/Id)** carries a documented **tail-headroom advisory** at 1.0 V
+    mid-rail — structural (meeting GBW raises the input |Vgs| until the tail loses
+    saturation headroom); all analytical margins are still met. Noted in each
+    ptm45 multi-stage spec header.
+  - Targets assume the **highest-gain load variant** (active-mirror / folded
+    cascode); resistor / simple current-source loads deliver ~6 dB less
+    first-stage gain (noted in each spec header).
+- **Regression test** (`tests/test_sizer.py::test_ptm_example_specs_feasible`):
+  every PTM spec sizes on its topology's reference circuit with **no gm-ceiling
+  warning and all margins ≥ 0** (ptm45 may carry the headroom advisory), so they
+  can't silently drift to "not met" again.
+
 ## 2026-06-24 (honest --simulate reporting)
 
 PR [#79](https://github.com/analog-ml/CircuitGenome/pull/79)

@@ -1,6 +1,10 @@
 # Feasible three-stage single-ended op-amp spec for PTM 45 nm HP bulk.
 # Technology: ptm45, circuitgenome/sizer/config/tech_ptm45.yaml
-# Supply: 1.0 V, 10 µA bias current.  3-stage spec applies to both NMC and RNMC variants.
+# Supply: 1.0 V, 15 µA bias current. 3-stage spec applies to both NMC and RNMC variants.
+# Targets assume the highest-gain load variant (active-mirror / folded-cascode); resistor/simple-CS loads need ~6 dB lower gain.
+# Note: at 1.0 V with a mid-rail input common-mode the tail current source is
+#   headroom-tight, so the gm/Id sizer emits an advisory; the design still meets
+#   all analytical margins. Lower the input CM or raise the supply for more margin.
 #
 # Usage:
 #   circuitgenome size circuits/three_stage_opamp_nmc_single_ended/circuit_0001_flat.ckt \
@@ -10,19 +14,19 @@
 
 vdd: 1.0            # V — positive supply
 vss: 0.0            # V — ground
-ibias: 10.0e-6      # A — input bias current
-cl: 2.0e-12       # F — output load capacitance
+ibias: 1.5e-5      # A — input bias current (15 µA)
+cl: 2.0e-12        # F — output load capacitance
 
-second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 25 µA
-third_stage_current_ratio: 5.0    # iDS_3 = ratio × ibias = 50 µA
+second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias
+third_stage_current_ratio: 5.0    # iDS_3 = ratio × ibias
 
 # DC and frequency performance
-gain_min_db: 70           # dB — minimum open-loop DC gain
+gain_min_db: 65           # dB — minimum open-loop DC gain
 gbw_min_hz: 2.5e+6        # Hz — minimum unity-gain bandwidth (2.5 MHz)
 phase_margin_min_deg: 60  # °  — minimum phase margin
-slew_rate_min_vps: 5.0e+5  # V/s — minimum slew rate (ibias / Cc)
+slew_rate_min_vps: 1.625e+6  # V/s — minimum slew rate (ibias / Cc)
 
 # Power and swing
 power_max_w: 5.0e-4      # W  — maximum total quiescent power
-output_swing_max_v: 0.85   # V  — 0.15 V headroom from VDD
-output_swing_min_v: 0.15    # V  — 0.15 V headroom from VSS
+output_swing_max_v: 0.75  # V  — 0.25 V headroom from VDD
+output_swing_min_v: 0.25   # V  — 0.25 V headroom from VSS
