@@ -3,6 +3,40 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (gm/Id pipeline redesign — phase 1)
+
+PR [#81](https://github.com/analog-ml/CircuitGenome/pull/81)
+(`feat/gmid-pipeline-phase1`). Targets `feat/gmid-sizing-redesign`.
+
+### Changed
+
+Phase 1 of separating the gm/Id sizer from the Level-1 analytical sizer into its
+own **block-based pipeline** (`circuitgenome/sizer/gmid/`), so the two paths can
+evolve independently and gm/Id can grow cascode / resistor / CMFB / FD support.
+
+- **`gmid/gmid_sizer.py`** (`size_gmid`) — the gm/Id orchestration is lifted out
+  of `size_circuit`, which now simply **dispatches** (`tech.gmid_lut` → gm/Id
+  pipeline, else Level-1 CP-SAT). `size_circuit`'s `is_gmid` branch is gone; the
+  Level-1 path is explicit (`Level1Model`). The **model-independent op-amp
+  physics** (`_compute_requirements`/`_evaluate_metrics`) stays shared and
+  model-injected — called by both pipelines, not duplicated.
+- **`gmid/blocks.py`** — a functional-block view (input pair, load, gain stages,
+  tail, bias, compensation) that **classifies** each load/tail (mirror / cascode /
+  resistor / current-source). The structural layer and extension point for later
+  phases.
+- **`gmid/intent.py`** (`GmIdIntent`) — explicit per-role **inversion-region
+  (gm/Id) and L** design choices (strong/moderate/weak), replacing the ad-hoc
+  `GmIdPolicy` constants as the user-facing knob.
+- **`gmid/dc_op.py`** — DC operating-point / headroom check that is now
+  **cascode-aware**: a stacked tail's budget is the *sum* of its devices' Vdsat
+  (a single-device check missed e.g. circuit_0110). Sets a new
+  `SizingResult.bias_feasible` flag (and a cascode-collapse warning) so callers
+  can tell when the assumed bias current won't actually flow.
+
+Parity: identical gm/Id results on the existing tests (the new pipeline calls the
+same physics with the same model); the Level-1 path is unchanged. Follow-up
+phases: cascode + resistor blocks (phase 2), FD + three-stage + CMFB (phase 3).
+
 ## 2026-06-24 (honest --simulate reporting)
 
 PR [#79](https://github.com/analog-ml/CircuitGenome/pull/79)

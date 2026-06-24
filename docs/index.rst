@@ -71,6 +71,10 @@ design exploration, or topology studies.
    api/sizer/gmid_geometry
    api/sizer/headroom
    api/sizer/refine
+   api/sizer/gmid/gmid_sizer
+   api/sizer/gmid/blocks
+   api/sizer/gmid/intent
+   api/sizer/gmid/dc_op
 
 .. toctree::
    :maxdepth: 1

@@ -138,6 +138,10 @@ class SizingResult:
     :param resistors: Sized load-resistor values in ohms, keyed by device
         reference (e.g. ``{"r1_load": 1.06e5}``). Empty when there are no
         sized resistors.
+    :param bias_feasible: ``False`` when the gm/Id DC operating-point check finds
+        a current source that cannot stay saturated (e.g. a cascode tail with no
+        headroom) — the assumed bias current won't flow, so the frequency-domain
+        metrics are optimistic. Always ``True`` for the Level-1 path.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -147,3 +151,4 @@ class SizingResult:
     cc2_pf: float | None = None
     warnings: list[str] = field(default_factory=list)
     resistors: dict[str, float] = field(default_factory=dict)
+    bias_feasible: bool = True

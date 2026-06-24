@@ -1,0 +1,106 @@
+"""Orchestrator for the block-based gm/Id sizing pipeline.
+
+``size_gmid`` runs the gm/Id path end-to-end, separate from the Level-1 CP-SAT
+sizer: build the block view, derive per-stage gm requirements (shared,
+model-injected op-amp physics), choose per-device gm/Id geometry from the
+:class:`~.intent.GmIdIntent`, check the DC operating point (cascode-aware
+headroom), and evaluate the metrics.  The model-independent topology math is
+reused from :mod:`circuitgenome.sizer` rather than duplicated.
+"""
+from __future__ import annotations
+
+from circuitgenome.recognizer.models import (
+    FunctionalBlockRecognitionResult,
+    ParsedNetlist,
+    SubcircuitRecognitionResult,
+)
+from circuitgenome.synthesizer.models import TopologyTemplate
+
+from ..device_model import CURRENT_SOURCE, SIGNAL, GmIdModel
+from ..device_model import GmIdPolicy
+from ..gmid_lut import GmIdLut
+from ..models import SizingResult, SizingSpec, TechParams
+from .blocks import _is_signal_dev, build_blocks
+from .dc_op import check_dc_operating_point
+from .intent import DEFAULT_INTENT, GmIdIntent
+
+
+def _model_for(tech: TechParams, intent: GmIdIntent) -> GmIdModel:
+    """Build a :class:`GmIdModel` whose L/region policy comes from ``intent``."""
+    policy = GmIdPolicy(
+        signal_l_mult=intent.signal_l_mult,
+        cs_l_mult=intent.current_source_l_mult,
+        cs_gmid=intent.current_source_gm_id,
+        signal_nominal_gmid=intent.signal_gm_id,
+    )
+    return GmIdModel(tech, GmIdLut(tech.gmid_lut), policy)
+
+
+def size_gmid(
+    parsed: ParsedNetlist,
+    sr_result: SubcircuitRecognitionResult,
+    fbr_result: FunctionalBlockRecognitionResult,
+    topology: TopologyTemplate,
+    tech: TechParams,
+    spec: SizingSpec,
+    intent: GmIdIntent = DEFAULT_INTENT,
+) -> SizingResult:
+    """Size a circuit via the gm/Id pipeline.  Requires ``tech.gmid_lut``."""
+    # Shared, model-independent preprocessing + topology physics (lazy import to
+    # avoid an import cycle with the dispatcher in sizer.py).
+    from ..sizer import (
+        _assign_ids,
+        _check_topology_match,
+        _compute_requirements,
+        _deduplicate,
+        _evaluate_metrics,
+        _extract_slot_resistors,
+        _extract_slot_transistors,
+        _size_load_resistors,
+    )
+    from ..gmid_geometry import assign_geometry_gmid
+
+    slot_transistors = _extract_slot_transistors(fbr_result)
+    slot_resistors = _extract_slot_resistors(fbr_result)
+    blocks = build_blocks(slot_transistors, slot_resistors)
+    topology_warnings = _check_topology_match(slot_transistors, topology.name)
+    all_transistors = _deduplicate(slot_transistors)
+    ids_map = _assign_ids(slot_transistors, all_transistors, spec)
+
+    resistors = _size_load_resistors(slot_resistors, spec, tech)
+    gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
+
+    model = _model_for(tech, intent)
+    gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = _compute_requirements(
+        slot_transistors, all_transistors, ids_map, tech, spec, model, gd_load_r
+    )
+
+    role_map = {
+        ref: (SIGNAL if _is_signal_dev(device) else CURRENT_SOURCE)
+        for ref, (device, _slot) in all_transistors.items()
+    }
+    transistor_sizing, geom_warnings = assign_geometry_gmid(
+        model, all_transistors, slot_transistors, ids_map, role_map, gm_req_map, tech
+    )
+
+    dc_warnings, bias_feasible = check_dc_operating_point(
+        model, blocks, slot_transistors, all_transistors, ids_map,
+        transistor_sizing, spec, tech
+    )
+
+    metrics, margins = _evaluate_metrics(
+        transistor_sizing, slot_transistors, cc_pf, tech, spec, model,
+        cc2_pf=cc2_pf, gd_load_r=gd_load_r,
+    )
+
+    return SizingResult(
+        transistors=transistor_sizing,
+        cc_pf=cc_pf,
+        metrics=metrics,
+        margins=margins,
+        solver_status="GMID",
+        cc2_pf=cc2_pf,
+        warnings=topology_warnings + ceil_warnings + geom_warnings + dc_warnings,
+        resistors=resistors,
+        bias_feasible=bias_feasible,
+    )
