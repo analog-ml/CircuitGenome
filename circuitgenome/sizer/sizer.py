@@ -36,9 +36,7 @@ from circuitgenome.synthesizer.models import Device, TopologyTemplate
 
 from . import equations as eq
 from .constraints import build_model
-from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel, build_device_model
-from .gmid_geometry import assign_geometry_gmid
-from .headroom import apply_headroom
+from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel, Level1Model
 from .models import SizingResult, SizingSpec, TechParams, TransistorSizing
 
 # Slots that carry iBias/2 per transistor (both sides of the differential pair).
@@ -513,11 +511,21 @@ def _evaluate_metrics(
     model: DeviceModel,
     cc2_pf: float | None = None,
     gd_load_r: float = 0.0,
+    rout1_override: float | None = None,
+    rout2_override: float | None = None,
+    rout3_override: float | None = None,
+    gm1_factor: float = 1.0,
+    gd_tail_override: float | None = None,
+    gd_out_extra: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Compute performance metrics and safety margins from the solution.
 
     Small-signal parameters come through ``model`` evaluated at the *solved*
     geometry — exact for both Level-1 (geometry-free λ·Id) and gm/Id (LUT).
+
+    ``rout{1,2,3}_override`` let a caller (the gm/Id pipeline) supply
+    cascode-aware stage output resistances; when ``None`` (the Level-1 default)
+    the single-device-gds estimate is used unchanged.
     """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
@@ -536,12 +544,12 @@ def _evaluate_metrics(
     def _gds(d: Device, s: TransistorSizing) -> float:
         return model.gds(d.type, s.w_um, s.l_um, s.ids_a)
 
-    # --- Input pair gm ---
+    # --- Input pair gm (gm1_factor < 1 for source degeneration) ---
     ip_devs = slot_transistors.get("input_pair", [])
     gm1 = 0.0
     s_ip = _sz(ip_devs[0].ref) if ip_devs else None
     if s_ip:
-        gm1 = _gm(ip_devs[0], s_ip)
+        gm1 = _gm(ip_devs[0], s_ip) * gm1_factor
 
     # --- Load ---
     ld_devs = slot_transistors.get("load", [])
@@ -552,8 +560,11 @@ def _evaluate_metrics(
             gd_ld = _gds(ld_devs[0], s)
 
     gd_ip = _gds(ip_devs[0], s_ip) if s_ip else 0.0
-    rout1 = (eq.rout(gd_ip, gd_ld + gd_load_r)
-             if (gd_ip + gd_ld + gd_load_r) > 0 else float("inf"))
+    if rout1_override is not None:
+        rout1 = rout1_override
+    else:
+        rout1 = (eq.rout(gd_ip, gd_ld + gd_load_r)
+                 if (gd_ip + gd_ld + gd_load_r) > 0 else float("inf"))
 
     # --- Tail current ---
     tc_devs = slot_transistors.get("tail_current", [])
@@ -562,6 +573,8 @@ def _evaluate_metrics(
         s = _sz(tc_devs[0].ref)
         if s:
             gd_tail = _gds(tc_devs[0], s)
+    if gd_tail_override is not None:   # resistor tail: gd_tail = 1/R
+        gd_tail = gd_tail_override
 
     # --- Second stage (SE: "second_stage"; FD: use second_stage_p as representative) ---
     ss_devs = (
@@ -592,6 +605,11 @@ def _evaluate_metrics(
             else:
                 ss_load_gd = g_d
         rout2 = eq.rout(gd_ss_n, gd_ss_p) if (gd_ss_n + gd_ss_p) > 0 else float("inf")
+        if rout2_override is not None:
+            rout2 = rout2_override
+        # Two-stage FD: the resistive-sense CMFB averager loads the output.
+        if (not is_three_stage and gd_out_extra > 0.0 and rout2 < float("inf")):
+            rout2 = 1.0 / (1.0 / rout2 + gd_out_extra)
     else:
         rout2 = float("inf")
 
@@ -619,6 +637,11 @@ def _evaluate_metrics(
             if _is_signal_dev(d):
                 gm3 = _gm(d, s)
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
+        if rout3_override is not None:
+            rout3 = rout3_override
+        # Three-stage FD: CMFB averager loads the (third-stage) output.
+        if gd_out_extra > 0.0 and rout3 < float("inf"):
+            rout3 = 1.0 / (1.0 / rout3 + gd_out_extra)
     else:
         rout3 = float("inf")
 
@@ -744,6 +767,12 @@ def size_circuit(
     :returns: :class:`~.models.SizingResult` with per-transistor sizing,
         compensation cap, computed metrics, and safety margins.
     """
+    # gm/Id technologies (LUT present) use the separate block-based pipeline;
+    # the Level-1 CP-SAT sizer below handles the card-less generic tech.
+    if getattr(tech, "gmid_lut", None):
+        from .gmid import size_gmid
+        return size_gmid(parsed, sr_result, fbr_result, topology, tech, spec)
+
     slot_transistors = _extract_slot_transistors(fbr_result)
     topology_warnings = _check_topology_match(slot_transistors, topology.name)
     all_transistors = _deduplicate(slot_transistors)
@@ -752,66 +781,46 @@ def size_circuit(
     resistors = _size_load_resistors(_extract_slot_resistors(fbr_result), spec, tech)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
 
-    # gm/Id model for PTM nodes (LUT present); Level-1 otherwise.
-    dev_model = build_device_model(tech)
+    # Level-1 square-law model; discrete W/L via CP-SAT.
+    dev_model = Level1Model(tech)
     gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = _compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
     )
     all_warnings = topology_warnings + gm_ceiling_warnings
 
-    if dev_model.is_gmid:
-        # Procedural forward pass — geometry is computed, not searched.
-        role_map = {
-            ref: (SIGNAL if _is_signal_dev(device) else CURRENT_SOURCE)
-            for ref, (device, _slot) in all_transistors.items()
-        }
-        transistor_sizing, geom_warnings = assign_geometry_gmid(
-            dev_model, all_transistors, slot_transistors, ids_map,
-            role_map, gm_req_map, tech,
-        )
-        # DC headroom budget: keep the tail current source out of triode
-        # (re-sizes its mirror group when it helps, else warns).
-        headroom_warnings = apply_headroom(
-            dev_model, slot_transistors, all_transistors, ids_map,
-            transistor_sizing, spec, tech,
-        )
-        all_warnings = all_warnings + geom_warnings + headroom_warnings
-        status_name = "GMID"
-    else:
-        # Level-1: discrete W/L via CP-SAT.
-        cp_mdl, W_vars, L_vars = build_model(
-            all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
-        )
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = time_limit_s
-        status = solver.solve(cp_mdl)
-        status_name = solver.status_name(status)
+    cp_mdl, W_vars, L_vars = build_model(
+        all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
+    )
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_limit_s
+    status = solver.solve(cp_mdl)
+    status_name = solver.status_name(status)
 
-        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return SizingResult(
-                transistors={},
-                cc_pf=cc_pf,
-                metrics={},
-                margins={},
-                solver_status=status_name,
-                cc2_pf=cc2_pf,
-                warnings=all_warnings,
-                resistors=resistors,
-            )
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return SizingResult(
+            transistors={},
+            cc_pf=cc_pf,
+            metrics={},
+            margins={},
+            solver_status=status_name,
+            cc2_pf=cc2_pf,
+            warnings=all_warnings,
+            resistors=resistors,
+        )
 
-        # Extract solution: convert integer step-units back to µm.
-        w_step = tech.width.step
-        l_step = tech.length.step
-        transistor_sizing = {}
-        for ref, (device, _slot) in all_transistors.items():
-            w_um = solver.value(W_vars[ref]) * w_step
-            l_um = solver.value(L_vars[ref]) * l_step
-            ids_a = ids_map[ref]
-            transistor_sizing[ref] = TransistorSizing(
-                ref=ref, w_um=w_um, l_um=l_um, ids_a=ids_a,
-                vgs_v=dev_model.vgs(device.type, w_um, l_um, ids_a),
-                vds_sat_v=dev_model.vds_sat(device.type, w_um, l_um, ids_a),
-            )
+    # Extract solution: convert integer step-units back to µm.
+    w_step = tech.width.step
+    l_step = tech.length.step
+    transistor_sizing = {}
+    for ref, (device, _slot) in all_transistors.items():
+        w_um = solver.value(W_vars[ref]) * w_step
+        l_um = solver.value(L_vars[ref]) * l_step
+        ids_a = ids_map[ref]
+        transistor_sizing[ref] = TransistorSizing(
+            ref=ref, w_um=w_um, l_um=l_um, ids_a=ids_a,
+            vgs_v=dev_model.vgs(device.type, w_um, l_um, ids_a),
+            vds_sat_v=dev_model.vds_sat(device.type, w_um, l_um, ids_a),
+        )
 
     metrics, margins = _evaluate_metrics(
         transistor_sizing, slot_transistors, cc_pf, tech, spec, dev_model,
