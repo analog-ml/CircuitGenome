@@ -23,6 +23,7 @@ from ..models import SizingResult, SizingSpec, TechParams
 from .blocks import _is_signal_dev, build_blocks, cascode_device_refs, node_rout
 from .dc_op import check_dc_operating_point
 from .intent import DEFAULT_INTENT, GmIdIntent
+from .resistors import size_resistors
 
 
 def _model_for(tech: TechParams, intent: GmIdIntent) -> GmIdModel:
@@ -95,6 +96,13 @@ def size_gmid(
         transistor_sizing, spec, tech
     )
 
+    # Size the non-load resistor blocks (degeneration / tail / bias) and capture
+    # their metric effects (degeneration on gm1, resistor-tail on gd_tail).
+    extra_r, gm1_factor, gd_tail_override, gd_out_extra = size_resistors(
+        blocks, slot_resistors, ids_map, transistor_sizing, model, spec, tech, intent
+    )
+    resistors = {**resistors, **extra_r}
+
     # Cascode loads: the single-device-gds estimate misses the gm·ro·ro boost, so
     # compute the first-stage output resistance cascode-aware from the blocks.
     rout1_override = None
@@ -109,6 +117,8 @@ def size_gmid(
     metrics, margins = _evaluate_metrics(
         transistor_sizing, slot_transistors, cc_pf, tech, spec, model,
         cc2_pf=cc2_pf, gd_load_r=gd_load_r, rout1_override=rout1_override,
+        gm1_factor=gm1_factor, gd_tail_override=gd_tail_override,
+        gd_out_extra=gd_out_extra,
     )
 
     return SizingResult(

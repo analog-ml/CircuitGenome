@@ -514,6 +514,9 @@ def _evaluate_metrics(
     rout1_override: float | None = None,
     rout2_override: float | None = None,
     rout3_override: float | None = None,
+    gm1_factor: float = 1.0,
+    gd_tail_override: float | None = None,
+    gd_out_extra: float = 0.0,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Compute performance metrics and safety margins from the solution.
 
@@ -541,12 +544,12 @@ def _evaluate_metrics(
     def _gds(d: Device, s: TransistorSizing) -> float:
         return model.gds(d.type, s.w_um, s.l_um, s.ids_a)
 
-    # --- Input pair gm ---
+    # --- Input pair gm (gm1_factor < 1 for source degeneration) ---
     ip_devs = slot_transistors.get("input_pair", [])
     gm1 = 0.0
     s_ip = _sz(ip_devs[0].ref) if ip_devs else None
     if s_ip:
-        gm1 = _gm(ip_devs[0], s_ip)
+        gm1 = _gm(ip_devs[0], s_ip) * gm1_factor
 
     # --- Load ---
     ld_devs = slot_transistors.get("load", [])
@@ -570,6 +573,8 @@ def _evaluate_metrics(
         s = _sz(tc_devs[0].ref)
         if s:
             gd_tail = _gds(tc_devs[0], s)
+    if gd_tail_override is not None:   # resistor tail: gd_tail = 1/R
+        gd_tail = gd_tail_override
 
     # --- Second stage (SE: "second_stage"; FD: use second_stage_p as representative) ---
     ss_devs = (
@@ -602,6 +607,9 @@ def _evaluate_metrics(
         rout2 = eq.rout(gd_ss_n, gd_ss_p) if (gd_ss_n + gd_ss_p) > 0 else float("inf")
         if rout2_override is not None:
             rout2 = rout2_override
+        # Two-stage FD: the resistive-sense CMFB averager loads the output.
+        if (not is_three_stage and gd_out_extra > 0.0 and rout2 < float("inf")):
+            rout2 = 1.0 / (1.0 / rout2 + gd_out_extra)
     else:
         rout2 = float("inf")
 
@@ -631,6 +639,9 @@ def _evaluate_metrics(
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
         if rout3_override is not None:
             rout3 = rout3_override
+        # Three-stage FD: CMFB averager loads the (third-stage) output.
+        if gd_out_extra > 0.0 and rout3 < float("inf"):
+            rout3 = 1.0 / (1.0 / rout3 + gd_out_extra)
     else:
         rout3 = float("inf")
 
