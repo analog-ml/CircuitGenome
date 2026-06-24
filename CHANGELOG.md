@@ -3,10 +3,34 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
-## 2026-06-24 (gm/Id pipeline redesign — phase 2b: resistors)
+## 2026-06-24 (gm/Id pipeline redesign — phase 3: FD + three-stage + CMFB)
 
-PR [#83](https://github.com/analog-ml/CircuitGenome/pull/83)
-(`feat/gmid-resistors`). Stacked on #82; targets `feat/gmid-sizing-redesign`.
+PR [#84](https://github.com/analog-ml/CircuitGenome/pull/84)
+(`feat/gmid-fd-cmfb`). Stacked on #83; targets `feat/gmid-sizing-redesign`.
+Closes #75.
+
+### Added
+
+The gm/Id pipeline already produced metrics for fully-differential and
+three-stage op-amps (shared physics + the phase-2a cascode `rout`); this phase
+closes the CMFB gap and adds coverage.
+
+- **CMFB resistive-sense averager sized** (`gmid/resistors.py`): the `cmfb`-slot
+  sense resistors `r1/r2` are sized to `intent.cmfb_sense_r` (~1 MΩ) instead of
+  the 1 kΩ placeholder (which would short the differential output), and their
+  loading `1/R_sense` is folded into the FD output resistance via a new optional
+  `_evaluate_metrics(gd_out_extra=…)` (default 0 → SE / Level-1 unchanged). New
+  `GmIdIntent.cmfb_sense_r`.
+- **FD + three-stage gm/Id coverage** (`tests/test_fd_three_stage_gmid.py`):
+  two-stage fully-differential with both `resistive_sense_cmfb` and `dda_cmfb`,
+  and three-stage NMC/RNMC single-ended — all size via the gm/Id path
+  (`status="GMID"`), set the three-stage inner cap `cc2_pf`, and size the CMFB
+  resistors. **Closes #75** (FD / three-stage gm/Id support).
+
+Parity: single-ended and non-CMFB circuits, and the Level-1 path, are unchanged.
+At 1.0 V these (folded-cascode) FD/three-stage stacks remain headroom-tight and
+flag `bias_feasible=False` honestly. Phase-3 completes the planned gm/Id redesign
+(phases 1, 2a, 2b, 3).
 
 ### Fixed
 
