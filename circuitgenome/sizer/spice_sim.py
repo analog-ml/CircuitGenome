@@ -17,6 +17,7 @@ Public API:
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -288,6 +289,71 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm):
         sr = abs(0.6 * swing) / dt
         if sr > 0:
             return float(sr)
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Operating-point read (for SPICE-in-the-loop refinement)
+# --------------------------------------------------------------------------- #
+def _run_capture(deck: str) -> str | None:
+    """Run ``deck`` in ngspice -b and return stdout (for ``print`` output)."""
+    with tempfile.TemporaryDirectory() as d:
+        sp = Path(d) / "deck.sp"
+        sp.write_text(deck)
+        try:
+            p = subprocess.run(["ngspice", "-b", str(sp)], capture_output=True,
+                               text=True, timeout=60)
+        except Exception:
+            return None
+        return p.stdout
+
+
+def read_op_operating_point(
+    netlist_text: str, result: SizingResult, tech: TechParams, spec: SizingSpec,
+) -> dict[str, dict[str, float]] | None:
+    """Return ``{ref: {'id','vds','vdsat'}}`` from a feedback-biased ``.op``.
+
+    Biases the sized circuit in unity feedback (``Lfb``/``Cfb`` rig, polarity
+    auto-detected via the settled output), then reads each MOSFET's actual
+    operating point through ``@m.xdut.<ref>[...]``.  Single-ended only; returns
+    ``None`` when ngspice is unavailable, the topology is fully-differential, or
+    the bias doesn't settle.
+    """
+    if not ngspice_available():
+        return None
+    name, ports, body = _parse_subckt(netlist_text)
+    topo = _Topo(ports)
+    if topo.fd:
+        return None
+    body_dut = _dut(tech, name, _inject_sizes(body, result))
+    refs = list(result.transistors)
+    if not refs:
+        return None
+    vdd, ibias = spec.vdd, spec.ibias
+    vcm = (spec.vdd + spec.vss) / 2.0
+    probe = "".join(
+        f"print @m.xdut.{r}[id]\nprint @m.xdut.{r}[vds]\nprint @m.xdut.{r}[vdsat]\n"
+        for r in refs
+    )
+    for inp, inn in (("in1", "in2"), ("in2", "in1")):
+        netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
+                  inp: "inp", inn: "inn", "out": "out"}
+        fb = (f"Vcm cm 0 {vcm}\nLfb out inn 1e12\nCfb inn cm 1e3\n"
+              f"Vid inp cm dc 0\n")
+        deck = (body_dut.replace("__PORTS__", " ".join(ports)) + _rig(vdd, ibias)
+                + fb + _xline(name, ports, netmap) + "\n"
+                + ".control\nop\nprint v(out)\n" + probe + ".endc\n.end\n")
+        txt = _run_capture(deck)
+        if txt is None:
+            continue
+        mo = re.search(r"v\(out\)\s*=\s*([-\d.eE+]+)", txt)
+        if not mo or not (0.1 * vdd < float(mo.group(1)) < 0.9 * vdd):
+            continue  # wrong polarity → output railed
+        op: dict[str, dict[str, float]] = {}
+        for m in re.finditer(r"@m\.xdut\.(\w+)\[(\w+)\]\s*=\s*([-\d.eE+]+)", txt):
+            op.setdefault(m.group(1), {})[m.group(2)] = float(m.group(3))
+        if op:
+            return op
     return None
 
 

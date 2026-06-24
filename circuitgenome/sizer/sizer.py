@@ -38,6 +38,7 @@ from . import equations as eq
 from .constraints import build_model
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel, build_device_model
 from .gmid_geometry import assign_geometry_gmid
+from .headroom import apply_headroom
 from .models import SizingResult, SizingSpec, TechParams, TransistorSizing
 
 # Slots that carry iBias/2 per transistor (both sides of the differential pair).
@@ -209,6 +210,31 @@ def _assign_ids(
     return ids_map
 
 
+def _first_stage_gain_factor(slot_transistors: dict[str, list[Device]]) -> float:
+    """First-stage transconductance/gain factor ``k_fs``.
+
+    A differential pair tapped **single-ended** only delivers ``gm1·Rout1/2``
+    (and a Miller loop transconductance of ``gm1/2``) unless an active
+    **current-mirror** load combines both branches to recover the full
+    ``gm1·Rout1``. So:
+
+    * ``1.0`` — current-mirror load (a ``load`` device is diode-connected,
+      ``g == d``), or a fully-differential output (both branches feed the
+      next stage), and
+    * ``0.5`` — single-ended output with a resistor or plain current-source
+      (non-mirror) load.
+
+    Applied to the first-stage gain and to ``gm1``'s role in GBW/PM (not to the
+    raw-device ``gm1`` used for CMRR).
+    """
+    if any(s in slot_transistors for s in
+           ("second_stage_p", "second_stage_n", "third_stage_p", "third_stage_n")):
+        return 1.0  # fully-differential: both branches drive the next stage
+    mosfets = [d for d in slot_transistors.get("load", []) if d.type in ("nmos", "pmos")]
+    is_mirror = any(d.terminals.get("g") == d.terminals.get("d") for d in mosfets)
+    return 1.0 if is_mirror else 0.5
+
+
 def _compute_requirements(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
@@ -243,6 +269,8 @@ def _compute_requirements(
     gd_ld = _gds_est(ld_devices[0], spec.ibias / 2) if ld_devices else 0.0
     # Resistor-load conductance (1/R) loads the first-stage output node.
     rout1 = eq.rout(gd_ip, gd_ld + gd_load_r)
+    # Single-ended non-mirror loads halve the first-stage gm/gain (see helper).
+    k_fs = _first_stage_gain_factor(slot_transistors)
 
     # For FD topologies use second_stage_p as the representative path (symmetric).
     ss_devices = (
@@ -302,15 +330,16 @@ def _compute_requirements(
     cc2_f: float = 0.0
 
     if has_second_stage and cc_f > 0:
-        # From GBW: gm1 = 2π·GBW·Cc  (with the SR-bounded Cc).
+        # From GBW: GBW = k_fs·gm1 / (2π·Cc)  (with the SR-bounded Cc).
         # This is the primary gm1 driver; Cc stays within the SR bound because
-        # we do NOT inflate Cc here to accommodate gain.
+        # we do NOT inflate Cc here to accommodate gain.  A non-mirror load
+        # (k_fs<1) needs a proportionally larger device gm1.
         if spec.gbw_min_hz:
-            gm1_req = max(gm1_req, 2.0 * math.pi * spec.gbw_min_hz * cc_f)
+            gm1_req = max(gm1_req, 2.0 * math.pi * spec.gbw_min_hz * cc_f / k_fs)
 
         # Recompute Cc only if CMRR pushed gm1 above the GBW baseline.
         if spec.gbw_min_hz and gm1_req > 0.0:
-            cc_f = max(cc_f, gm1_req / (2.0 * math.pi * spec.gbw_min_hz))
+            cc_f = max(cc_f, k_fs * gm1_req / (2.0 * math.pi * spec.gbw_min_hz))
             cc_f = min(cc_f, cc_max_f)
 
         if is_three_stage:
@@ -323,10 +352,11 @@ def _compute_requirements(
             if spec.phase_margin_min_deg and gm1_req > 0.0:
                 half_lag = math.radians((90.0 - spec.phase_margin_min_deg) / 2.0)
                 t = math.tan(half_lag)
-                gm2_req = max(gm2_req, gm1_req * cc2_f / (cc_f * t))
-                gm3_req = max(gm3_req, gm1_req * spec.cl / (cc_f * t))
+                gm1_loop = k_fs * gm1_req  # transconductance into the loop (ωt = gm1_loop/Cc1)
+                gm2_req = max(gm2_req, gm1_loop * cc2_f / (cc_f * t))
+                gm3_req = max(gm3_req, gm1_loop * spec.cl / (cc_f * t))
 
-            # Gain: A0 = gm1·Rout1·gm2·Rout2·gm3·Rout3.
+            # Gain: A0 = k_fs·gm1·Rout1·gm2·Rout2·gm3·Rout3.
             # With gm2_req now determined, solve for the gm3 needed for gain.
             if (spec.gain_min_db
                     and rout1 < float("inf")
@@ -335,18 +365,19 @@ def _compute_requirements(
                     and gm1_req > 0.0
                     and gm2_req > 0.0):
                 A0 = 10.0 ** (spec.gain_min_db / 20.0)
-                gm3_from_gain = A0 / (gm1_req * rout1 * gm2_req * rout2 * rout3)
+                gm3_from_gain = A0 / (k_fs * gm1_req * rout1 * gm2_req * rout2 * rout3)
                 gm3_req = max(gm3_req, gm3_from_gain)
 
         else:
-            # Two-stage: gain A0 = gm1·Rout1·gm2·Rout2.
+            # Two-stage: gain A0 = k_fs·gm1·Rout1·gm2·Rout2.
             if spec.gain_min_db and rout1 < float("inf") and rout2 < float("inf"):
                 A0 = 10.0 ** (spec.gain_min_db / 20.0)
                 if gm1_req > 0.0 and rout1 * rout2 > 0:
-                    gm2_from_gain = A0 / (gm1_req * rout1 * rout2)
+                    gm2_from_gain = A0 / (k_fs * gm1_req * rout1 * rout2)
                     gm2_req = max(gm2_req, gm2_from_gain)
                 else:
-                    per_stage = math.sqrt(A0 / (rout1 * rout2))
+                    # Split gain evenly; k_fs applies to the first stage only.
+                    per_stage = math.sqrt(A0 / (k_fs * rout1 * rout2))
                     gm1_req = max(gm1_req, per_stage)
                     gm2_req = max(gm2_req, per_stage)
 
@@ -372,16 +403,16 @@ def _compute_requirements(
                 pm_rad = math.radians(spec.phase_margin_min_deg)
                 gm2_req = max(
                     gm2_req,
-                    gm1_eff * spec.cl / (cc_f * math.tan(math.pi / 2.0 - pm_rad)),
+                    k_fs * gm1_eff * spec.cl / (cc_f * math.tan(math.pi / 2.0 - pm_rad)),
                 )
 
         cc_pf = cc_f * 1e12
 
     else:
-        # One-stage: gain = gm1·Rout1
+        # One-stage: gain = k_fs·gm1·Rout1
         if spec.gain_min_db and rout1 < float("inf"):
             A0 = 10.0 ** (spec.gain_min_db / 20.0)
-            gm1_req = max(gm1_req, A0 / rout1)
+            gm1_req = max(gm1_req, A0 / (k_fs * rout1))
 
     # --- Cap gm requirements at the physical (weak-inversion) ceiling ---
     # The square-law model has no gm ceiling, so without this the sizer would size
@@ -592,12 +623,15 @@ def _evaluate_metrics(
         rout3 = float("inf")
 
     # --- Gain ---
+    # Single-ended non-mirror first stage delivers k_fs·gm1·Rout1 (k_fs=0.5);
+    # mirror / fully-differential first stage delivers the full gm1·Rout1.
+    k_fs = _first_stage_gain_factor(slot_transistors)
     if is_three_stage and rout2 < float("inf") and rout3 < float("inf"):
-        stage_gains = [gm1 * rout1, gm2 * rout2, gm3 * rout3]
+        stage_gains = [k_fs * gm1 * rout1, gm2 * rout2, gm3 * rout3]
     elif has_second_stage and rout2 < float("inf"):
-        stage_gains = [gm1 * rout1, gm2 * rout2]
+        stage_gains = [k_fs * gm1 * rout1, gm2 * rout2]
     else:
-        stage_gains = [gm1 * rout1]
+        stage_gains = [k_fs * gm1 * rout1]
     if all(g > 0 for g in stage_gains):
         gain_db = eq.open_loop_gain_db(stage_gains)
         metrics["gain_db"] = gain_db
@@ -608,15 +642,18 @@ def _evaluate_metrics(
     cc_f = (cc_pf * 1e-12) if cc_pf else None
     cc2_f = (cc2_pf * 1e-12) if cc2_pf else None
     if has_second_stage and cc_f and gm1 > 0:
-        gbw = eq.unity_gain_bw(gm1, cc_f)
+        # k_fs·gm1 is the transconductance into the Miller loop (halved for a
+        # single-ended non-mirror first stage).
+        gm1_loop = k_fs * gm1
+        gbw = eq.unity_gain_bw(gm1_loop, cc_f)
         metrics["gbw_hz"] = gbw
         if spec.gbw_min_hz is not None:
             margins["gbw_hz"] = gbw - spec.gbw_min_hz
 
         if is_three_stage and gm2 > 0 and gm3 > 0 and cc2_f:
-            pm = eq.phase_margin_three_stage_deg(gm1, gm2, gm3, cc_f, cc2_f, spec.cl)
+            pm = eq.phase_margin_three_stage_deg(gm1_loop, gm2, gm3, cc_f, cc2_f, spec.cl)
         elif gm2 > 0:
-            pm = eq.phase_margin_two_stage_deg(gm1, gm2, cc_f, spec.cl)
+            pm = eq.phase_margin_two_stage_deg(gm1_loop, gm2, cc_f, spec.cl)
         else:
             pm = None
         if pm is not None:
@@ -732,7 +769,13 @@ def size_circuit(
             dev_model, all_transistors, slot_transistors, ids_map,
             role_map, gm_req_map, tech,
         )
-        all_warnings = all_warnings + geom_warnings
+        # DC headroom budget: keep the tail current source out of triode
+        # (re-sizes its mirror group when it helps, else warns).
+        headroom_warnings = apply_headroom(
+            dev_model, slot_transistors, all_transistors, ids_map,
+            transistor_sizing, spec, tech,
+        )
+        all_warnings = all_warnings + geom_warnings + headroom_warnings
         status_name = "GMID"
     else:
         # Level-1: discrete W/L via CP-SAT.
