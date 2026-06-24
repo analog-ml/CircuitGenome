@@ -21,14 +21,20 @@ flow, so the analytical metrics are optimistic. The sizer already flagged this
   square-law sizer — the very numbers gm/Id exists to avoid. Only the card-less
   `generic` tech uses the analytical sizer. The `size` CLI and `tools/spice_verify.py`
   catch the error and exit cleanly. (LUTs for these nodes are tracked in #73.)
-- **Analytical metrics gated on `bias_feasible`.** When the bias point is
-  infeasible, the `size` CLI prints a prominent banner and marks each metric
-  `[unreliable]` instead of printing ✓/✗ pass-fail margins; the `--simulate`
-  table notes that the analytical column is untrustworthy. Metrics for designs
-  that *do* bias are unchanged (they match SPICE within ~10 %).
+- **Feasibility-verdict reporting.** The `size` CLI now leads the metrics section
+  with a mode-aware verdict instead of always printing a ✓/✗ table:
+  - **INFEASIBLE** (`bias_feasible=False`, e.g. circuit_0110's cascode tail): the
+    performance table is **suppressed** — its numbers are meaningless once the
+    bias point collapses — and the bias reason is stated inline. Under
+    `--simulate` the `analytical` column shows `n/a` and the `SPICE` column is the
+    measured operating point.
+  - **MARGINAL** (`bias_feasible=True` but a target is missed, e.g. the gm
+    weak-inversion ceiling caps GBW): the **real** metrics are shown with ✗ on the
+    failing rows.
+  - **FEASIBLE**: the normal ✓ table.
 
-Parity: feasible ptm45 designs, the `generic` Level-1 path, and all existing
-metric output are unchanged.
+Parity: feasible ptm45 designs, the `generic` Level-1 path, and the ✓/✗ table
+itself are unchanged.
 
 ## 2026-06-24 (gm/Id pipeline redesign — phase 3: FD + three-stage + CMFB)
 

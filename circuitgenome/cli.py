@@ -237,62 +237,70 @@ def _cmd_size(args: argparse.Namespace) -> None:
         print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
     if result.metrics:
-        print("\nPerformance metrics:")
-        reliable = result.bias_feasible
-        if not reliable:
-            print("  ⚠ Bias point infeasible — metrics below are UNRELIABLE "
-                  "(assumed currents do not flow). Re-bias (lower Vcm / raise "
-                  "supply) or use --simulate to measure.")
-        _METRIC_LABELS = {
-            "gain_db": ("Open-loop gain", "dB", True),
-            "gbw_hz": ("GBW", "MHz", True),
-            "phase_margin_deg": ("Phase margin", "°", True),
-            "slew_rate_vps": ("Slew rate", "V/µs", True),
-            "power_w": ("Quiescent power", "mW", False),
-            "output_swing_max_v": ("Output swing max", "V", True),
-            "output_swing_min_v": ("Output swing min", "V", False),
-            "cmrr_db": ("CMRR", "dB", True),
-            "psrr_db": ("PSRR+", "dB", True),
-        }
-        _SCALE = {
-            "gbw_hz": 1e-6, "slew_rate_vps": 1e-6, "power_w": 1e3,
-        }
-        _SPEC_KEYS = {
-            "gain_db": "gain_min_db", "gbw_hz": "gbw_min_hz",
-            "phase_margin_deg": "phase_margin_min_deg",
-            "slew_rate_vps": "slew_rate_min_vps", "power_w": "power_max_w",
-            "output_swing_max_v": "output_swing_max_v",
-            "output_swing_min_v": "output_swing_min_v",
-            "cmrr_db": "cmrr_min_db", "psrr_db": "psrr_min_db",
-        }
-        for key, (label, unit, _is_min) in _METRIC_LABELS.items():
-            if key not in result.metrics:
-                continue
-            raw = result.metrics[key]
-            scale = _SCALE.get(key, 1.0)
-            val_str = f"{raw * scale:.2f} {unit}"
-            spec_key = _SPEC_KEYS.get(key)
-            spec_val = getattr(spec, spec_key, None) if spec_key else None
-            margin = result.margins.get(key)
-            if spec_val is not None and margin is not None:
-                op = "≥" if _is_min else "≤"
-                spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
-                if not reliable:
-                    print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  [unreliable]")
+        # Feasibility verdict drives how (and whether) metrics are shown:
+        #   INFEASIBLE — bias point collapses → metrics are meaningless, suppress them.
+        #   MARGINAL   — biases but misses spec → metrics are real, show with ✗.
+        #   FEASIBLE   — biases and meets spec → normal ✓ table.
+        failing = [k for k, m in (result.margins or {}).items() if m < 0]
+        if not result.bias_feasible:
+            print("\nFeasibility: INFEASIBLE — bias point cannot be established.")
+            for w in result.warnings:
+                if any(t in w for t in ("cascode", "headroom", "collapse")):
+                    print(f"  ↳ {w}")
+            print("  Performance not evaluated; run --simulate to measure the "
+                  "actual operating point.")
+        else:
+            verdict = ("MARGINAL — biases, but does not meet spec (see ⚠ above)"
+                       if failing else "FEASIBLE")
+            print(f"\nFeasibility: {verdict}")
+            print("\nPerformance metrics:")
+            _METRIC_LABELS = {
+                "gain_db": ("Open-loop gain", "dB", True),
+                "gbw_hz": ("GBW", "MHz", True),
+                "phase_margin_deg": ("Phase margin", "°", True),
+                "slew_rate_vps": ("Slew rate", "V/µs", True),
+                "power_w": ("Quiescent power", "mW", False),
+                "output_swing_max_v": ("Output swing max", "V", True),
+                "output_swing_min_v": ("Output swing min", "V", False),
+                "cmrr_db": ("CMRR", "dB", True),
+                "psrr_db": ("PSRR+", "dB", True),
+            }
+            _SCALE = {
+                "gbw_hz": 1e-6, "slew_rate_vps": 1e-6, "power_w": 1e3,
+            }
+            _SPEC_KEYS = {
+                "gain_db": "gain_min_db", "gbw_hz": "gbw_min_hz",
+                "phase_margin_deg": "phase_margin_min_deg",
+                "slew_rate_vps": "slew_rate_min_vps", "power_w": "power_max_w",
+                "output_swing_max_v": "output_swing_max_v",
+                "output_swing_min_v": "output_swing_min_v",
+                "cmrr_db": "cmrr_min_db", "psrr_db": "psrr_min_db",
+            }
+            for key, (label, unit, _is_min) in _METRIC_LABELS.items():
+                if key not in result.metrics:
                     continue
-                sign = "+" if margin >= 0 else ""
-                margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
-                status = "✓" if margin >= 0 else "✗"
-                print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  {margin_str}  {status}")
-            else:
-                print(f"  {label:<22} {val_str}")
+                raw = result.metrics[key]
+                scale = _SCALE.get(key, 1.0)
+                val_str = f"{raw * scale:.2f} {unit}"
+                spec_key = _SPEC_KEYS.get(key)
+                spec_val = getattr(spec, spec_key, None) if spec_key else None
+                margin = result.margins.get(key)
+                if spec_val is not None and margin is not None:
+                    op = "≥" if _is_min else "≤"
+                    spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
+                    sign = "+" if margin >= 0 else ""
+                    margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
+                    status = "✓" if margin >= 0 else "✗"
+                    print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  {margin_str}  {status}")
+                else:
+                    print(f"  {label:<22} {val_str}")
 
     if args.simulate:
         from .sizer.spice_sim import ngspice_available, simulate_metrics
         print("\nSPICE verification (ngspice):")
         if not result.bias_feasible:
-            print("  ⚠ Bias point infeasible — the 'analytical' column is "
-                  "UNRELIABLE; trust the 'SPICE' column.")
+            print("  Bias point infeasible — 'analytical' not evaluated; the "
+                  "'SPICE' column is the measured operating point.")
         if not ngspice_available():
             print("  ngspice not found on PATH — install it (e.g. `brew install ngspice`).")
         else:
@@ -308,7 +316,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
             ]
             print(f"  {'metric':<20}{'analytical':>15}{'SPICE':>15}{'Δ':>10}")
             for key, label, unit, scl, fmt in cols:
-                a = result.metrics.get(key)
+                a = result.metrics.get(key) if result.bias_feasible else None
                 s = sim.get(key)
                 a_str = f"{fmt.format(a*scl)} {unit}" if a is not None else "n/a"
                 s_str = f"{fmt.format(s*scl)} {unit}" if s is not None else "n/a"
