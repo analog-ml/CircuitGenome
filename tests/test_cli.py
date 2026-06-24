@@ -47,3 +47,31 @@ def test_recognize_unknown_topology(sample_netlist):
     with pytest.raises(SystemExit) as exc:
         main(["recognize", str(path), "--topology", "nonexistent_topology"])
     assert exc.value.code == 1
+
+
+_ROOT = Path(__file__).resolve().parent.parent
+_C0110 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0110_flat.ckt"
+_PTM_SPEC = _ROOT / "examples" / "two_stage_se_specs" / "spec_ptm45.yaml"
+
+
+@pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),
+                    reason="ptm45 two-stage fixtures not present")
+def test_size_ptm45_infeasible_marks_metrics_unreliable(capsys):
+    """circuit_0110's cascode tail can't bias → metrics tagged [unreliable]."""
+    main(["size", str(_C0110), "--topology", "two_stage_opamp_single_ended",
+          "--spec", str(_PTM_SPEC), "--tech", "ptm45"])
+    out = capsys.readouterr().out
+    assert "UNRELIABLE" in out
+    assert "[unreliable]" in out
+    assert "✓" not in out  # no pass-fail ticks when the bias is infeasible
+
+
+@pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),
+                    reason="ptm45 two-stage fixtures not present")
+def test_size_ptm_without_lut_errors(capsys):
+    """A PTM node without a gm/Id LUT exits cleanly instead of using Level-1."""
+    with pytest.raises(SystemExit) as exc:
+        main(["size", str(_C0110), "--topology", "two_stage_opamp_single_ended",
+              "--spec", str(_PTM_SPEC), "--tech", "ptm32"])
+    assert exc.value.code == 1
+    assert "gm/Id LUT" in capsys.readouterr().err

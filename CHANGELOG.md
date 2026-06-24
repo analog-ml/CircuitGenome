@@ -3,6 +3,33 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (gm/Id pipeline redesign — PTM-only dispatch + bias-aware metrics)
+
+PR (`feat/gmid-ptm-only-bias-gating`). Targets `feat/gmid-sizing-redesign`.
+
+Running `size … --tech ptm45 --simulate` on a headroom-starved design (e.g.
+`circuit_0110`, whose cascode tail cannot bias at 1.0 V) showed a huge
+analytical-vs-SPICE gap on GBW / slew rate / power: the assumed currents never
+flow, so the analytical metrics are optimistic. The sizer already flagged this
+(`bias_feasible=False`) but reported the numbers as if valid.
+
+### Changed
+
+- **PTM techs are a gm/Id-only path.** A PTM/SPICE-model node *without* a gm/Id
+  LUT (currently ptm32/22/16) now raises `UnsupportedTechError`
+  (`sizer/models.py`) instead of silently falling through to the Level-1
+  square-law sizer — the very numbers gm/Id exists to avoid. Only the card-less
+  `generic` tech uses the analytical sizer. The `size` CLI and `tools/spice_verify.py`
+  catch the error and exit cleanly. (LUTs for these nodes are tracked in #73.)
+- **Analytical metrics gated on `bias_feasible`.** When the bias point is
+  infeasible, the `size` CLI prints a prominent banner and marks each metric
+  `[unreliable]` instead of printing ✓/✗ pass-fail margins; the `--simulate`
+  table notes that the analytical column is untrustworthy. Metrics for designs
+  that *do* bias are unchanged (they match SPICE within ~10 %).
+
+Parity: feasible ptm45 designs, the `generic` Level-1 path, and all existing
+metric output are unchanged.
+
 ## 2026-06-24 (gm/Id pipeline redesign — phase 3: FD + three-stage + CMFB)
 
 PR [#84](https://github.com/analog-ml/CircuitGenome/pull/84)

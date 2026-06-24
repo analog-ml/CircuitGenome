@@ -8,6 +8,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+class UnsupportedTechError(ValueError):
+    """Raised when a technology cannot be sized by the requested method.
+
+    Currently raised when a PTM/SPICE-model node has no gm/Id LUT: such nodes
+    must use the gm/Id pipeline, and the analytical (Level-1) sizer is not a
+    valid fallback for them.
+    """
+
+
 @dataclass
 class MosfetParams:
     """CMOS process parameters for one device polarity.

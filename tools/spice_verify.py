@@ -22,7 +22,12 @@ import yaml
 from circuitgenome.recognizer import parse, recognize
 from circuitgenome.recognizer.functional_block_recognizer import assign_slots
 from circuitgenome.synthesizer.loader import load_topologies
-from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
+from circuitgenome.sizer import (
+    load_tech,
+    size_circuit,
+    SizingSpec,
+    UnsupportedTechError,
+)
 from circuitgenome.sizer.spice_sim import ngspice_available, simulate_metrics
 
 _COLS = [
@@ -53,13 +58,20 @@ def main() -> None:
     spec_data = yaml.safe_load(args.spec.read_text())
     spec = SizingSpec(**{k: v for k, v in spec_data.items()
                          if k in SizingSpec.__dataclass_fields__})
-    result = size_circuit(parsed, recognize(parsed), fbr, topology, tech, spec)
+    try:
+        result = size_circuit(parsed, recognize(parsed), fbr, topology, tech, spec)
+    except UnsupportedTechError as e:
+        print(f"Error: {e}")
+        raise SystemExit(1)
 
     print(f"Netlist : {args.netlist.name}")
     print(f"Topology: {args.topology}   Tech: {tech.name}   Solver: {result.solver_status}")
     if not result.transistors:
         print("No feasible sizing — nothing to simulate.")
         return
+    if not result.bias_feasible:
+        print("  (!) Bias point infeasible — the 'analytical' column is "
+              "UNRELIABLE; trust the 'SPICE' column.")
     if not ngspice_available():
         print("ngspice not found on PATH — install it (e.g. `brew install ngspice`).")
         return

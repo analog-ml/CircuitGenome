@@ -37,7 +37,13 @@ from circuitgenome.synthesizer.models import Device, TopologyTemplate
 from . import equations as eq
 from .constraints import build_model
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel, Level1Model
-from .models import SizingResult, SizingSpec, TechParams, TransistorSizing
+from .models import (
+    SizingResult,
+    SizingSpec,
+    TechParams,
+    TransistorSizing,
+    UnsupportedTechError,
+)
 
 # Slots that carry iBias/2 per transistor (both sides of the differential pair).
 _HALF_BIAS_SLOTS = frozenset({"input_pair", "load"})
@@ -772,6 +778,16 @@ def size_circuit(
     if getattr(tech, "gmid_lut", None):
         from .gmid import size_gmid
         return size_gmid(parsed, sr_result, fbr_result, topology, tech, spec)
+
+    # A PTM/SPICE-model node without a gm/Id LUT must not silently fall through
+    # to the Level-1 square-law sizer — those are the inaccurate numbers gm/Id
+    # exists to avoid. Only the card-less generic tech uses the analytical path.
+    if getattr(tech, "spice_model", None):
+        raise UnsupportedTechError(
+            f"Technology '{tech.name}' is a PTM/SPICE-model node without a gm/Id "
+            f"LUT. The analytical (Level-1) sizer is not valid for PTM nodes — "
+            f"characterize a gm/Id LUT first (see issue #73). Only the 'generic' "
+            f"technology uses the analytical sizer.")
 
     slot_transistors = _extract_slot_transistors(fbr_result)
     topology_warnings = _check_topology_match(slot_transistors, topology.name)

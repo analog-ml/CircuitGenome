@@ -180,7 +180,7 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
 def _cmd_size(args: argparse.Namespace) -> None:
     import yaml
     from .recognizer import parse, recognize, assign_slots
-    from .sizer import load_tech, size_circuit, SizingSpec
+    from .sizer import load_tech, size_circuit, SizingSpec, UnsupportedTechError
 
     netlist_text = args.netlist_file.read_text()
     parsed = parse(netlist_text)
@@ -199,8 +199,12 @@ def _cmd_size(args: argparse.Namespace) -> None:
         spec_data = yaml.safe_load(f)
     spec = SizingSpec(**{k: v for k, v in spec_data.items() if k in SizingSpec.__dataclass_fields__})
 
-    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
-                          time_limit_s=args.time_limit)
+    try:
+        result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
+                              time_limit_s=args.time_limit)
+    except UnsupportedTechError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if getattr(args, "refine", False) and result.transistors:
         from .sizer.refine import refine_with_spice
@@ -234,6 +238,11 @@ def _cmd_size(args: argparse.Namespace) -> None:
 
     if result.metrics:
         print("\nPerformance metrics:")
+        reliable = result.bias_feasible
+        if not reliable:
+            print("  ⚠ Bias point infeasible — metrics below are UNRELIABLE "
+                  "(assumed currents do not flow). Re-bias (lower Vcm / raise "
+                  "supply) or use --simulate to measure.")
         _METRIC_LABELS = {
             "gain_db": ("Open-loop gain", "dB", True),
             "gbw_hz": ("GBW", "MHz", True),
@@ -268,6 +277,9 @@ def _cmd_size(args: argparse.Namespace) -> None:
             if spec_val is not None and margin is not None:
                 op = "≥" if _is_min else "≤"
                 spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
+                if not reliable:
+                    print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  [unreliable]")
+                    continue
                 sign = "+" if margin >= 0 else ""
                 margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
                 status = "✓" if margin >= 0 else "✗"
@@ -278,6 +290,9 @@ def _cmd_size(args: argparse.Namespace) -> None:
     if args.simulate:
         from .sizer.spice_sim import ngspice_available, simulate_metrics
         print("\nSPICE verification (ngspice):")
+        if not result.bias_feasible:
+            print("  ⚠ Bias point infeasible — the 'analytical' column is "
+                  "UNRELIABLE; trust the 'SPICE' column.")
         if not ngspice_available():
             print("  ngspice not found on PATH — install it (e.g. `brew install ngspice`).")
         else:

@@ -870,7 +870,13 @@ _PTM_NODES = {"45": 1.0, "32": 0.9, "22": 0.8, "16": 0.7}
 
 @pytest.mark.parametrize("node,vdd", sorted(_PTM_NODES.items()))
 def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
-    """Each PTM tech config parses and yields a feasible node-appropriate sizing."""
+    """Each PTM tech config parses; only LUT-bearing nodes are sizeable.
+
+    PTM is a gm/Id-only path: a node *with* a gm/Id LUT (ptm45) sizes via the
+    "GMID" pipeline; a node *without* one (ptm32/22/16) must raise
+    :class:`UnsupportedTechError` rather than silently using the Level-1 sizer.
+    """
+    from circuitgenome.sizer import UnsupportedTechError
     tech = load_tech(_config_dir() / f"tech_ptm{node}.yaml")
     # sanity on parsed params: NMOS µCox > PMOS µCox > 0; |Vth| reasonable; λ > 0
     assert tech.nmos.mu_cox > tech.pmos.mu_cox > 0
@@ -884,11 +890,12 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
         gain_min_db=40, gbw_min_hz=2.5e6,
         phase_margin_min_deg=60, slew_rate_min_vps=1e6,
     )
+    if not tech.gmid_lut:
+        with pytest.raises(UnsupportedTechError):
+            size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+        return
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-    # ptm45 carries a gm/Id LUT → procedural "GMID" path; the others fall back
-    # to the Level-1 CP-SAT solver.
-    expected = ("GMID",) if tech.gmid_lut else ("OPTIMAL", "FEASIBLE")
-    assert result.solver_status in expected
+    assert result.solver_status == "GMID"
     assert result.transistors
     # every device sits inside the node's W/L grid
     for s in result.transistors.values():
