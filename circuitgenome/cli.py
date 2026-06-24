@@ -302,6 +302,8 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 else:
                     d_str = "—"
                 print(f"  {label:<20}{a_str:>15}{s_str:>15}{d_str:>10}")
+            for note in sim.get("notes", []) or []:
+                print(f"  ⓘ {note}")
             print("  (SPICE = best-effort cross-check; FD AC metrics may show n/a)")
 
 

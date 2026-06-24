@@ -99,3 +99,34 @@ def test_resistor_load_biases_in_spice():
     assert result.resistors  # load resistors were sized
     sim = spice_sim.simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is not None  # circuit biases → AC measurable
+
+
+@ngspice
+def test_misbiased_circuit_reports_measured_gain_and_reason():
+    """A circuit that can't bias at low supply reports its measured (≤ 0 dB) gain
+    and a diagnostic note, instead of a bare ``n/a``."""
+    from pathlib import Path
+
+    ckt = (Path(__file__).resolve().parent.parent / "circuits"
+           / "two_stage_opamp_single_ended" / "circuit_1201_flat.ckt")
+    if not ckt.exists():
+        pytest.skip("circuit_1201 fixture not present")
+    text = ckt.read_text()
+    parsed = parse(text)
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=10e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=5e5)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+
+    # The folded-cascode stage can't bias at 1.0 V → measured gain ≤ 0 dB
+    # (reported, not n/a); GBW/PM remain n/a; notes explain why.
+    assert sim["gain_db"] is not None and sim["gain_db"] <= 0
+    assert sim["gbw_hz"] is None and sim["phase_margin_deg"] is None
+    notes = sim.get("notes")
+    assert notes and any("amplify" in n for n in notes)
+    assert any("triode" in n or "starved" in n for n in notes)

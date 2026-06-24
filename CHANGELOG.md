@@ -3,6 +3,33 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (honest --simulate reporting)
+
+PR [#79](https://github.com/analog-ml/CircuitGenome/pull/79)
+(`fix/spice-report-honest`). Stacked on #78.
+
+### Fixed
+
+- **`--simulate` no longer hides a non-amplifying circuit behind `n/a`.** A
+  circuit that can't bias (e.g. a folded-cascode stage that doesn't fit the 1.0 V
+  PTM headroom budget — input pair/cascodes in triode, bias legs starved) has a
+  measured open-loop gain ≤ 0 dB. `_measure_ac` (`spice_sim.py`) previously
+  discarded any result with `gain_db ≤ 0`, so gain/GBW/PM all printed `n/a`,
+  looking like a measurement glitch.
+  - `_measure_ac` now keeps the higher-gain input polarity and **reports the
+    measured gain regardless of sign** (GBW/PM stay `n/a` when there is no 0-dB
+    crossing), returning a `reason` string.
+  - `simulate_metrics` adds a **bias diagnostic** when AC finds no gain — it
+    reuses `read_op_operating_point` to name the devices in triode / starved
+    (<0.1 µA) — and carries the AC reason + diagnostic out via a new `notes`
+    list, printed beneath the table by `circuitgenome size --simulate` and
+    `tools/spice_verify.py`.
+  - So the reported command now shows e.g. `Open-loop gain −45.5 dB` plus
+    "measured gain ≤ 0 dB — circuit does not amplify as biased" and
+    "bias diagnostic — in triode: m1_input_pair, …; starved: mp1_bias_gen, …",
+    instead of a bare `n/a`. Root-cause headroom feasibility stays tracked under
+    #74 / #76.
+
 ## 2026-06-24 (gm/Id gain/GBW accuracy)
 
 PR [#78](https://github.com/analog-ml/CircuitGenome/pull/78)

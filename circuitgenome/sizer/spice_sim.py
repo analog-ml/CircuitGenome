@@ -174,16 +174,23 @@ def _measure_power(name, ports, body_dut, topo, vdd, ibias, vcm):
 
 
 def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
-    """Open-loop AC: returns (gain_db, gbw_hz, pm_deg) or (None,None,None).
+    """Open-loop AC: returns ``(gain_db, gbw_hz, pm_deg, reason)``.
 
     AC-coupled feedback: huge L closes the loop at DC (sets bias ≈ CM), huge C
     AC-grounds the inverting input; a 1 V AC source drives the non-inverting
     input.  The (in1,in2)->(non-inv,inv) assignment is auto-detected via the DC
     operating point (output must settle near CM, not a rail).
+
+    The **measured** low-frequency gain is reported even when it is ≤ 0 dB (a
+    mis-biased circuit that does not amplify) — ``gbw``/``pm`` are then ``None``
+    (no 0-dB crossing) and ``reason`` explains why.  ``reason`` is ``None`` on a
+    normal (positive-gain) measurement.
     """
     # Feedback L must be AC-OPEN even at the lowest sweep frequency (1 Hz):
     # ωL = 2π·1·1e12 ≈ 6e12 Ω. C grounds the inverting input at AC.
     Lh, Ch = "1e12", "1e3"
+    settled = False
+    best: tuple[float, float | None, float | None] | None = None
     for inp, inn in (("in1", "in2"), ("in2", "in1")):
         netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
                   inp: "inp", inn: "inn"}
@@ -216,6 +223,7 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         ok = (abs(vchk) < 0.3 * vdd) if topo.fd else (0.1 * vdd < vchk < 0.9 * vdd)
         if not ok:
             continue
+        settled = True
         # AC: dump real/imag of the (differential) output; mag/phase in numpy.
         # wrdata writes a scale (frequency) column per vector → [f, re, f, im].
         ac = (body_dut.replace("__PORTS__", " ".join(ports)) + _rig(vdd, ibias)
@@ -247,9 +255,18 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
             gbw = float(10 ** (lf0 + t * (lf1 - lf0)))
             ph_gbw = phase[i0] + t * (phase[i1] - phase[i0])
             pm = float(180.0 + ph_gbw)   # excess phase is negative → PM < 180
-        if gain_db > 0:
-            return gain_db, gbw, pm
-    return None, None, None
+        # Keep the higher-gain polarity (the negative-feedback one); report it
+        # even if ≤ 0 dB so a mis-biased circuit isn't silently dropped.
+        if best is None or gain_db > best[0]:
+            best = (gain_db, gbw, pm)
+    if best is None:
+        reason = ("open-loop AC did not settle (output railed) — gain not measurable"
+                  if not settled else "open-loop AC sweep did not converge")
+        return None, None, None, reason
+    gain_db, gbw, pm = best
+    reason = (None if gain_db > 0
+              else "measured gain ≤ 0 dB — circuit does not amplify as biased")
+    return gain_db, gbw, pm, reason
 
 
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm):
@@ -381,17 +398,57 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
         "phase_margin_deg": None, "slew_rate_vps": None,
         "output_swing_max_v": None, "output_swing_min_v": None,
     }
+    notes: list[str] = []
     try:
         out["power_w"] = _measure_power(name, ports, body_dut, topo, vdd, ibias, vcm)
     except Exception:
         pass
     try:
-        g, gbw, pm = _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm)
+        g, gbw, pm, reason = _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm)
         out["gain_db"], out["gbw_hz"], out["phase_margin_deg"] = g, gbw, pm
+        if reason:
+            notes.append(reason + " (GBW/PM not measurable)")
+            bias = _bias_diagnostic(netlist_text, result, tech, spec)
+            if bias:
+                notes.append(bias)
     except Exception:
         pass
     try:
         out["slew_rate_vps"] = _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm)
     except Exception:
         pass
+    if notes:
+        out["notes"] = notes  # type: ignore[assignment]  # advisory, not a metric
     return out
+
+
+def _bias_diagnostic(netlist_text: str, result: SizingResult,
+                     tech: TechParams, spec: SizingSpec) -> str | None:
+    """One-line summary of devices in triode / starved, when AC found no gain.
+
+    Reuses the feedback-biased ``.op`` reader to explain *why* a circuit doesn't
+    amplify (the usual cause: stacked devices don't fit the supply headroom).
+    """
+    try:
+        op = read_op_operating_point(netlist_text, result, tech, spec)
+    except Exception:
+        op = None
+    if not op:
+        return None
+    triode, starved = [], []
+    for ref, d in op.items():
+        ida = abs(d.get("id", 0.0))
+        if ida < 1e-7:
+            starved.append(ref)
+        elif "vds" in d and "vdsat" in d and abs(d["vds"]) < abs(d["vdsat"]) - 1e-3:
+            triode.append(ref)
+    parts = []
+    if triode:
+        parts.append(f"in triode: {', '.join(triode[:4])}"
+                     + ("…" if len(triode) > 4 else ""))
+    if starved:
+        parts.append(f"starved (<0.1µA): {', '.join(starved[:4])}"
+                     + ("…" if len(starved) > 4 else ""))
+    if not parts:
+        return None
+    return "bias diagnostic — " + "; ".join(parts) + " (insufficient headroom?)"
