@@ -1,6 +1,7 @@
 # Feasible one-stage op-amp spec for PTM 22 nm HP bulk.
 # Technology: ptm22, circuitgenome/sizer/config/tech_ptm22.yaml
-# Supply: 0.8 V, 10 µA bias current.  One-stage: no Miller cap, so GBW/PM/SR are not modelled.
+# Supply: 0.8 V, 15 µA bias current. One-stage: no Miller cap, so GBW/PM/SR are not modelled.
+# Targets assume the highest-gain load variant (active-mirror / folded-cascode); resistor/simple-CS loads need ~6 dB lower gain.
 #
 # Usage:
 #   circuitgenome size circuits/one_stage_opamp/circuit_0001_flat.ckt \
@@ -10,13 +11,13 @@
 
 vdd: 0.8            # V — positive supply
 vss: 0.0            # V — ground
-ibias: 10.0e-6      # A — input bias current
-cl: 2.0e-12       # F — output load capacitance
+ibias: 1.5e-5      # A — input bias current (15 µA)
+cl: 2.0e-12        # F — output load capacitance
 
 # DC and frequency performance
-gain_min_db: 30           # dB — minimum open-loop DC gain
+gain_min_db: 25           # dB — minimum open-loop DC gain
 
 # Power and swing
 power_max_w: 5.0e-4      # W  — maximum total quiescent power
-output_swing_max_v: 0.65   # V  — 0.15 V headroom from VDD
-output_swing_min_v: 0.15    # V  — 0.15 V headroom from VSS
+output_swing_max_v: 0.65  # V  — 0.15 V headroom from VDD
+output_swing_min_v: 0.15   # V  — 0.15 V headroom from VSS

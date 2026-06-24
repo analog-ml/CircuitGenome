@@ -933,3 +933,81 @@ def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
     assert len(ip) == 2
     a, b = (result.transistors[r] for r in ip)
     assert a.w_um == b.w_um and a.l_um == b.l_um  # matched differential pair
+
+
+# ---------------------------------------------------------------------------
+# PTM example-spec feasibility (issue #74): every committed spec must size
+# without a gm-ceiling shortfall and with all margins met on its topology's
+# active-load reference circuit, so they can't silently drift to "not met".
+# ---------------------------------------------------------------------------
+import functools  # noqa: E402
+
+_SPEC_REF = {
+    "one_stage_specs": ("one_stage_opamp", {
+        "input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+        "tail_current": "current_mirror_tail_pmos",
+        "bias_gen": "diode_connected_mosfet_bias"}),
+    "two_stage_se_specs": ("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+        "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
+        "bias_gen": "diode_connected_mosfet_bias", "compensation": "miller_cap"}),
+    "two_stage_fd_specs": ("two_stage_opamp_fully_differential", {
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_differential_output",
+        "tail_current": "current_mirror_tail_pmos",
+        "bias_gen": "diode_connected_mosfet_bias", "cmfb": "resistive_sense_cmfb",
+        "comp_p": "miller_cap", "comp_n": "miller_cap",
+        "second_stage_p": "common_source", "second_stage_n": "common_source"}),
+    "three_stage_se_specs": ("three_stage_opamp_nmc_single_ended", {
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_single_output",
+        "tail_current": "current_mirror_tail_pmos",
+        "bias_gen": "diode_connected_mosfet_bias", "second_stage": "common_source",
+        "third_stage": "common_source", "comp1": "miller_cap", "comp2": "miller_cap"}),
+    "three_stage_fd_specs": ("three_stage_opamp_nmc_fully_differential", {
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_differential_output",
+        "tail_current": "current_mirror_tail_pmos",
+        "bias_gen": "diode_connected_mosfet_bias", "cmfb": "resistive_sense_cmfb",
+        "comp1_p": "miller_cap", "comp2_p": "miller_cap",
+        "comp1_n": "miller_cap", "comp2_n": "miller_cap",
+        "second_stage_p": "common_source", "second_stage_n": "common_source",
+        "third_stage_p": "common_source", "third_stage_n": "common_source"}),
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _ref_circuit(sdir):
+    topo_name, vf = _SPEC_REF[sdir]
+    return _fbr(topo_name, vf)
+
+
+@pytest.mark.parametrize("node", ["ptm45", "ptm32", "ptm22", "ptm16"])
+@pytest.mark.parametrize("sdir", list(_SPEC_REF))
+def test_ptm_example_specs_feasible(sdir, node):
+    import yaml
+    from pathlib import Path
+
+    parsed, sr_result, fbr_result, topology = _ref_circuit(sdir)
+    spec_path = (Path(__file__).resolve().parent.parent / "examples"
+                 / sdir / f"spec_{node}.yaml")
+    data = yaml.safe_load(spec_path.read_text())
+    spec = SizingSpec(**{k: v for k, v in data.items()
+                         if k in SizingSpec.__dataclass_fields__})
+    result = size_circuit(parsed, sr_result, fbr_result, topology,
+                          load_tech(node), spec)
+
+    assert result.transistors, f"{sdir}/{node}: no sizing"
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE", "GMID")
+    # No weak-inversion gm-ceiling shortfall (the #74 failure mode).
+    assert not any("ceiling" in w for w in result.warnings), \
+        f"{sdir}/{node}: gm-ceiling shortfall: {result.warnings}"
+    # ptm45 (gm/Id) may carry the documented tail-headroom advisory at 1.0 V;
+    # the Level-1 nodes must be warning-clean.
+    if node != "ptm45":
+        assert not any("headroom" in w for w in result.warnings), \
+            f"{sdir}/{node}: unexpected headroom warning: {result.warnings}"
+    # Every constrained spec is met (1° tolerance on PM for grid rounding).
+    for key, val in result.margins.items():
+        tol = -1.0 if key == "phase_margin_deg" else 0.0
+        assert val >= tol, f"{sdir}/{node}: margin {key}={val:.3f} < {tol}"
