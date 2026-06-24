@@ -26,18 +26,21 @@ def size_resistors(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
-) -> tuple[dict[str, float], float, float | None]:
-    """Return ``(extra_resistors, gm1_factor, gd_tail_override)``.
+) -> tuple[dict[str, float], float, float | None, float]:
+    """Return ``(extra_resistors, gm1_factor, gd_tail_override, gd_out_extra)``.
 
-    * ``extra_resistors``: ``{ref: ohms}`` for degeneration / tail / bias.
+    * ``extra_resistors``: ``{ref: ohms}`` for degeneration / tail / bias / cmfb.
     * ``gm1_factor``: multiplies the input-pair gm for source degeneration
       (``1/(1+gm1·R)`` = ``1/(1+factor)``); ``1.0`` when none.
     * ``gd_tail_override``: ``1/R`` of a resistor tail (finite output conductance
       for CMRR), or ``None``.
+    * ``gd_out_extra``: output-node conductance added by a resistive-sense CMFB
+      averager (``1/R_sense``), loading the FD output; ``0.0`` when none.
     """
     out: dict[str, float] = {}
     gm1_factor = 1.0
     gd_tail_override: float | None = None
+    gd_out_extra = 0.0
     vcm = (spec.vdd + spec.vss) / 2.0
 
     # --- Source degeneration (input-pair-slot resistors) ---
@@ -79,7 +82,16 @@ def size_resistors(
         for r in bias_res:
             out[r.ref] = r_val
 
-    return out, gm1_factor, gd_tail_override
+    # --- CMFB resistive-sense averager (cmfb-slot resistors): large, low-load ---
+    cmfb_res = slot_resistors.get("cmfb", [])
+    if cmfb_res:
+        for r in cmfb_res:
+            out[r.ref] = intent.cmfb_sense_r
+        # Each output node is loaded by one sense resistor to the (virtual-ground)
+        # sense node → adds 1/R_sense to the differential output conductance.
+        gd_out_extra = 1.0 / intent.cmfb_sense_r if intent.cmfb_sense_r > 0 else 0.0
+
+    return out, gm1_factor, gd_tail_override, gd_out_extra
 
 
 def _representative_bias_vgs(blocks: OpAmpBlocks,

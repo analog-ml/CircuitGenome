@@ -98,7 +98,7 @@ def size_gmid(
 
     # Size the non-load resistor blocks (degeneration / tail / bias) and capture
     # their metric effects (degeneration on gm1, resistor-tail on gd_tail).
-    extra_r, gm1_factor, gd_tail_override = size_resistors(
+    extra_r, gm1_factor, gd_tail_override, gd_out_extra = size_resistors(
         blocks, slot_resistors, ids_map, transistor_sizing, model, spec, tech, intent
     )
     resistors = {**resistors, **extra_r}
@@ -118,6 +118,7 @@ def size_gmid(
         transistor_sizing, slot_transistors, cc_pf, tech, spec, model,
         cc2_pf=cc2_pf, gd_load_r=gd_load_r, rout1_override=rout1_override,
         gm1_factor=gm1_factor, gd_tail_override=gd_tail_override,
+        gd_out_extra=gd_out_extra,
     )
 
     return SizingResult(
