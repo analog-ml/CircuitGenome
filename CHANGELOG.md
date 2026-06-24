@@ -32,6 +32,15 @@ flow, so the analytical metrics are optimistic. The sizer already flagged this
     weak-inversion ceiling caps GBW): the **real** metrics are shown with ✗ on the
     failing rows.
   - **FEASIBLE**: the normal ✓ table.
+- **SPICE-grounded feasibility verdict.** The analytical bias check only validates
+  the input-pair tail, so it false-positives on circuits whose downstream stages
+  don't bias (e.g. circuit_0010, whose output stage is current-mismatched 58 µA vs
+  0.02 µA → rails to vdd). The `size` CLI now grounds the verdict in the reliable
+  SPICE DC `.op` (`check_bias_soundness`, reusing `read_op_operating_point`): if the
+  operating point rails or shows starved/triode devices, the circuit is reported
+  **INFEASIBLE** instead of MARGINAL-with-optimistic-metrics. Automatic when ngspice
+  is on PATH; the analytical verdict stands when it isn't. The core `size_circuit`
+  stays analytical/fast — the SPICE check is CLI-level only.
 
 Parity: feasible ptm45 designs, the `generic` Level-1 path, and the ✓/✗ table
 itself are unchanged.

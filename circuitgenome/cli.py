@@ -215,6 +215,18 @@ def _cmd_size(args: argparse.Namespace) -> None:
         result = refine_with_spice(result, netlist_text, slot_t, tech, spec,
                                    build_device_model(tech), gd_load_r)
 
+    # Ground the feasibility verdict in the SPICE DC operating point: the analytical
+    # bias check only validates the input-pair tail, so it false-positives on circuits
+    # whose downstream stages don't bias. Automatic when ngspice is available; the
+    # analytical verdict stands when it isn't.
+    if result.transistors and result.bias_feasible:
+        from .sizer.spice_sim import ngspice_available, check_bias_soundness
+        if ngspice_available():
+            ok, reason = check_bias_soundness(netlist_text, result, tech, spec)
+            if not ok:
+                result.bias_feasible = False
+                result.warnings.append(reason)
+
     print(f"Netlist: {args.netlist_file.name}  |  Topology: {args.topology}")
     print(f"Tech: {tech.name}")
     print(f"\nSolver: {result.solver_status}")
@@ -245,7 +257,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
         if not result.bias_feasible:
             print("\nFeasibility: INFEASIBLE — bias point cannot be established.")
             for w in result.warnings:
-                if any(t in w for t in ("cascode", "headroom", "collapse")):
+                if any(t in w for t in ("cascode", "headroom", "collapse", "SPICE bias")):
                     print(f"  ↳ {w}")
             print("  Performance not evaluated; run --simulate to measure the "
                   "actual operating point.")

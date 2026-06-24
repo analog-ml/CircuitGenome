@@ -55,6 +55,9 @@ _PTM_SPEC = _ROOT / "examples" / "two_stage_se_specs" / "spec_ptm45.yaml"
 
 
 _C0001 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0001_flat.ckt"
+_C0010 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0010_flat.ckt"
+
+from circuitgenome.sizer.spice_sim import ngspice_available
 
 
 @pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),
@@ -72,12 +75,23 @@ def test_size_ptm45_infeasible_verdict(capsys):
     assert "cascode tail" in out
 
 
-@pytest.mark.skipif(not (_C0001.exists() and _PTM_SPEC.exists()),
-                    reason="ptm45 two-stage fixtures not present")
-def test_size_ptm45_marginal_verdict(capsys):
-    """A biasing-but-underperforming circuit → MARGINAL with real metrics + ✗."""
+def _no_spice(monkeypatch):
+    """Force the analytical verdict path (skip the SPICE DC bias check) so the
+    verdict-rendering tests are deterministic regardless of ngspice/circuit quirks."""
+    monkeypatch.setattr("circuitgenome.sizer.spice_sim.ngspice_available", lambda: False)
+
+
+@pytest.mark.skipif(not _C0001.exists(), reason="two-stage fixture not present")
+def test_size_marginal_verdict(capsys, tmp_path, monkeypatch):
+    """Biases but misses spec → MARGINAL with real metrics + ✗ (analytical verdict)."""
+    _no_spice(monkeypatch)
+    spec = tmp_path / "miss.yaml"
+    spec.write_text(
+        "vdd: 5.0\nvss: 0.0\nibias: 20.0e-6\ncl: 5.0e-12\n"
+        "second_stage_current_ratio: 2.5\ngain_min_db: 80\ngbw_min_hz: 5.0e+6\n"
+        "phase_margin_min_deg: 45\nslew_rate_min_vps: 1.0e+5\n")
     main(["size", str(_C0001), "--topology", "two_stage_opamp_single_ended",
-          "--spec", str(_PTM_SPEC), "--tech", "ptm45"])
+          "--spec", str(spec), "--tech", "generic"])
     out = capsys.readouterr().out
     assert "MARGINAL" in out
     assert "Performance metrics:" in out  # metrics are real → shown
@@ -86,8 +100,9 @@ def test_size_ptm45_marginal_verdict(capsys):
 
 
 @pytest.mark.skipif(not _C0001.exists(), reason="two-stage fixture not present")
-def test_size_feasible_verdict(capsys, tmp_path):
-    """A relaxed spec the design meets → FEASIBLE with the ✓ table."""
+def test_size_feasible_verdict(capsys, tmp_path, monkeypatch):
+    """A relaxed spec the design meets → FEASIBLE with the ✓ table (analytical)."""
+    _no_spice(monkeypatch)
     spec = tmp_path / "relaxed.yaml"
     spec.write_text(
         "vdd: 5.0\nvss: 0.0\nibias: 20.0e-6\ncl: 5.0e-12\n"
@@ -99,6 +114,19 @@ def test_size_feasible_verdict(capsys, tmp_path):
     assert "Feasibility: FEASIBLE" in out
     assert "INFEASIBLE" not in out and "MARGINAL" not in out
     assert "Performance metrics:" in out
+
+
+@pytest.mark.skipif(not (_C0010.exists() and _PTM_SPEC.exists() and ngspice_available()),
+                    reason="needs ngspice + ptm45 two-stage fixtures")
+def test_size_spice_bias_infeasible(capsys):
+    """circuit_0010 passes the analytical (tail-only) check but rails in SPICE →
+    the SPICE DC verdict downgrades it to INFEASIBLE (optimistic table suppressed)."""
+    main(["size", str(_C0010), "--topology", "two_stage_opamp_single_ended",
+          "--spec", str(_PTM_SPEC), "--tech", "ptm45"])
+    out = capsys.readouterr().out
+    assert "INFEASIBLE" in out
+    assert "SPICE bias check" in out
+    assert "Performance metrics:" not in out
 
 
 @pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),

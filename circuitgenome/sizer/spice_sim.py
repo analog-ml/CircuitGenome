@@ -422,6 +422,55 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     return out
 
 
+def _op_bias_problems(op: dict[str, dict[str, float]]) -> tuple[list[str], list[str]]:
+    """Return ``(triode_refs, starved_refs)`` from an operating-point dict.
+
+    Starved: drain current below 0.1 µA (device effectively off). Triode: |Vds|
+    below |Vdsat| (a current source/amplifier device pushed out of saturation).
+    """
+    triode, starved = [], []
+    for ref, d in op.items():
+        ida = abs(d.get("id", 0.0))
+        if ida < 1e-7:
+            starved.append(ref)
+        elif "vds" in d and "vdsat" in d and abs(d["vds"]) < abs(d["vdsat"]) - 1e-3:
+            triode.append(ref)
+    return triode, starved
+
+
+def check_bias_soundness(netlist_text: str, result: SizingResult,
+                         tech: TechParams, spec: SizingSpec) -> tuple[bool, str | None]:
+    """SPICE-grounded DC bias verdict: ``(sound, reason)``.
+
+    Runs the feedback-biased ``.op`` (:func:`read_op_operating_point`) — which
+    converges reliably, unlike the open-loop AC rig — and condemns the bias only on
+    positive evidence: the operating point **rails** (no usable mid-rail bias) or a
+    device is **starved/triode**.  Conservative by design: returns ``(True, None)``
+    when it cannot check (ngspice absent, or a fully-differential topology the SE
+    ``.op`` rig doesn't support), so it only ever downgrades a feasible verdict.
+    """
+    if not ngspice_available():
+        return True, None
+    _, ports, _ = _parse_subckt(netlist_text)
+    if _Topo(ports).fd:
+        return True, None
+    op = read_op_operating_point(netlist_text, result, tech, spec)
+    if op is None:
+        return False, ("SPICE bias check: the feedback operating point railed — the "
+                       "circuit does not establish a usable mid-rail bias point.")
+    triode, starved = _op_bias_problems(op)
+    if starved or triode:
+        parts = []
+        if starved:
+            parts.append(f"starved (<0.1µA): {', '.join(starved[:4])}"
+                         + ("…" if len(starved) > 4 else ""))
+        if triode:
+            parts.append(f"in triode: {', '.join(triode[:4])}"
+                         + ("…" if len(triode) > 4 else ""))
+        return False, "SPICE bias check: " + "; ".join(parts) + " — bias not established."
+    return True, None
+
+
 def _bias_diagnostic(netlist_text: str, result: SizingResult,
                      tech: TechParams, spec: SizingSpec) -> str | None:
     """One-line summary of devices in triode / starved, when AC found no gain.
@@ -435,13 +484,7 @@ def _bias_diagnostic(netlist_text: str, result: SizingResult,
         op = None
     if not op:
         return None
-    triode, starved = [], []
-    for ref, d in op.items():
-        ida = abs(d.get("id", 0.0))
-        if ida < 1e-7:
-            starved.append(ref)
-        elif "vds" in d and "vdsat" in d and abs(d["vds"]) < abs(d["vdsat"]) - 1e-3:
-            triode.append(ref)
+    triode, starved = _op_bias_problems(op)
     parts = []
     if triode:
         parts.append(f"in triode: {', '.join(triode[:4])}"
