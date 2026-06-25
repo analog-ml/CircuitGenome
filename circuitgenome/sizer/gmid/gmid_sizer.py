@@ -5,7 +5,7 @@ sizer: build the block view, derive per-stage gm requirements (shared,
 model-injected op-amp physics), choose per-device gm/Id geometry from the
 :class:`~.intent.GmIdIntent`, check the DC operating point (cascode-aware
 headroom), and evaluate the metrics.  The model-independent topology math is
-reused from :mod:`circuitgenome.sizer` rather than duplicated.
+reused from :mod:`circuitgenome.sizer.shared` rather than duplicated.
 """
 from __future__ import annotations
 
@@ -16,12 +16,23 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
-from ..device_model import CASCODE, CURRENT_SOURCE, SIGNAL, GmIdModel
-from ..device_model import GmIdPolicy
-from ..gmid_lut import GmIdLut
-from ..models import SizingResult, SizingSpec, TechParams
+from ..shared.device_model import CASCODE, CURRENT_SOURCE, SIGNAL, GmIdModel
+from ..shared.device_model import GmIdPolicy
+from ..shared.gmid_lut import GmIdLut
+from ..shared.models import SizingResult, SizingSpec, TechParams
+from ..shared.metrics import _evaluate_metrics
+from ..shared.preprocess import (
+    _assign_ids,
+    _check_topology_match,
+    _compute_requirements,
+    _deduplicate,
+    _extract_slot_resistors,
+    _extract_slot_transistors,
+    _size_load_resistors,
+)
 from .blocks import _is_signal_dev, build_blocks, cascode_device_refs, node_rout
 from .dc_op import check_dc_operating_point
+from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent
 from .resistors import size_resistors
 
@@ -49,20 +60,6 @@ def size_gmid(
     intent: GmIdIntent = DEFAULT_INTENT,
 ) -> SizingResult:
     """Size a circuit via the gm/Id pipeline.  Requires ``tech.gmid_lut``."""
-    # Shared, model-independent preprocessing + topology physics (lazy import to
-    # avoid an import cycle with the dispatcher in sizer.py).
-    from ..sizer import (
-        _assign_ids,
-        _check_topology_match,
-        _compute_requirements,
-        _deduplicate,
-        _evaluate_metrics,
-        _extract_slot_resistors,
-        _extract_slot_transistors,
-        _size_load_resistors,
-    )
-    from ..gmid_geometry import assign_geometry_gmid
-
     slot_transistors = _extract_slot_transistors(fbr_result)
     slot_resistors = _extract_slot_resistors(fbr_result)
     blocks = build_blocks(slot_transistors, slot_resistors)

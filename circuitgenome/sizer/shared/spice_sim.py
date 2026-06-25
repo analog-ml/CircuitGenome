@@ -310,7 +310,7 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm):
 
 
 # --------------------------------------------------------------------------- #
-# Operating-point read (for SPICE-in-the-loop refinement)
+# Operating-point read (grounds the SPICE bias-soundness verdict)
 # --------------------------------------------------------------------------- #
 def _run_capture(deck: str) -> str | None:
     """Run ``deck`` in ngspice -b and return stdout (for ``print`` output)."""

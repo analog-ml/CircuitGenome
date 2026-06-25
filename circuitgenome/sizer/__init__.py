@@ -18,8 +18,8 @@ Typical usage::
     for ref, s in result.transistors.items():
         print(f"{ref}: W={s.w_um}µm  L={s.l_um}µm")
 """
-from .loader import load_tech
-from .models import (
+from .shared.loader import load_tech
+from .shared.models import (
     SizingResult,
     SizingSpec,
     TechParams,

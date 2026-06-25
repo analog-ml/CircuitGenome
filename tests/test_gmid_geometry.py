@@ -1,14 +1,14 @@
 """Tests for the procedural gm/Id geometry pass (no CP-SAT)."""
 import pytest
 
-from circuitgenome.sizer.device_model import (
+from circuitgenome.sizer.shared.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
     GmIdModel,
     build_device_model,
 )
-from circuitgenome.sizer.gmid_geometry import assign_geometry_gmid
-from circuitgenome.sizer.loader import load_tech
+from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
+from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.synthesizer.models import Device
 
 

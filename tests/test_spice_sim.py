@@ -12,7 +12,7 @@ from circuitgenome.synthesizer.loader import load_topologies, load_modules
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
-from circuitgenome.sizer import spice_sim
+from circuitgenome.sizer.shared import spice_sim
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):

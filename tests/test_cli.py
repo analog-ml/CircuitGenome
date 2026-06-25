@@ -57,7 +57,7 @@ _PTM_SPEC = _ROOT / "examples" / "two_stage_se_specs" / "spec_ptm45.yaml"
 _C0001 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0001_flat.ckt"
 _C0010 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0010_flat.ckt"
 
-from circuitgenome.sizer.spice_sim import ngspice_available
+from circuitgenome.sizer.shared.spice_sim import ngspice_available
 
 
 @pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),
@@ -78,7 +78,7 @@ def test_size_ptm45_infeasible_verdict(capsys):
 def _no_spice(monkeypatch):
     """Force the analytical verdict path (skip the SPICE DC bias check) so the
     verdict-rendering tests are deterministic regardless of ngspice/circuit quirks."""
-    monkeypatch.setattr("circuitgenome.sizer.spice_sim.ngspice_available", lambda: False)
+    monkeypatch.setattr("circuitgenome.sizer.shared.spice_sim.ngspice_available", lambda: False)
 
 
 @pytest.mark.skipif(not _C0001.exists(), reason="two-stage fixture not present")

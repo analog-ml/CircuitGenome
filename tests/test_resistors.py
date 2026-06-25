@@ -7,8 +7,8 @@ from circuitgenome.recognizer import assign_slots, parse, recognize
 from circuitgenome.sizer.gmid.blocks import build_blocks
 from circuitgenome.sizer.gmid.intent import GmIdIntent
 from circuitgenome.sizer.gmid.resistors import size_resistors
-from circuitgenome.sizer.loader import load_tech
-from circuitgenome.sizer.models import SizingSpec, TransistorSizing
+from circuitgenome.sizer.shared.loader import load_tech
+from circuitgenome.sizer.shared.models import SizingSpec, TransistorSizing
 from circuitgenome.sizer.sizer import size_circuit
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.netlist import to_flat_spice

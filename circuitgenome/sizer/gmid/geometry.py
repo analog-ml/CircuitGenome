@@ -17,8 +17,8 @@ for the result.
 """
 from __future__ import annotations
 
-from .device_model import GmIdModel
-from .models import TechParams, TransistorSizing
+from ..shared.device_model import GmIdModel
+from ..shared.models import TechParams, TransistorSizing
 
 # Same matched-pair slots CP-SAT treats as symmetric (constraints.build_model).
 _SYMMETRY_SLOTS = frozenset({"input_pair", "load", "tail_current"})

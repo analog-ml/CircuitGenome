@@ -12,9 +12,9 @@ Later phases fold the full per-branch KVL solve in here.
 """
 from __future__ import annotations
 
-from circuitgenome.sizer.device_model import GmIdModel
-from circuitgenome.sizer.headroom import apply_headroom
-from circuitgenome.sizer.models import SizingSpec, TechParams, TransistorSizing
+from ..shared.device_model import GmIdModel
+from .headroom import apply_headroom
+from ..shared.models import SizingSpec, TechParams, TransistorSizing
 
 from .blocks import OpAmpBlocks
 

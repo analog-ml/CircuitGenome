@@ -18,8 +18,8 @@ correction is left to the SPICE refinement pass, :mod:`~.refine`).
 """
 from __future__ import annotations
 
-from .device_model import GmIdModel
-from .models import GridSpec, SizingSpec, TechParams, TransistorSizing
+from ..shared.device_model import GmIdModel
+from ..shared.models import GridSpec, SizingSpec, TechParams, TransistorSizing
 
 __all__ = ["apply_headroom"]
 

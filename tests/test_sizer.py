@@ -4,7 +4,7 @@ import math
 import pytest
 
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
-from circuitgenome.sizer.equations import (
+from circuitgenome.sizer.shared.equations import (
     cmrr_db,
     gd,
     gm,
@@ -17,7 +17,7 @@ from circuitgenome.sizer.equations import (
     vds_sat,
     vgs_from_ids,
 )
-from circuitgenome.sizer.models import TechParams
+from circuitgenome.sizer.shared.models import TechParams
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -802,7 +802,7 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
 def _fbr_pmos_cs_second_stage(topology_name: str):
     """Return the FBR tuple for the first variant whose second-stage signal
     transistor is a PMOS (a PMOS-common-source stage)."""
-    from circuitgenome.sizer.sizer import _extract_slot_transistors, _is_signal_dev
+    from circuitgenome.sizer.shared.preprocess import _extract_slot_transistors, _is_signal_dev
 
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == topology_name)
@@ -861,7 +861,7 @@ def test_topology_mismatch_warns():
 def _config_dir():
     from pathlib import Path
     import circuitgenome.sizer as _sz
-    return Path(_sz.__file__).parent / "config"
+    return Path(_sz.__file__).parent / "shared" / "config"
 
 
 # node -> nominal Vdd (V)
@@ -905,7 +905,7 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
 
 def test_first_stage_gain_factor():
     """k_fs is 1.0 for a current-mirror/FD first stage, 0.5 for non-mirror SE."""
-    from circuitgenome.sizer.sizer import _first_stage_gain_factor
+    from circuitgenome.sizer.shared.preprocess import _first_stage_gain_factor
     from circuitgenome.synthesizer.models import Device
 
     mirror = {"load": [

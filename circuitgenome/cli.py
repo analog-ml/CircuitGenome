@@ -53,10 +53,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     size.add_argument("--simulate", action="store_true",
                       help="After sizing, verify metrics with an ngspice simulation "
                            "(same technology) and print analytical vs SPICE")
-    size.add_argument("--refine", action="store_true",
-                      help="After sizing, re-evaluate metrics at the actual SPICE "
-                           "operating point (corrects for bias currents that don't "
-                           "fully flow, e.g. a headroom-starved tail). Single-ended.")
 
     return parser.parse_args(argv)
 
@@ -206,21 +202,12 @@ def _cmd_size(args: argparse.Namespace) -> None:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    if getattr(args, "refine", False) and result.transistors:
-        from .sizer.refine import refine_with_spice
-        from .sizer.sizer import _extract_slot_transistors
-        from .sizer.device_model import build_device_model
-        slot_t = _extract_slot_transistors(fbr_result)
-        gd_load_r = (1.0 / min(result.resistors.values())) if result.resistors else 0.0
-        result = refine_with_spice(result, netlist_text, slot_t, tech, spec,
-                                   build_device_model(tech), gd_load_r)
-
     # Ground the feasibility verdict in the SPICE DC operating point: the analytical
     # bias check only validates the input-pair tail, so it false-positives on circuits
     # whose downstream stages don't bias. Automatic when ngspice is available; the
     # analytical verdict stands when it isn't.
     if result.transistors and result.bias_feasible:
-        from .sizer.spice_sim import ngspice_available, check_bias_soundness
+        from .sizer.shared.spice_sim import ngspice_available, check_bias_soundness
         if ngspice_available():
             ok, reason = check_bias_soundness(netlist_text, result, tech, spec)
             if not ok:
@@ -288,7 +275,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
             # (square-law / single-pole) would mismatch the selected device model.
             # Measure performance directly with ngspice instead — the SPICE numbers
             # are the sole source of truth, with no analytical fallback.
-            from .sizer.spice_sim import ngspice_available, simulate_metrics
+            from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
             if not ngspice_available():
                 print(f"\nError: tech {tech.name} uses a SPICE model card; performance "
                       "metrics are measured with ngspice, which was not found on PATH. "
@@ -362,7 +349,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
         print("\n(--simulate is redundant for this technology: the metrics above are "
               "already measured with ngspice.)")
     elif args.simulate:
-        from .sizer.spice_sim import ngspice_available, simulate_metrics
+        from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
         print("\nSPICE verification (ngspice):")
         if not result.bias_feasible:
             print("  Bias point infeasible — 'analytical' not evaluated; the "

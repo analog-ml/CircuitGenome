@@ -12,7 +12,7 @@ resistors.
 """
 from __future__ import annotations
 
-from ..models import SizingSpec, TechParams, TransistorSizing
+from ..shared.models import SizingSpec, TechParams, TransistorSizing
 from .blocks import OpAmpBlocks
 from .intent import GmIdIntent
 
