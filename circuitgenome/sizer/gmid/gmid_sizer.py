@@ -111,6 +111,9 @@ def size_gmid(
             stop = frozenset({tail}) if tail else frozenset()
             rout1_override = node_rout(out_net, all_mos, model, transistor_sizing, stop)
 
+    # Analytical (ngspice-free) estimate: a deterministic sizing-quality signal for
+    # tests/programmatic callers. The CLI measures PTM performance with ngspice
+    # (simulate_metrics) and displays that instead of these numbers.
     metrics, margins = _evaluate_metrics(
         transistor_sizing, slot_transistors, cc_pf, tech, spec, model,
         cc2_pf=cc2_pf, gd_load_r=gd_load_r, rout1_override=rout1_override,

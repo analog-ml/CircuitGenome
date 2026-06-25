@@ -235,7 +235,11 @@ def _cmd_size(args: argparse.Namespace) -> None:
     for ref, ohms in result.resistors.items():
         print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
-    if result.metrics:
+    # Show the performance section whenever we have a sizing to report. For PTM
+    # the numbers come from ngspice (simulate_metrics, below); the generic path
+    # reads the analytical result.metrics — so the gate keys off the sizing, not
+    # the analytical estimate.
+    if result.transistors:
         _METRIC_LABELS = {
             "gain_db": ("Open-loop gain", "dB", True),
             "gbw_hz": ("GBW", "MHz", True),
