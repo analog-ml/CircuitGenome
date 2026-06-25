@@ -249,6 +249,28 @@ def _cmd_size(args: argparse.Namespace) -> None:
         print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
     if result.metrics:
+        _METRIC_LABELS = {
+            "gain_db": ("Open-loop gain", "dB", True),
+            "gbw_hz": ("GBW", "MHz", True),
+            "phase_margin_deg": ("Phase margin", "°", True),
+            "slew_rate_vps": ("Slew rate", "V/µs", True),
+            "power_w": ("Quiescent power", "mW", False),
+            "output_swing_max_v": ("Output swing max", "V", True),
+            "output_swing_min_v": ("Output swing min", "V", False),
+            "cmrr_db": ("CMRR", "dB", True),
+            "psrr_db": ("PSRR+", "dB", True),
+        }
+        _SCALE = {
+            "gbw_hz": 1e-6, "slew_rate_vps": 1e-6, "power_w": 1e3,
+        }
+        _SPEC_KEYS = {
+            "gain_db": "gain_min_db", "gbw_hz": "gbw_min_hz",
+            "phase_margin_deg": "phase_margin_min_deg",
+            "slew_rate_vps": "slew_rate_min_vps", "power_w": "power_max_w",
+            "output_swing_max_v": "output_swing_max_v",
+            "output_swing_min_v": "output_swing_min_v",
+            "cmrr_db": "cmrr_min_db", "psrr_db": "psrr_min_db",
+        }
         # Feasibility verdict drives how (and whether) metrics are shown:
         #   INFEASIBLE — bias point collapses → metrics are meaningless, suppress them.
         #   MARGINAL   — biases but misses spec → metrics are real, show with ✗.
@@ -261,33 +283,62 @@ def _cmd_size(args: argparse.Namespace) -> None:
                     print(f"  ↳ {w}")
             print("  Performance not evaluated; run --simulate to measure the "
                   "actual operating point.")
+        elif tech.spice_model:
+            # The technology has a BSIM4 model card, so the analytical metrics
+            # (square-law / single-pole) would mismatch the selected device model.
+            # Measure performance directly with ngspice instead — the SPICE numbers
+            # are the sole source of truth, with no analytical fallback.
+            from .sizer.spice_sim import ngspice_available, simulate_metrics
+            if not ngspice_available():
+                print(f"\nError: tech {tech.name} uses a SPICE model card; performance "
+                      "metrics are measured with ngspice, which was not found on PATH. "
+                      "Install it (e.g. `brew install ngspice`) and rerun.",
+                      file=sys.stderr)
+                sys.exit(1)
+            sim = simulate_metrics(netlist_text, result, tech, spec)
+            # Only these keys are measured by the SPICE rig; CMRR/PSRR/output-swing
+            # have no testbench yet and are omitted (see note below).
+            spice_keys = ["gain_db", "gbw_hz", "phase_margin_deg",
+                          "slew_rate_vps", "power_w"]
+            rows = []
+            any_fail = False
+            for key in spice_keys:
+                label, unit, is_min = _METRIC_LABELS[key]
+                scale = _SCALE.get(key, 1.0)
+                raw = sim.get(key)
+                spec_val = getattr(spec, _SPEC_KEYS[key], None)
+                if raw is None:
+                    rows.append(f"  {label:<22} {'n/a':<16}  "
+                                "[ngspice could not extract this metric]")
+                    continue
+                val_str = f"{raw * scale:.2f} {unit}"
+                if spec_val is not None:
+                    margin = (raw - spec_val) if is_min else (spec_val - raw)
+                    any_fail = any_fail or margin < 0
+                    op = "≥" if is_min else "≤"
+                    spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
+                    sign = "+" if margin >= 0 else ""
+                    margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
+                    status = "✓" if margin >= 0 else "✗"
+                    rows.append(f"  {label:<22} {val_str:<16}  {spec_str:<30}  "
+                                f"{margin_str}  {status}")
+                else:
+                    rows.append(f"  {label:<22} {val_str}")
+            verdict = ("MARGINAL — biases, but does not meet spec"
+                       if any_fail else "FEASIBLE")
+            print(f"\nFeasibility: {verdict}")
+            print("\nPerformance metrics (ngspice / BSIM4):")
+            for row in rows:
+                print(row)
+            for note in sim.get("notes", []) or []:
+                print(f"  ⓘ {note}")
+            print("  ⓘ CMRR, PSRR, and output swing are not measured by the current "
+                  "ngspice rig and are omitted.")
         else:
             verdict = ("MARGINAL — biases, but does not meet spec (see ⚠ above)"
                        if failing else "FEASIBLE")
             print(f"\nFeasibility: {verdict}")
             print("\nPerformance metrics:")
-            _METRIC_LABELS = {
-                "gain_db": ("Open-loop gain", "dB", True),
-                "gbw_hz": ("GBW", "MHz", True),
-                "phase_margin_deg": ("Phase margin", "°", True),
-                "slew_rate_vps": ("Slew rate", "V/µs", True),
-                "power_w": ("Quiescent power", "mW", False),
-                "output_swing_max_v": ("Output swing max", "V", True),
-                "output_swing_min_v": ("Output swing min", "V", False),
-                "cmrr_db": ("CMRR", "dB", True),
-                "psrr_db": ("PSRR+", "dB", True),
-            }
-            _SCALE = {
-                "gbw_hz": 1e-6, "slew_rate_vps": 1e-6, "power_w": 1e3,
-            }
-            _SPEC_KEYS = {
-                "gain_db": "gain_min_db", "gbw_hz": "gbw_min_hz",
-                "phase_margin_deg": "phase_margin_min_deg",
-                "slew_rate_vps": "slew_rate_min_vps", "power_w": "power_max_w",
-                "output_swing_max_v": "output_swing_max_v",
-                "output_swing_min_v": "output_swing_min_v",
-                "cmrr_db": "cmrr_min_db", "psrr_db": "psrr_min_db",
-            }
             for key, (label, unit, _is_min) in _METRIC_LABELS.items():
                 if key not in result.metrics:
                     continue
@@ -307,7 +358,10 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 else:
                     print(f"  {label:<22} {val_str}")
 
-    if args.simulate:
+    if args.simulate and tech.spice_model:
+        print("\n(--simulate is redundant for this technology: the metrics above are "
+              "already measured with ngspice.)")
+    elif args.simulate:
         from .sizer.spice_sim import ngspice_available, simulate_metrics
         print("\nSPICE verification (ngspice):")
         if not result.bias_feasible:

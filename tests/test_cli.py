@@ -129,6 +129,34 @@ def test_size_spice_bias_infeasible(capsys):
     assert "Performance metrics:" not in out
 
 
+@pytest.mark.skipif(not (_C0001.exists() and _PTM_SPEC.exists() and ngspice_available()),
+                    reason="needs ngspice + ptm45 two-stage fixtures")
+def test_size_ptm45_metrics_from_spice(capsys):
+    """A PTM (BSIM4) tech reports the metrics measured by ngspice, not analytical:
+    the table is titled as SPICE-sourced and the unmeasured metrics are omitted."""
+    main(["size", str(_C0001), "--topology", "two_stage_opamp_single_ended",
+          "--spec", str(_PTM_SPEC), "--tech", "ptm45"])
+    out = capsys.readouterr().out
+    assert "Performance metrics (ngspice / BSIM4):" in out
+    assert "Open-loop gain" in out
+    # CMRR/PSRR/output-swing have no SPICE testbench → dropped from the table
+    assert "CMRR" not in out.split("Performance metrics")[1].split("ⓘ")[0]
+    assert "PSRR" not in out.split("Performance metrics")[1].split("ⓘ")[0]
+
+
+@pytest.mark.skipif(not (_C0001.exists() and _PTM_SPEC.exists()),
+                    reason="ptm45 two-stage fixtures not present")
+def test_size_ptm45_requires_ngspice(capsys, monkeypatch):
+    """A feasible PTM size hard-errors when ngspice is unavailable rather than
+    falling back to (mismatched) analytical metrics."""
+    _no_spice(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        main(["size", str(_C0001), "--topology", "two_stage_opamp_single_ended",
+              "--spec", str(_PTM_SPEC), "--tech", "ptm45"])
+    assert exc.value.code == 1
+    assert "ngspice" in capsys.readouterr().err
+
+
 @pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),
                     reason="ptm45 two-stage fixtures not present")
 def test_size_ptm_without_lut_errors(capsys):
