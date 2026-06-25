@@ -220,5 +220,55 @@ The spec YAML file (used by the CLI) mirrors ``SizingSpec`` field names
 directly.  See ``examples/two_stage_se_specs/spec_generic.yaml`` for an annotated
 example.
 
+gm/Id sizing with a foundry PDK (GF180MCU)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A technology that carries a gm/Id LUT — the PTM nodes and the **GF180MCU** foundry
+PDK — sizes through the gm/Id pipeline instead of the Level-1 CP-SAT solver: the
+same :func:`~circuitgenome.sizer.sizer.size_circuit` call, just a different
+:func:`~circuitgenome.sizer.shared.loader.load_tech` name.  Performance is then
+**measured in ngspice** (BSIM4) across process corners rather than estimated
+analytically.
+
+.. code-block:: python
+
+   from circuitgenome.sizer import size_circuit, load_tech, SizingSpec
+   from circuitgenome.sizer.shared.spice_sim import ngspice_available, simulate_metrics
+
+   # Reuse `parsed`, `sr_result`, `fbr_result`, `topology`, `netlist_text`
+   # built in the example above.
+   tech = load_tech("gf180mcu")          # GF180MCU 180nm core 3.3V (gm/Id LUT)
+
+   spec = SizingSpec(
+       vdd=3.3, vss=0.0, ibias=40e-6, cl=2e-12,
+       second_stage_current_ratio=2.0,
+       gain_min_db=45, gbw_min_hz=8e5,
+       phase_margin_min_deg=60, slew_rate_min_vps=2e5,
+   )
+
+   result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+   assert result.solver_status == "GMID"        # gm/Id pipeline (LUT present)
+   for ref, s in result.transistors.items():
+       print(f"  {ref:30s}  W={s.w_um:.2f} µm  L={s.l_um:.2f} µm")
+   print("bias_feasible:", result.bias_feasible)
+
+   # Measure performance in ngspice (requires ngspice on PATH). `result.metrics`
+   # is only the analytical estimate; simulate_metrics gives the measured numbers.
+   if ngspice_available():
+       nominal = tech.spice_lib.corner                       # "typical"
+       at_typ = simulate_metrics(netlist_text, result, tech, spec, corner=nominal)
+       print("gain (dB), GBW (Hz) @ typical:", at_typ["gain_db"], at_typ["gbw_hz"])
+
+       # Re-measure the sized design across every configured corner (worst-case).
+       for c in tech.spice_lib.corners:                      # typical, ss, ff, sf, fs
+           m = simulate_metrics(netlist_text, result, tech, spec, corner=c)
+           print(c, m["gain_db"], m["gbw_hz"], m["power_w"])
+
+The gm/Id LUT (``models/gf180mcu_gmid.npz``) is characterized at the ``typical``
+corner and drives sizing; the corner loop above re-measures the *sized* design.
+A :func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics` value is ``None``
+when ngspice cannot extract that metric (gain/GBW/PM/slew/power are measured;
+CMRR/PSRR/output-swing are not).
+
 See :doc:`../overview` for the sizer's constraint derivation order and
 CP-SAT linearisation details.
