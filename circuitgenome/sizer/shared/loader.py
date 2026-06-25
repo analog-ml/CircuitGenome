@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import GridSpec, MosfetParams, TechParams
+from .models import GridSpec, MosfetParams, SpiceLib, TechParams
 
 _BUILTIN_DIR = Path(__file__).parent / "config"
 
@@ -58,6 +58,20 @@ def load_tech(path: Path | str | None = None) -> TechParams:
     # Resolve relative to the config file's directory.
     spice_model = _resolve(data.get("spice_model"))
     gmid_lut = _resolve(data.get("gmid_lut"))
+
+    spice_lib = None
+    lib_d = data.get("spice_lib")
+    if lib_d:
+        spice_lib = SpiceLib(
+            file=_resolve(lib_d["file"]),
+            corner=str(lib_d.get("corner", "typical")),
+            design=_resolve(lib_d.get("design")),
+            corners=[str(c) for c in lib_d.get("corners", [])],
+        )
+    device_map = data.get("device_map")
+    if device_map is not None:
+        device_map = {str(k): str(v) for k, v in device_map.items()}
+
     return TechParams(
         name=str(data["name"]),
         nmos=_mosfet(data["nmos"]),
@@ -71,4 +85,6 @@ def load_tech(path: Path | str | None = None) -> TechParams:
         ),
         spice_model=spice_model,
         gmid_lut=gmid_lut,
+        spice_lib=spice_lib,
+        device_map=device_map,
     )

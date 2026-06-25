@@ -1,0 +1,48 @@
+# GF180MCU 180nm core 3.3V devices (nmos_3p3 / pmos_3p3), BSIM4 level=54.
+# A foundry PDK referenced via a corner library (`.lib <file> <corner>`); its
+# devices are subcircuits, so this tech carries `spice_lib` + `device_map`
+# instead of PTM's flat `spice_model`. Sizing uses the gm/Id LUT
+# (models/gf180mcu_gmid.npz, characterized at the `typical` corner with
+# tools/extract_tech.py --node gf180mcu --gm-id); the CLI measures performance
+# in ngspice and reports the {typical,ss,ff,sf,fs} corner sweep.
+# Source: GlobalFoundries GF180MCU open PDK (sm141064.ngspice).
+name: gf180mcu_3v3
+description: "GF180MCU 180nm core 3.3V (nmos_3p3/pmos_3p3, BSIM4 level=54)"
+
+spice_lib:
+  design: ../pdk/gf180/ngspice/design.ngspice   # global statistical/noise switches
+  file: ../pdk/gf180/ngspice/sm141064.ngspice    # corner library
+  corner: typical                                # nominal corner for sizing
+  corners: [typical, ss, ff, sf, fs]             # CLI verification sweep
+
+device_map:                                      # generic type -> PDK subcircuit
+  nmos: nmos_3p3
+  pmos: pmos_3p3
+
+gmid_lut: models/gf180mcu_gmid.npz   # gm/Id LUT (drives sizing)
+
+# Nominal Level-1 params: the gm/Id path uses the LUT above, so these only
+# satisfy the schema and seed the deterministic load-resistor bias (~vth+Vov).
+nmos:
+  mu_cox: 1.70e-04   # A/V²
+  vth: 0.70          # V
+  lam: 0.10          # 1/V
+pmos:
+  mu_cox: 4.00e-05   # A/V²
+  vth: -0.70         # V
+  lam: 0.12          # 1/V
+
+width:
+  min: 0.22
+  max: 100.0
+  step: 0.005
+
+length:
+  min: 0.28
+  max: 4.0
+  step: 0.02
+
+cap:
+  min_pf: 0.01
+  max_pf: 20.0
+  step_pf: 0.01

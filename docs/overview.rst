@@ -918,12 +918,18 @@ The sizer reads its device parameters from a technology YAML, selected with
      - 16 nm
      - PTM 16 nm **bulk** — a *predictive planar extrapolation* (real 16 nm
        silicon is FinFET); for exploration only.
+   * - ``tech_gf180mcu``
+     - 180 nm
+     - GlobalFoundries **GF180MCU** open PDK, 3.3 V core (``nmos_3p3``/``pmos_3p3``).
+       A foundry PDK: devices are subcircuits and a process corner is selected with
+       ``.lib <file> <corner>``.  Sizes from a gm/Id LUT (characterized at the
+       ``typical`` corner); ships ``models/gf180mcu_gmid.npz``.
 
-A PTM node sizes from its gm/Id LUT (LUT-accurate ``gm``/``gds``/``Vdsat`` from the
-BSIM4 device), while the card-less ``generic`` tech uses *effective* Level-1
-square-law fits.  FinFET nodes (≤16 nm in silicon) need a different device model
-and are not covered.  Regenerate the configs or add a node with
-``tools/extract_tech.py`` (requires ngspice).
+A PTM node or foundry PDK sizes from its gm/Id LUT (LUT-accurate
+``gm``/``gds``/``Vdsat`` from the BSIM4 device), while the card-less ``generic``
+tech uses *effective* Level-1 square-law fits.  FinFET nodes (≤16 nm in silicon)
+need a different device model and are not covered.  Regenerate the configs or add a
+node with ``tools/extract_tech.py`` (requires ngspice).
 Source / citation: ASU Predictive Technology Model, https://ptm.asu.edu
 (W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for Sub-45nm
 Design Exploration," ISQED 2006).
@@ -931,18 +937,22 @@ Design Exploration," ISQED 2006).
 SPICE verification
 ~~~~~~~~~~~~~~~~~~
 
-ngspice runs in two roles, both using the model from the tech (a BSIM4 ``.pm``
-card for the PTM nodes via the ``spice_model`` field, or a synthesised Level-1
-``.model`` from ``mu_cox``/``vth``/``lam`` for ``generic``):
+ngspice runs in two roles, using the model from the tech: a BSIM4 ``.pm`` card for
+the PTM nodes (``spice_model``), a foundry corner library for a PDK
+(``spice_lib`` → ``.lib "<file>" <corner>``, e.g. GF180MCU), or a synthesised
+Level-1 ``.model`` from ``mu_cox``/``vth``/``lam`` for ``generic``:
 
-* **PTM (default report).**  For a node with a SPICE card, ``circuitgenome size``
-  reports ngspice-**measured** metrics directly (BSIM4), grounded by a SPICE DC
-  bias-soundness check that yields the INFEASIBLE / MARGINAL / FEASIBLE verdict.
-  ngspice is **required** for the PTM path — the command errors if it is missing.
+* **PTM and foundry PDKs (default report).**  For a node with a real device model,
+  ``circuitgenome size`` reports ngspice-**measured** metrics directly (BSIM4),
+  grounded by a SPICE DC bias-soundness check that yields the INFEASIBLE /
+  MARGINAL / FEASIBLE verdict.  ngspice is **required** here — the command errors
+  if it is missing.  A foundry PDK additionally re-measures the sized design across
+  its configured process corners (``{typical, ss, ff, sf, fs}`` for GF180MCU) and
+  prints a corner-verification table; sizing itself stays at the nominal corner.
 * **``--simulate`` (generic cross-check).**  On the Level-1 ``generic`` tech,
   ``circuitgenome size --simulate`` prints the analytical metrics next to the
   SPICE-measured ones with the delta — a sanity check on the formulas.  It is
-  redundant for PTM (already SPICE-measured).
+  redundant for PTM / PDK techs (already SPICE-measured).
 
 Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loop
 AC-coupled-feedback testbench; power from the DC operating point; slew rate from a

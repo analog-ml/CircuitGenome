@@ -274,17 +274,16 @@ def _cmd_size(args: argparse.Namespace) -> None:
                     print(f"  ↳ {w}")
             print("  Performance not evaluated; run --simulate to measure the "
                   "actual operating point.")
-        elif tech.spice_model:
-            # The technology has a BSIM4 model card, so the analytical metrics
-            # (square-law / single-pole) would mismatch the selected device model.
+        elif tech.spice_model or tech.spice_lib:
+            # The technology has a real device model (BSIM4 card or foundry PDK), so
+            # the analytical metrics (square-law / single-pole) would mismatch it.
             # Measure performance directly with ngspice instead — the SPICE numbers
             # are the sole source of truth, with no analytical fallback.
             from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
             if not ngspice_available():
-                print(f"\nError: tech {tech.name} uses a SPICE model card; performance "
-                      "metrics are measured with ngspice, which was not found on PATH. "
-                      "Install it (e.g. `brew install ngspice`) and rerun.",
-                      file=sys.stderr)
+                print(f"\nError: tech {tech.name} measures performance with ngspice, "
+                      "which was not found on PATH. Install it (e.g. `brew install "
+                      "ngspice`) and rerun.", file=sys.stderr)
                 sys.exit(1)
             sim = simulate_metrics(netlist_text, result, tech, spec)
             # Only these keys are measured by the SPICE rig; CMRR/PSRR/output-swing
@@ -325,6 +324,28 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 print(f"  ⓘ {note}")
             print("  ⓘ CMRR, PSRR, and output swing are not measured by the current "
                   "ngspice rig and are omitted.")
+            # Foundry PDKs (spice_lib): re-measure the sized design across process
+            # corners for worst-case visibility (sizing stays at the nominal corner).
+            if tech.spice_lib and len(tech.spice_lib.corners) > 1:
+                corners = tech.spice_lib.corners
+                per = {c: simulate_metrics(netlist_text, result, tech, spec, corner=c)
+                       for c in corners}
+                print(f"\nCorner verification (re-measured; sized at "
+                      f"{tech.spice_lib.corner}):")
+                print("  " + f"{'metric':<16}" + "".join(f"{c:>10}" for c in corners))
+                _CORNER_ROWS = [
+                    ("gain_db", "Gain (dB)"), ("gbw_hz", "GBW (MHz)"),
+                    ("phase_margin_deg", "PM (deg)"), ("slew_rate_vps", "Slew (V/µs)"),
+                    ("power_w", "Power (mW)"),
+                ]
+                for key, lbl in _CORNER_ROWS:
+                    scale = _SCALE.get(key, 1.0)
+                    cells = ""
+                    for c in corners:
+                        v = per[c].get(key)
+                        cells += (f"{v * scale:>10.2f}" if v is not None
+                                  else f"{'n/a':>10}")
+                    print(f"  {lbl:<16}{cells}")
         else:
             verdict = ("MARGINAL — biases, but does not meet spec (see ⚠ above)"
                        if failing else "FEASIBLE")
@@ -349,7 +370,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 else:
                     print(f"  {label:<22} {val_str}")
 
-    if args.simulate and tech.spice_model:
+    if args.simulate and (tech.spice_model or tech.spice_lib):
         print("\n(--simulate is redundant for this technology: the metrics above are "
               "already measured with ngspice.)")
     elif args.simulate:

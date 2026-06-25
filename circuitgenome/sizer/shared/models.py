@@ -44,6 +44,27 @@ class GridSpec:
 
 
 @dataclass
+class SpiceLib:
+    """A foundry PDK referenced via ``.lib`` corner sections (e.g. GF180MCU).
+
+    Unlike ``spice_model`` (a flat ``.include`` of ``.model nmos``/``pmos`` cards,
+    as with PTM), a PDK selects a process corner with ``.lib "<file>" <corner>``
+    and its devices are **subcircuits** (instantiated with ``X``), so a
+    :class:`TechParams` carrying a ``SpiceLib`` also carries a ``device_map``.
+
+    :param file: Resolved path to the corner library (``sm141064.ngspice``).
+    :param corner: Default/nominal corner used for sizing characterisation.
+    :param design: Optional resolved path to a global settings file to ``.include``
+        before the corner ``.lib`` (``design.ngspice``).
+    :param corners: Corners to re-measure for the CLI verification table.
+    """
+    file: str
+    corner: str = "typical"
+    design: str | None = None
+    corners: list[str] = field(default_factory=list)
+
+
+@dataclass
 class TechParams:
     """Process technology parameters loaded from a YAML config file.
 
@@ -61,6 +82,12 @@ class TechParams:
         committed gm/Id lookup table (``*_gmid.npz`` from
         ``tools/extract_tech.py --gm-id``). When present, sizing uses the
         procedural gm/Id path instead of the Level-1 analytical sizer.
+    :param spice_lib: Optional :class:`SpiceLib` for a corner-based foundry PDK.
+        Mutually exclusive with ``spice_model``.
+    :param device_map: Optional mapping from the generic device type
+        (``"nmos"``/``"pmos"``) to the PDK subcircuit name (e.g. ``"nmos_3p3"``).
+        Present iff the SPICE deck must instantiate subcircuits (``X``) instead of
+        ``.model`` MOSFETs (``M``).
     """
     name: str
     nmos: MosfetParams
@@ -70,6 +97,8 @@ class TechParams:
     cap: GridSpec
     spice_model: str | None = None
     gmid_lut: str | None = None
+    spice_lib: SpiceLib | None = None
+    device_map: dict[str, str] | None = None
 
 
 @dataclass

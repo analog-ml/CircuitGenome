@@ -1,0 +1,13 @@
+# Two-stage single-ended op-amp spec for the GF180MCU 3.3 V core (gm/Id sizer).
+vdd: 3.3
+vss: 0.0
+ibias: 20.0e-6
+cl: 5.0e-12
+second_stage_current_ratio: 2.5
+gain_min_db: 60
+gbw_min_hz: 2.0e+6
+phase_margin_min_deg: 60
+slew_rate_min_vps: 3.0e+5
+power_max_w: 2.0e-3
+output_swing_max_v: 3.0
+output_swing_min_v: 0.3
