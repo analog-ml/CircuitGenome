@@ -1,7 +1,7 @@
 Gm/Id LUT
 =========
 
-.. automodule:: circuitgenome.sizer.gmid_lut
+.. automodule:: circuitgenome.sizer.shared.gmid_lut
    :members:
    :undoc-members:
    :show-inheritance:

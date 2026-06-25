@@ -264,35 +264,38 @@ Example:
      --topology two_stage_opamp_single_ended \
      --spec examples/two_stage_se_specs/spec_generic.yaml
 
-Sample output:
+Sample output (``generic`` tech — Level-1 analytical path):
 
 .. code-block:: text
 
-   Sizing: two_stage_opamp_single_ended
-   Status : OPTIMAL
+   Netlist: circuit_0001_flat.ckt  |  Topology: two_stage_opamp_single_ended
+   Tech: generic_parameterized
 
-   Transistor sizes
-   ┌─────────────────────────────────┬──────────┬──────────┐
-   │ Device                          │  W (µm)  │  L (µm)  │
-   ├─────────────────────────────────┼──────────┼──────────┤
-   │ m1_input_pair  [input_pair]     │    3.00  │    0.25  │
-   │ m2_input_pair  [input_pair]     │    3.00  │    0.25  │
-   │ m1_load        [load]           │    0.50  │    0.25  │
-   │ m2_load        [load]           │    0.50  │    0.25  │
-   │ m1_tail_current [tail_current]  │    0.50  │    0.25  │
-   │ m2_tail_current [tail_current]  │    0.50  │    0.25  │
-   │ mn1_bias_gen   [bias_gen]       │    0.50  │    0.25  │
-   │ mn_second_stage [second_stage]  │   36.00  │    0.25  │
-   │ mp_second_stage [second_stage]  │    0.50  │    0.25  │
-   └─────────────────────────────────┴──────────┴──────────┘
+   Solver: OPTIMAL
+   ⚠ second-stage gm requirement exceeds the weak-inversion ceiling — increase second_stage_current_ratio/ibias or relax gain.
 
-   Performance metrics
-     Cc          :   2.86 pF
-     GBW         :   2.50 MHz
-     Phase margin:  60.0 °
-     Slew rate   :   3.50 V/µs
-     DC gain     :  80.0 dB
-     Power       : 175.0 µW
+   Transistor sizing:
+     m1_input_pair      W=9.000µm   L=1.000µm  IDS=5.00µA   VGS=-0.611V  VDS_sat=0.111V
+     ...
+     mp1_second_stage   W=5.000µm   L=1.000µm  IDS=25.00µA  VGS=-0.833V  VDS_sat=0.333V
+     Cc = 2.9pF
+     r1_load            R=130.00kΩ
+
+   Feasibility: MARGINAL — biases, but does not meet spec (see ⚠ above)
+
+   Performance metrics:
+     Open-loop gain     63.94 dB   [spec ≥ 80.00 dB]    margin -16.06 dB   ✗
+     GBW                2.51 MHz   [spec ≥ 2.50 MHz]    margin +0.01 MHz   ✓
+     Phase margin       63.25 °    [spec ≥ 60.00 °]     margin +3.25 °     ✓
+     Slew rate          3.50 V/µs  [spec ≥ 3.50 V/µs]   margin +0.00 V/µs  ✓
+     Quiescent power    0.43 mW    [spec ≤ 1.00 mW]     margin +0.57 mW    ✓
+     CMRR               39.08 dB
+     PSRR+              53.98 dB
+
+The verdict line is **FEASIBLE**, **MARGINAL** (biases but misses a spec — failing
+rows are marked ``✗``, as the gain row is here), or **INFEASIBLE** (bias point
+cannot be established — the metrics table is suppressed).  For the ``generic`` tech
+the metrics are the Level-1 analytical estimates.
 
 .. list-table::
    :header-rows: 1
@@ -313,6 +316,13 @@ Sample output:
    * - ``--tech NAME``
      - Built-in config name or path to a technology YAML
      - ``generic``
+   * - ``--simulate``
+     - Cross-check the sized circuit in ngspice (analytical vs SPICE). Redundant
+       for PTM, whose metrics are already ngspice-measured.
+     - off
+   * - ``--time-limit S``
+     - CP-SAT solver time limit, seconds (Level-1 path only)
+     - ``30``
 
 ``--tech`` accepts either a path to a technology YAML or the short name of a
 built-in config: ``generic`` (default), ``ptm45``, ``ptm32``, ``ptm22``, or
@@ -326,3 +336,32 @@ how to add a node with ``tools/extract_tech.py``.
    circuitgenome size circuit_0001_flat.ckt \
      --topology two_stage_opamp_single_ended \
      --spec spec.yaml --tech ptm45
+
+PTM technologies (gm/Id path)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For a PTM node the sizer uses the gm/Id pipeline (not the Level-1 CP-SAT solver),
+and the performance section reports metrics **measured in ngspice** (BSIM4) rather
+than the analytical estimates — so ngspice must be on ``PATH`` (the command
+errors otherwise).  Only gain, GBW, phase margin, slew rate, and power are
+measured; CMRR, PSRR, and output swing have no ngspice test-bench yet and are
+omitted.  A metric ngspice cannot extract is shown as ``n/a``.
+
+.. code-block:: text
+
+   Solver: GMID
+
+   ... (transistor sizing) ...
+
+   Feasibility: MARGINAL — biases, but does not meet spec
+
+   Performance metrics (ngspice / BSIM4):
+     Open-loop gain     48.63 dB   [spec ≥ 60.00 dB]   margin -11.37 dB   ✗
+     GBW                0.77 MHz   [spec ≥ 2.50 MHz]   margin -1.73 MHz   ✗
+     Phase margin       84.46 °    [spec ≥ 60.00 °]    margin +24.46 °    ✓
+     Slew rate          n/a        [ngspice could not extract this metric]
+     Quiescent power    0.05 mW    [spec ≤ 0.50 mW]    margin +0.45 mW    ✓
+     ⓘ CMRR, PSRR, and output swing are not measured by the current ngspice rig and are omitted.
+
+A PTM/SPICE-model node *without* a characterized gm/Id LUT is rejected with
+``UnsupportedTechError`` (the Level-1 square-law numbers are not valid there).

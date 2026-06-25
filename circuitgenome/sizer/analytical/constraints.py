@@ -25,7 +25,7 @@ from fractions import Fraction
 
 from ortools.sat.python import cp_model
 
-from .models import MosfetParams, TechParams
+from ..shared.models import MosfetParams, TechParams
 
 # Scale factor: converts A²/V² coefficient products to tidy integers.
 # With µCox ≈ 90e-6 A/V², IDS ≈ 5e-6 A:

@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from circuitgenome.recognizer import assign_slots, parse, recognize
-from circuitgenome.sizer.loader import load_tech
-from circuitgenome.sizer.models import SizingSpec
+from circuitgenome.sizer.shared.loader import load_tech
+from circuitgenome.sizer.shared.models import SizingSpec
 from circuitgenome.sizer.sizer import size_circuit
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -57,6 +57,19 @@ def test_simple_mirror_tail_no_cascode_warning():
     r = _size(to_flat_spice(circ))
     assert r.solver_status == "GMID"
     assert not any("cascode tail" in w for w in r.warnings)
+
+
+def test_ptm_without_lut_raises_unsupported():
+    """A PTM/SPICE-model node with no gm/Id LUT must error, not fall through to
+    the Level-1 square-law sizer (ptm32/22/16 have a spice_model but no LUT)."""
+    from circuitgenome.sizer import UnsupportedTechError
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == _TOPO)
+    circ = next(enumerate_circuits(topo, mods))
+    parsed = parse(to_flat_spice(circ))
+    fbr = assign_slots(recognize(parsed), topo)
+    with pytest.raises(UnsupportedTechError):
+        size_circuit(parsed, recognize(parsed), fbr, topo, load_tech("ptm32"), _spec())
 
 
 def test_level1_path_bias_feasible_default_true():

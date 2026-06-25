@@ -8,6 +8,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+class UnsupportedTechError(ValueError):
+    """Raised when a technology cannot be sized by the requested method.
+
+    Currently raised when a PTM/SPICE-model node has no gm/Id LUT: such nodes
+    must use the gm/Id pipeline, and the analytical (Level-1) sizer is not a
+    valid fallback for them.
+    """
+
+
 @dataclass
 class MosfetParams:
     """CMOS process parameters for one device polarity.
@@ -128,7 +137,9 @@ class SizingResult:
     :param transistors: Per-transistor sizing keyed by device reference.
     :param cc_pf: Compensation capacitor value in pF, or ``None`` for single-stage.
     :param metrics: Computed performance metrics, e.g.
-        ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``.
+        ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``. Analytical (model-based,
+        ngspice-free) estimate; for PTM the CLI measures and displays ngspice
+        values (``spice_sim.simulate_metrics``) instead.
     :param margins: Safety margin for each constrained spec (actual/spec for
         min specs, spec/actual for max specs). Values > 1 mean spec is met.
     :param solver_status: OR-Tools CP-SAT status string:

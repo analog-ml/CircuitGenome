@@ -12,7 +12,7 @@ from circuitgenome.synthesizer.loader import load_topologies, load_modules
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
-from circuitgenome.sizer import spice_sim
+from circuitgenome.sizer.shared import spice_sim
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
@@ -130,3 +130,34 @@ def test_misbiased_circuit_reports_measured_gain_and_reason():
     notes = sim.get("notes")
     assert notes and any("amplify" in n for n in notes)
     assert any("triode" in n or "starved" in n for n in notes)
+
+
+@ngspice
+def test_check_bias_soundness_distinguishes_biasing_from_railed():
+    """The SPICE DC verdict: a genuinely biasing design is sound; a circuit whose
+    operating point rails (circuit_0010 at 1.0 V) is flagged not-sound."""
+    from pathlib import Path
+
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+
+    # genuinely biasing design (generic, 5 V) → sound
+    text, result, tech, spec = _active_load_two_stage_se("generic", 5.0, 80, 3.5e6)
+    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    assert ok and reason is None
+
+    # circuit_0010: output stage current-mismatched → operating point rails
+    ckt = (Path(__file__).resolve().parent.parent / "circuits"
+           / "two_stage_opamp_single_ended" / "circuit_0010_flat.ckt")
+    if not ckt.exists():
+        pytest.skip("circuit_0010 fixture not present")
+    text = ckt.read_text()
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=10e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60, gbw_min_hz=2.5e6,
+                      phase_margin_min_deg=60, slew_rate_min_vps=5e5)
+    tech = load_tech("ptm45")
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    assert not ok and reason and "SPICE bias" in reason

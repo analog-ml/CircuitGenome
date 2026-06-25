@@ -3,6 +3,48 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (gm/Id pipeline redesign — PTM-only dispatch + bias-aware metrics)
+
+PR (`feat/gmid-ptm-only-bias-gating`). Targets `feat/gmid-sizing-redesign`.
+
+Running `size … --tech ptm45 --simulate` on a headroom-starved design (e.g.
+`circuit_0110`, whose cascode tail cannot bias at 1.0 V) showed a huge
+analytical-vs-SPICE gap on GBW / slew rate / power: the assumed currents never
+flow, so the analytical metrics are optimistic. The sizer already flagged this
+(`bias_feasible=False`) but reported the numbers as if valid.
+
+### Changed
+
+- **PTM techs are a gm/Id-only path.** A PTM/SPICE-model node *without* a gm/Id
+  LUT (currently ptm32/22/16) now raises `UnsupportedTechError`
+  (`sizer/models.py`) instead of silently falling through to the Level-1
+  square-law sizer — the very numbers gm/Id exists to avoid. Only the card-less
+  `generic` tech uses the analytical sizer. The `size` CLI and `tools/spice_verify.py`
+  catch the error and exit cleanly. (LUTs for these nodes are tracked in #73.)
+- **Feasibility-verdict reporting.** The `size` CLI now leads the metrics section
+  with a mode-aware verdict instead of always printing a ✓/✗ table:
+  - **INFEASIBLE** (`bias_feasible=False`, e.g. circuit_0110's cascode tail): the
+    performance table is **suppressed** — its numbers are meaningless once the
+    bias point collapses — and the bias reason is stated inline. Under
+    `--simulate` the `analytical` column shows `n/a` and the `SPICE` column is the
+    measured operating point.
+  - **MARGINAL** (`bias_feasible=True` but a target is missed, e.g. the gm
+    weak-inversion ceiling caps GBW): the **real** metrics are shown with ✗ on the
+    failing rows.
+  - **FEASIBLE**: the normal ✓ table.
+- **SPICE-grounded feasibility verdict.** The analytical bias check only validates
+  the input-pair tail, so it false-positives on circuits whose downstream stages
+  don't bias (e.g. circuit_0010, whose output stage is current-mismatched 58 µA vs
+  0.02 µA → rails to vdd). The `size` CLI now grounds the verdict in the reliable
+  SPICE DC `.op` (`check_bias_soundness`, reusing `read_op_operating_point`): if the
+  operating point rails or shows starved/triode devices, the circuit is reported
+  **INFEASIBLE** instead of MARGINAL-with-optimistic-metrics. Automatic when ngspice
+  is on PATH; the analytical verdict stands when it isn't. The core `size_circuit`
+  stays analytical/fast — the SPICE check is CLI-level only.
+
+Parity: feasible ptm45 designs, the `generic` Level-1 path, and the ✓/✗ table
+itself are unchanged.
+
 ## 2026-06-24 (gm/Id pipeline redesign — phase 3: FD + three-stage + CMFB)
 
 PR [#84](https://github.com/analog-ml/CircuitGenome/pull/84)

@@ -162,7 +162,7 @@ Initial Sizer
 -------------
 
 The sizer takes the FBR result (from :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
-plus a :class:`~circuitgenome.sizer.models.SizingSpec` and returns minimum
+plus a :class:`~circuitgenome.sizer.shared.models.SizingSpec` and returns minimum
 W/L values for every transistor.
 
 .. code-block:: python
@@ -171,9 +171,9 @@ W/L values for every transistor.
    from circuitgenome.synthesizer import enumerate_circuits, to_flat_spice
    from circuitgenome.recognizer import parse, recognize
    from circuitgenome.recognizer.functional_block_recognizer import assign_slots
-   from circuitgenome.sizer import size_circuit
-   from circuitgenome.sizer.models import SizingSpec
-   from circuitgenome.sizer.loader import load_tech
+   # Public API is re-exported from the package root (internals live under
+   # circuitgenome.sizer.shared / .analytical / .gmid).
+   from circuitgenome.sizer import size_circuit, load_tech, SizingSpec
 
    # 1. Build / load a netlist and run SR + FBR
    topology = next(
@@ -202,13 +202,19 @@ W/L values for every transistor.
    )
 
    # 3. Load technology and run the sizer
-   tech = load_tech("generic_parameterized")
-   result = size_circuit(parsed, sr_result, fbr_result, topology, spec, tech)
+   tech = load_tech("generic")                # built-in config name, or a YAML path
+   result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
 
-   print(result.status)          # "OPTIMAL"
-   for ref, (w_um, l_um) in result.sizes_um.items():
-       print(f"  {ref:30s}  W={w_um:.2f} µm  L={l_um:.2f} µm")
-   print(f"  Cc = {result.cc_pf:.2f} pF")
+   print(result.solver_status)                # e.g. "OPTIMAL" / "FEASIBLE" / "GMID"
+   for ref, s in result.transistors.items():
+       print(f"  {ref:30s}  W={s.w_um:.2f} µm  L={s.l_um:.2f} µm  IDS={s.ids_a*1e6:.1f} µA")
+   if result.cc_pf is not None:
+       print(f"  Cc = {result.cc_pf:.2f} pF")
+   print(result.metrics, result.bias_feasible)
+
+``result.metrics`` is an **analytical** estimate; for PTM the ``circuitgenome
+size`` CLI measures performance in ngspice instead (see :doc:`cli`).  Pass
+``--tech ptm45`` to exercise the gm/Id path.
 
 The spec YAML file (used by the CLI) mirrors ``SizingSpec`` field names
 directly.  See ``examples/two_stage_se_specs/spec_generic.yaml`` for an annotated

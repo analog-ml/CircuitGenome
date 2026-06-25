@@ -1,7 +1,7 @@
-Loader
+Models
 ======
 
-.. automodule:: circuitgenome.sizer.loader
+.. automodule:: circuitgenome.sizer.shared.models
    :members:
    :undoc-members:
    :show-inheritance:

@@ -53,10 +53,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     size.add_argument("--simulate", action="store_true",
                       help="After sizing, verify metrics with an ngspice simulation "
                            "(same technology) and print analytical vs SPICE")
-    size.add_argument("--refine", action="store_true",
-                      help="After sizing, re-evaluate metrics at the actual SPICE "
-                           "operating point (corrects for bias currents that don't "
-                           "fully flow, e.g. a headroom-starved tail). Single-ended.")
 
     return parser.parse_args(argv)
 
@@ -180,7 +176,7 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
 def _cmd_size(args: argparse.Namespace) -> None:
     import yaml
     from .recognizer import parse, recognize, assign_slots
-    from .sizer import load_tech, size_circuit, SizingSpec
+    from .sizer import load_tech, size_circuit, SizingSpec, UnsupportedTechError
 
     netlist_text = args.netlist_file.read_text()
     parsed = parse(netlist_text)
@@ -199,17 +195,24 @@ def _cmd_size(args: argparse.Namespace) -> None:
         spec_data = yaml.safe_load(f)
     spec = SizingSpec(**{k: v for k, v in spec_data.items() if k in SizingSpec.__dataclass_fields__})
 
-    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
-                          time_limit_s=args.time_limit)
+    try:
+        result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
+                              time_limit_s=args.time_limit)
+    except UnsupportedTechError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    if getattr(args, "refine", False) and result.transistors:
-        from .sizer.refine import refine_with_spice
-        from .sizer.sizer import _extract_slot_transistors
-        from .sizer.device_model import build_device_model
-        slot_t = _extract_slot_transistors(fbr_result)
-        gd_load_r = (1.0 / min(result.resistors.values())) if result.resistors else 0.0
-        result = refine_with_spice(result, netlist_text, slot_t, tech, spec,
-                                   build_device_model(tech), gd_load_r)
+    # Ground the feasibility verdict in the SPICE DC operating point: the analytical
+    # bias check only validates the input-pair tail, so it false-positives on circuits
+    # whose downstream stages don't bias. Automatic when ngspice is available; the
+    # analytical verdict stands when it isn't.
+    if result.transistors and result.bias_feasible:
+        from .sizer.shared.spice_sim import ngspice_available, check_bias_soundness
+        if ngspice_available():
+            ok, reason = check_bias_soundness(netlist_text, result, tech, spec)
+            if not ok:
+                result.bias_feasible = False
+                result.warnings.append(reason)
 
     print(f"Netlist: {args.netlist_file.name}  |  Topology: {args.topology}")
     print(f"Tech: {tech.name}")
@@ -232,8 +235,11 @@ def _cmd_size(args: argparse.Namespace) -> None:
     for ref, ohms in result.resistors.items():
         print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
-    if result.metrics:
-        print("\nPerformance metrics:")
+    # Show the performance section whenever we have a sizing to report. For PTM
+    # the numbers come from ngspice (simulate_metrics, below); the generic path
+    # reads the analytical result.metrics — so the gate keys off the sizing, not
+    # the analytical estimate.
+    if result.transistors:
         _METRIC_LABELS = {
             "gain_db": ("Open-loop gain", "dB", True),
             "gbw_hz": ("GBW", "MHz", True),
@@ -256,28 +262,102 @@ def _cmd_size(args: argparse.Namespace) -> None:
             "output_swing_min_v": "output_swing_min_v",
             "cmrr_db": "cmrr_min_db", "psrr_db": "psrr_min_db",
         }
-        for key, (label, unit, _is_min) in _METRIC_LABELS.items():
-            if key not in result.metrics:
-                continue
-            raw = result.metrics[key]
-            scale = _SCALE.get(key, 1.0)
-            val_str = f"{raw * scale:.2f} {unit}"
-            spec_key = _SPEC_KEYS.get(key)
-            spec_val = getattr(spec, spec_key, None) if spec_key else None
-            margin = result.margins.get(key)
-            if spec_val is not None and margin is not None:
-                op = "≥" if _is_min else "≤"
-                spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
-                sign = "+" if margin >= 0 else ""
-                margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
-                status = "✓" if margin >= 0 else "✗"
-                print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  {margin_str}  {status}")
-            else:
-                print(f"  {label:<22} {val_str}")
+        # Feasibility verdict drives how (and whether) metrics are shown:
+        #   INFEASIBLE — bias point collapses → metrics are meaningless, suppress them.
+        #   MARGINAL   — biases but misses spec → metrics are real, show with ✗.
+        #   FEASIBLE   — biases and meets spec → normal ✓ table.
+        failing = [k for k, m in (result.margins or {}).items() if m < 0]
+        if not result.bias_feasible:
+            print("\nFeasibility: INFEASIBLE — bias point cannot be established.")
+            for w in result.warnings:
+                if any(t in w for t in ("cascode", "headroom", "collapse", "SPICE bias")):
+                    print(f"  ↳ {w}")
+            print("  Performance not evaluated; run --simulate to measure the "
+                  "actual operating point.")
+        elif tech.spice_model:
+            # The technology has a BSIM4 model card, so the analytical metrics
+            # (square-law / single-pole) would mismatch the selected device model.
+            # Measure performance directly with ngspice instead — the SPICE numbers
+            # are the sole source of truth, with no analytical fallback.
+            from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
+            if not ngspice_available():
+                print(f"\nError: tech {tech.name} uses a SPICE model card; performance "
+                      "metrics are measured with ngspice, which was not found on PATH. "
+                      "Install it (e.g. `brew install ngspice`) and rerun.",
+                      file=sys.stderr)
+                sys.exit(1)
+            sim = simulate_metrics(netlist_text, result, tech, spec)
+            # Only these keys are measured by the SPICE rig; CMRR/PSRR/output-swing
+            # have no testbench yet and are omitted (see note below).
+            spice_keys = ["gain_db", "gbw_hz", "phase_margin_deg",
+                          "slew_rate_vps", "power_w"]
+            rows = []
+            any_fail = False
+            for key in spice_keys:
+                label, unit, is_min = _METRIC_LABELS[key]
+                scale = _SCALE.get(key, 1.0)
+                raw = sim.get(key)
+                spec_val = getattr(spec, _SPEC_KEYS[key], None)
+                if raw is None:
+                    rows.append(f"  {label:<22} {'n/a':<16}  "
+                                "[ngspice could not extract this metric]")
+                    continue
+                val_str = f"{raw * scale:.2f} {unit}"
+                if spec_val is not None:
+                    margin = (raw - spec_val) if is_min else (spec_val - raw)
+                    any_fail = any_fail or margin < 0
+                    op = "≥" if is_min else "≤"
+                    spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
+                    sign = "+" if margin >= 0 else ""
+                    margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
+                    status = "✓" if margin >= 0 else "✗"
+                    rows.append(f"  {label:<22} {val_str:<16}  {spec_str:<30}  "
+                                f"{margin_str}  {status}")
+                else:
+                    rows.append(f"  {label:<22} {val_str}")
+            verdict = ("MARGINAL — biases, but does not meet spec"
+                       if any_fail else "FEASIBLE")
+            print(f"\nFeasibility: {verdict}")
+            print("\nPerformance metrics (ngspice / BSIM4):")
+            for row in rows:
+                print(row)
+            for note in sim.get("notes", []) or []:
+                print(f"  ⓘ {note}")
+            print("  ⓘ CMRR, PSRR, and output swing are not measured by the current "
+                  "ngspice rig and are omitted.")
+        else:
+            verdict = ("MARGINAL — biases, but does not meet spec (see ⚠ above)"
+                       if failing else "FEASIBLE")
+            print(f"\nFeasibility: {verdict}")
+            print("\nPerformance metrics:")
+            for key, (label, unit, _is_min) in _METRIC_LABELS.items():
+                if key not in result.metrics:
+                    continue
+                raw = result.metrics[key]
+                scale = _SCALE.get(key, 1.0)
+                val_str = f"{raw * scale:.2f} {unit}"
+                spec_key = _SPEC_KEYS.get(key)
+                spec_val = getattr(spec, spec_key, None) if spec_key else None
+                margin = result.margins.get(key)
+                if spec_val is not None and margin is not None:
+                    op = "≥" if _is_min else "≤"
+                    spec_str = f"[spec {op} {spec_val * scale:.2f} {unit}]"
+                    sign = "+" if margin >= 0 else ""
+                    margin_str = f"margin {sign}{margin * scale:.2f} {unit}"
+                    status = "✓" if margin >= 0 else "✗"
+                    print(f"  {label:<22} {val_str:<16}  {spec_str:<30}  {margin_str}  {status}")
+                else:
+                    print(f"  {label:<22} {val_str}")
 
-    if args.simulate:
-        from .sizer.spice_sim import ngspice_available, simulate_metrics
+    if args.simulate and tech.spice_model:
+        print("\n(--simulate is redundant for this technology: the metrics above are "
+              "already measured with ngspice.)")
+    elif args.simulate:
+        from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
         print("\nSPICE verification (ngspice):")
+        if not result.bias_feasible:
+            print("  Bias point infeasible — 'analytical' not evaluated; the "
+                  "'SPICE' column is the measured operating point.")
         if not ngspice_available():
             print("  ngspice not found on PATH — install it (e.g. `brew install ngspice`).")
         else:
@@ -293,7 +373,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
             ]
             print(f"  {'metric':<20}{'analytical':>15}{'SPICE':>15}{'Δ':>10}")
             for key, label, unit, scl, fmt in cols:
-                a = result.metrics.get(key)
+                a = result.metrics.get(key) if result.bias_feasible else None
                 s = sim.get(key)
                 a_str = f"{fmt.format(a*scl)} {unit}" if a is not None else "n/a"
                 s_str = f"{fmt.format(s*scl)} {unit}" if s is not None else "n/a"

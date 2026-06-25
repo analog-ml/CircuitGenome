@@ -22,9 +22,16 @@ Scope and circuit topology
 The sizer targets all seven op-amp topology templates supported by CircuitGenome:
 one-stage, two-stage (single-ended and fully-differential), and three-stage
 NMC/RNMC (single-ended and fully-differential).
-The small-signal model used throughout is **Level-1 (Shichman-Hodges)**: square-law drain
-current in saturation, constant channel-length modulation coefficient λ,
-no short-channel or velocity-saturation effects.
+
+This page documents the **Level-1 (Shichman-Hodges)** analytical flow — square-law
+drain current in saturation, constant channel-length modulation coefficient λ, no
+short-channel or velocity-saturation effects.  This flow is selected for the
+card-less ``generic`` technology.  Deep-submicron **PTM nodes use the gm/Id
+pipeline instead** (LUT-driven, deterministic geometry — see `gm/Id model (PTM
+nodes)`_ below); a PTM/SPICE-model node without a gm/Id LUT raises
+``UnsupportedTechError``.  For PTM the reported performance numbers are
+**measured in ngspice** rather than computed from the Level-1 equations below
+(see `Post-sizing performance metrics`_).
 
 .. code-block:: text
 
@@ -34,7 +41,7 @@ no short-channel or velocity-saturation effects.
                           Stage 1 dominant pole: ωp1 = 1/(Rout1·Cc)
                           Non-dominant pole (neglected): ωp2 ≈ gm2/CL
 
-The five-step sizing flow in :func:`~circuitgenome.sizer.sizer._compute_requirements`
+The five-step sizing flow in :func:`~circuitgenome.sizer.shared.preprocess._compute_requirements`
 derives performance requirements in this order:
 
 .. list-table::
@@ -65,8 +72,8 @@ derives performance requirements in this order:
 Device model
 ------------
 
-Three Level-1 equations underpin every constraint.  All are implemented
-in :mod:`circuitgenome.sizer.equations`.
+Three Level-1 equations underpin the constraints below.  All are implemented
+in :mod:`circuitgenome.sizer.shared.equations`.
 
 Transconductance
 ~~~~~~~~~~~~~~~~
@@ -75,7 +82,7 @@ Transconductance
 
    g_m = \sqrt{2\,\mu C_{ox}\,\frac{W}{L}\,|I_{DS}|}
 
-:func:`~circuitgenome.sizer.equations.gm` — ``mu_cox`` in A/V², ``w_um``
+:func:`~circuitgenome.sizer.shared.equations.gm` — ``mu_cox`` in A/V², ``w_um``
 and ``l_um`` in µm, ``ids_a`` in A.
 
 :math:`g_m` grows as the square root of gate area at a fixed :math:`I_{DS}`:
@@ -91,7 +98,7 @@ Output conductance
 
    g_d = \lambda\,|I_{DS}|
 
-:func:`~circuitgenome.sizer.equations.gd` — λ (``lam``) in V\ :sup:`-1`.
+:func:`~circuitgenome.sizer.shared.equations.gd` — λ (``lam``) in V\ :sup:`-1`.
 
 λ is treated as a **constant**, independent of :math:`V_{DS}`.  In real
 silicon λ falls with channel length and rises with :math:`|V_{DS}|`, so
@@ -105,7 +112,7 @@ Stage output resistance
 
    R_{out} = \frac{1}{g_{d,\text{top}} + g_{d,\text{bot}}}
 
-:func:`~circuitgenome.sizer.equations.rout` — parallel combination of the
+:func:`~circuitgenome.sizer.shared.equations.rout` — parallel combination of the
 upper (load) and lower (drive) transistors' output conductances.
 
 For a PMOS input pair with NMOS active load (generic tech, λ\ :sub:`p`\ =0.05, λ\ :sub:`n`\ =0.04)
@@ -124,7 +131,7 @@ capture moderate/weak inversion, velocity saturation, or
 :math:`\lambda \propto 1/L` — so on deep-submicron PTM nodes the Level-1
 predictions diverge sharply from SPICE.  A technology that carries a
 **gm/Id lookup table** (the ``gmid_lut`` field of
-:class:`~circuitgenome.sizer.models.TechParams`, e.g. ``ptm45``) instead drives
+:class:`~circuitgenome.sizer.shared.models.TechParams`, e.g. ``ptm45``) instead drives
 sizing from a SPICE-characterized table indexed by :math:`(g_m/I_{DS}, L)`.
 
 In this path the small-signal primitives :math:`g_m`, :math:`g_{ds}`,
@@ -138,11 +145,11 @@ forward pass with grid snapping, matched-pair symmetry, and exact current-mirror
 ratios.
 
 The model is selected per-tech by
-:func:`~circuitgenome.sizer.device_model.build_device_model`
-(:class:`~circuitgenome.sizer.device_model.Level1Model` vs
-:class:`~circuitgenome.sizer.device_model.GmIdModel`); the table interface is
-:class:`~circuitgenome.sizer.gmid_lut.GmIdLut` and the geometry pass is
-:func:`~circuitgenome.sizer.gmid_geometry.assign_geometry_gmid`.  The Level-1
+:func:`~circuitgenome.sizer.shared.device_model.build_device_model`
+(:class:`~circuitgenome.sizer.shared.device_model.Level1Model` vs
+:class:`~circuitgenome.sizer.shared.device_model.GmIdModel`); the table interface is
+:class:`~circuitgenome.sizer.shared.gmid_lut.GmIdLut` and the geometry pass is
+:func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid`.  The Level-1
 flow described below is unchanged for the card-less generic tech.
 
 ----
@@ -150,7 +157,7 @@ flow described below is unchanged for the card-less generic tech.
 Operating-point assignment
 --------------------------
 
-Reference: :func:`~circuitgenome.sizer.sizer._assign_ids`
+Reference: :func:`~circuitgenome.sizer.shared.preprocess._assign_ids`
 
 :math:`I_{DS}` for every transistor is determined by **KCL and the external
 bias current** before any W/L is chosen.  This is the critical insight that
@@ -186,7 +193,7 @@ linearises in W and L (see `CP-SAT integer linearisation`_).
 Five-step constraint derivation
 --------------------------------
 
-Reference: :func:`~circuitgenome.sizer.sizer._compute_requirements`
+Reference: :func:`~circuitgenome.sizer.shared.preprocess._compute_requirements`
 
 Each step below follows the same structure: **equation → derivation →
 intuition → why this position in the ordering → numerical example** using
@@ -222,7 +229,7 @@ evaluated after :math:`C_c`, the GBW step might fix :math:`g_{m1}` too low
 to satisfy CMRR, forcing a retroactive change to :math:`C_c` that could
 violate SR.
 
-Implementing function: :func:`~circuitgenome.sizer.equations.cmrr_db`
+Implementing function: :func:`~circuitgenome.sizer.shared.equations.cmrr_db`
 
 **Numerical example** (CMRR = 50 dB, not specified in the example spec
 but shown here for illustration):
@@ -259,7 +266,7 @@ the tail current is the only drive available to charge or discharge
 subsequent steps can only grow :math:`C_c` (never shrink it), so setting
 the SR ceiling first guarantees SR is never violated by later adjustments.
 
-Implementing function: :func:`~circuitgenome.sizer.equations.slew_rate_vps`
+Implementing function: :func:`~circuitgenome.sizer.shared.equations.slew_rate_vps`
 
 **Numerical example** — :math:`I_{bias}` = 10 µA, SR\ :sub:`min` = 3.5 V/µs:
 
@@ -296,7 +303,7 @@ GBW \cdot C_c`.  Without the SR constraint the sizer would pick the smallest
 :math:`C_c` (cheapest in power), but that would violate SR.  Step 2 pins
 :math:`C_c` from above; Step 3 reads that value to derive :math:`g_{m1}`.
 
-Implementing function: :func:`~circuitgenome.sizer.equations.unity_gain_bw`
+Implementing function: :func:`~circuitgenome.sizer.shared.equations.unity_gain_bw`
 
 **Numerical example** — GBW\ :sub:`min` = 2.5 MHz, :math:`C_c` = 2.857 pF from Step 2:
 
@@ -323,7 +330,7 @@ With :math:`g_{m1}` now known, solve for the minimum :math:`g_{m2}`:
 where :math:`R_{out1} = 1/(g_{d,ip} + g_{d,ld})` and
 :math:`R_{out2} = 1/(g_{d,n2} + g_{d,p2})` are computed from
 :math:`g_d = \lambda\,|I_{DS}|` at the bias point
-(see :func:`~circuitgenome.sizer.equations.rout`).
+(see :func:`~circuitgenome.sizer.shared.equations.rout`).
 
 **Intuition:** The total gain is the product of two stage gains.  Stage 1's
 gain is :math:`g_{m1}\,R_{out1}` — fixed once :math:`g_{m1}` is known and
@@ -336,7 +343,7 @@ equation would require a proportionally larger :math:`C_c` (since
 Step 2.  Assigning the gain responsibility to :math:`g_{m2}` decouples gain
 from the SR-limited :math:`C_c`.
 
-Implementing function: :func:`~circuitgenome.sizer.equations.open_loop_gain_db`
+Implementing function: :func:`~circuitgenome.sizer.shared.equations.open_loop_gain_db`
 
 **Numerical example** — gain\ :sub:`min` = 80 dB, :math:`g_{m1}` = 44.88 µA/V:
 
@@ -407,7 +414,7 @@ frequency upward relative to :math:`g_{m2}`, degrading PM.  Sizing
 :math:`g_{m2}` against :math:`g_{m1,\text{worst}}` — the actual
 post-rounding value — ensures PM is satisfied on the integer grid.
 
-Implementing function: :func:`~circuitgenome.sizer.equations.phase_margin_two_stage_deg`
+Implementing function: :func:`~circuitgenome.sizer.shared.equations.phase_margin_two_stage_deg`
 
 **Numerical example** — PM\ :sub:`min` = 60°, :math:`C_L` = 20 pF:
 
@@ -452,7 +459,7 @@ Final :math:`g_{m2}` = max(226, 630) = **630 µA/V** ← PM is the binding const
 CP-SAT integer linearisation
 -----------------------------
 
-Reference: :func:`~circuitgenome.sizer.constraints.build_model`
+Reference: :func:`~circuitgenome.sizer.analytical.constraints.build_model`
 
 W and L for each transistor are **integer decision variables** in units of
 the technology grid step.  The key observation is that once :math:`I_{DS}` is
@@ -526,9 +533,13 @@ Objective and symmetry
 Post-sizing performance metrics
 --------------------------------
 
-After the solver returns W/L values, :func:`~circuitgenome.sizer.sizer._evaluate_metrics`
+After the solver returns W/L values, :func:`~circuitgenome.sizer.shared.metrics._evaluate_metrics`
 computes all performance metrics and their margins against spec.  The
-implementing function for each is in :mod:`circuitgenome.sizer.equations`.
+implementing function for each is in :mod:`circuitgenome.sizer.shared.equations`.
+These are **analytical (model-based) estimates**; the gm/Id pipeline computes the
+same table from LUT-accurate small-signal parameters.  For PTM the CLI does not
+display these numbers — it reports **ngspice-measured** metrics instead (see
+`Feasibility verdict and SPICE metrics (PTM)`_).
 
 .. list-table::
    :header-rows: 1
@@ -540,31 +551,31 @@ implementing function for each is in :mod:`circuitgenome.sizer.equations`.
      - Margin sign
    * - Open-loop gain
      - :math:`A_0 = \prod_j g_{m,j}\,R_{out,j}`, converted to dB
-     - :func:`~circuitgenome.sizer.equations.open_loop_gain_db`
+     - :func:`~circuitgenome.sizer.shared.equations.open_loop_gain_db`
      - actual − spec
    * - GBW
      - :math:`GBW = g_{m1}\,/\,(2\pi C_c)`
-     - :func:`~circuitgenome.sizer.equations.unity_gain_bw`
+     - :func:`~circuitgenome.sizer.shared.equations.unity_gain_bw`
      - actual − spec
    * - Phase margin
      - :math:`PM = 90° - \arctan(g_{m1}\,C_L\,/\,(g_{m2}\,C_c))`
-     - :func:`~circuitgenome.sizer.equations.phase_margin_two_stage_deg`
+     - :func:`~circuitgenome.sizer.shared.equations.phase_margin_two_stage_deg`
      - actual − spec
    * - Slew rate
      - :math:`SR = I_{bias}\,/\,C_c`
-     - :func:`~circuitgenome.sizer.equations.slew_rate_vps`
+     - :func:`~circuitgenome.sizer.shared.equations.slew_rate_vps`
      - actual − spec
    * - CMRR
      - :math:`CMRR = g_{m1}\,/\,(2\,g_{d,\text{tail}})`, dB
-     - :func:`~circuitgenome.sizer.equations.cmrr_db`
+     - :func:`~circuitgenome.sizer.shared.equations.cmrr_db`
      - actual − spec
    * - PSRR\ :sup:`+` (approx)
      - :math:`PSRR^+ \approx g_{m2}\,/\,g_{d,\text{bias}}`, dB
-     - :func:`~circuitgenome.sizer.equations.psrr_db_approx`
+     - :func:`~circuitgenome.sizer.shared.equations.psrr_db_approx`
      - actual − spec
    * - Quiescent power
      - :math:`P = (V_{DD} - V_{SS})\sum|I_{supply}|`
-     - :func:`~circuitgenome.sizer.equations.quiescent_power`
+     - :func:`~circuitgenome.sizer.shared.equations.quiescent_power`
      - spec − actual
    * - Output swing max
      - :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{PMOS}_2)`
@@ -578,6 +589,32 @@ implementing function for each is in :mod:`circuitgenome.sizer.equations`.
 A positive margin value means the spec is met with headroom; a negative
 margin means the spec is violated (only possible if the spec was not
 enforced by a CP-SAT constraint, e.g. PSRR, power, swing).
+
+----
+
+Feasibility verdict and SPICE metrics (PTM)
+-------------------------------------------
+
+For a technology with a SPICE model card (the PTM nodes), the analytical estimate
+above would mismatch the BSIM4 device model, so the CLI grounds its report in
+ngspice instead:
+
+* **Feasibility verdict.**  A SPICE DC operating-point check
+  (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) classifies
+  the design as:
+
+  * **INFEASIBLE** — the bias point cannot be established (the feedback operating
+    point rails, or a device is starved / pushed into triode); performance is not
+    reported.
+  * **MARGINAL** — biases correctly but misses one or more specs.
+  * **FEASIBLE** — biases correctly and meets every measured spec.
+
+* **Measured metrics.**  When feasible, the CLI measures performance in ngspice
+  (:func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics`): open-loop gain,
+  GBW, phase margin, slew rate, and quiescent power.  CMRR, PSRR, and output swing
+  have no ngspice test-bench yet and are omitted.  A metric ngspice cannot extract
+  is shown as ``n/a`` (no analytical fallback), and ngspice is **required** — the
+  command errors if it is not installed.
 
 ----
 
@@ -612,7 +649,7 @@ Assumptions and where they break down
 
 .. note::
 
-   **PSRR approximation.**  :func:`~circuitgenome.sizer.equations.psrr_db_approx`
+   **PSRR approximation.**  :func:`~circuitgenome.sizer.shared.equations.psrr_db_approx`
    returns a first-order upper bound on PSRR\ :sup:`+`.  Full PSRR — including
    the path through the compensation capacitor — requires an AC simulation.
 
@@ -716,7 +753,7 @@ With two non-dominant poles, the phase margin is:
        - \arctan\!\left(\frac{\omega_t \cdot C_L}{g_{m3}}\right)
 
 where :math:`\omega_t = g_{m1}/C_{c1}` is the unity-gain frequency
-(implemented in :func:`~circuitgenome.sizer.equations.phase_margin_three_stage_deg`).
+(implemented in :func:`~circuitgenome.sizer.shared.equations.phase_margin_three_stage_deg`).
 
 For a target :math:`\text{PM}_{\min}`, the sizer **splits the phase budget
 equally** between the two poles — each is allowed to contribute at most
