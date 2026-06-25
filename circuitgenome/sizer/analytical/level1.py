@@ -1,8 +1,9 @@
 """Level-1 (square-law) sizing pipeline: discrete W/L via OR-Tools CP-SAT.
 
 Used for the card-less ``generic`` technology.  Reuses the shared preprocessing
-(:mod:`..shared.preprocess`) and metric evaluation (:mod:`..shared.metrics`);
-the discrete geometry search is built in :mod:`.constraints`.
+(:mod:`circuitgenome.sizer.shared.preprocess`) and metric evaluation
+(:mod:`circuitgenome.sizer.shared.metrics`); the discrete geometry search is built
+in :mod:`.constraints`.
 """
 from __future__ import annotations
 

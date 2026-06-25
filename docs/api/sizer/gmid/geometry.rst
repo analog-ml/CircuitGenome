@@ -1,7 +1,7 @@
 Gm/Id Geometry
 ==============
 
-.. automodule:: circuitgenome.sizer.gmid_geometry
+.. automodule:: circuitgenome.sizer.gmid.geometry
    :members:
    :undoc-members:
    :show-inheritance:

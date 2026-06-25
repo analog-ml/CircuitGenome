@@ -13,8 +13,8 @@ This pass estimates the tail's saturation headroom and, when it is short, first
 tries to **lower the tail's Vdsat** by raising the tail current-mirror group's
 gm/Id (which keeps the mirror consistent — the same gm/Id implies the same Vgs
 and a width that still tracks the current ratio).  If even the table's
-weak-inversion limit does not fit, it emits an honest warning (the accurate
-correction is left to the SPICE refinement pass, :mod:`~.refine`).
+weak-inversion limit does not fit, it emits an honest warning (the SPICE DC
+bias-soundness check then grounds the final feasibility verdict).
 """
 from __future__ import annotations
 

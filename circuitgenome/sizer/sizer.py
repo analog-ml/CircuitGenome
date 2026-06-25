@@ -7,7 +7,7 @@ and a performance spec to the right sizer and returns a
 :class:`~.shared.models.SizingResult`.
 
 * technologies with a gm/Id LUT → the block-based gm/Id pipeline
-  (:func:`~.gmid.size_gmid`);
+  (:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid`);
 * the card-less ``generic`` technology → the Level-1 CP-SAT sizer
   (:func:`~.analytical.level1.size_level1`);
 * a PTM/SPICE-model node **without** a LUT → ``UnsupportedTechError`` (the

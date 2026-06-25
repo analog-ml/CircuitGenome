@@ -5,7 +5,7 @@ sizer: build the block view, derive per-stage gm requirements (shared,
 model-injected op-amp physics), choose per-device gm/Id geometry from the
 :class:`~.intent.GmIdIntent`, check the DC operating point (cascode-aware
 headroom), and evaluate the metrics.  The model-independent topology math is
-reused from :mod:`circuitgenome.sizer.shared` rather than duplicated.
+reused from the ``circuitgenome.sizer.shared`` package rather than duplicated.
 """
 from __future__ import annotations
 

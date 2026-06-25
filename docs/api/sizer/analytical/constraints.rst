@@ -1,7 +1,7 @@
 Constraints
 ===========
 
-.. automodule:: circuitgenome.sizer.constraints
+.. automodule:: circuitgenome.sizer.analytical.constraints
    :members:
    :undoc-members:
    :show-inheritance:

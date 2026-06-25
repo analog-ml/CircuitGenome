@@ -1,7 +1,7 @@
 """DC operating-point / headroom check for the gm/Id pipeline.
 
 Phase 1: reuses the existing tail headroom pass
-(:func:`~circuitgenome.sizer.headroom.apply_headroom`, which lowers the tail
+(:func:`~circuitgenome.sizer.gmid.headroom.apply_headroom`, which lowers the tail
 mirror group's Vdsat to fit when it can) and adds **cascode awareness** — for a
 *stacked* tail (cascode current source) the budget is the **sum** of the series
 devices' Vdsat, which a single-device check misses (e.g. circuit_0110).  Returns
