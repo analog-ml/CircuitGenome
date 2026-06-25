@@ -1,7 +1,7 @@
 Headroom
 ========
 
-.. automodule:: circuitgenome.sizer.headroom
+.. automodule:: circuitgenome.sizer.gmid.headroom
    :members:
    :undoc-members:
    :show-inheritance:

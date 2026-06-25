@@ -3,6 +3,152 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-06-24 (gm/Id pipeline redesign — PTM-only dispatch + bias-aware metrics)
+
+PR (`feat/gmid-ptm-only-bias-gating`). Targets `feat/gmid-sizing-redesign`.
+
+Running `size … --tech ptm45 --simulate` on a headroom-starved design (e.g.
+`circuit_0110`, whose cascode tail cannot bias at 1.0 V) showed a huge
+analytical-vs-SPICE gap on GBW / slew rate / power: the assumed currents never
+flow, so the analytical metrics are optimistic. The sizer already flagged this
+(`bias_feasible=False`) but reported the numbers as if valid.
+
+### Changed
+
+- **PTM techs are a gm/Id-only path.** A PTM/SPICE-model node *without* a gm/Id
+  LUT (currently ptm32/22/16) now raises `UnsupportedTechError`
+  (`sizer/models.py`) instead of silently falling through to the Level-1
+  square-law sizer — the very numbers gm/Id exists to avoid. Only the card-less
+  `generic` tech uses the analytical sizer. The `size` CLI and `tools/spice_verify.py`
+  catch the error and exit cleanly. (LUTs for these nodes are tracked in #73.)
+- **Feasibility-verdict reporting.** The `size` CLI now leads the metrics section
+  with a mode-aware verdict instead of always printing a ✓/✗ table:
+  - **INFEASIBLE** (`bias_feasible=False`, e.g. circuit_0110's cascode tail): the
+    performance table is **suppressed** — its numbers are meaningless once the
+    bias point collapses — and the bias reason is stated inline. Under
+    `--simulate` the `analytical` column shows `n/a` and the `SPICE` column is the
+    measured operating point.
+  - **MARGINAL** (`bias_feasible=True` but a target is missed, e.g. the gm
+    weak-inversion ceiling caps GBW): the **real** metrics are shown with ✗ on the
+    failing rows.
+  - **FEASIBLE**: the normal ✓ table.
+- **SPICE-grounded feasibility verdict.** The analytical bias check only validates
+  the input-pair tail, so it false-positives on circuits whose downstream stages
+  don't bias (e.g. circuit_0010, whose output stage is current-mismatched 58 µA vs
+  0.02 µA → rails to vdd). The `size` CLI now grounds the verdict in the reliable
+  SPICE DC `.op` (`check_bias_soundness`, reusing `read_op_operating_point`): if the
+  operating point rails or shows starved/triode devices, the circuit is reported
+  **INFEASIBLE** instead of MARGINAL-with-optimistic-metrics. Automatic when ngspice
+  is on PATH; the analytical verdict stands when it isn't. The core `size_circuit`
+  stays analytical/fast — the SPICE check is CLI-level only.
+
+Parity: feasible ptm45 designs, the `generic` Level-1 path, and the ✓/✗ table
+itself are unchanged.
+
+## 2026-06-24 (gm/Id pipeline redesign — phase 3: FD + three-stage + CMFB)
+
+PR [#84](https://github.com/analog-ml/CircuitGenome/pull/84)
+(`feat/gmid-fd-cmfb`). Stacked on #83; targets `feat/gmid-sizing-redesign`.
+Closes #75.
+
+### Added
+
+The gm/Id pipeline already produced metrics for fully-differential and
+three-stage op-amps (shared physics + the phase-2a cascode `rout`); this phase
+closes the CMFB gap and adds coverage.
+
+- **CMFB resistive-sense averager sized** (`gmid/resistors.py`): the `cmfb`-slot
+  sense resistors `r1/r2` are sized to `intent.cmfb_sense_r` (~1 MΩ) instead of
+  the 1 kΩ placeholder (which would short the differential output), and their
+  loading `1/R_sense` is folded into the FD output resistance via a new optional
+  `_evaluate_metrics(gd_out_extra=…)` (default 0 → SE / Level-1 unchanged). New
+  `GmIdIntent.cmfb_sense_r`.
+- **FD + three-stage gm/Id coverage** (`tests/test_fd_three_stage_gmid.py`):
+  two-stage fully-differential with both `resistive_sense_cmfb` and `dda_cmfb`,
+  and three-stage NMC/RNMC single-ended — all size via the gm/Id path
+  (`status="GMID"`), set the three-stage inner cap `cc2_pf`, and size the CMFB
+  resistors. **Closes #75** (FD / three-stage gm/Id support).
+
+Parity: single-ended and non-CMFB circuits, and the Level-1 path, are unchanged.
+At 1.0 V these (folded-cascode) FD/three-stage stacks remain headroom-tight and
+flag `bias_feasible=False` honestly. Phase-3 completes the planned gm/Id redesign
+(phases 1, 2a, 2b, 3).
+
+### Fixed
+
+The gm/Id path only sized rail-referenced `load` resistors; `resistor_bias`,
+`resistor_tail`, and source-**degeneration** r1/r2 kept the 1 kΩ placeholder →
+wrong bias and a wrong (un-degenerated) gm1.
+
+- **`gmid/resistors.py::size_resistors`** sizes each by role:
+  - **degeneration** `R = degeneration_factor / gm1` → reported `gm1` scaled by
+    `1/(1+factor)` (a constant), applied to gain/GBW/PM/CMRR;
+  - **`resistor_tail`** `R = |Vrail − V_tail| / ibias` (V_tail from the input-pair
+    Vgs), with `gd_tail = 1/R` for a realistic CMRR;
+  - **`resistor_bias`** legs `R_i = Vgs / ibias` (approximate — a sensible
+    ~0.5–0.6 V rail instead of the placeholder ~10 mV).
+- `_evaluate_metrics` gains optional `gm1_factor` / `gd_tail_override` (defaults →
+  unchanged, Level-1 untouched); `gmid_sizer` merges the sized resistors into
+  `SizingResult.resistors` (which `spice_sim._inject_sizes` already injects) and
+  passes the metric factors.
+- New `GmIdIntent.degeneration_factor` (default 0.5 = moderate).
+
+Parity: circuits with no degeneration/resistor-tail/resistor-bias are unchanged.
+Verified: a degenerated input pair drops gain by exactly `20·log10(1+factor)`;
+full suite green.
+
+### Fixed
+
+The gm/Id path mis-modelled cascode loads: `_evaluate_metrics` took a single load
+device's `gds` for `rout1`, ignoring the cascode `gm·ro·ro` boost (so every
+folded-/telescopic-cascode load got a far-too-low gain).
+
+- **Cascode-aware output resistance** (`gmid/blocks.py::node_rout`): traces each
+  branch into the stage output node — a cascode device (source on another
+  device's drain) contributes `ro·(1+gm·R_below)`, a plain device just `ro`;
+  branches combine in parallel, with the input-pair tail treated as an AC ground.
+- **Metrics override** (`_evaluate_metrics` gains optional `rout{1,2,3}_override`,
+  default `None` → Level-1 path byte-identical); `gmid_sizer` computes the
+  first-stage `rout` cascode-aware via the blocks and passes it in.
+- **`CASCODE` sizing role** (`device_model`, `intent.cascode_gm_id`/`cascode_l_mult`):
+  cascode devices are now sized in a smaller-Vdsat region (strong inversion) for
+  headroom, instead of as plain current sources.
+
+Parity: non-cascode circuits unchanged; the Level-1 path is untouched (no override
+passed). Note: at the 1.0 V PTM supply most cascode stacks are headroom-tight and
+flag `bias_feasible=False` (the gain is computed correctly but won't be reached
+until the supply/CM allows the stack to bias). Full cascode-stack headroom in
+`dc_op` (beyond the tail) and resistor sizing land in phase 2b.
+
+### Changed
+
+Phase 1 of separating the gm/Id sizer from the Level-1 analytical sizer into its
+own **block-based pipeline** (`circuitgenome/sizer/gmid/`), so the two paths can
+evolve independently and gm/Id can grow cascode / resistor / CMFB / FD support.
+
+- **`gmid/gmid_sizer.py`** (`size_gmid`) — the gm/Id orchestration is lifted out
+  of `size_circuit`, which now simply **dispatches** (`tech.gmid_lut` → gm/Id
+  pipeline, else Level-1 CP-SAT). `size_circuit`'s `is_gmid` branch is gone; the
+  Level-1 path is explicit (`Level1Model`). The **model-independent op-amp
+  physics** (`_compute_requirements`/`_evaluate_metrics`) stays shared and
+  model-injected — called by both pipelines, not duplicated.
+- **`gmid/blocks.py`** — a functional-block view (input pair, load, gain stages,
+  tail, bias, compensation) that **classifies** each load/tail (mirror / cascode /
+  resistor / current-source). The structural layer and extension point for later
+  phases.
+- **`gmid/intent.py`** (`GmIdIntent`) — explicit per-role **inversion-region
+  (gm/Id) and L** design choices (strong/moderate/weak), replacing the ad-hoc
+  `GmIdPolicy` constants as the user-facing knob.
+- **`gmid/dc_op.py`** — DC operating-point / headroom check that is now
+  **cascode-aware**: a stacked tail's budget is the *sum* of its devices' Vdsat
+  (a single-device check missed e.g. circuit_0110). Sets a new
+  `SizingResult.bias_feasible` flag (and a cascode-collapse warning) so callers
+  can tell when the assumed bias current won't actually flow.
+
+Parity: identical gm/Id results on the existing tests (the new pipeline calls the
+same physics with the same model); the Level-1 path is unchanged. Follow-up
+phases: cascode + resistor blocks (phase 2), FD + three-stage + CMFB (phase 3).
+
 ## 2026-06-24 (honest --simulate reporting)
 
 PR [#79](https://github.com/analog-ml/CircuitGenome/pull/79)

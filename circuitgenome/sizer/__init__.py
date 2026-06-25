@@ -18,8 +18,14 @@ Typical usage::
     for ref, s in result.transistors.items():
         print(f"{ref}: W={s.w_um}µm  L={s.l_um}µm")
 """
-from .loader import load_tech
-from .models import SizingResult, SizingSpec, TechParams, TransistorSizing
+from .shared.loader import load_tech
+from .shared.models import (
+    SizingResult,
+    SizingSpec,
+    TechParams,
+    TransistorSizing,
+    UnsupportedTechError,
+)
 from .sizer import size_circuit
 
 __all__ = [
@@ -29,4 +35,5 @@ __all__ = [
     "SizingSpec",
     "TechParams",
     "TransistorSizing",
+    "UnsupportedTechError",
 ]

@@ -842,11 +842,18 @@ Sizing algorithm
    including the three-stage inner-pole and :math:`g_{m3}` steps — is covered
    in :doc:`theory/sizing_flow`.
 
-The sizer uses a Level-1 MOSFET model where ``gm = √(2·µCox·(W/L)·IDS)``
-and ``gd = λ·|IDS|``.  Because ``IDS`` is topology-determined by KCL and the
-bias current, the ``gm ≥ gm_req`` constraint linearises to
-``2·µCox·IDS·W ≥ gm_req²·L``, which is a linear integer constraint once W
-and L are discrete grid variables.
+The sizer has two paths, selected by technology.  The **card-less ``generic``
+tech** uses a Level-1 MOSFET model where ``gm = √(2·µCox·(W/L)·IDS)`` and
+``gd = λ·|IDS|``.  Because ``IDS`` is topology-determined by KCL and the bias
+current, the ``gm ≥ gm_req`` constraint linearises to
+``2·µCox·IDS·W ≥ gm_req²·L``, a linear integer constraint once W and L are
+discrete grid variables — solved with CP-SAT.
+
+**PTM nodes use the gm/Id pipeline instead**: geometry is chosen deterministically
+from a SPICE-characterised gm/Id lookup table (no CP-SAT search), which captures
+moderate/weak inversion and short-channel behaviour the square law misses.  A
+PTM/SPICE-model node without a gm/Id LUT raises ``UnsupportedTechError``.  The
+requirement-derivation order below is shared by both paths.
 
 The required transconductances are derived in a fixed order to ensure mutual
 consistency after the integer grid rounds values up:
@@ -888,7 +895,7 @@ Technology configurations
 The sizer reads its device parameters from a technology YAML, selected with
 ``circuitgenome size --tech <file>`` (default: the built-in
 ``tech_generic``).  Built-in configs live in
-``circuitgenome/sizer/config/``:
+``circuitgenome/sizer/shared/config/``:
 
 .. list-table::
    :header-rows: 1
@@ -902,17 +909,21 @@ The sizer reads its device parameters from a technology YAML, selected with
      - Illustrative defaults; the built-in fallback.
    * - ``tech_ptm45`` / ``tech_ptm32`` / ``tech_ptm22``
      - 45 / 32 / 22 nm
-     - Planar-bulk BSIM4 from the ASU Predictive Technology Model; the Level-1
-       parameters (``mu_cox``, ``vth``, ``lam``) are extracted with ngspice.
+     - Planar-bulk BSIM4 from the ASU Predictive Technology Model.  Sizing uses
+       the gm/Id pipeline driven by a SPICE-characterised gm/Id LUT — currently
+       only ``ptm45`` ships one; the others carry the BSIM4 card but need a LUT
+       (characterize one with ``tools/extract_tech.py`` or sizing raises
+       ``UnsupportedTechError``).
    * - ``tech_ptm16``
      - 16 nm
      - PTM 16 nm **bulk** — a *predictive planar extrapolation* (real 16 nm
        silicon is FinFET); for exploration only.
 
-These Level-1 values are *effective* square-law fits to the BSIM4 devices, so
-they suit **initial** sizing of planar-bulk designs.  FinFET nodes (≤16 nm in
-silicon) need a different device model and are not covered.  Regenerate the
-configs or add a node with ``tools/extract_tech.py`` (requires ngspice).
+A PTM node sizes from its gm/Id LUT (LUT-accurate ``gm``/``gds``/``Vdsat`` from the
+BSIM4 device), while the card-less ``generic`` tech uses *effective* Level-1
+square-law fits.  FinFET nodes (≤16 nm in silicon) need a different device model
+and are not covered.  Regenerate the configs or add a node with
+``tools/extract_tech.py`` (requires ngspice).
 Source / citation: ASU Predictive Technology Model, https://ptm.asu.edu
 (W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for Sub-45nm
 Design Exploration," ISQED 2006).
@@ -920,19 +931,22 @@ Design Exploration," ISQED 2006).
 SPICE verification
 ~~~~~~~~~~~~~~~~~~
 
-``circuitgenome size --simulate`` (and the standalone ``tools/spice_verify.py``)
-re-simulate the *sized* circuit in **ngspice** using the **same technology** and
-print the analytical metrics next to the SPICE-measured ones, with the delta.
-The model is taken from the tech: a BSIM4 ``.pm`` card for the PTM nodes (via the
-``spice_model`` field), or a synthesised Level-1 ``.model`` from
-``mu_cox``/``vth``/``lam`` for ``generic``.  Because the analytical metrics *are*
-Level-1, the Level-1 SPICE run roughly validates the formulas, while the BSIM4
-run exposes the Level-1-vs-device gap (e.g. a deep-submicron design predicted at
-~80 dB may simulate at ~20 dB).
+ngspice runs in two roles, both using the model from the tech (a BSIM4 ``.pm``
+card for the PTM nodes via the ``spice_model`` field, or a synthesised Level-1
+``.model`` from ``mu_cox``/``vth``/``lam`` for ``generic``):
 
-This is a **best-effort cross-check**, not sign-off.  Gain/GBW/PM are measured
-with an open-loop AC-coupled-feedback testbench; power from the DC operating
-point; slew rate from a unity-gain step.  Single-ended op-amps are the most
-robust; fully-differential AC metrics (which depend on the on-chip CMFB
-operating point) and any non-converging measurement are reported as ``n/a``
-rather than as wrong numbers.  Requires ngspice on ``PATH``.
+* **PTM (default report).**  For a node with a SPICE card, ``circuitgenome size``
+  reports ngspice-**measured** metrics directly (BSIM4), grounded by a SPICE DC
+  bias-soundness check that yields the INFEASIBLE / MARGINAL / FEASIBLE verdict.
+  ngspice is **required** for the PTM path — the command errors if it is missing.
+* **``--simulate`` (generic cross-check).**  On the Level-1 ``generic`` tech,
+  ``circuitgenome size --simulate`` prints the analytical metrics next to the
+  SPICE-measured ones with the delta — a sanity check on the formulas.  It is
+  redundant for PTM (already SPICE-measured).
+
+Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loop
+AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
+unity-gain step.  Single-ended op-amps are the most robust; fully-differential AC
+metrics (which depend on the on-chip CMFB operating point) and any non-converging
+measurement are reported as ``n/a`` rather than as wrong numbers.  CMRR, PSRR, and
+output swing are not measured and are omitted from the PTM report.

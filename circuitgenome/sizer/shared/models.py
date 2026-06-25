@@ -8,6 +8,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+class UnsupportedTechError(ValueError):
+    """Raised when a technology cannot be sized by the requested method.
+
+    Currently raised when a PTM/SPICE-model node has no gm/Id LUT: such nodes
+    must use the gm/Id pipeline, and the analytical (Level-1) sizer is not a
+    valid fallback for them.
+    """
+
+
 @dataclass
 class MosfetParams:
     """CMOS process parameters for one device polarity.
@@ -128,7 +137,9 @@ class SizingResult:
     :param transistors: Per-transistor sizing keyed by device reference.
     :param cc_pf: Compensation capacitor value in pF, or ``None`` for single-stage.
     :param metrics: Computed performance metrics, e.g.
-        ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``.
+        ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``. Analytical (model-based,
+        ngspice-free) estimate; for PTM the CLI measures and displays ngspice
+        values (``spice_sim.simulate_metrics``) instead.
     :param margins: Safety margin for each constrained spec (actual/spec for
         min specs, spec/actual for max specs). Values > 1 mean spec is met.
     :param solver_status: OR-Tools CP-SAT status string:
@@ -138,6 +149,10 @@ class SizingResult:
     :param resistors: Sized load-resistor values in ohms, keyed by device
         reference (e.g. ``{"r1_load": 1.06e5}``). Empty when there are no
         sized resistors.
+    :param bias_feasible: ``False`` when the gm/Id DC operating-point check finds
+        a current source that cannot stay saturated (e.g. a cascode tail with no
+        headroom) — the assumed bias current won't flow, so the frequency-domain
+        metrics are optimistic. Always ``True`` for the Level-1 path.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -147,3 +162,4 @@ class SizingResult:
     cc2_pf: float | None = None
     warnings: list[str] = field(default_factory=list)
     resistors: dict[str, float] = field(default_factory=dict)
+    bias_feasible: bool = True

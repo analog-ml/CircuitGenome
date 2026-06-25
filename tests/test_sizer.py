@@ -4,7 +4,7 @@ import math
 import pytest
 
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
-from circuitgenome.sizer.equations import (
+from circuitgenome.sizer.shared.equations import (
     cmrr_db,
     gd,
     gm,
@@ -17,7 +17,7 @@ from circuitgenome.sizer.equations import (
     vds_sat,
     vgs_from_ids,
 )
-from circuitgenome.sizer.models import TechParams
+from circuitgenome.sizer.shared.models import TechParams
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -802,7 +802,7 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
 def _fbr_pmos_cs_second_stage(topology_name: str):
     """Return the FBR tuple for the first variant whose second-stage signal
     transistor is a PMOS (a PMOS-common-source stage)."""
-    from circuitgenome.sizer.sizer import _extract_slot_transistors, _is_signal_dev
+    from circuitgenome.sizer.shared.preprocess import _extract_slot_transistors, _is_signal_dev
 
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == topology_name)
@@ -861,7 +861,7 @@ def test_topology_mismatch_warns():
 def _config_dir():
     from pathlib import Path
     import circuitgenome.sizer as _sz
-    return Path(_sz.__file__).parent / "config"
+    return Path(_sz.__file__).parent / "shared" / "config"
 
 
 # node -> nominal Vdd (V)
@@ -870,7 +870,13 @@ _PTM_NODES = {"45": 1.0, "32": 0.9, "22": 0.8, "16": 0.7}
 
 @pytest.mark.parametrize("node,vdd", sorted(_PTM_NODES.items()))
 def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
-    """Each PTM tech config parses and yields a feasible node-appropriate sizing."""
+    """Each PTM tech config parses; only LUT-bearing nodes are sizeable.
+
+    PTM is a gm/Id-only path: a node *with* a gm/Id LUT (ptm45) sizes via the
+    "GMID" pipeline; a node *without* one (ptm32/22/16) must raise
+    :class:`UnsupportedTechError` rather than silently using the Level-1 sizer.
+    """
+    from circuitgenome.sizer import UnsupportedTechError
     tech = load_tech(_config_dir() / f"tech_ptm{node}.yaml")
     # sanity on parsed params: NMOS µCox > PMOS µCox > 0; |Vth| reasonable; λ > 0
     assert tech.nmos.mu_cox > tech.pmos.mu_cox > 0
@@ -884,11 +890,12 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
         gain_min_db=40, gbw_min_hz=2.5e6,
         phase_margin_min_deg=60, slew_rate_min_vps=1e6,
     )
+    if not tech.gmid_lut:
+        with pytest.raises(UnsupportedTechError):
+            size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+        return
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-    # ptm45 carries a gm/Id LUT → procedural "GMID" path; the others fall back
-    # to the Level-1 CP-SAT solver.
-    expected = ("GMID",) if tech.gmid_lut else ("OPTIMAL", "FEASIBLE")
-    assert result.solver_status in expected
+    assert result.solver_status == "GMID"
     assert result.transistors
     # every device sits inside the node's W/L grid
     for s in result.transistors.values():
@@ -898,7 +905,7 @@ def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
 
 def test_first_stage_gain_factor():
     """k_fs is 1.0 for a current-mirror/FD first stage, 0.5 for non-mirror SE."""
-    from circuitgenome.sizer.sizer import _first_stage_gain_factor
+    from circuitgenome.sizer.shared.preprocess import _first_stage_gain_factor
     from circuitgenome.synthesizer.models import Device
 
     mirror = {"load": [

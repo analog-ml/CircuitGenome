@@ -1,7 +1,7 @@
-Gm/Id Geometry
+gm/Id — Intent
 ==============
 
-.. automodule:: circuitgenome.sizer.gmid_geometry
+.. automodule:: circuitgenome.sizer.gmid.intent
    :members:
    :undoc-members:
    :show-inheritance:

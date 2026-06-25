@@ -61,16 +61,24 @@ design exploration, or topology studies.
    :maxdepth: 2
    :caption: API Reference - Sizer
 
-   api/sizer/models
    api/sizer/sizer
-   api/sizer/equations
-   api/sizer/constraints
-   api/sizer/loader
-   api/sizer/device_model
-   api/sizer/gmid_lut
-   api/sizer/gmid_geometry
-   api/sizer/headroom
-   api/sizer/refine
+   api/sizer/shared/models
+   api/sizer/shared/loader
+   api/sizer/shared/device_model
+   api/sizer/shared/equations
+   api/sizer/shared/gmid_lut
+   api/sizer/shared/spice_sim
+   api/sizer/shared/preprocess
+   api/sizer/shared/metrics
+   api/sizer/analytical/level1
+   api/sizer/analytical/constraints
+   api/sizer/gmid/gmid_sizer
+   api/sizer/gmid/blocks
+   api/sizer/gmid/dc_op
+   api/sizer/gmid/intent
+   api/sizer/gmid/resistors
+   api/sizer/gmid/geometry
+   api/sizer/gmid/headroom
 
 .. toctree::
    :maxdepth: 1
