@@ -38,8 +38,18 @@ def ngspice_available() -> bool:
 # --------------------------------------------------------------------------- #
 # Deck building blocks
 # --------------------------------------------------------------------------- #
-def _emit_model(tech: TechParams) -> str:
-    """Return the SPICE ``.model``/``.include`` block for ``tech``."""
+def _emit_model(tech: TechParams, corner: str | None = None) -> str:
+    """Return the SPICE ``.model``/``.include``/``.lib`` block for ``tech``.
+
+    * ``spice_lib`` (foundry PDK, e.g. GF180MCU): ``.include`` the global design
+      file (if any) then ``.lib "<file>" <corner>`` — devices are subcircuits.
+    * ``spice_model`` (PTM): flat ``.include`` of ``.model nmos``/``pmos`` cards.
+    * neither: synthesise a Level-1 ``.model`` from ``mu_cox``/``vth``/``lam``.
+    """
+    if tech.spice_lib:
+        lib = tech.spice_lib
+        out = f'.include "{lib.design}"\n' if lib.design else ""
+        return out + f'.lib "{lib.file}" {corner or lib.corner}\n'
     if tech.spice_model:
         return f'.include "{tech.spice_model}"\n'
     n, p = tech.nmos, tech.pmos
@@ -50,6 +60,45 @@ def _emit_model(tech: TechParams) -> str:
         f".model pmos pmos level=1 kp={p.mu_cox:.6e} vto={p.vth:.4f} "
         f"lambda={p.lam:.4f} gamma=0 phi=0.7\n"
     )
+
+
+def _xref(ref: str) -> str:
+    """Subcircuit instance name for a MOSFET ``ref`` (``m1_in`` → ``x1_in``)."""
+    return ("x" + ref[1:]) if ref[:1].lower() == "m" else ("x" + ref)
+
+
+def _dev_prefix(tech: TechParams, ref: str) -> str:
+    """ngspice operating-point handle prefix for device ``ref`` inside ``Xdut``.
+
+    PTM/generic instantiate ``.model`` MOSFETs (flat ``@m.xdut.<ref>``); a PDK
+    with a ``device_map`` instantiates subcircuits, so the BSIM4 device sits one
+    level deeper at the subckt's internal ``m0`` (``@m.xdut.<xref>.m0``).
+    """
+    if tech.device_map:
+        return f"@m.xdut.{_xref(ref)}.m0"
+    return f"@m.xdut.{ref}"
+
+
+def _emit_body(tech: TechParams, body: list[str]) -> list[str]:
+    """Rewrite generic ``m… nmos/pmos`` lines as PDK subcircuit ``x…`` instances.
+
+    No-op unless ``tech.device_map`` is set.  Maps the model token via the map
+    (``nmos`` → ``nmos_3p3``) and lowercases ``W=``/``L=`` to the subckt params.
+    """
+    dm = tech.device_map
+    if not dm:
+        return body
+    out: list[str] = []
+    for line in body:
+        tok = line.split()
+        if len(tok) >= 6 and tok[5].lower() in dm:
+            rest = " ".join(tok[6:]).replace("W=", "w=").replace("L=", "l=")
+            out.append(
+                f"{_xref(tok[0])} {tok[1]} {tok[2]} {tok[3]} {tok[4]} "
+                f"{dm[tok[5].lower()]} {rest}".rstrip())
+        else:
+            out.append(line)
+    return out
 
 
 def _parse_subckt(netlist_text: str):
@@ -89,15 +138,17 @@ def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
     return out
 
 
-def _dut(tech: TechParams, name: str, body: list[str]) -> str:
+def _dut(tech: TechParams, name: str, body: list[str],
+         corner: str | None = None) -> str:
     """Title line + model block + the sized ``.subckt`` definition.
 
     The leading comment is mandatory: SPICE always treats the first deck line as
     the title and ignores it, which would otherwise swallow the first ``.model``.
+    For a PDK tech the device lines are rewritten to subcircuit instances.
     """
     return ("* circuitgenome spice verification\n"
-            + _emit_model(tech) + f".subckt {name} __PORTS__\n"
-            + "\n".join(body) + "\n.ends\n")
+            + _emit_model(tech, corner) + f".subckt {name} __PORTS__\n"
+            + "\n".join(_emit_body(tech, body)) + "\n.ends\n")
 
 
 def _run(deck: str, vectors: list[str]) -> np.ndarray | None:
@@ -348,9 +399,10 @@ def read_op_operating_point(
         return None
     vdd, ibias = spec.vdd, spec.ibias
     vcm = (spec.vdd + spec.vss) / 2.0
+    prefixes = {r: _dev_prefix(tech, r) for r in refs}
     probe = "".join(
-        f"print @m.xdut.{r}[id]\nprint @m.xdut.{r}[vds]\nprint @m.xdut.{r}[vdsat]\n"
-        for r in refs
+        f"print {pre}[id]\nprint {pre}[vds]\nprint {pre}[vdsat]\n"
+        for pre in prefixes.values()
     )
     for inp, inn in (("in1", "in2"), ("in2", "in1")):
         netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
@@ -367,8 +419,9 @@ def read_op_operating_point(
         if not mo or not (0.1 * vdd < float(mo.group(1)) < 0.9 * vdd):
             continue  # wrong polarity → output railed
         op: dict[str, dict[str, float]] = {}
-        for m in re.finditer(r"@m\.xdut\.(\w+)\[(\w+)\]\s*=\s*([-\d.eE+]+)", txt):
-            op.setdefault(m.group(1), {})[m.group(2)] = float(m.group(3))
+        for r, pre in prefixes.items():
+            for m in re.finditer(re.escape(pre) + r"\[(\w+)\]\s*=\s*([-\d.eE+]+)", txt):
+                op.setdefault(r, {})[m.group(1)] = float(m.group(2))
         if op:
             return op
     return None
@@ -378,16 +431,18 @@ def read_op_operating_point(
 # Public entry point
 # --------------------------------------------------------------------------- #
 def simulate_metrics(netlist_text: str, result: SizingResult,
-                     tech: TechParams, spec: SizingSpec) -> dict[str, float | None]:
+                     tech: TechParams, spec: SizingSpec,
+                     corner: str | None = None) -> dict[str, float | None]:
     """Return SPICE-measured metrics, mirroring ``_evaluate_metrics`` keys.
 
     Keys: ``power_w``, ``gain_db``, ``gbw_hz``, ``phase_margin_deg``,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``.
-    Missing/failed measurements are ``None``.
+    Missing/failed measurements are ``None``.  ``corner`` overrides the PDK
+    library corner (foundry techs only); ``None`` uses the tech's nominal corner.
     """
     name, ports, body = _parse_subckt(netlist_text)
     body = _inject_sizes(body, result)
-    body_dut = _dut(tech, name, body)
+    body_dut = _dut(tech, name, body, corner)
     topo = _Topo(ports)
     vdd = spec.vdd
     ibias = spec.ibias

@@ -325,11 +325,12 @@ the metrics are the Level-1 analytical estimates.
      - ``30``
 
 ``--tech`` accepts either a path to a technology YAML or the short name of a
-built-in config: ``generic`` (default), ``ptm45``, ``ptm32``, ``ptm22``, or
-``ptm16`` (ASU Predictive Technology Model planar-bulk nodes; ``ptm16`` is a
-predictive extrapolation — real 16 nm is FinFET).  See *Initial Sizer →
-Technology configurations* in the :doc:`Overview </overview>` for details and
-how to add a node with ``tools/extract_tech.py``.
+built-in config: ``generic`` (default); ``ptm45``/``ptm32``/``ptm22``/``ptm16``
+(ASU Predictive Technology Model planar-bulk nodes; ``ptm16`` is a predictive
+extrapolation — real 16 nm is FinFET); or ``gf180mcu`` (GlobalFoundries GF180MCU
+180 nm open PDK, 3.3 V core).  See *Initial Sizer → Technology configurations* in
+the :doc:`Overview </overview>` for details and how to add a node with
+``tools/extract_tech.py``.
 
 .. code-block:: bash
 
@@ -337,13 +338,13 @@ how to add a node with ``tools/extract_tech.py``.
      --topology two_stage_opamp_single_ended \
      --spec spec.yaml --tech ptm45
 
-PTM technologies (gm/Id path)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PTM / foundry PDK technologies (gm/Id path)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For a PTM node the sizer uses the gm/Id pipeline (not the Level-1 CP-SAT solver),
-and the performance section reports metrics **measured in ngspice** (BSIM4) rather
-than the analytical estimates — so ngspice must be on ``PATH`` (the command
-errors otherwise).  Only gain, GBW, phase margin, slew rate, and power are
+For a PTM node or a foundry PDK the sizer uses the gm/Id pipeline (not the Level-1
+CP-SAT solver), and the performance section reports metrics **measured in ngspice**
+(BSIM4) rather than the analytical estimates — so ngspice must be on ``PATH`` (the
+command errors otherwise).  Only gain, GBW, phase margin, slew rate, and power are
 measured; CMRR, PSRR, and output swing have no ngspice test-bench yet and are
 omitted.  A metric ngspice cannot extract is shown as ``n/a``.
 
@@ -365,3 +366,26 @@ omitted.  A metric ngspice cannot extract is shown as ``n/a``.
 
 A PTM/SPICE-model node *without* a characterized gm/Id LUT is rejected with
 ``UnsupportedTechError`` (the Level-1 square-law numbers are not valid there).
+
+**Foundry PDKs and process corners.**  ``--tech gf180mcu`` selects the GF180MCU
+open PDK: its devices are PDK **subcircuits** (``nmos_3p3``/``pmos_3p3``) and a
+process corner is selected with ``.lib "<file>" <corner>``.  Sizing is done at the
+nominal (``typical``) corner; after the typical-corner metrics the CLI re-measures
+the sized design across ``{typical, ss, ff, sf, fs}`` and prints a
+corner-verification table (sizing itself stays at ``typical``):
+
+.. code-block:: text
+
+   Feasibility: MARGINAL — biases, but does not meet spec
+
+   Performance metrics (ngspice / BSIM4):
+     Open-loop gain     82.31 dB   [spec ≥ 45.00 dB]   margin +37.31 dB   ✓
+     GBW                0.64 MHz   [spec ≥ 0.80 MHz]   margin -0.16 MHz   ✗
+     ...
+
+   Corner verification (re-measured; sized at typical):
+     metric             typical        ss        ff        sf        fs
+     Gain (dB)            82.31     82.11     82.42     82.61     81.90
+     GBW (MHz)             0.64      0.61      0.67      0.65      0.63
+     PM (deg)             79.05     78.91     79.17     78.49     79.58
+     Power (mW)            0.38      0.38      0.39      0.38      0.39

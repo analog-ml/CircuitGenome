@@ -26,12 +26,12 @@ NMC/RNMC (single-ended and fully-differential).
 This page documents the **Level-1 (Shichman-Hodges)** analytical flow — square-law
 drain current in saturation, constant channel-length modulation coefficient λ, no
 short-channel or velocity-saturation effects.  This flow is selected for the
-card-less ``generic`` technology.  Deep-submicron **PTM nodes use the gm/Id
-pipeline instead** (LUT-driven, deterministic geometry — see `gm/Id model (PTM
-nodes)`_ below); a PTM/SPICE-model node without a gm/Id LUT raises
-``UnsupportedTechError``.  For PTM the reported performance numbers are
-**measured in ngspice** rather than computed from the Level-1 equations below
-(see `Post-sizing performance metrics`_).
+card-less ``generic`` technology.  Deep-submicron **PTM nodes and foundry PDKs
+(e.g. GF180MCU) use the gm/Id pipeline instead** (LUT-driven, deterministic
+geometry — see `gm/Id model (PTM nodes)`_ below); a PTM/SPICE-model node without a
+gm/Id LUT raises ``UnsupportedTechError``.  For those technologies the reported
+performance numbers are **measured in ngspice** rather than computed from the
+Level-1 equations below (see `Post-sizing performance metrics`_).
 
 .. code-block:: text
 
@@ -537,9 +537,9 @@ After the solver returns W/L values, :func:`~circuitgenome.sizer.shared.metrics.
 computes all performance metrics and their margins against spec.  The
 implementing function for each is in :mod:`circuitgenome.sizer.shared.equations`.
 These are **analytical (model-based) estimates**; the gm/Id pipeline computes the
-same table from LUT-accurate small-signal parameters.  For PTM the CLI does not
-display these numbers — it reports **ngspice-measured** metrics instead (see
-`Feasibility verdict and SPICE metrics (PTM)`_).
+same table from LUT-accurate small-signal parameters.  For PTM / foundry-PDK techs
+the CLI does not display these numbers — it reports **ngspice-measured** metrics
+instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
 
 .. list-table::
    :header-rows: 1
@@ -592,12 +592,12 @@ enforced by a CP-SAT constraint, e.g. PSRR, power, swing).
 
 ----
 
-Feasibility verdict and SPICE metrics (PTM)
--------------------------------------------
+Feasibility verdict and SPICE metrics (PTM / foundry PDKs)
+----------------------------------------------------------
 
-For a technology with a SPICE model card (the PTM nodes), the analytical estimate
-above would mismatch the BSIM4 device model, so the CLI grounds its report in
-ngspice instead:
+For a technology with a real device model (a PTM BSIM4 card, or a foundry PDK such
+as GF180MCU), the analytical estimate above would mismatch the device, so the CLI
+grounds its report in ngspice instead:
 
 * **Feasibility verdict.**  A SPICE DC operating-point check
   (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) classifies
@@ -615,6 +615,12 @@ ngspice instead:
   have no ngspice test-bench yet and are omitted.  A metric ngspice cannot extract
   is shown as ``n/a`` (no analytical fallback), and ngspice is **required** — the
   command errors if it is not installed.
+
+* **Corner sweep (foundry PDKs).**  A PDK tech (``spice_lib``, e.g. GF180MCU) is
+  sized at its nominal corner, then the sized design is re-measured across the
+  configured process corners (``{typical, ss, ff, sf, fs}``) and printed as a
+  corner-verification table for worst-case visibility.  The PTM nodes carry a
+  single model card and report the nominal corner only.
 
 ----
 

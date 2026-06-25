@@ -34,12 +34,32 @@ from pathlib import Path
 import numpy as np
 
 _HERE = Path(__file__).resolve().parent
-_CONFIG = _HERE.parent / "circuitgenome" / "sizer" / "config"
+_SHARED = _HERE.parent / "circuitgenome" / "sizer" / "shared"
+_CONFIG = _SHARED / "config"
 _MODELS = _CONFIG / "models"
+_PDK = _SHARED / "pdk"
 
 # Per-node extraction + geometry-grid settings.  Grids are node-appropriate
 # starting points (um / pF); mu_cox/vth/lam are filled by extraction.
+#
+# ``kind`` selects the SPICE device interface:
+#   "model" (default) — flat ``.include`` of a BSIM4 card defining ``.model
+#                       nmos``/``pmos`` (PTM); devices are ``M`` instances.
+#   "pdk"             — foundry library: ``.include`` a design file then
+#                       ``.lib <file> <corner>``; devices are subcircuits (``X``)
+#                       named ``nmos_dev``/``pmos_dev`` with the BSIM4 device at
+#                       the internal node ``m0`` (handle ``@m.x1.m0``).
 NODES: dict[str, dict] = {
+    "gf180mcu": dict(
+        kind="pdk",
+        design="gf180/ngspice/design.ngspice",
+        lib="gf180/ngspice/sm141064.ngspice", corner="typical",
+        nmos_dev="nmos_3p3", pmos_dev="pmos_3p3",
+        vdd=3.3, l_ext_um=0.28, w_ext_um=10.0,
+        width=(0.22, 100.0, 0.005), length=(0.28, 4.0, 0.02),
+        cap=(0.01, 20.0, 0.01), out="gf180mcu",
+        desc="GF180MCU 180nm core 3.3V (nmos_3p3/pmos_3p3, BSIM4 level=54)",
+    ),
     "45": dict(
         card="ptm_45nm_HP.pm", vdd=1.0, l_ext_um=0.09, w_ext_um=1.0,
         width=(0.10, 100.0, 0.05), length=(0.045, 1.0, 0.005),
@@ -70,6 +90,32 @@ NODES: dict[str, dict] = {
 _UM = 1e-6
 
 
+class _Model:
+    """Per-node SPICE device interface (PTM ``.model`` M-device vs PDK subckt).
+
+    Provides the model-include block, an instance-line builder, and the
+    operating-point handle prefix, so the sweep decks below are device-agnostic.
+    """
+
+    def __init__(self, cfg: dict):
+        if cfg.get("kind") == "pdk":
+            inc = f'.include "{_PDK / cfg["design"]}"\n' if cfg.get("design") else ""
+            inc += f'.lib "{_PDK / cfg["lib"]}" {cfg.get("corner", "typical")}\n'
+            self.include = inc
+            self._dev = {"nmos": cfg["nmos_dev"], "pmos": cfg["pmos_dev"]}
+            self._x = "x"
+            self.prefix = "@m.x1.m0"
+        else:
+            self.include = f'.include "{_MODELS / cfg["card"]}"\n'
+            self._dev = {"nmos": "nmos", "pmos": "pmos"}
+            self._x = "M"
+            self.prefix = "@m1"
+
+    def inst(self, dev: str, nodes: str, w: float, l: float) -> str:
+        """A single sized device instance named ``<x>1`` on ``nodes`` (d g s b)."""
+        return f"{self._x}1 {nodes} {self._dev[dev]} W={w:.6e} L={l:.6e}"
+
+
 def _run_ngspice(deck: str) -> np.ndarray:
     """Run a deck in ngspice batch mode and return the wrdata table."""
     with tempfile.TemporaryDirectory() as d:
@@ -83,75 +129,39 @@ def _run_ngspice(deck: str) -> np.ndarray:
         return np.loadtxt(out)
 
 
-def _transfer(card: Path, dev: str, vdd: float, w_um: float, l_um: float):
+def _transfer(model: _Model, dev: str, vdd: float, w_um: float, l_um: float):
     """Return (vgs[], id_abs[]) for a Vds=Vdd transfer sweep."""
     w, l = w_um * _UM, l_um * _UM
     step = vdd / 400.0
     if dev == "nmos":
-        deck = f"""* transfer nmos
-.include "{card}"
-Vd d 0 {vdd}
-Vg g 0 0
-M1 d g 0 0 nmos W={w:.6e} L={l:.6e}
-.dc Vg 0 {vdd} {step:.6e}
-.control
-run
-wrdata __OUT__ i(Vd)
-.endc
-.end
-"""
+        src = f"Vd d 0 {vdd}\nVg g 0 0\n{model.inst('nmos', 'd g 0 0', w, l)}\n"
+        sweep = f".dc Vg 0 {vdd} {step:.6e}"
     else:
-        deck = f"""* transfer pmos
-.include "{card}"
-Vs s 0 {vdd}
-Vd d 0 0
-Vg g 0 {vdd}
-M1 d g s s pmos W={w:.6e} L={l:.6e}
-.dc Vg {vdd} 0 {-step:.6e}
-.control
-run
-wrdata __OUT__ i(Vd)
-.endc
-.end
-"""
+        src = (f"Vs s 0 {vdd}\nVd d 0 0\nVg g 0 {vdd}\n"
+               f"{model.inst('pmos', 'd g s s', w, l)}\n")
+        sweep = f".dc Vg {vdd} 0 {-step:.6e}"
+    deck = (f"* transfer {dev}\n{model.include}{src}{sweep}\n"
+            ".control\nrun\nwrdata __OUT__ i(Vd)\n.endc\n.end\n")
     data = _run_ngspice(deck)
-    sweep, cur = data[:, 0], np.abs(data[:, 1])
-    vgs = sweep if dev == "nmos" else (vdd - sweep)
+    sweep_v, cur = data[:, 0], np.abs(data[:, 1])
+    vgs = sweep_v if dev == "nmos" else (vdd - sweep_v)
     order = np.argsort(vgs)
     return vgs[order], cur[order]
 
 
-def _output(card: Path, dev: str, vdd: float, vov: float, w_um: float, l_um: float):
+def _output(model: _Model, dev: str, vdd: float, vov: float, w_um: float, l_um: float):
     """Return (vds[], id_abs[]) for a fixed-overdrive output sweep."""
     w, l = w_um * _UM, l_um * _UM
     step = vdd / 400.0
     if dev == "nmos":
-        deck = f"""* output nmos
-.include "{card}"
-Vd d 0 0
-Vg g 0 {vov:.6e}
-M1 d g 0 0 nmos W={w:.6e} L={l:.6e}
-.dc Vd 0 {vdd} {step:.6e}
-.control
-run
-wrdata __OUT__ i(Vd)
-.endc
-.end
-"""
+        src = f"Vd d 0 0\nVg g 0 {vov:.6e}\n{model.inst('nmos', 'd g 0 0', w, l)}\n"
+        sweep = f".dc Vd 0 {vdd} {step:.6e}"
     else:
-        deck = f"""* output pmos
-.include "{card}"
-Vs s 0 {vdd}
-Vg g 0 {vdd - vov:.6e}
-Vd d 0 {vdd}
-M1 d g s s pmos W={w:.6e} L={l:.6e}
-.dc Vd {vdd} 0 {-step:.6e}
-.control
-run
-wrdata __OUT__ i(Vd)
-.endc
-.end
-"""
+        src = (f"Vs s 0 {vdd}\nVg g 0 {vdd - vov:.6e}\nVd d 0 {vdd}\n"
+               f"{model.inst('pmos', 'd g s s', w, l)}\n")
+        sweep = f".dc Vd {vdd} 0 {-step:.6e}"
+    deck = (f"* output {dev}\n{model.include}{src}{sweep}\n"
+            ".control\nrun\nwrdata __OUT__ i(Vd)\n.endc\n.end\n")
     data = _run_ngspice(deck)
     vds_raw, cur = data[:, 0], np.abs(data[:, 1])
     vds = vds_raw if dev == "nmos" else (vdd - vds_raw)
@@ -181,14 +191,14 @@ def _fit_lambda(vds, idr, vdd):
 
 def extract(node: str) -> dict:
     cfg = NODES[node]
-    card = _MODELS / cfg["card"]
+    model = _Model(cfg)
     vdd, w, l = cfg["vdd"], cfg["w_ext_um"], cfg["l_ext_um"]
     res = {}
     for dev in ("nmos", "pmos"):
-        vgs, idr = _transfer(card, dev, vdd, w, l)
+        vgs, idr = _transfer(model, dev, vdd, w, l)
         vth, mu_cox = _fit_transfer(vgs, idr, w, l)
         vov = min(0.2, 0.4 * vdd)
-        vds, ido = _output(card, dev, vdd, abs(vth) + vov, w, l)
+        vds, ido = _output(model, dev, vdd, abs(vth) + vov, w, l)
         lam = _fit_lambda(vds, ido, vdd)
         res[dev] = dict(
             mu_cox=mu_cox,
@@ -258,7 +268,7 @@ cap:
 _GMID_AXIS = np.round(np.arange(6.0, 24.0 + 1e-9, 0.5), 3)
 
 
-def _gmid_sweep(card: Path, dev: str, vdd: float, w_um: float, l_um: float):
+def _gmid_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float):
     """Sweep Vgs at Vds=Vdd/2; return per-point (gm_id, id_w, gm_gds, ft, vdsat, vgs).
 
     ``id_w`` is Id per µm of width (A/µm); ``vgs`` is the gate-source voltage
@@ -267,35 +277,18 @@ def _gmid_sweep(card: Path, dev: str, vdd: float, w_um: float, l_um: float):
     w, l = w_um * _UM, l_um * _UM
     vds = vdd / 2.0
     step = vdd / 400.0
-    saves = ".save @m1[id] @m1[gm] @m1[gds] @m1[cgg] @m1[vdsat]\n"
-    cols = "@m1[id] @m1[gm] @m1[gds] @m1[cgg] @m1[vdsat]"
+    p = model.prefix
+    fields = f"{p}[id] {p}[gm] {p}[gds] {p}[cgg] {p}[vdsat]"
+    saves = f".save {fields}\n"
     if dev == "nmos":
-        deck = f"""* gmid nmos
-.include "{card}"
-Vd d 0 {vds:.6e}
-Vg g 0 0
-M1 d g 0 0 nmos W={w:.6e} L={l:.6e}
-{saves}.dc Vg 0 {vdd} {step:.6e}
-.control
-run
-wrdata __OUT__ {cols}
-.endc
-.end
-"""
+        src = f"Vd d 0 {vds:.6e}\nVg g 0 0\n{model.inst('nmos', 'd g 0 0', w, l)}\n"
+        sweep = f".dc Vg 0 {vdd} {step:.6e}"
     else:
-        deck = f"""* gmid pmos
-.include "{card}"
-Vs s 0 {vdd}
-Vd d 0 {vdd - vds:.6e}
-Vg g 0 {vdd}
-M1 d g s s pmos W={w:.6e} L={l:.6e}
-{saves}.dc Vg {vdd} 0 {-step:.6e}
-.control
-run
-wrdata __OUT__ {cols}
-.endc
-.end
-"""
+        src = (f"Vs s 0 {vdd}\nVd d 0 {vdd - vds:.6e}\nVg g 0 {vdd}\n"
+               f"{model.inst('pmos', 'd g s s', w, l)}\n")
+        sweep = f".dc Vg {vdd} 0 {-step:.6e}"
+    deck = (f"* gmid {dev}\n{model.include}{src}{saves}{sweep}\n"
+            f".control\nrun\nwrdata __OUT__ {fields}\n.endc\n.end\n")
     data = _run_ngspice(deck)
     # wrdata writes a scale column before each vector: [vg, id, vg, gm, vg, gds, ...].
     vg = data[:, 0]
@@ -341,7 +334,7 @@ def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarra
 def extract_gmid(node: str) -> dict:
     """Build the gm/Id LUT arrays for one node (both polarities)."""
     cfg = NODES[node]
-    card = _MODELS / cfg["card"]
+    model = _Model(cfg)
     vdd, w = cfg["vdd"], cfg["w_ext_um"]
     lmin, lmax, lstep = cfg["length"]
     # ~10 log-spaced lengths from L_min to L_max, snapped to the length grid.
@@ -351,7 +344,7 @@ def extract_gmid(node: str) -> dict:
     for dev in ("nmos", "pmos"):
         cube = {k: [] for k in ("id_w", "gm_gds", "ft", "vdsat", "vgs")}
         for l_um in l_axis:
-            gm_id, id_w, gm_gds, ft, vdsat, vgs = _gmid_sweep(card, dev, vdd, w, float(l_um))
+            gm_id, id_w, gm_gds, ft, vdsat, vgs = _gmid_sweep(model, dev, vdd, w, float(l_um))
             row = _invert_to_axis(
                 gm_id,
                 {"id_w": id_w, "gm_gds": gm_gds, "ft": ft, "vdsat": vdsat, "vgs": vgs},
@@ -364,7 +357,8 @@ def extract_gmid(node: str) -> dict:
 
 
 def write_npz(node: str, data: dict) -> Path:
-    out = _MODELS / f"ptm{node}_gmid.npz"
+    stem = NODES[node].get("out", f"ptm{node}")
+    out = _MODELS / f"{stem}_gmid.npz"
     np.savez(out, **data)
     return out
 
