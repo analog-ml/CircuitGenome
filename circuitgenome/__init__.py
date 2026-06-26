@@ -1,8 +1,11 @@
-# Re-export the Topology Synthesizer public API at the package root for
-# convenience (e.g. ``from circuitgenome import enumerate_circuits``).  The
-# recognizer and sizer layers are reached via their subpackages
-# (``circuitgenome.recognizer`` / ``circuitgenome.sizer``) so importing the
-# top-level package stays lightweight (no ortools/numpy pulled in eagerly).
+# Re-export each layer's public API at the package root for convenience, so
+# users can write e.g. ``from circuitgenome import enumerate_circuits`` or
+# ``from circuitgenome import size_circuit`` without reaching into subpackages.
+# The same symbols remain available via their subpackages
+# (``circuitgenome.synthesizer`` / ``circuitgenome.recognizer`` /
+# ``circuitgenome.sizer``).
+
+# Layer 1 - Topology Synthesizer
 from .synthesizer import (
     synthesize,
     enumerate_circuits,
@@ -15,8 +18,37 @@ from .synthesizer import (
     TopologyTemplate,
 )
 
+# Layer 2 - Recognizer
+from .recognizer import (
+    parse,
+    recognize,
+    assign_slots,
+    group_by_category,
+    ParsedNetlist,
+    RecognizedStructure,
+    SubcircuitRecognitionResult,
+    PatternDef,
+    PatternDevice,
+    SlotAssignment,
+    FunctionalBlockRecognitionResult,
+    CategoryGroupResult,
+)
+
+# Layer 3 - Initial Sizer
+from .sizer import (
+    size_circuit,
+    load_tech,
+    SizingResult,
+    SizingSpec,
+    TechParams,
+    TransistorSizing,
+    UnsupportedTechError,
+)
+
+
 __version__ = "0.1.0"
 __all__ = [
+    # Synthesizer public API
     "synthesize",
     "enumerate_circuits",
     "load_modules",
@@ -26,4 +58,27 @@ __all__ = [
     "SynthesizedCircuit",
     "ModuleVariant",
     "TopologyTemplate",
+
+    # Recognizer public API
+    "parse",
+    "recognize",
+    "assign_slots",
+    "group_by_category",
+    "ParsedNetlist",
+    "RecognizedStructure",
+    "SubcircuitRecognitionResult",
+    "PatternDef",
+    "PatternDevice",
+    "SlotAssignment",
+    "FunctionalBlockRecognitionResult",
+    "CategoryGroupResult",
+
+    # Sizer public API
+    "size_circuit",
+    "load_tech",
+    "SizingResult",
+    "SizingSpec",
+    "TechParams",
+    "TransistorSizing",
+    "UnsupportedTechError",
 ]
