@@ -11,12 +11,8 @@ from circuitgenome.synthesizer.models import Device
 from . import equations as eq
 from .device_model import DeviceModel
 from .models import SizingSpec, TechParams, TransistorSizing
-from .preprocess import (
-    _SECOND_STAGE_SLOTS,
-    _THIRD_STAGE_SLOTS,
-    _first_stage_gain_factor,
-    _is_signal_dev,
-)
+from .preprocess import _first_stage_gain_factor
+from .taxonomy import SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device
 
 
 def _evaluate_metrics(
@@ -46,9 +42,9 @@ def _evaluate_metrics(
     """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
-    is_three_stage = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
+    is_three_stage = any(s in slot_transistors for s in THIRD_STAGE_SLOTS)
     has_second_stage = (
-        any(s in slot_transistors for s in _SECOND_STAGE_SLOTS) or is_three_stage
+        any(s in slot_transistors for s in SECOND_STAGE_SLOTS) or is_three_stage
     )
 
     def _sz(ref: str) -> TransistorSizing | None:
@@ -117,7 +113,7 @@ def _evaluate_metrics(
                 gd_ss_n = g_d
             else:
                 gd_ss_p = g_d
-            if _is_signal_dev(d):
+            if is_signal_device(d):
                 gm2 = _gm(d, s)
             else:
                 ss_load_gd = g_d
@@ -151,7 +147,7 @@ def _evaluate_metrics(
                 gd_ts_n = g_d
             else:
                 gd_ts_p = g_d
-            if _is_signal_dev(d):
+            if is_signal_device(d):
                 gm3 = _gm(d, s)
         rout3 = eq.rout(gd_ts_n, gd_ts_p) if (gd_ts_n + gd_ts_p) > 0 else float("inf")
         if rout3_override is not None:
@@ -212,10 +208,10 @@ def _evaluate_metrics(
     n_bias_legs = len([d for d in bg_devs if d.type in ("nmos", "pmos")])
     supply_currents = [spec.ibias]  # tail
     if has_second_stage:
-        n_ss = sum(1 for s in _SECOND_STAGE_SLOTS if s in slot_transistors)
+        n_ss = sum(1 for s in SECOND_STAGE_SLOTS if s in slot_transistors)
         supply_currents.append(ids_2 * n_ss)
     if is_three_stage:
-        n_ts = sum(1 for s in _THIRD_STAGE_SLOTS if s in slot_transistors)
+        n_ts = sum(1 for s in THIRD_STAGE_SLOTS if s in slot_transistors)
         supply_currents.append(ids_3 * n_ts)
     supply_currents.append(spec.ibias * max(n_bias_legs, 1))  # bias gen approx
     power = eq.quiescent_power(spec.vdd, spec.vss, supply_currents)
