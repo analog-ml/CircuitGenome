@@ -30,8 +30,8 @@ from ..shared.preprocess import (
     _extract_slot_transistors,
     _size_load_resistors,
 )
+from .bias import check_dc_operating_point
 from .blocks import build_blocks, cascode_device_refs, node_rout
-from .dc_op import check_dc_operating_point
 from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent, resolve_transistor_intents
 from .resistors import size_resistors
@@ -83,7 +83,7 @@ def size_gmid(
         model, all_transistors, slot_transistors, ids_map, tintents, gm_req_map, tech
     )
 
-    dc_warnings, bias_feasible = check_dc_operating_point(
+    transistor_sizing, dc_warnings, bias_feasible = check_dc_operating_point(
         model, blocks, slot_transistors, all_transistors, ids_map,
         transistor_sizing, spec, tech
     )
