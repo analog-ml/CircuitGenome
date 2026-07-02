@@ -16,7 +16,7 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
-from ..shared.device_model import CASCODE, CURRENT_SOURCE, SIGNAL, GmIdModel
+from ..shared.device_model import GmIdModel
 from ..shared.device_model import GmIdPolicy
 from ..shared.gmid_lut import GmIdLut
 from ..shared.models import SizingResult, SizingSpec, TechParams
@@ -30,10 +30,10 @@ from ..shared.preprocess import (
     _extract_slot_transistors,
     _size_load_resistors,
 )
-from .blocks import _is_signal_dev, build_blocks, cascode_device_refs, node_rout
+from .blocks import build_blocks, cascode_device_refs, node_rout
 from .dc_op import check_dc_operating_point
 from .geometry import assign_geometry_gmid
-from .intent import DEFAULT_INTENT, GmIdIntent
+from .intent import DEFAULT_INTENT, GmIdIntent, resolve_transistor_intents
 from .resistors import size_resistors
 
 
@@ -75,17 +75,12 @@ def size_gmid(
         slot_transistors, all_transistors, ids_map, tech, spec, model, gd_load_r
     )
 
+    # Resolve the functional-block design intent onto each device (Level 2 → 3):
+    # role + per-block gm/Id region + L, with the rationale kept for reporting.
     cascodes = cascode_device_refs(slot_transistors)
-    role_map = {}
-    for ref, (device, _slot) in all_transistors.items():
-        if _is_signal_dev(device):
-            role_map[ref] = SIGNAL
-        elif ref in cascodes:
-            role_map[ref] = CASCODE
-        else:
-            role_map[ref] = CURRENT_SOURCE
+    tintents = resolve_transistor_intents(all_transistors, cascodes, intent.block_intents)
     transistor_sizing, geom_warnings = assign_geometry_gmid(
-        model, all_transistors, slot_transistors, ids_map, role_map, gm_req_map, tech
+        model, all_transistors, slot_transistors, ids_map, tintents, gm_req_map, tech
     )
 
     dc_warnings, bias_feasible = check_dc_operating_point(
@@ -131,4 +126,5 @@ def size_gmid(
         warnings=topology_warnings + ceil_warnings + geom_warnings + dc_warnings,
         resistors=resistors,
         bias_feasible=bias_feasible,
+        transistor_intents=tintents,
     )

@@ -9,7 +9,20 @@ untouched.
 """
 from __future__ import annotations
 
-from .intent import GmIdIntent
+from .intent import (
+    DEFAULT_BLOCK_INTENTS,
+    BlockIntent,
+    GmIdIntent,
+    TransistorIntent,
+    resolve_transistor_intents,
+)
 from .gmid_sizer import size_gmid
 
-__all__ = ["GmIdIntent", "size_gmid"]
+__all__ = [
+    "BlockIntent",
+    "DEFAULT_BLOCK_INTENTS",
+    "GmIdIntent",
+    "TransistorIntent",
+    "resolve_transistor_intents",
+    "size_gmid",
+]

@@ -17,8 +17,13 @@ for the result.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..shared.device_model import GmIdModel
 from ..shared.models import TechParams, TransistorSizing
+
+if TYPE_CHECKING:
+    from .intent import TransistorIntent
 
 # Same matched-pair slots CP-SAT treats as symmetric (constraints.build_model).
 _SYMMETRY_SLOTS = frozenset({"input_pair", "load", "tail_current"})
@@ -32,11 +37,16 @@ def assign_geometry_gmid(
     all_transistors: dict[str, tuple],      # ref → (Device, slot_name)
     slot_transistors: dict[str, list],      # slot_name → [Device, ...]
     ids_map: dict[str, float],              # ref → IDS in A
-    role_map: dict[str, str],               # ref → SIGNAL | CURRENT_SOURCE
+    intents: dict[str, "TransistorIntent"],  # ref → resolved per-device design intent
     gm_target_map: dict[str, float],        # ref → required gm in A/V (signal devices)
     tech: TechParams,
 ) -> tuple[dict[str, TransistorSizing], list[str]]:
-    """Return ``({ref: TransistorSizing}, warnings)`` for the gm/Id path."""
+    """Return ``({ref: TransistorSizing}, warnings)`` for the gm/Id path.
+
+    Geometry follows each device's :class:`~.intent.TransistorIntent`: its role,
+    its (per-block) gm/Id region and channel length.  Signal devices ignore the
+    intent's gm/Id and solve it from ``gm_target_map``.
+    """
     g = tech.width
     warnings: list[str] = []
 
@@ -44,13 +54,14 @@ def assign_geometry_gmid(
         v = round(w_um / g.step) * g.step
         return float(min(max(v, g.min), g.max))
 
-    # --- 1+2: per-device geometry from the LUT, W snapped ---
+    # --- 1+2: per-device geometry from the LUT (block intent → gm/Id, L), W snapped ---
     W: dict[str, float] = {}
     L: dict[str, float] = {}
     for ref, (device, _slot) in all_transistors.items():
-        role = role_map[ref]
+        ti = intents[ref]
         geo = model.geometry_for(
-            device.type, ids_map[ref], role, gm_target_map.get(ref)
+            device.type, ids_map[ref], ti.role, gm_target_map.get(ref),
+            gm_id=ti.gm_id, l_um=model.length_for(ti.l_mult),
         )
         W[ref] = snap_w(geo.w_um)
         L[ref] = geo.l_um

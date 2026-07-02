@@ -8,6 +8,7 @@ from circuitgenome.sizer.shared.device_model import (
     build_device_model,
 )
 from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
+from circuitgenome.sizer.gmid.intent import TransistorIntent
 from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.synthesizer.models import Device
 
@@ -29,6 +30,18 @@ def _snap_w(tech, w):
     return min(max(round(w / g.step) * g.step, g.min), g.max)
 
 
+# Wrap explicit roles into per-device intents using the registry's role defaults
+# (SIGNAL: gm/Id solved, L×2; CURRENT_SOURCE: gm/Id 10, L×4; CASCODE: gm/Id 8, L×3).
+_ROLE_DEF = {SIGNAL: (None, 2.0), CURRENT_SOURCE: (10.0, 4.0)}
+
+
+def _intents(roles):
+    return {ref: TransistorIntent(ref=ref, block="test", role=role,
+                                  gm_id=_ROLE_DEF[role][0], l_mult=_ROLE_DEF[role][1],
+                                  rationale="")
+            for ref, role in roles.items()}
+
+
 def test_mirror_ratio_is_exact(tech, model):
     """Output width tracks the current ratio off the diode-connected reference."""
     ref = Device(ref="mref", type="nmos",
@@ -40,7 +53,7 @@ def test_mirror_ratio_is_exact(tech, model):
     ids = {"mref": 10e-6, "mout": 25e-6}
     roles = {"mref": CURRENT_SOURCE, "mout": CURRENT_SOURCE}
 
-    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, roles, {}, tech)
+    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
 
     assert sizing["mout"].l_um == sizing["mref"].l_um            # matched length
     expected = _snap_w(tech, 2.5 * sizing["mref"].w_um)
@@ -60,7 +73,7 @@ def test_matched_pair_symmetry(tech, model):
     roles = {"m1": SIGNAL, "m2": SIGNAL}
     gmt = {"m1": 1e-4, "m2": 1e-4}
 
-    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, roles, gmt, tech)
+    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), gmt, tech)
     assert sizing["m1"].w_um == sizing["m2"].w_um
     assert sizing["m1"].l_um == sizing["m2"].l_um
 
@@ -70,7 +83,7 @@ def test_geometry_on_grid(tech, model):
     all_t = {"m1": (d, "input_pair")}
     slot_t = {"input_pair": [d]}
     sizing, _ = assign_geometry_gmid(
-        model, all_t, slot_t, {"m1": 5e-6}, {"m1": SIGNAL}, {"m1": 1e-4}, tech)
+        model, all_t, slot_t, {"m1": 5e-6}, _intents({"m1": SIGNAL}), {"m1": 1e-4}, tech)
     s = sizing["m1"]
     assert s.w_um == pytest.approx(_snap_w(tech, s.w_um))
     assert tech.width.min <= s.w_um <= tech.width.max
@@ -84,6 +97,6 @@ def test_over_ceiling_request_warns_and_clamps(tech, model):
     slot_t = {"input_pair": [d]}
     # gm_target/Id = 1e-3 / 5e-6 = 200 /V, far above the table ceiling (~24).
     sizing, warns = assign_geometry_gmid(
-        model, all_t, slot_t, {"m1": 5e-6}, {"m1": SIGNAL}, {"m1": 1e-3}, tech)
+        model, all_t, slot_t, {"m1": 5e-6}, _intents({"m1": SIGNAL}), {"m1": 1e-3}, tech)
     assert any("ceiling" in w for w in warns)
     assert sizing["m1"].w_um <= tech.width.max
