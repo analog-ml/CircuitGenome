@@ -54,6 +54,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                       help="After sizing, verify metrics with an ngspice simulation "
                            "(same technology) and print analytical vs SPICE")
 
+    design = sub.add_parser(
+        "design",
+        help="Synthesize + size + SPICE-verify circuits against a spec, and "
+             "export the designs that meet it")
+    which = design.add_mutually_exclusive_group(required=True)
+    which.add_argument("--topology", help="Topology template name to design")
+    which.add_argument("--all", action="store_true", dest="all_templates",
+                       help="Design every topology template")
+    design.add_argument("--spec", type=Path, dest="spec_file", required=True,
+                        help="Performance specification YAML file")
+    design.add_argument("--output-dir", "-o", type=Path, dest="output_dir",
+                        required=True,
+                        help="Directory for the sized netlists and report.json")
+    design.add_argument("--tech", default="gf180mcu",
+                        help="Technology YAML config or built-in name "
+                             "(default: gf180mcu; needs a gm/Id LUT)")
+    design.add_argument("--limit", type=int,
+                        help="Evaluate at most N circuits per template "
+                             "(default: exhaustive)")
+    design.add_argument("--workers", type=int, default=1,
+                        help="Parallel worker processes (default: 1)")
+
     return parser.parse_args(argv)
 
 
@@ -404,6 +426,60 @@ def _cmd_size(args: argparse.Namespace) -> None:
             print("  (SPICE = best-effort cross-check; FD AC metrics may show n/a)")
 
 
+def _cmd_design(args: argparse.Namespace) -> None:
+    from .designer import design
+
+    templates = None if args.all_templates else [args.topology]
+    try:
+        report = design(args.spec_file, args.output_dir, templates=templates,
+                        tech=args.tech, limit=args.limit, workers=args.workers,
+                        progress=print)
+    except (RuntimeError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    total = sum(s.enumerated for s in report.stats.values())
+    accepted = len(report.solutions)
+
+    print(f"\nDesign summary (tech: {report.tech}):")
+    print(f"  {'template':<44}{'evaluated':>10}{'sizing✗':>9}{'bias✗':>7}"
+          f"{'spec✗':>7}{'error':>7}{'accepted':>10}")
+    for name, st in report.stats.items():
+        print(f"  {name:<44}{st.enumerated:>10}{st.sizing_failed:>9}"
+              f"{st.bias_infeasible:>7}{st.spec_failed:>7}{st.errors:>7}"
+              f"{st.accepted:>10}")
+    rate = (accepted / total * 100) if total else 0.0
+    print(f"\n  {accepted}/{total} circuits meet the spec ({rate:.1f}%)  |  "
+          f"runtime {report.runtime_s:.1f}s")
+    if report.unverified_specs:
+        print(f"  ⚠ not SPICE-verifiable (check separately): "
+              f"{', '.join(report.unverified_specs)}")
+
+    if report.best_points:
+        _BEST_ROWS = [
+            ("highest_gain", "Highest gain", "gain_db", 1.0, "dB"),
+            ("highest_gbw", "Highest GBW", "gbw_hz", 1e-6, "MHz"),
+            ("highest_phase_margin", "Highest phase margin", "phase_margin_deg", 1.0, "°"),
+            ("lowest_power", "Lowest power", "power_w", 1e3, "mW"),
+        ]
+        print("\nBest design points:")
+        for crit, label, key, scale, unit in _BEST_ROWS:
+            sol = report.best_points.get(crit)
+            if sol is not None and sol.metrics.get(key) is not None:
+                print(f"  {label:<22} {sol.topology}/{sol.name}  "
+                      f"({sol.metrics[key] * scale:.2f} {unit})")
+        robust = report.best_points.get("most_robust")
+        if robust is not None:
+            print(f"  {'Most robust':<22} {robust.topology}/{robust.name}  "
+                  f"(worst-case margin +{robust.worst_margin * 100:.0f}%)")
+
+    if accepted:
+        print(f"\nSized netlists + report.json written to {args.output_dir}/")
+    else:
+        print(f"\nNo circuit met the spec — report.json written to "
+              f"{args.output_dir}/ (relax the spec or try other templates).")
+
+
 def _cmd_visualize(args: argparse.Namespace) -> None:
     try:
         import streamlit.web.cli as stcli
@@ -426,6 +502,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_recognize(args)
     elif args.command == "size":
         _cmd_size(args)
+    elif args.command == "design":
+        _cmd_design(args)
 
 
 if __name__ == "__main__":

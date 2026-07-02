@@ -37,12 +37,21 @@ from .recognizer import (
 # Layer 3 - Initial Sizer
 from .sizer import (
     size_circuit,
+    load_spec,
     load_tech,
     SizingResult,
     SizingSpec,
     TechParams,
     TransistorSizing,
     UnsupportedTechError,
+)
+
+# Layer 4 - Designer
+from .designer import (
+    design,
+    DesignReport,
+    DesignSolution,
+    TemplateStats,
 )
 
 
@@ -75,10 +84,17 @@ __all__ = [
 
     # Sizer public API
     "size_circuit",
+    "load_spec",
     "load_tech",
     "SizingResult",
     "SizingSpec",
     "TechParams",
     "TransistorSizing",
     "UnsupportedTechError",
+
+    # Designer public API
+    "design",
+    "DesignReport",
+    "DesignSolution",
+    "TemplateStats",
 ]
