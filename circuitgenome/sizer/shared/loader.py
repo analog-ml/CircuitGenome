@@ -1,12 +1,24 @@
-"""Load technology parameters from a YAML config file."""
+"""Load technology parameters and performance specs from YAML config files."""
 from __future__ import annotations
 from pathlib import Path
 
 import yaml
 
-from .models import GridSpec, MosfetParams, SpiceLib, TechParams
+from .models import GridSpec, MosfetParams, SizingSpec, SpiceLib, TechParams
 
 _BUILTIN_DIR = Path(__file__).parent / "config"
+
+
+def load_spec(path: Path | str) -> SizingSpec:
+    """Load a :class:`~.models.SizingSpec` from a YAML file.
+
+    Keys that are not ``SizingSpec`` fields are ignored, so a spec file may
+    carry extra annotations (comments, provenance) without breaking loading.
+    """
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    return SizingSpec(
+        **{k: v for k, v in data.items() if k in SizingSpec.__dataclass_fields__})
 
 
 def load_tech(path: Path | str | None = None) -> TechParams:

@@ -112,6 +112,23 @@ def _parse_subckt(netlist_text: str):
     return name, ports, body
 
 
+def sized_netlist(netlist_text: str, result: SizingResult) -> str:
+    """Return ``netlist_text`` with the sized values from ``result`` injected.
+
+    Each MOSFET in the single ``.subckt`` block gets its ``W=``/``L=``, sized
+    load resistors get their ohm value and the compensation cap(s) get
+    ``cc_pf``/``cc2_pf`` — the same injection the verification decks use.  Any
+    lines before the ``.subckt`` (title/comments) are preserved, so the output
+    is a standalone flat netlist ready for SPICE.
+    """
+    lines = netlist_text.splitlines()
+    start = next(i for i, l in enumerate(lines) if l.strip().lower().startswith(".subckt"))
+    name, ports, body = _parse_subckt(netlist_text)
+    body = _inject_sizes(body, result)
+    out = lines[:start] + [f".subckt {name} {' '.join(ports)}"] + body + [".ends"]
+    return "\n".join(out) + "\n"
+
+
 def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
     """Set sized W/L (MOSFETs), Cc (comp caps) and R (sized load resistors)."""
     cc1 = result.cc_pf
