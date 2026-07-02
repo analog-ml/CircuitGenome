@@ -12,9 +12,9 @@ GF180MCU foundry PDK).  Unlike the Level-1 analytical flow — documented in
 by KCL and ``gm/Id`` chosen per device, the LUT turns ``Id/W`` straight into
 ``W``.
 
-It walks the pipeline end to end as thirteen steps, each with a runnable snippet
-and its observed output, then explains the **role vs functional building block**
-distinction that drives the per-device gm/Id choice.
+It walks the pipeline end to end as **five phases**, each with a runnable
+snippet and its observed output, then explains the **role vs functional
+building block** distinction that drives the per-device gm/Id choice.
 
 .. contents:: On this page
    :depth: 2
@@ -70,23 +70,24 @@ Flow at a glance
 
    size_circuit ──(tech.gmid_lut?)──► size_gmid
       │
-      ├─ 1. extract slots ──► build_blocks                  (blocks.py)
-      ├─ 2. topology check + dedupe                         (shared/preprocess)
-      ├─ 3. assign Ids by KCL                               (shared/preprocess)
-      ├─ 4. size load resistors                             (shared/preprocess)
-      ├─ 5. GmIdIntent → GmIdPolicy → GmIdModel             (gmid_sizer._model_for)
-      ├─ 6. compute gm requirements + Cc                    (shared/preprocess)
-      ├─ 7. resolve block intent → per-device role/gm-Id/L  (intent.resolve_transistor_intents)
-      ├─ 8. assign geometry (LUT→W/L, sym, mirror)          (geometry.py)   ◄── core
-      ├─ 9. DC bias feasibility (headroom + cascode)        (dc_op.py)      ◄── mutates sizing
-      ├─ 10. size non-load resistors                        (resistors.py)
-      ├─ 11. cascode rout override                          (blocks.node_rout)
-      ├─ 12. evaluate metrics                               (shared/metrics)
-      └─ 13. return SizingResult(status="GMID")
+      ├─ Phase 1  Analyze          (analyze.py)   ─► CircuitView
+      │             slots, block view, dedupe, cascodes, topology check
+      ├─ Phase 2  Bias currents    (plan.py)      ─► CurrentPlan
+      │             Ids by KCL, rail-referenced load resistors
+      ├─ Phase 3  Plan             (plan.py)      ─► SizingPlan
+      │             GmIdModel, gm requirements + Cc, per-device intent
+      ├─ Phase 4  Size
+      │             a. geometry (LUT→W/L, sym, mirror)   (geometry.py)  ◄── core
+      │             b. DC bias check + tail repair       (bias.py)
+      │             c. non-load resistors                (resistors.py) ─► MetricModifiers
+      └─ Phase 5  Evaluate         (evaluate.py)  ─► metrics/margins
+                    cascode-aware rout, analytical gain/GBW/PM
+                    ─► SizingResult(status="GMID")
 
-The key design property: because current is fixed at step 3 and gm/Id is a
-*choice* (steps 5–7), geometry is computed, not searched — steps 8–13 are a
-straight line with one in-place repair (step 9's tail re-size).
+The key design property: because current is fixed in Phase 2 and gm/Id is a
+*choice* (Phase 3), geometry is computed, not searched — Phases 4–5 are a
+straight line with one explicit repair (the tail re-size in Phase 4b, which
+returns a new sizing rather than mutating).
 
 ----
 
@@ -212,31 +213,34 @@ current-source load — they resolve to different blocks
 
 ----
 
-Step-by-step walkthrough
-------------------------
+Phase-by-phase walkthrough
+--------------------------
 
-Each step below assumes the bootstrap above and the results of the prior steps.
+Each phase below assumes the bootstrap above and the results of the prior
+phases.  Each phase is one function with a typed result, so the orchestrator
+(:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid`) reads as this
+walkthrough does.
 
-Step 1 — extract slots + block view
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 1 — Analyze: the structural view
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.shared.preprocess._extract_slot_transistors` /
-``_extract_slot_resistors`` pull the MOSFETs and resistors out of the
-recognizer's functional-block slots;
-:func:`~circuitgenome.sizer.gmid.blocks.build_blocks` groups them into typed
-blocks (input pair, load, stages, tail…) and classifies each load's *kind*
-(MIRROR / CASCODE / RESISTOR / CURRENT_SOURCE).
+:func:`~circuitgenome.sizer.gmid.analyze.analyze_circuit` derives everything the
+later phases need to know about the circuit's *structure*, once, into a
+:class:`~circuitgenome.sizer.gmid.analyze.CircuitView`: the per-slot MOSFET and
+resistor lists, the typed block view (:func:`~circuitgenome.sizer.gmid.blocks.build_blocks`
+classifies each load's *kind* — MIRROR / CASCODE / RESISTOR / CURRENT_SOURCE),
+the deduplicated ``ref → (Device, slot)`` map (a device appearing in several
+slots is attributed to the highest-priority one), the cascode device refs, and a
+topology-mismatch warning when a gain-stage slot holds no signal transistor.
 
 .. code-block:: python
 
-   from circuitgenome.sizer.shared.preprocess import (
-       _extract_slot_transistors, _extract_slot_resistors)
-   from circuitgenome.sizer.gmid.blocks import build_blocks
-   slot_transistors = _extract_slot_transistors(fbr)
-   slot_resistors   = _extract_slot_resistors(fbr)
-   blocks = build_blocks(slot_transistors, slot_resistors)
-   print({k: [d.ref for d in v] for k, v in slot_transistors.items()})
-   print(blocks.load.load_kind, blocks.n_stages, blocks.is_fully_differential)
+   from circuitgenome.sizer.gmid.analyze import analyze_circuit
+   view = analyze_circuit(fbr, topo)
+   print({k: [d.ref for d in v] for k, v in view.slot_transistors.items()})
+   print(view.blocks.load.load_kind, view.blocks.n_stages, view.blocks.is_fully_differential)
+   print(view.warnings)
+   print({r: (d.type, slot) for r, (d, slot) in view.all_transistors.items()})
 
 .. code-block:: text
 
@@ -244,143 +248,95 @@ blocks (input pair, load, stages, tail…) and classifies each load's *kind*
     'bias_gen': ['mn1_bias_gen','mn6_bias_gen','mp5_bias_gen','mn8_bias_gen','m1_tail_current'],
     'second_stage': ['mn1_second_stage','mp1_second_stage']}
    LoadKind.RESISTOR  2  False
-
-Step 2 — topology check + dedupe
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:func:`~circuitgenome.sizer.shared.preprocess._check_topology_match` warns if the
-recognized slots don't match the claimed topology; ``_deduplicate`` collapses
-devices appearing in multiple slots into one ``ref → (Device, slot)`` map.
-
-.. code-block:: python
-
-   from circuitgenome.sizer.shared.preprocess import _check_topology_match, _deduplicate
-   topo_warn = _check_topology_match(slot_transistors, topo.name)
-   all_transistors = _deduplicate(slot_transistors)
-   print(topo_warn)
-   print({r: (d.type, slot) for r, (d, slot) in all_transistors.items()})
-
-.. code-block:: text
-
    []
    {'m1_input_pair': ('pmos','input_pair'), 'm2_input_pair': ('pmos','input_pair'),
     'm1_tail_current': ('pmos','tail_current'), 'm2_tail_current': ('pmos','tail_current'),
     'mn1_second_stage': ('nmos','second_stage'), 'mp1_second_stage': ('pmos','second_stage'),
     'mn1_bias_gen': ('nmos','bias_gen'), ... }   # 10 unique devices
 
-Step 3 — assign currents by KCL
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. note::
 
-:func:`~circuitgenome.sizer.shared.preprocess._assign_ids` walks the bias current
-(``spec.ibias``) and the per-stage current ratios to give every device its
-``Id``.  This is what makes the rest deterministic: with ``Id`` fixed, the LUT
-turns a chosen gm/Id straight into geometry.
+   The slot names and bias-net conventions the whole sizer assumes about a
+   template live in one place:
+   :mod:`circuitgenome.sizer.shared.taxonomy`.  A new topology whose slots
+   follow those conventions needs no sizer changes; one that introduces new
+   slot names is supported by extending the groups there.
+
+Phase 2 — Bias currents: Ids by KCL + load resistors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:func:`~circuitgenome.sizer.gmid.plan.assign_currents` fixes what *cannot* be
+chosen.  It walks the bias current (``spec.ibias``) and the per-stage current
+ratios to give every device its ``Id``
+(:func:`~circuitgenome.sizer.shared.preprocess.assign_ids`), and sets
+rail-referenced load resistors so the first-stage output biases correctly
+(:func:`~circuitgenome.sizer.shared.preprocess.size_load_resistors`).  This is
+what makes the rest deterministic: with ``Id`` fixed, the LUT turns a chosen
+gm/Id straight into geometry.
 
 .. code-block:: python
 
-   from circuitgenome.sizer.shared.preprocess import _assign_ids
-   ids_map = _assign_ids(slot_transistors, all_transistors, spec)
-   print({r: round(i*1e6, 2) for r, i in ids_map.items()})   # Ids in uA
+   from circuitgenome.sizer.gmid.plan import assign_currents
+   currents = assign_currents(view, spec, tech)
+   print({r: round(i*1e6, 2) for r, i in currents.ids_map.items()})   # Ids in uA
+   print(currents.load_resistors, currents.gd_load_r)
 
 .. code-block:: text
 
    {'m1_input_pair': 7.5, 'm2_input_pair': 7.5, 'm1_tail_current': 15.0, 'm2_tail_current': 15.0,
     'mn1_second_stage': 37.5, 'mp1_second_stage': 37.5, 'mn1_bias_gen': 15.0, ...}
+   {'r1_load': 69866.7, 'r2_load': 69866.7}  1.431e-05
 
 (ibias 15 µA → tail 15, each input-pair half 7.5, second stage 15×2.5 = 37.5.)
 
-Step 4 — size load resistors
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 3 — Plan: requirements + per-device intent
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.shared.preprocess._size_load_resistors` sets
-rail-referenced load resistors so the first-stage output biases correctly;
-``gd_load_r`` (their conductance) is derived for later gain/PM math.
+:func:`~circuitgenome.sizer.gmid.plan.plan_devices` derives what must be
+*achieved* and what is *chosen*, into a
+:class:`~circuitgenome.sizer.gmid.plan.SizingPlan`:
 
-.. code-block:: python
-
-   from circuitgenome.sizer.shared.preprocess import _size_load_resistors
-   resistors = _size_load_resistors(slot_resistors, spec, tech)
-   gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
-   print(resistors, gd_load_r)
-
-.. code-block:: text
-
-   {'r1_load': 69866.7, 'r2_load': 69866.7}  1.431e-05
-
-Step 5 — build the GmIdModel from intent
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:func:`~circuitgenome.sizer.gmid.gmid_sizer._model_for` translates the
-role-level fallbacks in :class:`~circuitgenome.sizer.gmid.intent.GmIdIntent` into
-a ``GmIdPolicy`` and constructs the
-:class:`~circuitgenome.sizer.shared.device_model.GmIdModel` wrapping the
-:class:`~circuitgenome.sizer.shared.gmid_lut.GmIdLut` (.npz table).  This is the
-only place the model is instantiated.
+* It builds the :class:`~circuitgenome.sizer.shared.device_model.GmIdModel`
+  (wrapping the :class:`~circuitgenome.sizer.shared.gmid_lut.GmIdLut` ``.npz``
+  table) with a ``GmIdPolicy`` translated from the role-level fallbacks in
+  :class:`~circuitgenome.sizer.gmid.intent.GmIdIntent`.  This is the only place
+  the model is instantiated.
+* :func:`~circuitgenome.sizer.shared.preprocess.compute_requirements` computes,
+  from the spec (GBW, gain, phase margin, load cap), each signal device's
+  required gm and the compensation caps ``cc_pf`` / ``cc2_pf``, emitting ceiling
+  warnings if a required gm/Id exceeds the weak-inversion limit.
+* :func:`~circuitgenome.sizer.gmid.intent.resolve_transistor_intents` maps every
+  device to its functional building block via
+  :func:`~circuitgenome.sizer.gmid.intent.functional_block` (signal precedence,
+  then cascode, then current-source), and reads the block's role, gm/Id region
+  and L multiple from the registry.  Note the ``second_stage`` slot splitting by
+  role: the signal driver → ``gain_stage``, its load → ``stage_load`` (see
+  `Roles vs functional building blocks`_).
 
 .. code-block:: python
 
-   from circuitgenome.sizer.gmid.gmid_sizer import _model_for
+   from circuitgenome.sizer.gmid.plan import plan_devices
    from circuitgenome.sizer.gmid.intent import DEFAULT_INTENT
    intent = DEFAULT_INTENT
-   model = _model_for(tech, intent)
-   print(type(model).__name__, model.is_gmid, model.lut.gm_id_axis[:3], model.lut.gm_id_axis[-1])
-
-.. code-block:: text
-
-   GmIdModel  True  [6.0 6.5 7.0]  24.0
-
-Step 6 — derive gm requirements + compensation caps
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:func:`~circuitgenome.sizer.shared.preprocess._compute_requirements` computes,
-from the spec (GBW, gain, phase margin, load cap), each signal device's required
-gm, the max output swing, and the compensation caps ``cc_pf`` / ``cc2_pf``.  It
-emits ceiling warnings if a required gm/Id exceeds the weak-inversion limit.
-
-.. code-block:: python
-
-   from circuitgenome.sizer.shared.preprocess import _compute_requirements
-   gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warn = _compute_requirements(
-       slot_transistors, all_transistors, ids_map, tech, spec, model, gd_load_r)
-   print({r: round(g*1e6, 1) for r, g in gm_req_map.items()}, cc_pf, cc2_pf)
-   print(ceil_warn)
+   plan = plan_devices(view, currents, spec, tech, intent)
+   print({r: round(g*1e6, 1) for r, g in plan.gm_req_map.items()}, plan.cc_pf, plan.cc2_pf)
+   print(plan.warnings)
+   for r in ["m1_input_pair","mn1_second_stage","mp1_second_stage","m1_tail_current","mn1_bias_gen"]:
+       ti = plan.tintents[r]
+       print(f"{r:18s} block={ti.block:14s} role={ti.role:14s} gm_id={ti.gm_id} l_mult={ti.l_mult}")
 
 .. code-block:: text
 
    {'m1_input_pair': 125.7, 'm2_input_pair': 125.7, 'mn1_second_stage': 900.0, 'mp1_second_stage': 0.0}  10.0  None
    ['second-stage gm requirement exceeds the weak-inversion ceiling — increase second_stage_current_ratio/ibias or relax gain.']
-
-Step 7 — resolve functional-block intent onto each device
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:func:`~circuitgenome.sizer.gmid.intent.resolve_transistor_intents` maps every
-device to its functional building block via
-:func:`~circuitgenome.sizer.gmid.intent.functional_block` (signal precedence,
-then cascode, then current-source), and reads the block's role, gm/Id region and
-L multiple from the registry.  Note the ``second_stage`` slot splitting by role:
-the signal driver → ``gain_stage``, its load → ``stage_load`` (see
-`Roles vs functional building blocks`_).
-
-.. code-block:: python
-
-   from circuitgenome.sizer.gmid.blocks import cascode_device_refs
-   from circuitgenome.sizer.gmid.intent import resolve_transistor_intents
-   cascodes = cascode_device_refs(slot_transistors)
-   tintents = resolve_transistor_intents(all_transistors, cascodes, intent.block_intents)
-   for r in ["m1_input_pair","mn1_second_stage","mp1_second_stage","m1_tail_current","mn1_bias_gen"]:
-       ti = tintents[r]
-       print(f"{r:18s} block={ti.block:14s} role={ti.role:14s} gm_id={ti.gm_id} l_mult={ti.l_mult}")
-
-.. code-block:: text
-
    m1_input_pair      block=input_stage    role=signal         gm_id=None l_mult=2.0
    mn1_second_stage   block=gain_stage     role=signal         gm_id=None l_mult=2.0
    mp1_second_stage   block=stage_load     role=current_source gm_id=10.0 l_mult=4.0
    m1_tail_current    block=tail_current   role=current_source gm_id=10.0 l_mult=4.0
    mn1_bias_gen       block=bias_generator role=current_source gm_id=10.0 l_mult=4.0
 
-Step 8 — assign geometry (LUT → W/L, symmetry, mirror ratios)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 4a — Size: assign geometry (LUT → W/L, symmetry, mirror ratios)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid` is the core
 forward pass, driven by each device's ``TransistorIntent``: (a) the LUT gives
@@ -393,9 +349,10 @@ ratio × the diode reference's W.  Returns
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
-   transistor_sizing, geom_warn = assign_geometry_gmid(
-       model, all_transistors, slot_transistors, ids_map, tintents, gm_req_map, tech)
-   for r, s in transistor_sizing.items():
+   sizing, geom_warn = assign_geometry_gmid(
+       plan.model, view.all_transistors, view.slot_transistors,
+       currents.ids_map, plan.tintents, plan.gm_req_map, tech)
+   for r, s in sizing.items():
        print("%-18s W=%.2f L=%.3f Vgs=%.3f Vdsat=%.3f" % (r, s.w_um, s.l_um, s.vgs_v, s.vds_sat_v))
 
 .. code-block:: text
@@ -406,23 +363,23 @@ ratio × the diode reference's W.  Returns
    mp1_second_stage   W=2.40 L=0.180 Vgs=-0.654 Vdsat=0.179
    mn1_bias_gen       W=0.35 L=0.180 Vgs=0.607 Vdsat=0.152   ...
 
-Step 9 — DC bias feasibility (headroom + cascode budget)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 4b — Size: DC bias feasibility (headroom + cascode budget)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.gmid.dc_op.check_dc_operating_point` does two things:
-:func:`~circuitgenome.sizer.gmid.headroom.apply_headroom` checks the tail's
-saturation headroom and, when short, re-sizes the tail mirror group to a higher
-gm/Id (lower ``Vdsat``) — mutating ``transistor_sizing`` in place — keeping mirror
-ratios consistent; then a **cascode-aware budget** sums a stacked tail's series
-``Vdsat`` and flags infeasibility a single-device check would miss.  Returns
-warnings plus a ``bias_feasible`` verdict.
+:func:`~circuitgenome.sizer.gmid.bias.check_dc_operating_point` does two things:
+a **headroom repair** checks the tail's saturation headroom and, when short,
+re-sizes the tail mirror group to a higher gm/Id (lower ``Vdsat``) — keeping
+mirror ratios consistent; then a **cascode-aware budget** sums a stacked tail's
+series ``Vdsat`` and flags infeasibility a single-device check would miss.  It
+returns the (possibly repaired) sizing, the warnings, and a ``bias_feasible``
+verdict — the input sizing is never mutated.
 
 .. code-block:: python
 
-   from circuitgenome.sizer.gmid.dc_op import check_dc_operating_point
-   dc_warn, bias_feasible = check_dc_operating_point(
-       model, blocks, slot_transistors, all_transistors, ids_map,
-       transistor_sizing, spec, tech)
+   from circuitgenome.sizer.gmid.bias import check_dc_operating_point
+   sizing, dc_warn, bias_feasible = check_dc_operating_point(
+       plan.model, view.blocks, view.slot_transistors, view.all_transistors,
+       currents.ids_map, sizing, spec, tech)
    print(bias_feasible, dc_warn)
 
 .. code-block:: text
@@ -433,8 +390,8 @@ warnings plus a ``bias_feasible`` verdict.
 Expected here: a PMOS tail at 1.0 V mid-rail is headroom-starved (the issue
 #74/#76 advisory).  Raising ``vdd`` (e.g. to 1.8 V) clears it.
 
-**Interpreting the verdict.**  Step 9 *repairs first and warns only on failure*, so
-the presence or absence of a warning maps to three outcomes:
+**Interpreting the verdict.**  Phase 4b *repairs first and warns only on failure*,
+so the presence or absence of a warning maps to three outcomes:
 
 .. list-table::
    :header-rows: 1
@@ -448,24 +405,24 @@ the presence or absence of a warning maps to three outcomes:
      - DC bias is sound; the sizing is unchanged.
    * - No warning, tail repaired
      - ``True``
-     - DC bias is sound, but the tail mirror group was silently re-sized (``sizing``
-       mutated) to fit — a clean result does **not** mean nothing was adjusted.
+     - DC bias is sound, but the returned sizing has the tail mirror group
+       re-sized to fit — a clean result does **not** mean nothing was adjusted.
    * - Warning emitted
      - ``False``
      - The repair could not fit the tail; it cannot stay saturated, so the assumed
        ``Id`` will not flow.
 
-Every step-9 warning sets ``bias_feasible = False``.  When it does, the W/L values are
+Every Phase-4b warning sets ``bias_feasible = False``.  When it does, the W/L values are
 still internally consistent (they hit their gm/Id targets), but the **design is
 infeasible**: the tail drops into triode, ``gm1 = (gm/Id)·Id`` collapses, and the
-gain/GBW reported in `Step 12 — evaluate analytical metrics`_ are *optimistic and should
-not be trusted*.  It is a physical-feasibility failure, not a computation error — treat a
-step-9 warning as "reject, and do not trust the metrics".
+gain/GBW reported in `Phase 5 — Evaluate: analytical metrics`_ are *optimistic and
+should not be trusted*.  It is a physical-feasibility failure, not a computation
+error — treat a Phase-4b warning as "reject, and do not trust the metrics".
 
 .. note::
 
    Not every result warning is a bias warning.  The gm-ceiling advisory from
-   `Step 6 — derive gm requirements + compensation caps`_
+   `Phase 3 — Plan: requirements + per-device intent`_
    (*"…exceeds the weak-inversion ceiling…"*) also means the design falls short, but for a
    different reason — the required gm is unreachable at the bias current — and it does
    **not** set ``bias_feasible``.  Audit by wording: *"insufficient saturation headroom"*
@@ -473,7 +430,7 @@ step-9 warning as "reject, and do not trust the metrics".
 
 .. note::
 
-   This is a fast **analytical pre-check**, and it is phase-1 (tail-focused): a SPICE DC
+   This is a fast **analytical pre-check**, and it is tail-focused: a SPICE DC
    bias-soundness check
    (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) grounds the final
    verdict for PTM / foundry techs.  So ``bias_feasible = True`` is *necessary but not
@@ -481,68 +438,44 @@ step-9 warning as "reject, and do not trust the metrics".
    failure: raise the supply, lower the input common-mode, flip the input polarity, or use
    a non-cascode tail.
 
-.. note::
-
-   These two passes currently live in ``dc_op.py`` and ``headroom.py``; a pending
-   refactor consolidates them into a single ``bias.py`` exposing the same
-   ``check_dc_operating_point`` function.
-
-Step 10 — size non-load resistors
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 4c — Size: non-load resistors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :func:`~circuitgenome.sizer.gmid.resistors.size_resistors` sizes
 source-degeneration, resistor-tail, resistor-bias and CMFB-sense resistors,
-returning their small-signal effects: ``gm1_factor`` (degeneration on input gm),
-``gd_tail_override`` (resistor tail on CMRR), ``gd_out_extra`` (CMFB loading).
+returning their small-signal effects as a
+:class:`~circuitgenome.sizer.gmid.resistors.MetricModifiers`: ``gm1_factor``
+(degeneration on input gm), ``gd_tail_override`` (resistor tail on CMRR),
+``gd_out_extra`` (CMFB loading).
 
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.resistors import size_resistors
-   extra_r, gm1_factor, gd_tail_override, gd_out_extra = size_resistors(
-       blocks, slot_resistors, ids_map, transistor_sizing, model, spec, tech, intent)
-   resistors = {**resistors, **extra_r}
-   print(extra_r, gm1_factor, gd_tail_override, gd_out_extra)
+   extra_r, modifiers = size_resistors(
+       view.blocks, view.slot_resistors, currents.ids_map, sizing,
+       plan.model, spec, tech, intent)
+   resistors = {**currents.load_resistors, **extra_r}
+   print(extra_r, modifiers)
 
 .. code-block:: text
 
-   {}  1.0  None  0.0        # this variant has no degeneration / resistor-tail / CMFB
+   {}  MetricModifiers(gm1_factor=1.0, gd_tail_override=None, gd_out_extra=0.0)
+   # this variant has no degeneration / resistor-tail / CMFB
 
-Step 11 — cascode-aware first-stage rout override
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 5 — Evaluate: analytical metrics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If there's a cascode load, :func:`~circuitgenome.sizer.gmid.blocks.node_rout`
-computes the first-stage output resistance cascode-aware (the ``gm·ro·ro`` boost
-a single-``gds`` estimate misses), treating the input-pair tail node as AC ground.
-
-.. code-block:: python
-
-   from circuitgenome.sizer.gmid.blocks import node_rout
-   rout1_override = None
-   if blocks.has_cascode_load():
-       out_net = blocks.first_stage_out_net()
-       all_mos = [d for d, _s in all_transistors.values()]
-       stop = frozenset({blocks.tail_net()}) if blocks.tail_net() else frozenset()
-       rout1_override = node_rout(out_net, all_mos, model, transistor_sizing, stop)
-   print(blocks.has_cascode_load(), rout1_override)
-
-.. code-block:: text
-
-   False  None       # no cascode load in this topology → analytical rout used as-is
-
-Step 12 — evaluate analytical metrics
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:func:`~circuitgenome.sizer.shared.metrics._evaluate_metrics` produces the
-analytical, ngspice-free estimate of gain / GBW / PM / etc., fed all the override
-hooks from steps 10–11.
+:func:`~circuitgenome.sizer.gmid.evaluate.evaluate_circuit` produces the
+analytical, ngspice-free estimate of gain / GBW / PM / etc.  When the first-stage
+load is a cascode it first computes the output resistance cascode-aware
+(:func:`~circuitgenome.sizer.gmid.blocks.node_rout` — the ``gm·ro·ro`` boost a
+single-``gds`` estimate misses, treating the input-pair tail node as AC ground),
+and it applies the Phase-4c :class:`~circuitgenome.sizer.gmid.resistors.MetricModifiers`.
 
 .. code-block:: python
 
-   from circuitgenome.sizer.shared.metrics import _evaluate_metrics
-   metrics, margins = _evaluate_metrics(
-       transistor_sizing, slot_transistors, cc_pf, tech, spec, model,
-       cc2_pf=cc2_pf, gd_load_r=gd_load_r, rout1_override=rout1_override,
-       gm1_factor=gm1_factor, gd_tail_override=gd_tail_override, gd_out_extra=gd_out_extra)
+   from circuitgenome.sizer.gmid.evaluate import evaluate_circuit
+   metrics, margins = evaluate_circuit(view, currents, plan, sizing, modifiers, spec, tech)
    print({k: round(v, 2) for k, v in metrics.items()})
 
 .. code-block:: text
@@ -550,36 +483,26 @@ hooks from steps 10–11.
    {'gain_db': 47.03, 'gbw_hz': 993689.98, 'phase_margin_deg': 89.21, 'slew_rate_vps': 1500000.0,
     'power_w': 0.0, 'cmrr_db': 34.26, 'psrr_db': 49.47}
 
-Step 13 — package the SizingResult
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Putting it together
+~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid` returns a
+:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid` runs exactly the five
+phases above and packages a
 :class:`~circuitgenome.sizer.shared.models.SizingResult` with
 ``solver_status="GMID"``, the transistor sizings, resistors, compensation caps,
 metrics, the ``bias_feasible`` verdict, the resolved ``transistor_intents``, and
-the accumulated warnings (topology + ceiling + geometry + DC).
-
-.. code-block:: python
-
-   from circuitgenome.sizer.shared.models import SizingResult
-   result = SizingResult(
-       transistors=transistor_sizing, cc_pf=cc_pf, metrics=metrics, margins=margins,
-       solver_status="GMID", cc2_pf=cc2_pf,
-       warnings=topo_warn + ceil_warn + geom_warn + dc_warn,
-       resistors=resistors, bias_feasible=bias_feasible,
-       transistor_intents=tintents)
-   print(result.solver_status, result.bias_feasible, len(result.transistors), len(result.warnings))
-
-.. code-block:: text
-
-   GMID  False  10  2
-
-In practice you never assemble this by hand — the whole pipeline is one call:
+the accumulated warnings (topology + ceiling + geometry + DC).  In practice you
+never assemble it by hand — the whole pipeline is one call:
 
 .. code-block:: python
 
    from circuitgenome.sizer.gmid import size_gmid
    result = size_gmid(parsed, recognize(parsed), fbr, topo, tech, spec)
+   print(result.solver_status, result.bias_feasible, len(result.transistors), len(result.warnings))
+
+.. code-block:: text
+
+   GMID  False  10  2
 
 ----
 
@@ -590,4 +513,6 @@ See also
   used for the card-less ``generic`` technology.
 * :mod:`circuitgenome.sizer.gmid.intent` — the design-intent hierarchy
   (``GmIdIntent``, ``BlockIntent``, ``TransistorIntent``).
+* :mod:`circuitgenome.sizer.shared.taxonomy` — the slot/net naming conventions a
+  circuit template must follow (the single point of extension for new templates).
 * :func:`circuitgenome.sizer.sizer.size_circuit` — the technology-routing entry point.

@@ -1,11 +1,15 @@
 """Block-based gm/Id sizing pipeline (separate from the Level-1 CP-SAT sizer).
 
-The gm/Id path is built from self-sizing *blocks* (input pair, gain stage, load,
-tail, bias, compensation) driven by an explicit per-role region/intent config,
-reusing the device primitives in :mod:`~circuitgenome.sizer.gmid_lut` /
-:mod:`~circuitgenome.sizer.device_model` and the model-independent op-amp physics
-in :mod:`~circuitgenome.sizer.equations`.  The Level-1 analytical sizer is left
-untouched.
+:func:`size_gmid` runs five phases with typed hand-offs — Analyze
+(:mod:`.analyze` → ``CircuitView``), Bias currents and Plan (:mod:`.plan` →
+``CurrentPlan``/``SizingPlan``), Size (:mod:`.geometry`, :mod:`.bias`,
+:mod:`.resistors`), and Evaluate (:mod:`.evaluate`) — driven by the explicit
+per-block design intent in :mod:`.intent`.  The device primitives
+(:mod:`~circuitgenome.sizer.shared.gmid_lut`,
+:mod:`~circuitgenome.sizer.shared.device_model`) and the model-independent
+op-amp physics (:mod:`~circuitgenome.sizer.shared.preprocess`,
+:mod:`~circuitgenome.sizer.shared.metrics`) are reused from ``sizer.shared``;
+the Level-1 analytical sizer is left untouched.
 """
 from __future__ import annotations
 

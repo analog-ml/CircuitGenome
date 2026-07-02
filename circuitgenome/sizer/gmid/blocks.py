@@ -3,13 +3,10 @@
 Groups the FBR slot devices into typed blocks (input pair, first-stage load,
 gain stages, tail, bias, compensation) and classifies the *kind* of each load /
 tail (current-mirror, cascode, resistor, plain current-source).  This is the
-structural layer the gm/Id pipeline organises sizing and the DC-operating-point
-check around, and the extension point for cascode / resistor / CMFB handling in
-later phases.
-
-Phase 1 uses it for classification (load kind → first-stage gain factor, cascode
-detection for the headroom check); the per-block self-sizing is layered on top in
-subsequent phases.
+structural layer beneath the Analyze phase (:mod:`.analyze`): the load kind
+drives the first-stage gain factor, the cascode detection feeds the DC
+headroom budget (:mod:`.bias`), and :func:`node_rout` gives the evaluation
+phase its cascode-aware output resistance.
 """
 from __future__ import annotations
 
