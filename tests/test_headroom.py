@@ -5,10 +5,9 @@ from circuitgenome.sizer.shared.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
     GmIdModel,
-    Level1Model,
     build_device_model,
 )
-from circuitgenome.sizer.gmid.headroom import _tail_gm_id_for_headroom, apply_headroom
+from circuitgenome.sizer.gmid.bias import _tail_gm_id_for_headroom, apply_headroom
 from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.sizer.shared.models import SizingSpec, TransistorSizing
 from circuitgenome.synthesizer.models import Device
@@ -74,10 +73,3 @@ def test_headroom_ok_at_high_supply(model, tech):
     warns = apply_headroom(model, slot, allt, ids, sizing, spec, tech)
     assert warns == []
     assert sizing["m1_tail_current"].w_um == w0  # untouched
-
-
-def test_level1_model_skips_headroom(tech):
-    # Headroom pass is gm/Id-only; Level-1 returns no warnings.
-    m = Level1Model(load_tech("generic"))
-    slot = {"input_pair": [], "tail_current": []}
-    assert apply_headroom(m, slot, {}, {}, {}, SizingSpec(vdd=1.0, vss=0.0, ibias=1e-5, cl=1e-12), tech) == []
