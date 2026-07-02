@@ -433,6 +433,54 @@ warnings plus a ``bias_feasible`` verdict.
 Expected here: a PMOS tail at 1.0 V mid-rail is headroom-starved (the issue
 #74/#76 advisory).  Raising ``vdd`` (e.g. to 1.8 V) clears it.
 
+**Interpreting the verdict.**  Step 9 *repairs first and warns only on failure*, so
+the presence or absence of a warning maps to three outcomes:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 16 50
+
+   * - Outcome
+     - ``bias_feasible``
+     - Meaning
+   * - No warning, tail already fit
+     - ``True``
+     - DC bias is sound; the sizing is unchanged.
+   * - No warning, tail repaired
+     - ``True``
+     - DC bias is sound, but the tail mirror group was silently re-sized (``sizing``
+       mutated) to fit — a clean result does **not** mean nothing was adjusted.
+   * - Warning emitted
+     - ``False``
+     - The repair could not fit the tail; it cannot stay saturated, so the assumed
+       ``Id`` will not flow.
+
+Every step-9 warning sets ``bias_feasible = False``.  When it does, the W/L values are
+still internally consistent (they hit their gm/Id targets), but the **design is
+infeasible**: the tail drops into triode, ``gm1 = (gm/Id)·Id`` collapses, and the
+gain/GBW reported in `Step 12 — evaluate analytical metrics`_ are *optimistic and should
+not be trusted*.  It is a physical-feasibility failure, not a computation error — treat a
+step-9 warning as "reject, and do not trust the metrics".
+
+.. note::
+
+   Not every result warning is a bias warning.  The gm-ceiling advisory from
+   `Step 6 — derive gm requirements + compensation caps`_
+   (*"…exceeds the weak-inversion ceiling…"*) also means the design falls short, but for a
+   different reason — the required gm is unreachable at the bias current — and it does
+   **not** set ``bias_feasible``.  Audit by wording: *"insufficient saturation headroom"*
+   or *"cascode tail … cannot bias"* ⇒ the bias is infeasible.
+
+.. note::
+
+   This is a fast **analytical pre-check**, and it is phase-1 (tail-focused): a SPICE DC
+   bias-soundness check
+   (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) grounds the final
+   verdict for PTM / foundry techs.  So ``bias_feasible = True`` is *necessary but not
+   sufficient* — it does not yet check, e.g., second-stage headroom.  Remedies for a
+   failure: raise the supply, lower the input common-mode, flip the input polarity, or use
+   a non-cascode tail.
+
 .. note::
 
    These two passes currently live in ``dc_op.py`` and ``headroom.py``; a pending
