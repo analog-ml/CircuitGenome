@@ -27,18 +27,37 @@ taxonomy (input stage, gain stage, active load, tail source, …).
 
 Design-intent table (defaults):
 
-======================  ===============  ================================================
-Building block          gm/Id (1/V)      Design intent
-======================  ===============  ================================================
-Input stage             solved           Diff voltage → current: high gm, low noise, matching
-Gain stage              solved           Increase voltage gain while keeping stability
-Output stage            solved           Drive load capacitance and provide slew current
-Active / stage load     10 (strong-ish)  Mirror current accurately with high output resistance
-Tail current source     10 (strong-ish)  Set bias current with saturation headroom and high rout
-Bias generator          10 (strong-ish)  Generate stable, low-sensitivity bias currents
-CMFB                     10 (strong-ish)  Regulate the output common-mode voltage
-Cascode                 8  (strong)       Increase output resistance with a small Vdsat
-======================  ===============  ================================================
+.. list-table::
+   :header-rows: 1
+   :widths: 22 18 60
+
+   * - Building block
+     - gm/Id (1/V)
+     - Design intent
+   * - Input stage
+     - solved
+     - Diff voltage → current: high gm, low noise, matching
+   * - Gain stage
+     - solved
+     - Increase voltage gain while keeping stability
+   * - Output stage
+     - solved
+     - Drive load capacitance and provide slew current
+   * - Active / stage load
+     - 10 (strong-ish)
+     - Mirror current accurately with high output resistance
+   * - Tail current source
+     - 10 (strong-ish)
+     - Set bias current with saturation headroom and high rout
+   * - Bias generator
+     - 10 (strong-ish)
+     - Generate stable, low-sensitivity bias currents
+   * - CMFB
+     - 10 (strong-ish)
+     - Regulate the output common-mode voltage
+   * - Cascode
+     - 8 (strong)
+     - Increase output resistance with a small Vdsat
 
 "solved" = gm/Id is not a free knob for signal devices; it is set to
 ``gm_required / Id`` to meet the spec (see :meth:`GmIdModel.geometry_for`).
