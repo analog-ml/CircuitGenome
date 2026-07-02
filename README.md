@@ -20,6 +20,14 @@ Takes the Subcircuit Recognizer's output plus a topology template and assigns ea
 ### 4. Initial Sizer
 Takes the slot assignments plus a performance specification (gain, GBW, phase margin, slew rate, CMRR) and computes minimum transistor W/L values with an OR-Tools CP-SAT integer-programming solver. Supports one-, two-, and three-stage op-amps, both single-ended and fully differential.
 
+### 5. Designer
+Chains the layers end to end: given a spec file and a topology template (or all of them), it enumerates every valid circuit, sizes each with the gm/Id sizer, keeps the circuits whose **ngspice-measured** metrics meet the spec, exports the survivors as sized SPICE netlists, and reports statistics with the best design points.
+
+```bash
+circuitgenome design --spec spec_gf180.yaml --topology two_stage_opamp_single_ended \
+    --output-dir designs/ --limit 200 --workers 4
+```
+
 ---
 
 ## Installation

@@ -85,6 +85,13 @@ design exploration, or topology studies.
    api/sizer/gmid/evaluate
 
 .. toctree::
+   :maxdepth: 2
+   :caption: API Reference - Designer
+
+   api/designer/designer
+   api/designer/models
+
+.. toctree::
    :maxdepth: 1
    :caption: About
 
