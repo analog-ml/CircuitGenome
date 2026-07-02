@@ -31,7 +31,7 @@ from ..shared.preprocess import (
     _size_load_resistors,
 )
 from .blocks import _is_signal_dev, build_blocks, cascode_device_refs, node_rout
-from .dc_op import check_dc_operating_point
+from .bias import check_dc_operating_point
 from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent
 from .resistors import size_resistors
