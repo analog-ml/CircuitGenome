@@ -8,7 +8,7 @@ from circuitgenome.sizer.shared.device_model import (
     Level1Model,
     build_device_model,
 )
-from circuitgenome.sizer.gmid.headroom import _tail_gm_id_for_headroom, apply_headroom
+from circuitgenome.sizer.gmid.bias import _apply_headroom, _tail_gm_id_for_headroom
 from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.sizer.shared.models import SizingSpec, TransistorSizing
 from circuitgenome.synthesizer.models import Device
@@ -36,7 +36,7 @@ def _size(model, dtype, ids, role, gm_target=None):
 
 
 def _scenario(model, vdd, ip_gm_target=125e-6):
-    """Build a PMOS-input-pair + PMOS-tail scenario for apply_headroom."""
+    """Build a PMOS-input-pair + PMOS-tail scenario for _apply_headroom."""
     ip = Device(ref="m1_input_pair", type="pmos",
                 terminals={"d": "o1", "g": "in1", "s": "net_tail"})
     tail = Device(ref="m1_tail_current", type="pmos",
@@ -63,7 +63,7 @@ def test_tail_gm_id_for_headroom_monotone(model):
 def test_headroom_violation_warns(model, tech):
     # vdd=1.0, mid-rail Vcm, PMOS pair → net_tail near vdd → tail starved.
     slot, allt, ids, sizing, spec = _scenario(model, vdd=1.0)
-    warns = apply_headroom(model, slot, allt, ids, sizing, spec, tech)
+    _, warns = _apply_headroom(model, slot, allt, ids, sizing, spec, tech)
     assert warns and "headroom" in warns[0]
 
 
@@ -71,13 +71,14 @@ def test_headroom_ok_at_high_supply(model, tech):
     # Plenty of supply → tail keeps its Vdsat → no warning, no resize.
     slot, allt, ids, sizing, spec = _scenario(model, vdd=3.0)
     w0 = sizing["m1_tail_current"].w_um
-    warns = apply_headroom(model, slot, allt, ids, sizing, spec, tech)
+    sized, warns = _apply_headroom(model, slot, allt, ids, sizing, spec, tech)
     assert warns == []
-    assert sizing["m1_tail_current"].w_um == w0  # untouched
+    assert sized["m1_tail_current"].w_um == w0  # untouched
 
 
 def test_level1_model_skips_headroom(tech):
     # Headroom pass is gm/Id-only; Level-1 returns no warnings.
     m = Level1Model(load_tech("generic"))
     slot = {"input_pair": [], "tail_current": []}
-    assert apply_headroom(m, slot, {}, {}, {}, SizingSpec(vdd=1.0, vss=0.0, ibias=1e-5, cl=1e-12), tech) == []
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=1e-5, cl=1e-12)
+    assert _apply_headroom(m, slot, {}, {}, {}, spec, tech) == ({}, [])

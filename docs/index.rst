@@ -69,17 +69,20 @@ design exploration, or topology studies.
    api/sizer/shared/equations
    api/sizer/shared/gmid_lut
    api/sizer/shared/spice_sim
+   api/sizer/shared/taxonomy
    api/sizer/shared/preprocess
    api/sizer/shared/metrics
    api/sizer/analytical/level1
    api/sizer/analytical/constraints
    api/sizer/gmid/gmid_sizer
+   api/sizer/gmid/analyze
    api/sizer/gmid/blocks
-   api/sizer/gmid/dc_op
+   api/sizer/gmid/plan
    api/sizer/gmid/intent
-   api/sizer/gmid/resistors
    api/sizer/gmid/geometry
-   api/sizer/gmid/headroom
+   api/sizer/gmid/bias
+   api/sizer/gmid/resistors
+   api/sizer/gmid/evaluate
 
 .. toctree::
    :maxdepth: 1

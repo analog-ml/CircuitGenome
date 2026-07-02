@@ -67,6 +67,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..shared.device_model import CASCODE, CURRENT_SOURCE, SIGNAL
+from ..shared.taxonomy import is_signal_device
 
 # --- gm/Id inversion regions used as the block defaults (1/V) ----------------
 _MODERATE = 14.0        # signal nominal (pre-geometry estimate); real gm/Id is solved
@@ -201,10 +202,9 @@ def resolve_transistor_intents(
     block_intents: dict[str, BlockIntent] = DEFAULT_BLOCK_INTENTS,
 ) -> dict[str, TransistorIntent]:
     """Resolve the block registry onto every device (Level 2 → Level 3)."""
-    from .blocks import _is_signal_dev
     out: dict[str, TransistorIntent] = {}
     for ref, (device, slot) in all_transistors.items():
-        block = functional_block(slot, _is_signal_dev(device), ref in cascode_refs)
+        block = functional_block(slot, is_signal_device(device), ref in cascode_refs)
         bi = block_intents[block]
         out[ref] = TransistorIntent(ref=ref, block=block, role=bi.role,
                                     gm_id=bi.gm_id, l_mult=bi.l_mult,

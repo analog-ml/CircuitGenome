@@ -12,9 +12,27 @@ resistors.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ..shared.models import SizingSpec, TechParams, TransistorSizing
 from .blocks import OpAmpBlocks
 from .intent import GmIdIntent
+
+
+@dataclass(frozen=True)
+class MetricModifiers:
+    """How the sized resistor network alters the metric evaluation (Phase 5).
+
+    :param gm1_factor: multiplies the input-pair gm for source degeneration
+        (``1/(1+gm1·R)`` = ``1/(1+factor)``); ``1.0`` when none.
+    :param gd_tail_override: ``1/R`` of a resistor tail (finite output
+        conductance for CMRR), or ``None``.
+    :param gd_out_extra: output-node conductance added by a resistive-sense
+        CMFB averager (``1/R_sense``), loading the FD output; ``0.0`` when none.
+    """
+    gm1_factor: float = 1.0
+    gd_tail_override: float | None = None
+    gd_out_extra: float = 0.0
 
 
 def size_resistors(
@@ -26,16 +44,12 @@ def size_resistors(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
-) -> tuple[dict[str, float], float, float | None, float]:
-    """Return ``(extra_resistors, gm1_factor, gd_tail_override, gd_out_extra)``.
+) -> tuple[dict[str, float], MetricModifiers]:
+    """Return ``(extra_resistors, metric_modifiers)``.
 
-    * ``extra_resistors``: ``{ref: ohms}`` for degeneration / tail / bias / cmfb.
-    * ``gm1_factor``: multiplies the input-pair gm for source degeneration
-      (``1/(1+gm1·R)`` = ``1/(1+factor)``); ``1.0`` when none.
-    * ``gd_tail_override``: ``1/R`` of a resistor tail (finite output conductance
-      for CMRR), or ``None``.
-    * ``gd_out_extra``: output-node conductance added by a resistive-sense CMFB
-      averager (``1/R_sense``), loading the FD output; ``0.0`` when none.
+    ``extra_resistors`` is ``{ref: ohms}`` for the degeneration / tail / bias /
+    cmfb resistors; the :class:`MetricModifiers` carry their metric effects
+    into the evaluation phase.
     """
     out: dict[str, float] = {}
     gm1_factor = 1.0
@@ -91,7 +105,9 @@ def size_resistors(
         # sense node → adds 1/R_sense to the differential output conductance.
         gd_out_extra = 1.0 / intent.cmfb_sense_r if intent.cmfb_sense_r > 0 else 0.0
 
-    return out, gm1_factor, gd_tail_override, gd_out_extra
+    return out, MetricModifiers(gm1_factor=gm1_factor,
+                                gd_tail_override=gd_tail_override,
+                                gd_out_extra=gd_out_extra)
 
 
 def _representative_bias_vgs(blocks: OpAmpBlocks,

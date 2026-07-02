@@ -3,13 +3,10 @@
 Groups the FBR slot devices into typed blocks (input pair, first-stage load,
 gain stages, tail, bias, compensation) and classifies the *kind* of each load /
 tail (current-mirror, cascode, resistor, plain current-source).  This is the
-structural layer the gm/Id pipeline organises sizing and the DC-operating-point
-check around, and the extension point for cascode / resistor / CMFB handling in
-later phases.
-
-Phase 1 uses it for classification (load kind → first-stage gain factor, cascode
-detection for the headroom check); the per-block self-sizing is layered on top in
-subsequent phases.
+structural layer beneath the Analyze phase (:mod:`.analyze`): the load kind
+drives the first-stage gain factor, the cascode detection feeds the DC
+headroom budget (:mod:`.bias`), and :func:`node_rout` gives the evaluation
+phase its cascode-aware output resistance.
 """
 from __future__ import annotations
 
@@ -18,17 +15,12 @@ from enum import Enum
 
 from circuitgenome.synthesizer.models import Device
 
-# Slot-name groups (mirror the constants in sizer.py so this stays standalone).
-_SECOND_STAGE_SLOTS = frozenset({"second_stage", "second_stage_p", "second_stage_n"})
-_THIRD_STAGE_SLOTS = frozenset({"third_stage", "third_stage_p", "third_stage_n"})
-_BIAS_NETS = frozenset({"vdd!", "vss!", "gnd!", "ibias"})
-_RAILS = frozenset({"vdd!", "vss!", "gnd!", "0"})
-
-
-def _is_signal_dev(device: Device) -> bool:
-    """True if the device's gate is a signal net (not a bias rail)."""
-    gate = device.terminals.get("g", "")
-    return bool(gate) and gate not in _BIAS_NETS and not gate.startswith("net_bias")
+from ..shared.taxonomy import (
+    RAILS,
+    SECOND_STAGE_SLOTS,
+    THIRD_STAGE_SLOTS,
+    is_signal_device,
+)
 
 
 class LoadKind(Enum):
@@ -61,7 +53,7 @@ def cascode_device_refs(slot_transistors: dict[str, list[Device]]) -> set[str]:
         drains = {d.terminals.get("d") for d in mos}
         for d in mos:
             src = d.terminals.get("s")
-            if src not in _RAILS and src in drains and not _is_signal_dev(d):
+            if src not in RAILS and src in drains and not is_signal_device(d):
                 out.add(d.ref)
     return out
 
@@ -84,7 +76,7 @@ def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
     gds = model.gds(device.type, s.w_um, s.l_um, s.ids_a)
     ro = 1.0 / gds if gds > 0 else float("inf")
     src = device.terminals.get("s")
-    if src in _RAILS or src in stop or src is None:
+    if src in RAILS or src in stop or src is None:
         return ro
     below = by_drain.get(src)
     if below is not None and below.ref != device.ref and below.type == device.type:
@@ -139,7 +131,7 @@ class Block:
     @property
     def signal_device(self) -> Device | None:
         """The gm-contributing device (gate on a signal net), if any."""
-        return next((d for d in self.mosfets if _is_signal_dev(d)), None)
+        return next((d for d in self.mosfets if is_signal_device(d)), None)
 
     @property
     def is_cascode(self) -> bool:
@@ -214,7 +206,7 @@ def build_blocks(slot_transistors: dict[str, list[Device]],
                                  else LoadKind.NONE)
     fd = any(s in slot_transistors for s in ("second_stage_p", "second_stage_n",
                                              "third_stage_p", "third_stage_n"))
-    has_2 = any(s in slot_transistors for s in _SECOND_STAGE_SLOTS)
-    has_3 = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
+    has_2 = any(s in slot_transistors for s in SECOND_STAGE_SLOTS)
+    has_3 = any(s in slot_transistors for s in THIRD_STAGE_SLOTS)
     n_stages = 1 + (1 if has_2 else 0) + (1 if has_3 else 0)
     return OpAmpBlocks(blocks=blocks, is_fully_differential=fd, n_stages=n_stages)

@@ -1,10 +1,10 @@
 """Tests for the gm/Id functional-block view (circuitgenome/sizer/gmid/blocks)."""
 from circuitgenome.sizer.gmid.blocks import (
     LoadKind,
-    _is_signal_dev,
     build_blocks,
     classify_load,
 )
+from circuitgenome.sizer.shared.taxonomy import is_signal_device
 from circuitgenome.synthesizer.models import Device
 
 
@@ -26,10 +26,10 @@ def test_classify_load_kinds():
     assert classify_load([], []) == LoadKind.NONE
 
 
-def test_is_signal_dev():
-    assert _is_signal_dev(D("m", "pmos", g="in1", d="o", s="t"))
-    assert not _is_signal_dev(D("m", "pmos", g="net_bias1", d="o", s="t"))
-    assert not _is_signal_dev(D("m", "nmos", g="vdd!", d="o", s="0"))
+def test_is_signal_device():
+    assert is_signal_device(D("m", "pmos", g="in1", d="o", s="t"))
+    assert not is_signal_device(D("m", "pmos", g="net_bias1", d="o", s="t"))
+    assert not is_signal_device(D("m", "nmos", g="vdd!", d="o", s="0"))
 
 
 def test_build_blocks_and_first_stage_factor():

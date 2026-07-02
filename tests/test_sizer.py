@@ -802,7 +802,8 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
 def _fbr_pmos_cs_second_stage(topology_name: str):
     """Return the FBR tuple for the first variant whose second-stage signal
     transistor is a PMOS (a PMOS-common-source stage)."""
-    from circuitgenome.sizer.shared.preprocess import _extract_slot_transistors, _is_signal_dev
+    from circuitgenome.sizer.shared.preprocess import extract_slot_transistors
+    from circuitgenome.sizer.shared.taxonomy import is_signal_device
 
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == topology_name)
@@ -810,9 +811,9 @@ def _fbr_pmos_cs_second_stage(topology_name: str):
         parsed = parse(to_flat_spice(circuit))
         sr_result = recognize(parsed)
         fbr_result = assign_slots(sr_result, topology)
-        slot_t = _extract_slot_transistors(fbr_result)
+        slot_t = extract_slot_transistors(fbr_result)
         ss = slot_t.get("second_stage", [])
-        signal = next((d for d in ss if _is_signal_dev(d)), None)
+        signal = next((d for d in ss if is_signal_device(d)), None)
         # Require an active (transistor) load so the high three-stage gain target
         # is achievable — resistor-load variants are intentionally gain-limited.
         if signal is not None and signal.type == "pmos" and slot_t.get("load"):

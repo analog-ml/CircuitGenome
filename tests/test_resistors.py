@@ -61,13 +61,13 @@ def test_size_resistors_degeneration_factor():
     blocks = build_blocks({"input_pair": ip}, {"input_pair": rdev})
     sizing = {"m1": _sz("m1"), "m2": _sz("m2")}
     intent = GmIdIntent(degeneration_factor=0.5)
-    out, gm1_factor, gd_tail, gd_out_extra = size_resistors(
+    out, modifiers = size_resistors(
         blocks, {"input_pair": rdev}, {}, sizing, _FakeModel(),
         _spec(), load_tech("ptm45"), intent)
     assert out["r1"] == pytest.approx(0.5 / 1e-3)     # R = factor/gm1 = 500 Ω
-    assert gm1_factor == pytest.approx(1.0 / 1.5)
-    assert gd_tail is None
-    assert gd_out_extra == 0.0   # no CMFB sense resistors here
+    assert modifiers.gm1_factor == pytest.approx(1.0 / 1.5)
+    assert modifiers.gd_tail_override is None
+    assert modifiers.gd_out_extra == 0.0   # no CMFB sense resistors here
 
 
 # --- integration ----------------------------------------------------------

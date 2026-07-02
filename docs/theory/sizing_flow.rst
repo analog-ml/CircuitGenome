@@ -41,7 +41,7 @@ Level-1 equations below (see `Post-sizing performance metrics`_).
                           Stage 1 dominant pole: ωp1 = 1/(Rout1·Cc)
                           Non-dominant pole (neglected): ωp2 ≈ gm2/CL
 
-The five-step sizing flow in :func:`~circuitgenome.sizer.shared.preprocess._compute_requirements`
+The five-step sizing flow in :func:`~circuitgenome.sizer.shared.preprocess.compute_requirements`
 derives performance requirements in this order:
 
 .. list-table::
@@ -157,7 +157,7 @@ flow described below is unchanged for the card-less generic tech.
 Operating-point assignment
 --------------------------
 
-Reference: :func:`~circuitgenome.sizer.shared.preprocess._assign_ids`
+Reference: :func:`~circuitgenome.sizer.shared.preprocess.assign_ids`
 
 :math:`I_{DS}` for every transistor is determined by **KCL and the external
 bias current** before any W/L is chosen.  This is the critical insight that
@@ -193,7 +193,7 @@ linearises in W and L (see `CP-SAT integer linearisation`_).
 Five-step constraint derivation
 --------------------------------
 
-Reference: :func:`~circuitgenome.sizer.shared.preprocess._compute_requirements`
+Reference: :func:`~circuitgenome.sizer.shared.preprocess.compute_requirements`
 
 Each step below follows the same structure: **equation → derivation →
 intuition → why this position in the ordering → numerical example** using

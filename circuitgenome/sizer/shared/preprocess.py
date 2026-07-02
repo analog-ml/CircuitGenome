@@ -16,35 +16,17 @@ from circuitgenome.synthesizer.models import Device
 from . import equations as eq
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel
 from .models import SizingSpec, TechParams
-
-# Slots that carry iBias/2 per transistor (both sides of the differential pair).
-_HALF_BIAS_SLOTS = frozenset({"input_pair", "load"})
-# Slots whose transistors each carry the full iBias.
-_FULL_BIAS_SLOTS = frozenset({"tail_current", "bias_gen"})
-# All second-stage slot names (SE: "second_stage"; FD: "second_stage_p"/"second_stage_n").
-_SECOND_STAGE_SLOTS = frozenset({"second_stage", "second_stage_p", "second_stage_n"})
-# All third-stage slot names (SE: "third_stage"; FD: "third_stage_p"/"third_stage_n").
-_THIRD_STAGE_SLOTS = frozenset({"third_stage", "third_stage_p", "third_stage_n"})
-
-# External supply / bias net names — gate connected to these → current-source load.
-_BIAS_NETS = frozenset({"vdd!", "vss!", "gnd!", "ibias"})
-
-# All gain-stage slot names (used by the topology-mismatch guard).
-_STAGE_SLOTS = _SECOND_STAGE_SLOTS | _THIRD_STAGE_SLOTS
+from .taxonomy import (
+    FULL_BIAS_SLOTS,
+    HALF_BIAS_SLOTS,
+    SECOND_STAGE_SLOTS,
+    STAGE_SLOTS,
+    THIRD_STAGE_SLOTS,
+    is_signal_device,
+)
 
 
-def _is_signal_dev(device: Device) -> bool:
-    """True if ``device``'s gate is driven by a signal net (not a bias rail).
-
-    The signal transistor of a gain stage is the one whose gate is the previous
-    stage's output; the partner device is a current-source load (gate on a bias
-    net). Used to pick the gm-contributing device regardless of NMOS/PMOS polarity.
-    """
-    gate = device.terminals.get("g", "")
-    return bool(gate) and gate not in _BIAS_NETS and not gate.startswith("net_bias")
-
-
-def _extract_slot_transistors(
+def extract_slot_transistors(
     fbr_result: FunctionalBlockRecognitionResult,
 ) -> dict[str, list[Device]]:
     """Return {slot_name: [mosfet_Device, ...]} from the FBR assignments."""
@@ -56,7 +38,7 @@ def _extract_slot_transistors(
     return result
 
 
-def _extract_slot_resistors(
+def extract_slot_resistors(
     fbr_result: FunctionalBlockRecognitionResult,
 ) -> dict[str, list[Device]]:
     """Return {slot_name: [resistor_Device, ...]} from the FBR assignments."""
@@ -73,7 +55,7 @@ def _extract_slot_resistors(
 _RESISTOR_LOAD_OVERDRIVE = 0.15
 
 
-def _size_load_resistors(
+def size_load_resistors(
     slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
 ) -> dict[str, float]:
     """Size resistor-load devices so the first-stage output biases on.
@@ -108,7 +90,7 @@ def _size_load_resistors(
     return out
 
 
-def _check_topology_match(
+def check_topology_match(
     slot_transistors: dict[str, list[Device]], topology_name: str
 ) -> list[str]:
     """Warn when the netlist does not realise the chosen topology.
@@ -120,9 +102,9 @@ def _check_topology_match(
     mismatch — which would otherwise silently drop the gain/PM/PSRR metrics.
     """
     warnings: list[str] = []
-    for slot in sorted(_STAGE_SLOTS):
+    for slot in sorted(STAGE_SLOTS):
         devs = slot_transistors.get(slot)
-        if devs and not any(_is_signal_dev(d) for d in devs):
+        if devs and not any(is_signal_device(d) for d in devs):
             warnings.append(
                 f"stage slot '{slot}' has no signal transistor — the netlist may "
                 f"not match topology '{topology_name}' (check --topology, e.g. "
@@ -131,7 +113,7 @@ def _check_topology_match(
     return warnings
 
 
-def _deduplicate(
+def deduplicate_devices(
     slot_transistors: dict[str, list[Device]],
 ) -> dict[str, tuple[Device, str]]:
     """Return {ref: (Device, slot_name)} with each ref appearing once.
@@ -156,7 +138,7 @@ def _deduplicate(
     return seen
 
 
-def _assign_ids(
+def assign_ids(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
     spec: SizingSpec,
@@ -165,16 +147,16 @@ def _assign_ids(
     ids_2 = spec.ibias * spec.second_stage_current_ratio
     ids_map: dict[str, float] = {}
     for ref, (device, slot) in all_transistors.items():
-        if slot in _HALF_BIAS_SLOTS:
+        if slot in HALF_BIAS_SLOTS:
             # Each transistor in a 2-transistor group carries ibias/2.
             # For n devices in the slot (e.g. degenerated pairs), divide equally.
             n = len([d for d in slot_transistors[slot] if d.type == device.type])
             ids_map[ref] = spec.ibias / max(n, 1)
-        elif slot in _FULL_BIAS_SLOTS:
+        elif slot in FULL_BIAS_SLOTS:
             ids_map[ref] = spec.ibias
-        elif slot in _SECOND_STAGE_SLOTS:
+        elif slot in SECOND_STAGE_SLOTS:
             ids_map[ref] = ids_2
-        elif slot in _THIRD_STAGE_SLOTS:
+        elif slot in THIRD_STAGE_SLOTS:
             ids_map[ref] = spec.ibias * spec.third_stage_current_ratio
         else:
             ids_map[ref] = spec.ibias  # conservative default
@@ -206,7 +188,7 @@ def _first_stage_gain_factor(slot_transistors: dict[str, list[Device]]) -> float
     return 1.0 if is_mirror else 0.5
 
 
-def _compute_requirements(
+def compute_requirements(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
     ids_map: dict[str, float],
@@ -221,9 +203,9 @@ def _compute_requirements(
     come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
     model reproduces the geometry-free ``λ·Id`` exactly.
     """
-    is_three_stage = any(s in slot_transistors for s in _THIRD_STAGE_SLOTS)
+    is_three_stage = any(s in slot_transistors for s in THIRD_STAGE_SLOTS)
     has_second_stage = (
-        any(s in slot_transistors for s in _SECOND_STAGE_SLOTS) or is_three_stage
+        any(s in slot_transistors for s in SECOND_STAGE_SLOTS) or is_three_stage
     )
     ids_2 = spec.ibias * spec.second_stage_current_ratio
 
@@ -233,7 +215,7 @@ def _compute_requirements(
 
     def _gds_est(device: Device, ids: float) -> float:
         """Pre-geometry gds estimate, role-aware (signal vs current source)."""
-        role = SIGNAL if _is_signal_dev(device) else CURRENT_SOURCE
+        role = SIGNAL if is_signal_device(device) else CURRENT_SOURCE
         return model.gds_estimate(device.type, ids, role)
 
     gd_ip = _gds_est(ip_devices[0], spec.ibias / 2) if ip_devices else 0.0
@@ -393,7 +375,7 @@ def _compute_requirements(
     # physically deliver, surfaced as a warning (the shortfall also shows in the
     # reported margins).
     def _ceil(ids: float, devs: list[Device]) -> float:
-        sig = next((d for d in devs if _is_signal_dev(d)), devs[0] if devs else None)
+        sig = next((d for d in devs if is_signal_device(d)), devs[0] if devs else None)
         dtype = sig.type if sig else "nmos"
         return model.gm_ceiling(dtype, ids, tech.length.min)
 
@@ -424,16 +406,12 @@ def _compute_requirements(
     for ref, (device, slot) in all_transistors.items():
         if slot == "input_pair":
             gm_req_map[ref] = gm1_req
-        elif slot in _SECOND_STAGE_SLOTS:
+        elif slot in SECOND_STAGE_SLOTS:
             # Only the signal transistor (gate driven by first-stage output)
             # needs a gm requirement; the load transistor is a current source.
-            gate = device.terminals.get("g", "")
-            is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
-            gm_req_map[ref] = gm2_req if is_signal else 0.0
-        elif slot in _THIRD_STAGE_SLOTS:
-            gate = device.terminals.get("g", "")
-            is_signal = gate and gate not in _BIAS_NETS and not gate.startswith("net_bias")
-            gm_req_map[ref] = gm3_req if is_signal else 0.0
+            gm_req_map[ref] = gm2_req if is_signal_device(device) else 0.0
+        elif slot in THIRD_STAGE_SLOTS:
+            gm_req_map[ref] = gm3_req if is_signal_device(device) else 0.0
         # All other slots: no explicit gm requirement (sized by min W/L)
 
     # --- VDS_sat upper bounds from output swing specs ---
@@ -443,7 +421,7 @@ def _compute_requirements(
     # All second- and third-stage device lists (constrain output swing on every path).
     all_ss_device_lists = [
         slot_transistors[s]
-        for s in (*_SECOND_STAGE_SLOTS, *_THIRD_STAGE_SLOTS)
+        for s in (*SECOND_STAGE_SLOTS, *THIRD_STAGE_SLOTS)
         if s in slot_transistors
     ]
 
