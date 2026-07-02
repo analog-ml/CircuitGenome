@@ -177,7 +177,11 @@ class GmIdModel:
         """Channel length for ``role`` from the L-policy multiplier (µm, snapped)."""
         mult = {CURRENT_SOURCE: self.policy.cs_l_mult,
                 CASCODE: self.policy.cascode_l_mult}.get(role, self.policy.signal_l_mult)
-        return self._snap_l(mult * self.tech.length.min)
+        return self.length_for(mult)
+
+    def length_for(self, l_mult: float) -> float:
+        """Channel length for an explicit L multiple of ``length.min`` (µm, snapped)."""
+        return self._snap_l(l_mult * self.tech.length.min)
 
     def _role_gm_id(self, role: str) -> float:
         """Nominal gm/Id for a non-signal role (current source / cascode)."""
@@ -225,18 +229,25 @@ class GmIdModel:
 
     # -- geometry inversion (procedural sizer) -----------------------------
     def geometry_for(
-        self, dtype: str, ids: float, role: str, gm_target: float | None = None
+        self, dtype: str, ids: float, role: str, gm_target: float | None = None,
+        *, gm_id: float | None = None, l_um: float | None = None,
     ) -> GeomResult:
         """Compute (W, L) for a device from its role and (optional) gm target.
 
         ``current_source``/``cascode`` devices use the policy gm/Id (cascodes at a
         smaller-Vdsat region); ``signal`` devices set gm/Id = gm_target/Id, clamped
         to the table's weak-inversion ceiling.
+
+        ``gm_id`` and ``l_um`` are per-device design-intent overrides (from the
+        block registry): an explicit gm/Id region for a non-signal device and an
+        explicit channel length.  When ``None`` they fall back to the role policy,
+        so the default behaviour is unchanged.  ``gm_id`` is ignored for a signal
+        device with a gm target — its gm/Id is always solved from the spec.
         """
-        l_um = self.role_length(role)
+        l_um = l_um if l_um is not None else self.role_length(role)
         capped = False
         if role != SIGNAL or not gm_target or ids <= 0:
-            gm_id = self._role_gm_id(role)
+            gm_id = gm_id if gm_id is not None else self._role_gm_id(role)
         else:
             gm_id = gm_target / abs(ids)
             ceiling = self.lut.max_gm_id(dtype, l_um)

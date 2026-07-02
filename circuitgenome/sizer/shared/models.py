@@ -182,6 +182,10 @@ class SizingResult:
         a current source that cannot stay saturated (e.g. a cascode tail with no
         headroom) — the assumed bias current won't flow, so the frequency-domain
         metrics are optimistic. Always ``True`` for the Level-1 path.
+    :param transistor_intents: gm/Id path only — the resolved per-device design
+        intent keyed by device reference (``gmid.intent.TransistorIntent``: the
+        functional block, role, gm/Id region, L multiple and rationale). Empty
+        for the Level-1 path.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -191,4 +195,5 @@ class SizingResult:
     cc2_pf: float | None = None
     warnings: list[str] = field(default_factory=list)
     resistors: dict[str, float] = field(default_factory=dict)
+    transistor_intents: dict = field(default_factory=dict)
     bias_feasible: bool = True
