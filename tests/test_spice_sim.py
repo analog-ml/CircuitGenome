@@ -13,6 +13,7 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
 from circuitgenome.sizer.shared import spice_sim
+from circuitgenome.sizer.shared.spice import deck, measure
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
@@ -38,13 +39,13 @@ def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
 # --- model emission (no ngspice needed) ------------------------------------
 
 def test_emit_level1_for_generic():
-    deck = spice_sim._emit_model(load_tech("generic"))
-    assert "level=1" in deck and "kp=" in deck and ".model nmos" in deck
+    model = deck._emit_model(load_tech("generic"))
+    assert "level=1" in model and "kp=" in model and ".model nmos" in model
 
 
 def test_emit_include_for_ptm():
-    deck = spice_sim._emit_model(load_tech("ptm45"))
-    assert ".include" in deck and "ptm_45nm_HP.pm" in deck
+    model = deck._emit_model(load_tech("ptm45"))
+    assert ".include" in model and "ptm_45nm_HP.pm" in model
 
 
 # --- simulation (requires ngspice) -----------------------------------------
@@ -167,12 +168,12 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
 
 def test_pm_plausible_range():
     """PM is physical only in (0°, 180°]; None (no crossing) is not evidence."""
-    assert spice_sim._pm_plausible(None)
-    assert spice_sim._pm_plausible(60.0)
-    assert spice_sim._pm_plausible(180.0)
-    assert not spice_sim._pm_plausible(0.0)
-    assert not spice_sim._pm_plausible(-10.0)
-    assert not spice_sim._pm_plausible(285.0)
+    assert measure._pm_plausible(None)
+    assert measure._pm_plausible(60.0)
+    assert measure._pm_plausible(180.0)
+    assert not measure._pm_plausible(0.0)
+    assert not measure._pm_plausible(-10.0)
+    assert not measure._pm_plausible(285.0)
 
 
 def _resistor_tail_two_stage_se(second_stage):
