@@ -31,6 +31,7 @@ design exploration, or topology studies.
    :caption: Theory
 
    theory/sizing_flow
+   theory/gmid_sizing_flow
 
 .. toctree::
    :maxdepth: 2
