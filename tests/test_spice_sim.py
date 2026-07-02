@@ -161,3 +161,66 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
     assert not ok and reason and "SPICE bias" in reason
+
+
+# --- phase-margin plausibility guard ----------------------------------------
+
+def test_pm_plausible_range():
+    """PM is physical only in (0°, 180°]; None (no crossing) is not evidence."""
+    assert spice_sim._pm_plausible(None)
+    assert spice_sim._pm_plausible(60.0)
+    assert spice_sim._pm_plausible(180.0)
+    assert not spice_sim._pm_plausible(0.0)
+    assert not spice_sim._pm_plausible(-10.0)
+    assert not spice_sim._pm_plausible(285.0)
+
+
+def _resistor_tail_two_stage_se(second_stage):
+    """Size a gf180 resistor-load/resistor-tail two-stage; return sim inputs.
+
+    With ``second_stage="differential_ota_second_stage"`` only the corrupted
+    AC polarity settles in the rig (PM extracts at ~266°) — the regression
+    case for the plausibility guard.  ``"common_source"`` is its honest twin.
+    """
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+            "tail_current": "resistor_tail_vdd",
+            "bias_gen": "diode_connected_mosfet_bias",
+            "compensation": "miller_cap", "second_stage": second_stage}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=40)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    return text, result, tech, spec
+
+
+@ngspice
+def test_implausible_pm_extraction_is_discarded():
+    """A corrupt AC sweep (PM ≈ 266° from the wrong-polarity branch) must not
+    be reported as a measurement: gain/GBW/PM come back None with a note."""
+    text, result, tech, spec = _resistor_tail_two_stage_se(
+        "differential_ota_second_stage")
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    assert sim["gain_db"] is None
+    assert sim["gbw_hz"] is None
+    assert sim["phase_margin_deg"] is None
+    assert any("implausible" in n for n in sim.get("notes", []))
+
+
+@ngspice
+def test_honest_twin_measurement_unaffected():
+    """The common-source twin of the regression circuit measures normally:
+    positive gain and a physical phase margin."""
+    text, result, tech, spec = _resistor_tail_two_stage_se("common_source")
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    pm = sim["phase_margin_deg"]
+    assert pm is not None and 0 < pm <= 180

@@ -224,24 +224,43 @@ def _measure_power(name, ports, body_dut, topo, vdd, ibias, vcm):
     return vdd * i
 
 
+def _pm_plausible(pm: float | None) -> bool:
+    """True unless ``pm`` is outside the physical ``(0°, 180°]`` range.
+
+    A stable amplifier's phase at the 0-dB crossing lies below its DC phase, so
+    ``PM = 180° + phase`` lands in ``(0°, 180°]``.  A value outside that range
+    means the crossing came from a **corrupted sweep** — typically the wrong
+    feedback polarity settling into a measurable but meaningless response
+    (seen with two-input second stages), or a phase-unwrap glitch — not from
+    the real amplifier.  ``None`` (no crossing found) carries no such evidence.
+    """
+    return pm is None or 0.0 < pm <= 180.0
+
+
 def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
     """Open-loop AC: returns ``(gain_db, gbw_hz, pm_deg, reason)``.
 
     AC-coupled feedback: huge L closes the loop at DC (sets bias ≈ CM), huge C
     AC-grounds the inverting input; a 1 V AC source drives the non-inverting
     input.  The (in1,in2)->(non-inv,inv) assignment is auto-detected via the DC
-    operating point (output must settle near CM, not a rail).
+    operating point (output must settle near CM, not a rail), and among the
+    branches that settle the one with a *plausible* phase margin wins (higher
+    gain breaks ties): a corrupted branch shows an implausible PM and must not
+    outrank the honest measurement just because its gain reads higher.
 
     The **measured** low-frequency gain is reported even when it is ≤ 0 dB (a
     mis-biased circuit that does not amplify) — ``gbw``/``pm`` are then ``None``
-    (no 0-dB crossing) and ``reason`` explains why.  ``reason`` is ``None`` on a
-    normal (positive-gain) measurement.
+    (no 0-dB crossing) and ``reason`` explains why.  When every settled branch
+    is corrupt (PM outside ``(0°, 180°]``) the whole extraction is discarded:
+    all three values are ``None`` and ``reason`` says so.  ``reason`` is
+    ``None`` on a normal (positive-gain) measurement.
     """
     # Feedback L must be AC-OPEN even at the lowest sweep frequency (1 Hz):
     # ωL = 2π·1·1e12 ≈ 6e12 Ω. C grounds the inverting input at AC.
     Lh, Ch = "1e12", "1e3"
     settled = False
     best: tuple[float, float | None, float | None] | None = None
+    best_rank: tuple[bool, float] | None = None
     for inp, inn in (("in1", "in2"), ("in2", "in1")):
         netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
                   inp: "inp", inn: "inn"}
@@ -306,15 +325,23 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
             gbw = float(10 ** (lf0 + t * (lf1 - lf0)))
             ph_gbw = phase[i0] + t * (phase[i1] - phase[i0])
             pm = float(180.0 + ph_gbw)   # excess phase is negative → PM < 180
-        # Keep the higher-gain polarity (the negative-feedback one); report it
-        # even if ≤ 0 dB so a mis-biased circuit isn't silently dropped.
-        if best is None or gain_db > best[0]:
-            best = (gain_db, gbw, pm)
+        # Keep the plausible-PM branch, then the higher gain (the negative-
+        # feedback one); report it even if ≤ 0 dB so a mis-biased circuit
+        # isn't silently dropped.
+        rank = (_pm_plausible(pm), gain_db)
+        if best_rank is None or rank > best_rank:
+            best, best_rank = (gain_db, gbw, pm), rank
     if best is None:
         reason = ("open-loop AC did not settle (output railed) — gain not measurable"
                   if not settled else "open-loop AC sweep did not converge")
         return None, None, None, reason
     gain_db, gbw, pm = best
+    if not _pm_plausible(pm):
+        # Every settled branch was corrupt: its gain/GBW come from the same
+        # meaningless sweep, so discard the extraction rather than report it.
+        return None, None, None, (
+            f"AC phase at the 0-dB crossing is implausible (PM {pm:.0f}° "
+            f"outside (0°, 180°]) — extraction artifact, discarded")
     reason = (None if gain_db > 0
               else "measured gain ≤ 0 dB — circuit does not amplify as biased")
     return gain_db, gbw, pm, reason
