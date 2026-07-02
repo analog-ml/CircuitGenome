@@ -174,9 +174,8 @@ def _cmd_recognize(args: argparse.Namespace) -> None:
 
 
 def _cmd_size(args: argparse.Namespace) -> None:
-    import yaml
     from .recognizer import parse, recognize, assign_slots
-    from .sizer import load_tech, size_circuit, SizingSpec, UnsupportedTechError
+    from .sizer import load_spec, load_tech, size_circuit, UnsupportedTechError
 
     netlist_text = args.netlist_file.read_text()
     parsed = parse(netlist_text)
@@ -190,10 +189,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
     fbr_result = assign_slots(sr_result, topology)
 
     tech = load_tech(args.tech_file)  # None → built-in generic
-
-    with open(args.spec_file) as f:
-        spec_data = yaml.safe_load(f)
-    spec = SizingSpec(**{k: v for k, v in spec_data.items() if k in SizingSpec.__dataclass_fields__})
+    spec = load_spec(args.spec_file)
 
     try:
         result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec,
