@@ -32,6 +32,73 @@ _FD_PAIRS = (("second_stage_p", "second_stage_n"),
              ("third_stage_p", "third_stage_n"))
 
 
+def _apply_symmetry(
+    W: dict[str, float], L: dict[str, float], slot_transistors: dict[str, list]
+) -> None:
+    """Matched pairs share the anchor device's geometry (plain assignment)."""
+    def equalize(refs: list[str]) -> None:
+        anchor = refs[0]
+        for r in refs[1:]:
+            W[r], L[r] = W[anchor], L[anchor]
+
+    for slot, devices in slot_transistors.items():
+        if slot not in _SYMMETRY_SLOTS:
+            continue
+        for dtype in ("nmos", "pmos"):
+            grp = [d.ref for d in devices if d.type == dtype and d.ref in W]
+            if grp:
+                equalize(grp)
+
+    for sp, sn in _FD_PAIRS:
+        p_devs, n_devs = slot_transistors.get(sp, []), slot_transistors.get(sn, [])
+        if not (p_devs and n_devs):
+            continue
+        for dtype in ("nmos", "pmos"):
+            grp = [d.ref for d in (*p_devs, *n_devs) if d.type == dtype and d.ref in W]
+            if grp:
+                equalize(grp)
+
+
+def _apply_mirror_ratios(
+    W: dict[str, float],
+    L: dict[str, float],
+    all_transistors: dict[str, tuple],
+    ids_map: dict[str, float],
+    snap_w,
+) -> None:
+    """Current-mirror outputs track the reference W by the exact current ratio.
+
+    MOSFETs are grouped by (gate-net, type); a diode-connected member (g == d)
+    is the reference.  Output W is the current ratio times the reference's W at
+    matched L (no ``Fraction`` rounding).
+    """
+    groups: dict[tuple, list[str]] = {}
+    for ref, (device, _slot) in all_transistors.items():
+        gate = device.terminals.get("g")
+        if gate:
+            groups.setdefault((gate, device.type), []).append(ref)
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        diodes = [m for m in members
+                  if all_transistors[m][0].terminals.get("g")
+                  == all_transistors[m][0].terminals.get("d")]
+        if not diodes:
+            continue
+        ref0 = diodes[0]
+        i_ref = ids_map.get(ref0, 0.0)
+        if i_ref <= 0:
+            continue
+        for m in members:
+            if m == ref0:
+                continue
+            i_m = ids_map.get(m, 0.0)
+            if i_m <= 0:
+                continue
+            L[m] = L[ref0]
+            W[m] = snap_w((i_m / i_ref) * W[ref0])
+
+
 def assign_geometry_gmid(
     model: GmIdModel,
     all_transistors: dict[str, tuple],      # ref → (Device, slot_name)
@@ -72,56 +139,10 @@ def assign_geometry_gmid(
                 f"(the design will fall short).")
 
     # --- 3: symmetry (matched pairs share the anchor's geometry) ---
-    def equalize(refs: list[str]) -> None:
-        anchor = refs[0]
-        for r in refs[1:]:
-            W[r], L[r] = W[anchor], L[anchor]
-
-    for slot, devices in slot_transistors.items():
-        if slot not in _SYMMETRY_SLOTS:
-            continue
-        for dtype in ("nmos", "pmos"):
-            grp = [d.ref for d in devices if d.type == dtype and d.ref in W]
-            if grp:
-                equalize(grp)
-
-    for sp, sn in _FD_PAIRS:
-        p_devs, n_devs = slot_transistors.get(sp, []), slot_transistors.get(sn, [])
-        if not (p_devs and n_devs):
-            continue
-        for dtype in ("nmos", "pmos"):
-            grp = [d.ref for d in (*p_devs, *n_devs) if d.type == dtype and d.ref in W]
-            if grp:
-                equalize(grp)
+    _apply_symmetry(W, L, slot_transistors)
 
     # --- 4: current-mirror ratios (exact, no Fraction approximation) ---
-    # Group MOSFETs by (gate-net, type); a diode-connected member (g == d) is the
-    # reference.  Output W tracks the current ratio at matched L.
-    groups: dict[tuple, list[str]] = {}
-    for ref, (device, _slot) in all_transistors.items():
-        gate = device.terminals.get("g")
-        if gate:
-            groups.setdefault((gate, device.type), []).append(ref)
-    for members in groups.values():
-        if len(members) < 2:
-            continue
-        diodes = [m for m in members
-                  if all_transistors[m][0].terminals.get("g")
-                  == all_transistors[m][0].terminals.get("d")]
-        if not diodes:
-            continue
-        ref0 = diodes[0]
-        i_ref = ids_map.get(ref0, 0.0)
-        if i_ref <= 0:
-            continue
-        for m in members:
-            if m == ref0:
-                continue
-            i_m = ids_map.get(m, 0.0)
-            if i_m <= 0:
-                continue
-            L[m] = L[ref0]
-            W[m] = snap_w((i_m / i_ref) * W[ref0])
+    _apply_mirror_ratios(W, L, all_transistors, ids_map, snap_w)
 
     # --- 5: build TransistorSizing with final geometry ---
     sizing: dict[str, TransistorSizing] = {}
