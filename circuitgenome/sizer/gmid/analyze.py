@@ -14,10 +14,10 @@ from circuitgenome.recognizer.models import FunctionalBlockRecognitionResult
 from circuitgenome.synthesizer.models import Device, TopologyTemplate
 
 from ..shared.preprocess import (
-    _check_topology_match,
-    _deduplicate,
-    _extract_slot_resistors,
-    _extract_slot_transistors,
+    check_topology_match,
+    deduplicate_devices,
+    extract_slot_resistors,
+    extract_slot_transistors,
 )
 from .blocks import OpAmpBlocks, build_blocks, cascode_device_refs
 
@@ -46,13 +46,13 @@ def analyze_circuit(
     fbr_result: FunctionalBlockRecognitionResult, topology: TopologyTemplate
 ) -> CircuitView:
     """Build the :class:`CircuitView` from the FBR assignments."""
-    slot_transistors = _extract_slot_transistors(fbr_result)
-    slot_resistors = _extract_slot_resistors(fbr_result)
+    slot_transistors = extract_slot_transistors(fbr_result)
+    slot_resistors = extract_slot_resistors(fbr_result)
     return CircuitView(
         slot_transistors=slot_transistors,
         slot_resistors=slot_resistors,
-        all_transistors=_deduplicate(slot_transistors),
+        all_transistors=deduplicate_devices(slot_transistors),
         blocks=build_blocks(slot_transistors, slot_resistors),
         cascode_refs=cascode_device_refs(slot_transistors),
-        warnings=_check_topology_match(slot_transistors, topology.name),
+        warnings=check_topology_match(slot_transistors, topology.name),
     )

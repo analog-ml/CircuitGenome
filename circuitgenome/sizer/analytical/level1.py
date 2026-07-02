@@ -20,13 +20,13 @@ from ..shared.device_model import Level1Model
 from ..shared.metrics import _evaluate_metrics
 from ..shared.models import SizingResult, SizingSpec, TechParams, TransistorSizing
 from ..shared.preprocess import (
-    _assign_ids,
-    _check_topology_match,
-    _compute_requirements,
-    _deduplicate,
-    _extract_slot_resistors,
-    _extract_slot_transistors,
-    _size_load_resistors,
+    assign_ids,
+    check_topology_match,
+    compute_requirements,
+    deduplicate_devices,
+    extract_slot_resistors,
+    extract_slot_transistors,
+    size_load_resistors,
 )
 from .constraints import build_model
 
@@ -42,17 +42,17 @@ def size_level1(
     time_limit_s: float = 30.0,
 ) -> SizingResult:
     """Size a circuit with the Level-1 square-law model + CP-SAT geometry search."""
-    slot_transistors = _extract_slot_transistors(fbr_result)
-    topology_warnings = _check_topology_match(slot_transistors, topology.name)
-    all_transistors = _deduplicate(slot_transistors)
-    ids_map = _assign_ids(slot_transistors, all_transistors, spec)
+    slot_transistors = extract_slot_transistors(fbr_result)
+    topology_warnings = check_topology_match(slot_transistors, topology.name)
+    all_transistors = deduplicate_devices(slot_transistors)
+    ids_map = assign_ids(slot_transistors, all_transistors, spec)
     # Size resistor loads (deterministic) and model them in the first-stage Rout.
-    resistors = _size_load_resistors(_extract_slot_resistors(fbr_result), spec, tech)
+    resistors = size_load_resistors(extract_slot_resistors(fbr_result), spec, tech)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
 
     # Level-1 square-law model; discrete W/L via CP-SAT.
     dev_model = Level1Model(tech)
-    gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = _compute_requirements(
+    gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
     )
     all_warnings = topology_warnings + gm_ceiling_warnings

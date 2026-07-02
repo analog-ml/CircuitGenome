@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from ..shared.device_model import GmIdModel, GmIdPolicy
 from ..shared.gmid_lut import GmIdLut
 from ..shared.models import SizingSpec, TechParams
-from ..shared.preprocess import _assign_ids, _compute_requirements, _size_load_resistors
+from ..shared.preprocess import assign_ids, compute_requirements, size_load_resistors
 from .analyze import CircuitView
 from .intent import GmIdIntent, TransistorIntent, resolve_transistor_intents
 
@@ -58,8 +58,8 @@ class SizingPlan:
 
 def assign_currents(view: CircuitView, spec: SizingSpec, tech: TechParams) -> CurrentPlan:
     """Assign per-device quiescent currents and size the load resistors."""
-    ids_map = _assign_ids(view.slot_transistors, view.all_transistors, spec)
-    load_resistors = _size_load_resistors(view.slot_resistors, spec, tech)
+    ids_map = assign_ids(view.slot_transistors, view.all_transistors, spec)
+    load_resistors = size_load_resistors(view.slot_resistors, spec, tech)
     gd_load_r = (1.0 / min(load_resistors.values())) if load_resistors else 0.0
     return CurrentPlan(ids_map=ids_map, load_resistors=load_resistors,
                        gd_load_r=gd_load_r)
@@ -87,7 +87,7 @@ def plan_devices(
 ) -> SizingPlan:
     """Derive gm requirements, compensation caps and per-device intent."""
     model = _model_for(tech, intent)
-    gm_req_map, _vod_max_map, cc_pf, cc2_pf, ceil_warnings = _compute_requirements(
+    gm_req_map, _vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
         view.slot_transistors, view.all_transistors, currents.ids_map,
         tech, spec, model, currents.gd_load_r,
     )

@@ -26,7 +26,7 @@ from .taxonomy import (
 )
 
 
-def _extract_slot_transistors(
+def extract_slot_transistors(
     fbr_result: FunctionalBlockRecognitionResult,
 ) -> dict[str, list[Device]]:
     """Return {slot_name: [mosfet_Device, ...]} from the FBR assignments."""
@@ -38,7 +38,7 @@ def _extract_slot_transistors(
     return result
 
 
-def _extract_slot_resistors(
+def extract_slot_resistors(
     fbr_result: FunctionalBlockRecognitionResult,
 ) -> dict[str, list[Device]]:
     """Return {slot_name: [resistor_Device, ...]} from the FBR assignments."""
@@ -55,7 +55,7 @@ def _extract_slot_resistors(
 _RESISTOR_LOAD_OVERDRIVE = 0.15
 
 
-def _size_load_resistors(
+def size_load_resistors(
     slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
 ) -> dict[str, float]:
     """Size resistor-load devices so the first-stage output biases on.
@@ -90,7 +90,7 @@ def _size_load_resistors(
     return out
 
 
-def _check_topology_match(
+def check_topology_match(
     slot_transistors: dict[str, list[Device]], topology_name: str
 ) -> list[str]:
     """Warn when the netlist does not realise the chosen topology.
@@ -113,7 +113,7 @@ def _check_topology_match(
     return warnings
 
 
-def _deduplicate(
+def deduplicate_devices(
     slot_transistors: dict[str, list[Device]],
 ) -> dict[str, tuple[Device, str]]:
     """Return {ref: (Device, slot_name)} with each ref appearing once.
@@ -138,7 +138,7 @@ def _deduplicate(
     return seen
 
 
-def _assign_ids(
+def assign_ids(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
     spec: SizingSpec,
@@ -188,7 +188,7 @@ def _first_stage_gain_factor(slot_transistors: dict[str, list[Device]]) -> float
     return 1.0 if is_mirror else 0.5
 
 
-def _compute_requirements(
+def compute_requirements(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
     ids_map: dict[str, float],
