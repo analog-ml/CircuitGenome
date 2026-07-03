@@ -304,10 +304,9 @@ def _cmd_size(args: argparse.Namespace) -> None:
                       "ngspice`) and rerun.", file=sys.stderr)
                 sys.exit(1)
             sim = simulate_metrics(netlist_text, result, tech, spec)
-            # Only these keys are measured by the SPICE rig; CMRR/PSRR/output-swing
-            # have no testbench yet and are omitted (see note below).
             spice_keys = ["gain_db", "gbw_hz", "phase_margin_deg",
-                          "slew_rate_vps", "power_w"]
+                          "slew_rate_vps", "power_w", "cmrr_db", "psrr_db",
+                          "output_swing_max_v", "output_swing_min_v"]
             rows = []
             any_fail = False
             for key in spice_keys:
@@ -340,8 +339,6 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 print(row)
             for note in sim.get("notes", []) or []:
                 print(f"  ⓘ {note}")
-            print("  ⓘ CMRR, PSRR, and output swing are not measured by the current "
-                  "ngspice rig and are omitted.")
             # Foundry PDKs (spice_lib): re-measure the sized design across process
             # corners for worst-case visibility (sizing stays at the nominal corner).
             if tech.spice_lib and len(tech.spice_lib.corners) > 1:
@@ -354,7 +351,9 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 _CORNER_ROWS = [
                     ("gain_db", "Gain (dB)"), ("gbw_hz", "GBW (MHz)"),
                     ("phase_margin_deg", "PM (deg)"), ("slew_rate_vps", "Slew (V/µs)"),
-                    ("power_w", "Power (mW)"),
+                    ("power_w", "Power (mW)"), ("cmrr_db", "CMRR (dB)"),
+                    ("psrr_db", "PSRR+ (dB)"), ("output_swing_max_v", "Swing hi (V)"),
+                    ("output_swing_min_v", "Swing lo (V)"),
                 ]
                 for key, lbl in _CORNER_ROWS:
                     scale = _SCALE.get(key, 1.0)
@@ -407,6 +406,8 @@ def _cmd_size(args: argparse.Namespace) -> None:
                 ("phase_margin_deg", "Phase margin", "°", 1.0, "{:.1f}"),
                 ("slew_rate_vps", "Slew rate", "V/µs", 1e-6, "{:.3f}"),
                 ("power_w", "Quiescent power", "mW", 1e3, "{:.4f}"),
+                ("cmrr_db", "CMRR", "dB", 1.0, "{:.1f}"),
+                ("psrr_db", "PSRR+", "dB", 1.0, "{:.1f}"),
                 ("output_swing_max_v", "Output swing max", "V", 1.0, "{:.3f}"),
                 ("output_swing_min_v", "Output swing min", "V", 1.0, "{:.3f}"),
             ]

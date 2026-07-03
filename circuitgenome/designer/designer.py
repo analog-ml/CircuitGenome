@@ -8,9 +8,10 @@ netlists, and report statistics with the best design points.
 
 Acceptance gates on measured metrics only: a circuit is rejected when its
 sizing fails, its DC bias is infeasible (analytical or SPICE-grounded), or any
-spec ngspice *did* measure is missed.  Specs the rig cannot measure
-(CMRR/PSRR/output swing; slew rate when extraction fails) never disqualify a
-circuit — they are surfaced as ``unverified_specs`` in the report instead.
+spec ngspice *did* measure is missed.  A measurement the rig could not extract
+for a given circuit (e.g. swing/slew on fully-differential topologies) never
+disqualifies it — the affected spec fields are surfaced in the report's
+``unverified_specs`` instead.
 """
 from __future__ import annotations
 
@@ -37,18 +38,20 @@ from ..synthesizer.models import TopologyTemplate
 from .models import DesignReport, DesignSolution, TemplateStats
 
 # Metric key → (SizingSpec attribute, is_min_spec) for every metric the ngspice
-# rig measures (mirrors the CLI's spice_keys).  Constrained specs outside this
-# table cannot be SPICE-verified and go into DesignReport.unverified_specs.
+# rig measures (mirrors the CLI's spice_keys).  A constrained spec whose
+# measurement comes back None for an accepted circuit is reported in
+# DesignReport.unverified_specs rather than failing the circuit.
 _MEASURED_SPECS: dict[str, tuple[str, bool]] = {
     "gain_db": ("gain_min_db", True),
     "gbw_hz": ("gbw_min_hz", True),
     "phase_margin_deg": ("phase_margin_min_deg", True),
     "slew_rate_vps": ("slew_rate_min_vps", True),
     "power_w": ("power_max_w", False),
+    "cmrr_db": ("cmrr_min_db", True),
+    "psrr_db": ("psrr_min_db", True),
+    "output_swing_max_v": ("output_swing_max_v", True),
+    "output_swing_min_v": ("output_swing_min_v", False),
 }
-_UNMEASURED_SPEC_ATTRS = (
-    "cmrr_min_db", "psrr_min_db", "output_swing_max_v", "output_swing_min_v",
-)
 
 # criterion name → (metric key, pick the max?) for the best-points table.
 _BEST_CRITERIA: dict[str, tuple[str, bool]] = {
@@ -254,8 +257,6 @@ def design(
     report = DesignReport(
         spec={k: v for k, v in asdict(spec).items() if v is not None},
         tech=tech.name,
-        unverified_specs=[a for a in _UNMEASURED_SPEC_ATTRS
-                          if getattr(spec, a) is not None],
     )
     t_run = time.perf_counter()
 
@@ -292,6 +293,12 @@ def design(
             f"in {stats.runtime_s:.1f}s")
 
     report.best_points = _best_points(report.solutions)
+    # Constrained specs that went unmeasured on at least one accepted circuit:
+    # those solutions were accepted without that spec being SPICE-verified.
+    report.unverified_specs = sorted({
+        attr for s in report.solutions
+        for key, (attr, _is_min) in _MEASURED_SPECS.items()
+        if getattr(spec, attr) is not None and s.metrics.get(key) is None})
     report.runtime_s = time.perf_counter() - t_run
     _write_report(report, output_dir)
     return report

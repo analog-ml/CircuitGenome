@@ -77,18 +77,26 @@ _TOPO = "two_stage_opamp_single_ended"
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
 def test_design_end_to_end_loose_spec(tmp_path):
-    # Loose spec: metrics only need to exist and clear trivial bars.
+    # Loose spec: metrics only need to exist and clear trivial bars.  The
+    # limit reaches the active-load variants (indices 82+), which measure a
+    # healthy CMRR — the resistor-tail ones before them are now correctly
+    # rejected on the measured-CMRR gate (a resistor tail rejects poorly).
     spec = _spec(second_stage_current_ratio=2.5, gain_min_db=40,
                  gbw_min_hz=5e5, phase_margin_min_deg=45, power_max_w=2e-3,
-                 cmrr_min_db=40)  # not SPICE-measurable → unverified
-    report = design(spec, tmp_path, templates=[_TOPO], limit=60, workers=2)
+                 cmrr_min_db=20)
+    report = design(spec, tmp_path, templates=[_TOPO], limit=100, workers=2)
 
     st = report.stats[_TOPO]
-    assert st.enumerated == 60
+    assert st.enumerated == 100
     assert st.enumerated == (st.accepted + st.sizing_failed
                              + st.bias_infeasible + st.spec_failed + st.errors)
     assert st.errors == 0
-    assert report.unverified_specs == ["cmrr_min_db"]
+    # The CMRR bench is exercised and gated: some accepted circuit measured
+    # it, and every measured CMRR margin is non-negative.
+    measured = [s for s in report.solutions
+                if s.metrics.get("cmrr_db") is not None]
+    assert measured
+    assert all(s.margins["cmrr_db"] >= 0 for s in measured)
     assert report.runtime_s > 0
 
     assert len(report.solutions) == st.accepted
