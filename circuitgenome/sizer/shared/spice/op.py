@@ -12,7 +12,7 @@ from .deck import (
     _run_capture,
     ngspice_available,
 )
-from .rig import _Topo, _rig, _xline
+from .rig import _Topo, _iref_sink, _rig, _xline
 
 
 def read_op_operating_point(
@@ -50,6 +50,7 @@ def _read_op(
     refs = list(result.transistors)
     if not refs:
         return None, "sim-failed"
+    sink = _iref_sink(body)
     vdd, ibias = spec.vdd, spec.ibias
     vcm = (spec.vdd + spec.vss) / 2.0
     prefixes = {r: _dev_prefix(tech, r) for r in refs}
@@ -63,7 +64,8 @@ def _read_op(
                   inp: "inp", inn: "inn", "out": "out"}
         fb = (f"Vcm cm 0 {vcm}\nLfb out inn 1e12\nCfb inn cm 1e3\n"
               f"Vid inp cm dc 0\n")
-        deck = (body_dut.replace("__PORTS__", " ".join(ports)) + _rig(vdd, ibias)
+        deck = (body_dut.replace("__PORTS__", " ".join(ports))
+                + _rig(vdd, ibias, sink=sink)
                 + fb + _xline(name, ports, netmap) + "\n"
                 + ".control\nop\nprint v(out)\n" + probe + ".endc\n.end\n")
         txt = _run_capture(deck)

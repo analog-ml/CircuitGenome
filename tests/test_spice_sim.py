@@ -13,7 +13,7 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
 from circuitgenome.sizer.shared import spice_sim
-from circuitgenome.sizer.shared.spice import deck, measure
+from circuitgenome.sizer.shared.spice import deck, measure, rig
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
@@ -46,6 +46,34 @@ def test_emit_level1_for_generic():
 def test_emit_include_for_ptm():
     model = deck._emit_model(load_tech("ptm45"))
     assert ".include" in model and "ptm_45nm_HP.pm" in model
+
+
+# --- bias-current direction (no ngspice needed) -----------------------------
+
+def test_iref_direction_follows_reference_diode():
+    """The rig injects into an NMOS-referenced ``ibias`` pin, but pulls the
+    current out of a PMOS-referenced one (whose diode conducts from VDD out of
+    the pin); no reference diode keeps the historical inject direction."""
+    nmos_ref = ["mn1_bias_gen ibias ibias gnd! gnd! nmos"]
+    pmos_ref = ["mp1_bias_gen ibias ibias vdd! vdd! pmos"]
+    pdk_pmos_ref = ["xp1_bias_gen ibias ibias vdd! vdd! pmos_3p3 w=1u l=1u"]
+    assert rig._iref_sink(nmos_ref) is False
+    assert rig._iref_sink(pmos_ref) is True
+    assert rig._iref_sink(pdk_pmos_ref) is True
+    assert rig._iref_sink(["r1_load net_mid gnd! 1k"]) is False
+    assert "Iref 0 ibias" in rig._rig(3.3, 2e-5)
+    assert "Iref ibias 0" in rig._rig(3.3, 2e-5, sink=True)
+
+
+def test_deck_sinks_iref_for_pmos_referenced_dut():
+    """_deck adapts the Iref direction to the DUT block it instantiates."""
+    ports = ["ibias", "vdd!", "gnd!"]
+    netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0"}
+    for diode, expect in (("mp1 ibias ibias vdd! vdd! pmos", "Iref ibias 0"),
+                          ("mn1 ibias ibias gnd! gnd! nmos", "Iref 0 ibias")):
+        body_dut = f"* t\n.subckt dut __PORTS__\n{diode}\n.ends\n"
+        d = rig._deck("dut", ports, body_dut, 3.3, 2e-5, "", netmap, "op")
+        assert expect in d
 
 
 # --- simulation (requires ngspice) -----------------------------------------
@@ -105,13 +133,19 @@ def test_resistor_load_biases_in_spice():
 @ngspice
 def test_misbiased_circuit_reports_measured_gain_and_reason():
     """A circuit that can't bias at low supply reports its measured (≤ 0 dB) gain
-    and a diagnostic note, instead of a bare ``n/a``."""
+    and a diagnostic note, instead of a bare ``n/a``.
+
+    circuit_0244: diode-connected (NMOS-referenced) bias, folded-cascode load —
+    at 1.0 V it settles but does not amplify.  (The previous fixture,
+    circuit_1201, had a PMOS-referenced bias generator that only produced this
+    outcome because the rig drove its ``ibias`` pin backwards; with the
+    direction-aware rig it rails honestly instead.)"""
     from pathlib import Path
 
     ckt = (Path(__file__).resolve().parent.parent / "circuits"
-           / "two_stage_opamp_single_ended" / "circuit_1201_flat.ckt")
+           / "two_stage_opamp_single_ended" / "circuit_0244_flat.ckt")
     if not ckt.exists():
-        pytest.skip("circuit_1201 fixture not present")
+        pytest.skip("circuit_0244 fixture not present")
     text = ckt.read_text()
     parsed = parse(text)
     topo = next(t for t in load_topologies()
@@ -131,6 +165,32 @@ def test_misbiased_circuit_reports_measured_gain_and_reason():
     notes = sim.get("notes")
     assert notes and any("amplify" in n for n in notes)
     assert any("triode" in n or "starved" in n for n in notes)
+
+
+@ngspice
+def test_pmos_referenced_bias_gen_biases_in_spice():
+    """A magic_battery (PMOS-referenced) candidate biases soundly once the rig
+    drives the ``ibias`` pin in the right direction.  With the old hardcoded
+    inject direction the pin floated above VDD, every bias rail was dead, and
+    all 1260 magic_battery/resistor_bias candidates railed or starved."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    want = {"input_pair": "differential_pair_nmos", "load": "active_load_pmos",
+            "tail_current": "current_mirror_tail_nmos", "second_stage": "common_drain",
+            "bias_gen": "magic_battery_bias", "compensation": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k).name == v for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=3e5)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID"
+    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    assert ok and reason is None
 
 
 @ngspice
@@ -259,13 +319,16 @@ def test_new_metrics_measured_on_generic_two_stage():
 def test_cmrr_psrr_none_without_clean_gain():
     """CMRR/PSRR are ratios against the differential gain: a circuit whose AC
     measurement is not a clean positive gain must report them as None (a
-    non-amplifying circuit once measured 'CMRR 242 dB' from numerical noise)."""
+    non-amplifying circuit once measured 'CMRR 242 dB' from numerical noise).
+
+    circuit_0244 measures a ≤ 0 dB gain at 1.0 V (see
+    test_misbiased_circuit_reports_measured_gain_and_reason)."""
     from pathlib import Path
 
     ckt = (Path(__file__).resolve().parent.parent / "circuits"
-           / "two_stage_opamp_single_ended" / "circuit_1201_flat.ckt")
+           / "two_stage_opamp_single_ended" / "circuit_0244_flat.ckt")
     if not ckt.exists():
-        pytest.skip("circuit_1201 fixture not present")
+        pytest.skip("circuit_0244 fixture not present")
     text = ckt.read_text()
     parsed = parse(text)
     topo = next(t for t in load_topologies()
