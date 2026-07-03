@@ -85,6 +85,29 @@ class ModuleVariant:
 
 
 @dataclass
+class BiasLegLibrary:
+    """The typed leg templates that demand-driven bias construction assembles.
+
+    Loaded from ``config/bias_legs.yaml`` by
+    :func:`~circuitgenome.synthesizer.loader.load_bias_legs`; consumed by
+    :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`.
+    Device terminals use the template-local net names ``ibias``, ``pref``,
+    ``out``, ``vdd``, ``gnd`` (see the YAML header for the contract).
+
+    :param reference: The master reference devices (always emitted).
+    :param pref_branch: Devices deriving the PMOS-side reference gate
+                        (emitted only when an instantiated leg references
+                        ``pref``).
+    :param legs: Maps each rail *kind* (``gate_vdd``, ``gate_gnd``,
+                 ``current_source``, ``current_sink``, ``tunable``) to its
+                 leg's device templates.
+    """
+    reference: list[Device]
+    pref_branch: list[Device]
+    legs: dict[str, list[Device]]
+
+
+@dataclass
 class Slot:
     """A named placeholder for one module category in a topology template.
 

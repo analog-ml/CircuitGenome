@@ -67,6 +67,10 @@ def _topology_explorer(modules, topologies) -> None:
 
     variant_map = {}
     for slot in topology.slots:
+        # bias_generation has no selectable variants: build_circuit constructs
+        # its variant from the other slots' demands.
+        if not modules.get(slot.category):
+            continue
         variant_map[slot.name] = st.sidebar.selectbox(
             f"{slot.name} ({slot.category})",
             modules[slot.category],

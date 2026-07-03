@@ -26,6 +26,151 @@ from circuitgenome.synthesizer.models import Device
 from .models import HookMatch, ParsedNetlist
 
 
+def constructed_bias_legs(
+    assignment: dict[str, Device],
+    pins: dict[str, str],
+    netlist: ParsedNetlist,
+) -> HookMatch | None:
+    """Discover the legs of a constructed multi-reference bias generator.
+
+    Hook for the ``constructed_bias`` pattern (``config/opamp_patterns.yaml``).
+    The synthesizer constructs its bias generator per combination
+    (:func:`circuitgenome.synthesizer.bias_construction.construct_bias_generation`):
+    an NMOS master reference on ``ibias`` (the base template's ``mref``),
+    NMOS-referenced legs mirroring it, and -- when any rail needs a
+    PMOS-referenced level -- a ``pref`` branch whose diode-connected PMOS
+    gates further PMOS-referenced legs. This hook discovers all of them:
+
+    - **Pass 1 (NMOS-referenced)**: every nmos with gate on ``mref``'s
+      diode node (the ``ibias`` net) and source on ``mref``'s source (gnd)
+      mirrors the master. If a diode-connected pmos (``d == g``, ``s == b``)
+      sits on its drain, the pair is a vdd-flavored leg *or* the ``pref``
+      branch (structurally identical -- both are claimed; which is which
+      doesn't matter for sizing); the pmos-diode node is remembered as a
+      potential PMOS-side reference gate. A bare mirror (no pmos diode) is
+      claimed alone -- a current-sink leg into a consumer's own diode.
+    - **Pass 2 (PMOS-referenced)**: every pmos gated on a pass-1 pmos-diode
+      node with source on that diode's supply is a leg *only if* its drain
+      hosts a diode-connected nmos (a gnd-flavored leg, or a current-source
+      leg into a mirror tail's own reference diode) or a resistor returning
+      to ``mref``'s gnd (a tunable resistor leg). The drain condition keeps
+      consumer devices out: a second-stage PMOS gated by a vdd-flavored rail
+      has neither on its drain.
+
+    Returns ``None`` when pass 2 claims nothing: the structure is then the
+    exact shape :func:`diode_connected_mosfet_bias_legs` discovers, and that
+    pattern (listed after this one) claims it instead -- keeping legacy
+    single-flavor netlists recognized under their historical names.
+
+    :param assignment: Must contain key ``"mref"`` -- the matched
+                        diode-connected nmos master reference.
+    :param pins: Unused; accepted for signature consistency with other
+                  hooks.
+    :param netlist: The full parsed netlist to search for legs in.
+    :returns: A :class:`HookMatch` with every discovered leg's devices in
+              ``extra_devices`` and its output net as ``legN_out`` in
+              ``extra_pins`` (1-indexed by discovery order; rail indices are
+              not a structural property of a leg), plus ``vdd`` from the
+              first pmos diode found. ``None`` if no PMOS-referenced leg
+              exists.
+    """
+    mref = assignment["mref"]
+    ibias_net = mref.terminals["g"]
+    gnd_net = mref.terminals["s"]
+
+    claimed = {mref.ref}
+    extra_devices: list[Device] = []
+    extra_pins: dict[str, str] = {}
+    leg_count = 0
+    pnodes: list[tuple[str, str]] = []  # (diode node, its vdd supply)
+
+    # --- Pass 1: NMOS mirrors of the master reference ---
+    for nmos_leg in netlist.devices:
+        if nmos_leg.ref in claimed or nmos_leg.type != "nmos":
+            continue
+        if nmos_leg.terminals["g"] != ibias_net or nmos_leg.terminals["s"] != gnd_net:
+            continue
+
+        out_net = nmos_leg.terminals["d"]
+        pmos_diode = next(
+            (
+                p for p in netlist.devices
+                if p.ref not in claimed
+                and p.type == "pmos"
+                and p.terminals["d"] == out_net
+                and p.terminals["g"] == out_net
+                and p.terminals["s"] == p.terminals["b"]
+            ),
+            None,
+        )
+        leg_count += 1
+        extra_pins[f"leg{leg_count}_out"] = out_net
+        claimed.add(nmos_leg.ref)
+        extra_devices.append(nmos_leg)
+        if pmos_diode is not None:
+            claimed.add(pmos_diode.ref)
+            extra_devices.append(pmos_diode)
+            extra_pins.setdefault("vdd", pmos_diode.terminals["s"])
+            pnodes.append((out_net, pmos_diode.terminals["s"]))
+
+    # --- Pass 2: PMOS-referenced legs gated on a pass-1 diode node ---
+    p_leg_count = 0
+    for pnode, vdd_net in pnodes:
+        for pmos_leg in netlist.devices:
+            if pmos_leg.ref in claimed or pmos_leg.type != "pmos":
+                continue
+            if pmos_leg.terminals["g"] != pnode or pmos_leg.terminals["s"] != vdd_net:
+                continue
+
+            out_net = pmos_leg.terminals["d"]
+            nmos_diode = next(
+                (
+                    n for n in netlist.devices
+                    if n.ref not in claimed
+                    and n.type == "nmos"
+                    and n.terminals["d"] == out_net
+                    and n.terminals["g"] == out_net
+                ),
+                None,
+            )
+            if nmos_diode is not None:
+                leg_count += 1
+                p_leg_count += 1
+                extra_pins[f"leg{leg_count}_out"] = out_net
+                extra_devices.append(pmos_leg)
+                claimed.add(pmos_leg.ref)
+                # A plain diode (s == b) is the leg's own gnd-referenced
+                # output diode -- claim it too. A stacked diode (s on an
+                # internal node: a cascode mirror tail's reference) belongs
+                # to its consumer; the pmos is a bare current-source leg.
+                if nmos_diode.terminals["s"] == nmos_diode.terminals["b"]:
+                    extra_devices.append(nmos_diode)
+                    claimed.add(nmos_diode.ref)
+                continue
+
+            resistor_leg = next(
+                (
+                    r for r in netlist.devices
+                    if r.ref not in claimed
+                    and r.type == "resistor"
+                    and out_net in (r.terminals["t1"], r.terminals["t2"])
+                    and gnd_net in (r.terminals["t1"], r.terminals["t2"])
+                ),
+                None,
+            )
+            if resistor_leg is not None:
+                leg_count += 1
+                p_leg_count += 1
+                extra_pins[f"leg{leg_count}_out"] = out_net
+                extra_devices.extend([pmos_leg, resistor_leg])
+                claimed.update({pmos_leg.ref, resistor_leg.ref})
+
+    if p_leg_count == 0:
+        return None
+
+    return HookMatch(extra_devices=extra_devices, extra_pins=extra_pins)
+
+
 def diode_connected_mosfet_bias_legs(
     assignment: dict[str, Device],
     pins: dict[str, str],
@@ -36,16 +181,15 @@ def diode_connected_mosfet_bias_legs(
     Hook for the ``diode_connected_mosfet_bias`` pattern
     (``config/opamp_patterns.yaml``). That pattern's base template
     matches only a single diode-connected nmos (template ref ``mref``: ``d
-    == g``, tied to ``gnd`` via ``s``/``b``) -- the "shared reference" that
-    every ``bias_generation`` variant has, regardless of how many of its
-    seven output rails survived
-    :func:`circuitgenome.synthesizer.bias_pruning.prune_bias_generation` for
-    this particular combination.
+    == g``, tied to ``gnd`` via ``s``/``b``) -- the shared reference of the
+    historical ``diode_connected_mosfet_bias`` variant, which the
+    ``constructed_bias`` pattern's :func:`constructed_bias_legs` also shares
+    (that hook rejects the purely-NMOS-referenced shape so this one can
+    claim it under the historical name).
 
     This hook does the rest: it walks the netlist looking for "legs" --
     self-contained 2-device groups that mirror ``mref`` and deliver one
-    output rail, mirroring the shared-reference-plus-legs layout described
-    in :mod:`circuitgenome.synthesizer.bias_pruning`. A leg consists of:
+    output rail. A leg consists of:
 
     - an **nmos** device whose gate ties to ``mref``'s diode-connected node
       (``mref.g`` == ``mref.d``, i.e. the ``ibias`` net) and whose
@@ -72,10 +216,9 @@ def diode_connected_mosfet_bias_legs(
               discovered leg appended to ``extra_devices``, and
               ``legN_out``/``vdd`` entries in ``extra_pins``. If zero legs are
               found, still returns ``HookMatch(extra_devices=[],
-              extra_pins={})`` -- a 0-rail
-              :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
-              result collapses to exactly this bare ``mref``, with no legs to
-              find. A spurious bare-diode-connected-nmos match elsewhere
+              extra_pins={})`` -- a constructed bias generator with no
+              consumed rails collapses to exactly this bare ``mref``, with no
+              legs to find. A spurious bare-diode-connected-nmos match elsewhere
               (e.g. ``current_mirror_tail_nmos``'s ``m1``) is harmless: its
               ``ibias`` pin won't equal the real ``ibias`` net, so
               :func:`~circuitgenome.recognizer.functional_block_recognizer._connectivity_score`

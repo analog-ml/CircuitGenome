@@ -1,0 +1,75 @@
+# Typed bias-leg library for demand-driven bias construction.
+#
+# The bias generator is no longer an enumerated module variant: it is
+# *constructed* per combination by bias_construction.py from what the other
+# slots actually consume on each bias rail (issue #99's redesign follow-up).
+# This file is the declarative half of that constructor -- a multi-reference
+# core plus one leg template per rail *kind*.
+#
+# Core (always emitted):
+#   reference     -- the master reference: a diode-connected NMOS on the ibias
+#                    pin. ibias is injected INTO the pin; the pin net itself is
+#                    the NMOS-side mirror gate reference ("nref" == ibias).
+#   pref_branch   -- derives the PMOS-side mirror gate reference from the
+#                    master: one NMOS mirror sinks a reference current through
+#                    a diode-connected PMOS, whose gate node ("pref") every
+#                    PMOS-referenced leg mirrors from. Emitted only when some
+#                    leg references the pref net.
+#
+# Leg templates -- instantiated once per consumed rail, with "out" rewritten
+# to out{i} and each ref suffixed with the rail index:
+#   gate_vdd       -- for consumer gates whose source sits at vdd (PMOS current
+#                     sources): NMOS mirror sinks through a diode-connected
+#                     PMOS, so the rail sits one |V_GSP| below vdd and is the
+#                     mirror *master* of its consumers.
+#   gate_gnd       -- mirror image, for consumer gates whose source sits at
+#                     gnd (NMOS current sinks): PMOS mirror sources into a
+#                     diode-connected NMOS, rail sits one V_GSN above gnd.
+#   current_source -- for a rail whose consumer brings its own NMOS reference
+#                     diode (mirror tails): a bare PMOS mirror sources the
+#                     reference current into the consumer's diode. No diode of
+#                     our own -- a second diode would sit in parallel with the
+#                     consumer's and split the reference current.
+#   current_sink   -- mirror image for PMOS-diode consumers: a bare NMOS
+#                     mirror sinks the reference current out of the consumer's
+#                     diode.
+#   tunable        -- fallback when no structural level is implied (cascode
+#                     gates whose source is an internal node, or conflicting
+#                     demands on a shared rail): PMOS mirror into a resistor,
+#                     out = I_leg * R, per-rail tunable by the sizer.
+#
+# Net-name contract inside the templates: ibias (master reference gate),
+# pref (PMOS reference gate, internal), out (the rail), vdd/gnd (supplies).
+
+reference:
+  devices:
+    - {ref: mnref, type: nmos, d: ibias, g: ibias, s: gnd, b: gnd}
+
+pref_branch:
+  devices:
+    - {ref: mnpref, type: nmos, d: pref, g: ibias, s: gnd, b: gnd}
+    - {ref: mppref, type: pmos, d: pref, g: pref,  s: vdd, b: vdd}
+
+legs:
+  - kind: gate_vdd
+    devices:
+      - {ref: mn, type: nmos, d: out, g: ibias, s: gnd, b: gnd}
+      - {ref: mp, type: pmos, d: out, g: out,   s: vdd, b: vdd}
+
+  - kind: gate_gnd
+    devices:
+      - {ref: mp, type: pmos, d: out, g: pref, s: vdd, b: vdd}
+      - {ref: mn, type: nmos, d: out, g: out,  s: gnd, b: gnd}
+
+  - kind: current_source
+    devices:
+      - {ref: mp, type: pmos, d: out, g: pref, s: vdd, b: vdd}
+
+  - kind: current_sink
+    devices:
+      - {ref: mn, type: nmos, d: out, g: ibias, s: gnd, b: gnd}
+
+  - kind: tunable
+    devices:
+      - {ref: mp, type: pmos,     d: out,  g: pref, s: vdd, b: vdd}
+      - {ref: r,  type: resistor, t1: out, t2: gnd}

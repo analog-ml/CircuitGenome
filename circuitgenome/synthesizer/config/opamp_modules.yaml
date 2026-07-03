@@ -37,21 +37,15 @@
 #                                     (net_bias1/2/3/4), produced by bias_gen's
 #                                     out1/out2/out3/out4.
 #   tail_current:     out, bias, vdd, gnd
-#   bias_generation:  ibias, out1, out2, out3, out4, out5, out6, out7, vdd, gnd
-#                       - out1..out7 : seven independent legs, each mirroring
-#                                     ibias through its own current path to
-#                                     produce one bias rail. out1..out4 feed
-#                                     load.bias1/bias2/bias3/bias_cmfb
-#                                     (net_bias1..4); out5 feeds
-#                                     second_stage*.bias (net_bias5); out6
-#                                     feeds third_stage*.bias (net_bias6);
-#                                     out7 feeds tail_current.bias
-#                                     (net_bias7). bias_pruning drops any
-#                                     leg/rail not needed by a given
-#                                     combination.
-#                       - vdd, gnd   : always declared -- every leg draws from
-#                                     both rails (a vdd-side device paired
-#                                     with a gnd-side device per rail).
+#   bias_generation:  ibias, out1..out7 (consumed rails only), vdd, gnd
+#                       No variants live in this file -- the bias generator
+#                       is constructed per combination from consumer demands
+#                       (bias_construction.py + bias_legs.yaml). out1..out4
+#                       feed load.bias1/bias2/bias3/bias_cmfb (net_bias1..4);
+#                       out5 feeds second_stage*.bias (net_bias5); out6 feeds
+#                       third_stage*.bias (net_bias6); out7 feeds
+#                       tail_current.bias (net_bias7). Only consumed rails
+#                       get a port and a leg.
 #   compensation:     in, out
 #   second_stage:     in, out, bias, vdd, gnd
 #   cmfb:             in1, in2, vref, bias, out, vdd, gnd
@@ -80,8 +74,7 @@
 #   pair (drains out1/out2 into the tail) paired with active_load_nmos (also
 #   sinks out1/out2 to gnd), or with current_mirror_tail_pmos (sources
 #   current into the tail instead of sinking it). Variants compatible with
-#   either polarity (inverter_based_input, and -- for now -- all
-#   bias_generation variants) omit the field.
+#   either polarity (e.g. inverter_based_input) omit the field.
 
 modules:
 
@@ -596,113 +589,11 @@ modules:
       - {ref: r1, type: resistor, t1: out, t2: gnd}
 
   # ─── BIAS GENERATION ──────────────────────────────────────────────────────
-
-  - name: diode_connected_mosfet_bias
-    category: bias_generation
-    display_name: "Diode-Connected MOSFET Bias (NMOS Reference, PMOS Legs)"
-    # Shared diode-connected NMOS mn1 mirrors ibias to gnd, setting a
-    # reference gate voltage. Each leg i has its own complete current path:
-    # mn(i+1) mirrors ibias (sinking current to gnd) while diode-connected
-    # PMOS mp(i) sits between out_i and vdd, so out_i settles near vdd minus
-    # one |V_GSP| -- seven independent, ibias-derived bias voltages suitable
-    # for biasing PMOS gates.
-    ports:
-      - {name: ibias, role: input}
-      - {name: out1,  role: output}
-      - {name: out2,  role: output}
-      - {name: out3,  role: output}
-      - {name: out4,  role: output}
-      - {name: out5,  role: output}
-      - {name: out6,  role: output}
-      - {name: out7,  role: output}
-      - {name: vdd,   role: supply}
-      - {name: gnd,   role: supply}
-    devices:
-      - {ref: mn1, type: nmos, d: ibias, g: ibias, s: gnd,  b: gnd}
-      - {ref: mn2, type: nmos, d: out1,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp1, type: pmos, d: out1,  g: out1,  s: vdd,  b: vdd}
-      - {ref: mn3, type: nmos, d: out2,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp2, type: pmos, d: out2,  g: out2,  s: vdd,  b: vdd}
-      - {ref: mn4, type: nmos, d: out3,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp3, type: pmos, d: out3,  g: out3,  s: vdd,  b: vdd}
-      - {ref: mn5, type: nmos, d: out4,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp4, type: pmos, d: out4,  g: out4,  s: vdd,  b: vdd}
-      - {ref: mn6, type: nmos, d: out5,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp5, type: pmos, d: out5,  g: out5,  s: vdd,  b: vdd}
-      - {ref: mn7, type: nmos, d: out6,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp6, type: pmos, d: out6,  g: out6,  s: vdd,  b: vdd}
-      - {ref: mn8, type: nmos, d: out7,  g: ibias, s: gnd,  b: gnd}
-      - {ref: mp7, type: pmos, d: out7,  g: out7,  s: vdd,  b: vdd}
-
-  - name: magic_battery_bias
-    category: bias_generation
-    display_name: "Magic Battery Current Mirror Bias"
-    # PMOS diode mp1 sets the ibias reference; seven independent mirror
-    # legs (mpN/mnN) each generate their own bias rail.
-    ports:
-      - {name: ibias, role: input}
-      - {name: out1,  role: output}
-      - {name: out2,  role: output}
-      - {name: out3,  role: output}
-      - {name: out4,  role: output}
-      - {name: out5,  role: output}
-      - {name: out6,  role: output}
-      - {name: out7,  role: output}
-      - {name: vdd,   role: supply}
-      - {name: gnd,   role: supply}
-    devices:
-      - {ref: mp1, type: pmos, d: ibias, g: ibias, s: vdd, b: vdd}
-      - {ref: mp2, type: pmos, d: out1,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn1, type: nmos, d: out1,  g: out1,  s: gnd, b: gnd}
-      - {ref: mp3, type: pmos, d: out2,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn2, type: nmos, d: out2,  g: out2,  s: gnd, b: gnd}
-      - {ref: mp4, type: pmos, d: out3,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn3, type: nmos, d: out3,  g: out3,  s: gnd, b: gnd}
-      - {ref: mp5, type: pmos, d: out4,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn4, type: nmos, d: out4,  g: out4,  s: gnd, b: gnd}
-      - {ref: mp6, type: pmos, d: out5,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn5, type: nmos, d: out5,  g: out5,  s: gnd, b: gnd}
-      - {ref: mp7, type: pmos, d: out6,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn6, type: nmos, d: out6,  g: out6,  s: gnd, b: gnd}
-      - {ref: mp8, type: pmos, d: out7,  g: ibias, s: vdd, b: vdd}
-      - {ref: mn7, type: nmos, d: out7,  g: out7,  s: gnd, b: gnd}
-
-  - name: resistor_bias
-    category: bias_generation
-    display_name: "Resistor Bias (PMOS Mirror Legs, Resistor Loads)"
-    # Shared diode-connected PMOS mp1 mirrors ibias from vdd, setting a
-    # reference gate voltage. Each leg i has its own complete current path:
-    # mp(i+1) mirrors ibias (sourcing current from vdd) through its own
-    # resistor r(i) to gnd, so out_i = I_leg * R(i) -- seven independent,
-    # ibias-derived bias voltages, each independently tunable via its
-    # resistor value.
-    ports:
-      - {name: ibias, role: input}
-      - {name: out1,  role: output}
-      - {name: out2,  role: output}
-      - {name: out3,  role: output}
-      - {name: out4,  role: output}
-      - {name: out5,  role: output}
-      - {name: out6,  role: output}
-      - {name: out7,  role: output}
-      - {name: vdd,   role: supply}
-      - {name: gnd,   role: supply}
-    devices:
-      - {ref: mp1, type: pmos,     d: ibias, g: ibias, s: vdd, b: vdd}
-      - {ref: mp2, type: pmos,     d: out1,  g: ibias, s: vdd, b: vdd}
-      - {ref: r1,  type: resistor, t1: out1, t2: gnd}
-      - {ref: mp3, type: pmos,     d: out2,  g: ibias, s: vdd, b: vdd}
-      - {ref: r2,  type: resistor, t1: out2, t2: gnd}
-      - {ref: mp4, type: pmos,     d: out3,  g: ibias, s: vdd, b: vdd}
-      - {ref: r3,  type: resistor, t1: out3, t2: gnd}
-      - {ref: mp5, type: pmos,     d: out4,  g: ibias, s: vdd, b: vdd}
-      - {ref: r4,  type: resistor, t1: out4, t2: gnd}
-      - {ref: mp6, type: pmos,     d: out5,  g: ibias, s: vdd, b: vdd}
-      - {ref: r5,  type: resistor, t1: out5, t2: gnd}
-      - {ref: mp7, type: pmos,     d: out6,  g: ibias, s: vdd, b: vdd}
-      - {ref: r6,  type: resistor, t1: out6, t2: gnd}
-      - {ref: mp8, type: pmos,     d: out7,  g: ibias, s: vdd, b: vdd}
-      - {ref: r7,  type: resistor, t1: out7, t2: gnd}
+  # No enumerated variants: the bias generator is *constructed* per
+  # combination from what the other slots consume on each bias rail
+  # (bias_construction.py), assembling typed leg templates from
+  # bias_legs.yaml. The topology's bias_generation slot and its static
+  # net_bias1..7 wiring are unchanged.
 
   # ─── COMPENSATION ─────────────────────────────────────────────────────────
 

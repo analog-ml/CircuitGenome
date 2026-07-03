@@ -24,7 +24,7 @@ duplication, plus dead ``tail_current_*`` devices and an unnecessarily
 :func:`prune_tail_current` then empties that variant's ports/devices for
 those combinations, so it contributes no devices and ``tail_current.bias``
 is no longer "needed" (see
-:func:`~circuitgenome.synthesizer.bias_pruning.needed_bias_outputs`).
+:func:`~circuitgenome.synthesizer.bias_construction.required_rail_kinds`).
 
 Both the filter and the prune are required together, exactly as with
 :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`/
@@ -85,7 +85,7 @@ def prune_tail_current(variant: ModuleVariant, input_pair: ModuleVariant) -> Mod
     devices -- it contributes nothing to the assembled circuit, ``net_tail``
     is no longer left floating, and ``tail_current.bias`` is no longer
     "needed" by
-    :func:`~circuitgenome.synthesizer.bias_pruning.needed_bias_outputs`.
+    :func:`~circuitgenome.synthesizer.bias_construction.required_rail_kinds`.
     """
     if _input_pair_uses_tail(input_pair):
         return variant

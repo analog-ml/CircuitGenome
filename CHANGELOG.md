@@ -3,6 +3,78 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-07-04 (demand-driven bias construction — typed leg library)
+
+PR (`feat/demand-driven-bias-construction`). Redesigns bias generation from
+enumerate-then-filter-then-prune to construct-from-consumer-demands (the
+redesign issue #99 parked and issue #102 anticipated).
+
+The three monolithic `bias_generation` variants delivered the *same* flavor
+of voltage on all seven rails, so mixed-flavor consumer sets — notably every
+real-cmfb fully-differential circuit, whose rail 4 is gnd-referenced while
+rails 1/5 are vdd-referenced — could only enumerate with `resistor_bias`,
+whose one-global-value sizing is the #100 bug. The flavor filter (#101)
+pruned the structurally unbiasable pairings but could not give FD circuits a
+correct generator.
+
+### Changed
+
+- **The bias generator is constructed, not enumerated.** `bias_generation`
+  leaves the slot product; `build_circuit` derives a per-combination variant
+  (`constructed_bias`) from a typed demand analysis of the other slots
+  (`circuitgenome/synthesizer/bias_construction.py`): every consumed rail is
+  classified as `gate_vdd`/`gate_gnd` (consumer gate with source on a
+  supply → diode leg that is the mirror *master* of its consumers),
+  `current_source`/`current_sink` (mirror tails' own reference diode → bare
+  current leg, no bias-side diode to duplicate or fight it), or `tunable`
+  (cascode gates / conflicting demands → resistor leg). Leg templates live
+  in `config/bias_legs.yaml` (multi-reference core: NMOS master on `ibias`,
+  plus a `pref` branch emitted only when a PMOS-referenced leg needs it).
+- **Enumeration counts drop ~3x** (no bias factor, no filtered residue):
+  1-stage 142→70, 2-stage SE 954→630, 2-stage FD 6 759→5 670, 3-stage SE
+  7 290→5 670, 3-stage FD 491 427→459 270. Every mixed-flavor consumer set
+  now gets structurally correct per-rail legs instead of routing to
+  `resistor_bias`.
+- **Recognizer**: new `constructed_bias` pattern + `constructed_bias_legs`
+  hook (per-leg discovery: NMOS-referenced pairs, the `pref` branch,
+  gnd-referenced/current/resistor legs off the PMOS-side reference). Purely
+  NMOS-referenced shapes resolve to the historical
+  `diode_connected_mosfet_bias` pattern; the three legacy monolith patterns
+  remain for external netlists. The B1 mis-recognition
+  (`resistor_bias` + `current_mirror_tail_nmos` → spurious
+  `magic_battery_bias`) no longer affects synthesized circuits.
+- **Sizer taxonomy**: `is_signal_device` now recognizes the constructed
+  generator's internal `*_pref` mirror-reference gate as a bias net —
+  without it, pref-gated legs were sized as signal devices (short L,
+  ~5 % mirror error from channel-length modulation) instead of
+  current sources (`sizer/shared/taxonomy.py`).
+- **Designer verdicts (gf180 two-stage SE benchmark)**: unique core
+  combinations reaching the metric gates rise 93 → 102. 18 mixed-flavor
+  cores (`current_source_load_nmos` × `current_mirror_tail_pmos`) that
+  previously only enumerated with mis-sized `resistor_bias` now bias; 9 are
+  honestly re-condemned — 6 whose old pass was powered by the #100 rail-7
+  corruption (a hot tail supplied the current their `common_drain` stage
+  needed), and 3 knife-edge cascode-tail cores (~3 mV of Vdsat margin)
+  tipped by the multi-reference core's extra mirror hop (~4 % cumulative
+  λ error vs the retired 2-hop `magic_battery_bias`).
+
+### Removed
+
+- `synthesizer/bias_compatibility.py` (`is_bias_flavor_compatible` — flavor
+  mismatches are now unconstructable; decision record: #102) and
+  `synthesizer/bias_pruning.py` (`prune_bias_generation` — only consumed
+  rails are built; `prune_redundant_tail_diode` — current legs carry no
+  diode). The demand analysis (`required_rail_kinds`) subsumes
+  `needed_bias_outputs`/`required_rail_flavors`.
+- The `diode_connected_mosfet_bias`/`magic_battery_bias`/`resistor_bias`
+  module variants from `opamp_modules.yaml` (their recognizer patterns
+  remain).
+
+### Follow-ups
+
+- #100 narrows to sizing the `tunable` legs (cascode-consumer rails); a
+  cascode-appropriate leg kind is the natural phase 2 of this design.
+
 ## 2026-06-24 (gm/Id pipeline redesign — PTM-only dispatch + bias-aware metrics)
 
 PR (`feat/gmid-ptm-only-bias-gating`). Targets `feat/gmid-sizing-redesign`.

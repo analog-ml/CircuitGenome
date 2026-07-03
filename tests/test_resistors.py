@@ -16,8 +16,7 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 
 _TOPO = "two_stage_opamp_single_ended"
 _BASE = dict(load="active_load_nmos", tail_current="current_mirror_tail_pmos",
-             second_stage="common_source", bias_gen="diode_connected_mosfet_bias",
-             compensation="miller_cap")
+             second_stage="common_source", compensation="miller_cap")
 
 
 def _spec(gain=40):
@@ -82,7 +81,9 @@ def test_resistor_tail_and_bias_sized():
     assert any("tail_current" in ref for ref in rt.resistors)
     assert all(v > 1e3 for v in rt.resistors.values())   # not the 1 kΩ placeholder
 
-    rb = _size(bias_gen="resistor_bias")
+    # A cascode-consumer rail (folded-cascode bias2) gets a tunable resistor
+    # leg in the constructed bias generator.
+    rb = _size(load="folded_cascode_load_pmos_input_single_output")
     assert any("bias_gen" in ref for ref in rb.resistors)
     assert all(v > 1e4 for v in rb.resistors.values())   # ~Vgs/ibias, tens of kΩ
 

@@ -197,7 +197,6 @@ def one_stage_fbr():
         "input_pair": "differential_pair_pmos",
         "load": "active_load_nmos",
         "tail_current": "current_mirror_tail_pmos",
-        "bias_gen": "diode_connected_mosfet_bias",
     })
 
 
@@ -253,7 +252,6 @@ def two_stage_fbr():
         "load": "active_load_nmos",
         "tail_current": "current_mirror_tail_pmos",
         "second_stage": "common_source",
-        "bias_gen": "diode_connected_mosfet_bias",
         "compensation": "miller_cap",
     })
 
@@ -265,7 +263,6 @@ def two_stage_resistor_load_fbr():
         "load": "resistor_load_gnd",
         "tail_current": "current_mirror_tail_pmos",
         "second_stage": "common_source",
-        "bias_gen": "diode_connected_mosfet_bias",
         "compensation": "miller_cap",
     })
 
@@ -447,7 +444,6 @@ def two_stage_fd_fbr():
         "input_pair":     "differential_pair_pmos",
         "load":           "folded_cascode_load_pmos_input_differential_output",
         "tail_current":   "current_mirror_tail_pmos",
-        "bias_gen":       "resistor_bias",
         "cmfb":           "resistive_sense_cmfb",
         "comp_p":         "miller_cap",
         "comp_n":         "miller_cap",
@@ -588,7 +584,6 @@ def three_stage_nmc_se_fbr():
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
-        "bias_gen":     "resistor_bias",
         "second_stage": "common_source",
         "third_stage":  "common_source",
         "comp1":        "miller_cap",
@@ -602,7 +597,6 @@ def three_stage_rnmc_se_fbr():
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
-        "bias_gen":     "resistor_bias",
         "second_stage": "common_source",
         "third_stage":  "common_source",
         "comp1":        "miller_cap",
@@ -616,7 +610,6 @@ def three_stage_nmc_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "bias_gen":        "resistor_bias",
         "cmfb":            "resistive_sense_cmfb",
         "second_stage_p":  "common_source",
         "second_stage_n":  "common_source",
@@ -635,7 +628,6 @@ def three_stage_rnmc_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "bias_gen":        "resistor_bias",
         "cmfb":            "resistive_sense_cmfb",
         "second_stage_p":  "common_source",
         "second_stage_n":  "common_source",

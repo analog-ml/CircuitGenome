@@ -36,6 +36,12 @@ def is_signal_device(device: Device) -> bool:
     The signal transistor of a gain stage is the one whose gate is the previous
     stage's output; the partner device is a current-source load (gate on a bias
     net). Used to pick the gm-contributing device regardless of NMOS/PMOS polarity.
+
+    ``*_pref`` is the constructed bias generator's internal PMOS-side mirror
+    reference gate (``pref`` in ``synthesizer/config/bias_legs.yaml``,
+    slot-prefixed to ``bias_gen_pref`` on assembly) — devices gated by it are
+    mirror current sources, not signal devices.
     """
     gate = device.terminals.get("g", "")
-    return bool(gate) and gate not in BIAS_NETS and not gate.startswith("net_bias")
+    return (bool(gate) and gate not in BIAS_NETS
+            and not gate.startswith("net_bias") and not gate.endswith("_pref"))

@@ -13,13 +13,17 @@ SPICE netlists.
 - `models.py` — plain dataclasses, no logic: `Device`, `PortDef`,
   `ModuleVariant`, `Slot`, `Connection`, `TopologyTemplate`,
   `SynthesizedCircuit`. **None are frozen** — `dataclasses.replace()` is the
-  standard way to derive a modified copy (used by `bias_pruning.py`).
+  standard way to derive a modified copy (used by the pruning passes).
 - `loader.py` — YAML → dataclasses. `Device.terminals` is built from *all*
   YAML device-entry keys except `ref`/`type` (so `d/g/s/b` for MOSFETs,
   `t1/t2` for resistors, `p/m` for capacitors — whatever the YAML uses).
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
-  category (input_pair, load, tail_current, bias_generation, cmfb,
-  compensation, second_stage).
+  category (input_pair, load, tail_current, cmfb, compensation,
+  second_stage). The bias_generation category has **no** variants here —
+  the bias generator is constructed per combination (see below).
+- `config/bias_legs.yaml` — the typed bias-leg library (multi-reference
+  core + one leg template per rail kind) consumed by `bias_construction.py`;
+  loaded by `load_bias_legs` into a `BiasLegLibrary`.
 - `config/opamp_topologies.yaml` — topology templates: slots (which
   categories are needed, and under what local slot name) + `{slot, port,
   net}` connection rules.
@@ -28,7 +32,7 @@ SPICE netlists.
   filter/transform.**
 - `netlist.py` — `to_flat_spice` / `to_hierarchical_spice` serializers.
 - `__init__.py` — public API surface (`__all__`); `polarity_compatibility` and
-  `bias_pruning` are intentionally **not** exported (see pattern below).
+  `bias_construction` are intentionally **not** exported (see pattern below).
 
 ### Pipeline filters & pruning (internal, not in `__all__`)
 
@@ -40,15 +44,14 @@ SPICE netlists.
   (`is_cmfb_compatible`, `prune_cmfb`).
 - `tail_current_compatibility.py` — tail_current-slot compatibility filter
   and pruning (`is_tail_current_compatible`, `prune_tail_current`).
-- `bias_compatibility.py` — bias-rail flavor compatibility filter
-  (`is_bias_flavor_compatible`; helpers `rail_flavor_from_diode`,
-  `provided_rail_flavors`, `required_rail_flavors`).
-- `bias_pruning.py` — bias-rail pruning (`needed_bias_outputs`,
-  `prune_bias_generation`, `prune_redundant_tail_diode`).
+- `bias_construction.py` — demand-driven bias construction
+  (`required_rail_kinds`, `construct_bias_generation`; helper
+  `rail_flavor_from_diode`). Not a filter: it *builds* the bias_generation
+  slot's variant from the other slots' demands.
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 
-These seven modules all follow the same shape (see "Pattern for small internal
+These six modules all follow the same shape (see "Pattern for small internal
 pure-function modules" below) and are invoked, in this order, from
 `enumerate_circuits` (see "pipeline order" below).
 
@@ -75,8 +78,10 @@ list is current.
   terminal that references it.
 - `vdd`/`gnd` ports auto-connect to `vdd!`/`gnd!` unless the topology
   overrides them.
-- **Bias rails**: `bias_gen` has 7 independent output rails (`out1..out7`),
-  statically wired by the topology YAML to one role each: `net_bias1..4`
+- **Bias rails**: the topology YAML statically wires `bias_gen`'s 7
+  output rails (`out1..out7`) to one role each (the constructed variant
+  only declares ports for consumed rails, so unconsumed connections are
+  simply unused): `net_bias1..4`
   connect `out1-4` to `load.bias1/bias2/bias3/bias_cmfb` (same index);
   `net_bias5`/`net_bias6` connect `out5`/`out6` to `second_stage*.bias`/
   `third_stage*.bias` (shared by `_p`/`_n` instances in fully-differential
@@ -167,55 +172,45 @@ and `tail_current.bias` is not counted by `needed_bias_outputs`. To support
 a new/edited `input_pair` variant as a genuine `tail_current` consumer, wire
 one of its device terminals to `tail` -- no code changes needed here.
 
-## Bias flavor compatibility filter (`bias_compatibility.py`)
+## Demand-driven bias construction (`bias_construction.py`)
 
-Every `bias_generation` leg pins its rail to one supply via its
-diode-connected device — the rail's **flavor**: PMOS diode → vdd-referenced
-(`diode_connected_mosfet_bias`), NMOS diode → gnd-referenced
-(`magic_battery_bias`); `resistor_bias` legs have no diode, so their rails
-are per-rail tunable (no flavor, never rejected). A consumer gate fed the
-wrong flavor is structurally unbiasable — no sizing can fix it (issue #99).
-`is_bias_flavor_compatible` rejects a combination when a **consumed** rail's
-required flavor contradicts the generator's. Both sides are derived
-**structurally** (no YAML tags, so nothing can drift from the devices):
-required flavor per rail = the supply a consumer gate's source sits on
-(internal-node sources — cascode gates — impose nothing), or the channel
-type of a diode-connected device on the rail (a mirror tail's reference,
-incl. the cascode tails' stacked one). Requirements only arise from actual
-device references, so unconsumed rails (later dropped by
-`prune_bias_generation`) never reject; the filter runs **after**
-`prune_cmfb`/`prune_tail_current` so emptied placeholders impose nothing.
-Rejection acts as routing: single-flavor consumer sets keep the matching
-generator (+ `resistor_bias`); mixed-flavor sets keep only `resistor_bias`.
+The bias generator is **constructed**, not enumerated: `bias_generation` is
+excluded from the slot product, and `build_circuit` calls
+`construct_bias_generation` after `prune_cmfb`/`prune_tail_current` (so
+emptied placeholders demand nothing). `required_rail_kinds` classifies every
+*consumed* rail structurally (actual device references, no YAML tags):
 
-## Bias-rail pruning (`bias_pruning.py`)
+- a consumer gate whose source sits on a supply → `gate_vdd`/`gate_gnd`
+  (the leg's diode-connected device is the mirror **master** of its
+  consumers — sizing by W/L ratio, not voltage matching);
+- a diode-connected consumer on the rail (mirror tails, incl. the cascode
+  tails' stacked diode) → `current_source`/`current_sink` (the rail is a
+  current interface; the leg is a **bare** mirror — no bias-side diode to
+  duplicate or fight the tail's reference, issue #99's rail-7 classes);
+- internal-node sources (cascode gates) or conflicting votes → `tunable`
+  (mirror into a resistor, per-rail sizable; the cascode-level gap is
+  issue #99's parked follow-up).
 
-- `needed_bias_outputs(topology, variant_map)` does a **structural** check
-  (actual device-terminal references, not declared `role`) of which of
-  `out1..out7` are consumed by the `load`, `second_stage`, `third_stage`, and
-  `tail_current` slots — each role is detected independently via the
-  topology's static `net_bias{1-7}` wiring. The result can be any subset of
-  `{1..7}`, not necessarily contiguous (e.g. `{1, 5, 7}`).
-- `prune_bias_generation(variant, needed)` drops every rail not in `needed`,
-  along with the devices that exist only to drive dropped rails — a single
-  shared-reference-plus-7-legs layout for all variants; see the module
-  docstring for the full algorithm. If `needed` covers all of `{1..7}`,
-  `variant` is returned unchanged.
-- `prune_redundant_tail_diode(bias_variant, tail_variant)` drops the bias
-  leg's rail-7 diode when a mirror tail brings its own reference diode of the
-  same flavor (via `bias_compatibility.rail_flavor_from_diode` — one shared
-  definition of flavor): the two diodes would otherwise sit in parallel and
-  split the reference current. Cross-flavor pairings never reach it — they
-  are rejected upstream by `is_bias_flavor_compatible`.
-- Invoked once per combination in `enumerate_circuits`, **after**
-  `is_combination_valid`, **before** `_build_port_net_map`/`_resolve_devices`.
-  The pruned variant replaces `variant_map[slot.name]` for the
-  `bias_generation` slot, so `SynthesizedCircuit.variant_map` and both SPICE
-  serializers reflect the pruned device set.
+`construct_bias_generation` assembles the variant (`constructed_bias`) from
+`config/bias_legs.yaml`: an NMOS master diode on `ibias` (always), a `pref`
+branch deriving the PMOS-side reference (only when a leg references `pref`;
+`pref` is not a port, so it resolves to a slot-internal net), and one leg
+per consumed rail (`out` → `out{i}`, refs suffixed with the rail index).
+Only consumed rails get ports/legs, so the old flavor filter
+(`is_bias_flavor_compatible`), rail pruning (`prune_bias_generation`), and
+redundant-diode prune (`prune_redundant_tail_diode`) are all subsumed —
+mismatches are unconstructable rather than filtered (decision record for the
+retired filter: issue #102; redesign: the issue #99 follow-up discussion).
+
+Recognizer coupling: the `constructed_bias` pattern + `constructed_bias_legs`
+hook (recognizer) discover the constructed shape per leg; purely
+NMOS-referenced shapes still resolve to the historical
+`diode_connected_mosfet_bias` pattern (its hook finds the identical device
+set), and the legacy monolith patterns remain for external netlists.
 
 ## Pattern for small internal pure-function modules
 
-`polarity_compatibility.py`, `bias_pruning.py`, and `net_aliasing.py` all
+`polarity_compatibility.py`, `bias_construction.py`, and `net_aliasing.py` all
 follow the same template — use it for future per-combination
 filters/transforms:
 
@@ -230,7 +225,9 @@ filters/transforms:
 
 ## `enumerate_circuits` pipeline order
 
-1. `itertools.product` over per-slot candidate variants → `variant_map`.
+1. `itertools.product` over per-slot candidate variants → `variant_map`
+   (the `bias_generation` slot is excluded from the product — its variant
+   is constructed in step 9).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_output_type_compatible(topology, variant_map)` — skip on
    output-cardinality mismatch.
@@ -243,24 +240,22 @@ filters/transforms:
    compatibility filter" above).
 7. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
    replacing `variant_map["tail_current"]`.
-8. `is_bias_flavor_compatible(topology, variant_map)` — skip if the
-   `bias_generation` variant delivers the wrong flavor on a consumed bias
-   rail (see "Bias flavor compatibility filter" above; must run after the
-   cmfb/tail_current prunes so placeholders impose nothing).
-9. `needed_bias_outputs` → `prune_bias_generation` →
-   `prune_redundant_tail_diode`, replacing `variant_map[bias_gen_slot]`.
-10. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
-    then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
-    `load` slot's `port_net_map` is captured separately as
-    `load_port_net_map`.
-11. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+8. `construct_bias_generation(topology, variant_map, bias_legs)` →
+   `variant_map[bias_gen_slot]` (see "Demand-driven bias construction"
+   above; must run after the cmfb/tail_current prunes so placeholders
+   demand nothing).
+9. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+   then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
+   `load` slot's `port_net_map` is captured separately as
+   `load_port_net_map`.
+10. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
     topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
     net-merge pass for `load` ports declared `alias_of` another `load` port
     (see "Net-naming & wiring conventions" above).
-12. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+11. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
     devices)`.
 
-Any new per-combination transform should slot in between steps 4 and 10,
+Any new per-combination transform should slot in between steps 4 and 9,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 
@@ -272,5 +267,5 @@ relevant slot's entry in `variant_map`" pattern.
 - Broad coverage uses `pytest.mark.parametrize` over variant names / expected
   sets.
 - Full-enumeration count tests are exact for 1- and 2-stage topologies; the
-  3-stage fully-differential topology (~7.1M combos) is only checked via
+  3-stage fully-differential topology (~0.46M combos) is only checked via
   `next()` (non-empty) for speed, never materialized in full.
