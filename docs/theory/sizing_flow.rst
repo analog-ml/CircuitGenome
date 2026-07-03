@@ -611,10 +611,10 @@ grounds its report in ngspice instead:
 
 * **Measured metrics.**  When feasible, the CLI measures performance in ngspice
   (:func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics`): open-loop gain,
-  GBW, phase margin, slew rate, and quiescent power.  CMRR, PSRR, and output swing
-  have no ngspice test-bench yet and are omitted.  A metric ngspice cannot extract
-  is shown as ``n/a`` (no analytical fallback), and ngspice is **required** — the
-  command errors if it is not installed.
+  GBW, phase margin, slew rate (min of the rising and falling edges), quiescent
+  power, CMRR, PSRR+, and output swing.  A metric ngspice cannot extract is shown
+  as ``n/a`` (no analytical fallback), and ngspice is **required** — the command
+  errors if it is not installed.
 
 * **Corner sweep (foundry PDKs).**  A PDK tech (``spice_lib``, e.g. GF180MCU) is
   sized at its nominal corner, then the sized design is re-measured across the

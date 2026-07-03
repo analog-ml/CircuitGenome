@@ -19,8 +19,9 @@ class DesignSolution:
     :param topology: the :class:`~circuitgenome.synthesizer.models.TopologyTemplate` name.
     :param variants: slot name → chosen module-variant name.
     :param metrics: ngspice-measured metrics (``gain_db``, ``gbw_hz``,
-        ``phase_margin_deg``, ``slew_rate_vps``, ``power_w``); ``None`` when a
-        measurement could not be extracted.
+        ``phase_margin_deg``, ``slew_rate_vps``, ``power_w``, ``cmrr_db``,
+        ``psrr_db``, ``output_swing_max_v``, ``output_swing_min_v``); ``None``
+        when a measurement could not be extracted.
     :param margins: normalized margin per constrained+measured spec
         (``(meas − min)/min`` for min-specs, ``(max − meas)/max`` for
         max-specs); every value is ≥ 0 by construction.
@@ -66,9 +67,10 @@ class DesignReport:
     :param best_points: criterion → the winning solution among ``solutions``
         (``highest_gain``, ``highest_gbw``, ``highest_phase_margin``,
         ``lowest_power``, ``most_robust``).
-    :param unverified_specs: constrained spec fields the ngspice rig cannot
-        measure (CMRR/PSRR/output swing) — solutions are *not* rejected on
-        these; verify them separately.
+    :param unverified_specs: constrained spec fields whose measurement came
+        back ``None`` for at least one accepted circuit (e.g. swing/slew on
+        fully-differential topologies) — those solutions were *not* rejected
+        on that spec; verify it separately.
     :param runtime_s: wall-clock time for the whole run.
     """
     spec: dict

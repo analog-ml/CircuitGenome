@@ -956,7 +956,10 @@ Level-1 ``.model`` from ``mu_cox``/``vth``/``lam`` for ``generic``:
 
 Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loop
 AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
-unity-gain step.  Single-ended op-amps are the most robust; fully-differential AC
-metrics (which depend on the on-chip CMFB operating point) and any non-converging
-measurement are reported as ``n/a`` rather than as wrong numbers.  CMRR, PSRR, and
-output swing are not measured and are omitted from the PTM report.
+unity-gain pulse (the min of the rising and falling edges); output swing from a
+unity-buffer DC sweep; CMRR and PSRR+ from the same feedback loop with the AC
+stimulus riding on the input common mode / the positive supply.  Single-ended
+op-amps are the most robust; fully-differential AC metrics (which depend on the
+on-chip CMFB operating point), the single-ended-only swing/slew benches on FD
+circuits, and any non-converging measurement are reported as ``n/a`` rather than
+as wrong numbers.

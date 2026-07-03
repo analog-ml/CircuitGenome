@@ -12,6 +12,7 @@ import pytest
 
 from circuitgenome.recognizer import assign_slots, parse, recognize
 from circuitgenome.sizer.shared import spice_sim
+from circuitgenome.sizer.shared.spice import deck, measure
 from circuitgenome.sizer.shared.device_model import build_device_model
 from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.sizer.shared.models import SizingSpec
@@ -38,30 +39,30 @@ def test_gf180_tech_loads_lib_and_device_map():
 
 def test_gf180_emit_model_selects_corner():
     tech = load_tech("gf180mcu")
-    nominal = spice_sim._emit_model(tech)
+    nominal = deck._emit_model(tech)
     assert ".include" in nominal and "design.ngspice" in nominal
     assert '.lib "' in nominal and "sm141064.ngspice" in nominal
     assert nominal.rstrip().endswith("typical")
-    assert spice_sim._emit_model(tech, "ff").rstrip().endswith("ff")
+    assert deck._emit_model(tech, "ff").rstrip().endswith("ff")
     # PTM stays a flat .include (no .lib).
-    assert ".lib" not in spice_sim._emit_model(load_tech("ptm45"))
+    assert ".lib" not in deck._emit_model(load_tech("ptm45"))
 
 
 def test_gf180_device_translation_m_to_x():
     tech = load_tech("gf180mcu")
     body = ["m1_input_pair net1 in1 net2 net2 pmos W=10.0u L=0.56u",
             "c1_compensation net2 out 1p"]
-    out = spice_sim._emit_body(tech, body)
+    out = deck._emit_body(tech, body)
     assert out[0] == "x1_input_pair net1 in1 net2 net2 pmos_3p3 w=10.0u l=0.56u"
     assert out[1] == "c1_compensation net2 out 1p"  # non-MOS untouched
     # PTM (no device_map) leaves the M-device line unchanged.
-    assert spice_sim._emit_body(load_tech("ptm45"), body) == body
+    assert deck._emit_body(load_tech("ptm45"), body) == body
 
 
 def test_gf180_op_handle_is_nested():
     tech = load_tech("gf180mcu")
-    assert spice_sim._dev_prefix(tech, "m1_input_pair") == "@m.xdut.x1_input_pair.m0"
-    assert spice_sim._dev_prefix(load_tech("ptm45"), "m1_input_pair") == "@m.xdut.m1_input_pair"
+    assert deck._dev_prefix(tech, "m1_input_pair") == "@m.xdut.x1_input_pair.m0"
+    assert deck._dev_prefix(load_tech("ptm45"), "m1_input_pair") == "@m.xdut.m1_input_pair"
 
 
 def _first_feasible_size():
