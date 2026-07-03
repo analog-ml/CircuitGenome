@@ -221,6 +221,7 @@ __marimo__/
 
 # output directory for generated files
 circuits/
+designs/
 circuitgenome/sizer/shared/eval_engines
 
 .mem/
