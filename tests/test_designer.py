@@ -89,8 +89,16 @@ def test_design_end_to_end_loose_spec(tmp_path):
     st = report.stats[_TOPO]
     assert st.enumerated == 100
     assert st.enumerated == (st.accepted + st.sizing_failed
-                             + st.bias_infeasible + st.spec_failed + st.errors)
+                             + st.bias_infeasible + st.spec_failed
+                             + st.unverified + st.errors)
     assert st.errors == 0
+    # Every rejection carries a (normalized) reason in the histogram.
+    assert sum(st.rejection_reasons.values()) == st.enumerated - st.accepted
+    # Acceptance is strict: constrained specs are measured on every solution.
+    for sol in report.solutions:
+        assert sol.metrics.get("gain_db") is not None
+        assert sol.metrics.get("cmrr_db") is not None
+        assert isinstance(sol.notes, list)
     # The CMRR bench is exercised and gated: some accepted circuit measured
     # it, and every measured CMRR margin is non-negative.
     measured = [s for s in report.solutions

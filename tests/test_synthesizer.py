@@ -1082,11 +1082,38 @@ def test_enumerate_circuits_tail_current_uses_rail_7_simple_load(bias_variant_na
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out7"]
-    assert len(bias_variant.devices) == 3  # shared ref + 1 leg
+    # magic_battery's rail-7 nmos diode duplicates the nmos mirror tail's own
+    # reference diode and is pruned (prune_redundant_tail_diode).
+    expected = 2 if bias_variant_name == "magic_battery_bias" else 3
+    assert len(bias_variant.devices) == expected  # shared ref + 1 (pruned) leg
 
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
     assert tail_devices["m1_tail_current"].terminals["g"] == "net_bias7"
+
+
+def test_enumerate_circuits_pmos_mirror_tail_prunes_rail_7_diode():
+    """current_mirror_tail_pmos brings its own diode-connected reference on
+    net_bias7: the bias_gen leg's same-type (pmos) rail-7 diode is pruned so
+    the two do not sit in parallel and split the reference current (the
+    recognizer also could not tell the identical diodes apart, leaving one
+    unsized).  The current leg (nmos sink) and the out7 port remain."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
+        "load": [v for v in modules["load"] if v.name == "active_load_nmos"],
+        "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_pmos"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+    }
+
+    circuit = next(enumerate_circuits(topo, simple_modules))
+    bias_variant = circuit.variant_map["bias_gen"]
+
+    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out7"]
+    assert len(bias_variant.devices) == 2  # shared nmos ref + mn8 current leg
+    assert not any(d.type == "pmos" and d.terminals.get("d") == "out7"
+                   for d in bias_variant.devices)
 
 
 @pytest.mark.parametrize(
@@ -1111,7 +1138,10 @@ def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails(bia
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out7"]
-    assert len(bias_variant.devices) == 5  # shared ref + 2 legs
+    # magic_battery's rail-7 nmos diode duplicates the nmos mirror tail's own
+    # reference diode and is pruned (prune_redundant_tail_diode).
+    expected = 4 if bias_variant_name == "magic_battery_bias" else 5
+    assert len(bias_variant.devices) == expected  # shared ref + 2 (pruned) legs
 
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"

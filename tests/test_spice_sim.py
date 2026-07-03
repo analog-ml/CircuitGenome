@@ -205,15 +205,18 @@ def _resistor_tail_two_stage_se(second_stage):
 
 @ngspice
 def test_implausible_pm_extraction_is_discarded():
-    """A corrupt AC sweep (PM ≈ 266° from the wrong-polarity branch) must not
-    be reported as a measurement: gain/GBW/PM come back None with a note."""
+    """A PM above 180° (phase lead on falling gain — the right-half-plane
+    pole of Miller compensation around the non-inverting two-CS second stage)
+    must not be reported as a measurement: gain/GBW/PM come back None with a
+    note naming the unsound response."""
     text, result, tech, spec = _resistor_tail_two_stage_se(
         "differential_ota_second_stage")
     sim = spice_sim.simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is None
     assert sim["gbw_hz"] is None
     assert sim["phase_margin_deg"] is None
-    assert any("implausible" in n for n in sim.get("notes", []))
+    assert any("right-half-plane" in n or "implausible" in n
+               for n in sim.get("notes", []))
 
 
 @ngspice

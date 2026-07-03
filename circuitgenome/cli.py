@@ -444,17 +444,22 @@ def _cmd_design(args: argparse.Namespace) -> None:
 
     print(f"\nDesign summary (tech: {report.tech}):")
     print(f"  {'template':<44}{'evaluated':>10}{'sizing✗':>9}{'bias✗':>7}"
-          f"{'spec✗':>7}{'error':>7}{'accepted':>10}")
+          f"{'spec✗':>7}{'unverif✗':>10}{'error':>7}{'accepted':>10}")
     for name, st in report.stats.items():
         print(f"  {name:<44}{st.enumerated:>10}{st.sizing_failed:>9}"
-              f"{st.bias_infeasible:>7}{st.spec_failed:>7}{st.errors:>7}"
-              f"{st.accepted:>10}")
+              f"{st.bias_infeasible:>7}{st.spec_failed:>7}{st.unverified:>10}"
+              f"{st.errors:>7}{st.accepted:>10}")
     rate = (accepted / total * 100) if total else 0.0
     print(f"\n  {accepted}/{total} circuits meet the spec ({rate:.1f}%)  |  "
           f"runtime {report.runtime_s:.1f}s")
     if report.unverified_specs:
-        print(f"  ⚠ not SPICE-verifiable (check separately): "
-              f"{', '.join(report.unverified_specs)}")
+        print(f"  ⚠ rejected candidates had constrained spec(s) ngspice could "
+              f"not measure: {', '.join(report.unverified_specs)}")
+    for name, st in report.stats.items():
+        if st.rejection_reasons:
+            print(f"\n  Top rejection reasons — {name}:")
+            for reason, n in list(st.rejection_reasons.items())[:5]:
+                print(f"    {n:>6}  {reason}")
 
     if report.best_points:
         _BEST_ROWS = [

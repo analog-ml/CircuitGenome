@@ -17,7 +17,11 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
-from .bias_pruning import needed_bias_outputs, prune_bias_generation
+from .bias_pruning import (
+    needed_bias_outputs,
+    prune_bias_generation,
+    prune_redundant_tail_diode,
+)
 from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
 from .polarity_compatibility import is_combination_valid
 from .loader import load_modules, load_topologies
@@ -122,6 +126,8 @@ def build_circuit(
     needed = needed_bias_outputs(topology, variant_map)
     bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
     variant_map[bias_slot.name] = prune_bias_generation(variant_map[bias_slot.name], needed)
+    variant_map[bias_slot.name] = prune_redundant_tail_diode(
+        variant_map[bias_slot.name], variant_map["tail_current"])
 
     all_devices: list[tuple[str, Device]] = []
     load_port_net_map: dict[str, str] = {}

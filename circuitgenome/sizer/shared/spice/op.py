@@ -26,16 +26,30 @@ def read_op_operating_point(
     ``None`` when ngspice is unavailable, the topology is fully-differential, or
     the bias doesn't settle.
     """
+    op, _fail = _read_op(netlist_text, result, tech, spec)
+    return op
+
+
+def _read_op(
+    netlist_text: str, result: SizingResult, tech: TechParams, spec: SizingSpec,
+) -> tuple[dict[str, dict[str, float]] | None, str | None]:
+    """:func:`read_op_operating_point` plus the failure kind when it is ``None``.
+
+    The failure kind separates "the simulation ran and the output **railed** at
+    both polarities" (``"railed"``) from "ngspice never produced a usable run"
+    (``"sim-failed"`` — crash, non-convergence, or nothing probed); it is
+    ``None`` when an operating point is returned.
+    """
     if not ngspice_available():
-        return None
+        return None, "sim-failed"
     name, ports, body = _parse_subckt(netlist_text)
     topo = _Topo(ports)
     if topo.fd:
-        return None
+        return None, "sim-failed"
     body_dut = _dut(tech, name, _inject_sizes(body, result))
     refs = list(result.transistors)
     if not refs:
-        return None
+        return None, "sim-failed"
     vdd, ibias = spec.vdd, spec.ibias
     vcm = (spec.vdd + spec.vss) / 2.0
     prefixes = {r: _dev_prefix(tech, r) for r in refs}
@@ -43,6 +57,7 @@ def read_op_operating_point(
         f"print {pre}[id]\nprint {pre}[vds]\nprint {pre}[vdsat]\n"
         for pre in prefixes.values()
     )
+    ran = False
     for inp, inn in (("in1", "in2"), ("in2", "in1")):
         netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
                   inp: "inp", inn: "inn", "out": "out"}
@@ -55,15 +70,18 @@ def read_op_operating_point(
         if txt is None:
             continue
         mo = re.search(r"v\(out\)\s*=\s*([-\d.eE+]+)", txt)
-        if not mo or not (0.1 * vdd < float(mo.group(1)) < 0.9 * vdd):
+        if not mo:
+            continue
+        ran = True
+        if not (0.1 * vdd < float(mo.group(1)) < 0.9 * vdd):
             continue  # wrong polarity → output railed
         op: dict[str, dict[str, float]] = {}
         for r, pre in prefixes.items():
             for m in re.finditer(re.escape(pre) + r"\[(\w+)\]\s*=\s*([-\d.eE+]+)", txt):
                 op.setdefault(r, {})[m.group(1)] = float(m.group(2))
         if op:
-            return op
-    return None
+            return op, None
+    return None, ("railed" if ran else "sim-failed")
 
 
 def _op_bias_problems(op: dict[str, dict[str, float]]) -> tuple[list[str], list[str]]:
@@ -99,10 +117,14 @@ def check_bias_soundness(netlist_text: str, result: SizingResult,
     _, ports, _ = _parse_subckt(netlist_text)
     if _Topo(ports).fd:
         return True, None
-    op = read_op_operating_point(netlist_text, result, tech, spec)
+    op, fail = _read_op(netlist_text, result, tech, spec)
     if op is None:
-        return False, ("SPICE bias check: the feedback operating point railed — the "
-                       "circuit does not establish a usable mid-rail bias point.")
+        if fail == "railed":
+            return False, ("SPICE bias check: the feedback operating point railed — "
+                           "the circuit does not establish a usable mid-rail bias "
+                           "point.")
+        return False, ("SPICE bias check: the .op simulation failed or did not "
+                       "converge — no operating point to assess.")
     triode, starved = _op_bias_problems(op)
     if starved or triode:
         parts = []

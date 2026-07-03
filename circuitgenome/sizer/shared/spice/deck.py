@@ -105,13 +105,29 @@ def sized_netlist(netlist_text: str, result: SizingResult) -> str:
     ``cc_pf``/``cc2_pf`` — the same injection the verification decks use.  Any
     lines before the ``.subckt`` (title/comments) are preserved, so the output
     is a standalone flat netlist ready for SPICE.
+
+    :raises ValueError: when a MOSFET has no sizing entry — an exported design
+        must be fully sized (an unsized device would silently run at the
+        simulator's default W/L).
     """
     lines = netlist_text.splitlines()
     start = next(i for i, l in enumerate(lines) if l.strip().lower().startswith(".subckt"))
     name, ports, body = _parse_subckt(netlist_text)
+    unsized = unsized_mos_refs(body, result)
+    if unsized:
+        raise ValueError(
+            f"netlist has unsized MOSFET(s): {', '.join(unsized)} — "
+            "the sizing result carries no W/L for them")
     body = _inject_sizes(body, result)
     out = lines[:start] + [f".subckt {name} {' '.join(ports)}"] + body + [".ends"]
     return "\n".join(out) + "\n"
+
+
+def unsized_mos_refs(body: list[str], result: SizingResult) -> list[str]:
+    """MOSFET refs in ``body`` that :func:`_inject_sizes` would leave unsized."""
+    return [tok[0] for line in body
+            if len(tok := line.split()) >= 6 and tok[5].lower() in _MOS_MODELS
+            and tok[0] not in result.transistors]
 
 
 def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:

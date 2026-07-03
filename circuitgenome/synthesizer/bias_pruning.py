@@ -119,3 +119,40 @@ def prune_bias_generation(variant: ModuleVariant, needed: set[int]) -> ModuleVar
     new_ports = [p for p in variant.ports if p.name not in drop_rails]
 
     return dataclasses.replace(variant, ports=new_ports, devices=new_devices)
+
+
+def prune_redundant_tail_diode(
+    bias_variant: ModuleVariant, tail_variant: ModuleVariant
+) -> ModuleVariant:
+    """Drop the rail-7 diode when the tail brings its own reference diode.
+
+    Current-mirror tails convert the rail-7 current into their mirror-gate
+    voltage with their own diode-connected reference device on ``bias``
+    (``d == g == bias``).  A bias-generation leg whose ``out7`` device is a
+    diode-connected MOSFET of the same channel type then sits **in parallel**
+    with that reference: the two identical diodes split the leg current, so
+    the tail mirror no longer sees the full reference current (and the
+    recognizer cannot tell them apart, leaving one unassigned and unsized).
+    Dropping the bias-side diode leaves rail 7 as a clean current source/sink
+    into the tail's own diode.  Gate-driven mirror legs, resistor legs, and
+    opposite-type diodes (which complete the leg's current path rather than
+    duplicate the tail's) are untouched, as is everything when the tail has
+    no diode on ``bias`` (resistor tails, pruned placeholders).
+    """
+    tail_diode_types = {
+        dev.type for dev in tail_variant.devices
+        if dev.type in ("nmos", "pmos")
+        and dev.terminals.get("d") == "bias"
+        and dev.terminals.get("g") == "bias"
+    }
+    if not tail_diode_types:
+        return bias_variant
+    new_devices = [
+        dev for dev in bias_variant.devices
+        if not (dev.type in tail_diode_types
+                and dev.terminals.get("d") == "out7"
+                and dev.terminals.get("g") == "out7")
+    ]
+    if len(new_devices) == len(bias_variant.devices):
+        return bias_variant
+    return dataclasses.replace(bias_variant, devices=new_devices)

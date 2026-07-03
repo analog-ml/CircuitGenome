@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..models import SizingResult, SizingSpec, TechParams
-from .deck import _dut, _inject_sizes, _parse_subckt
+from .deck import _dut, _inject_sizes, _parse_subckt, unsized_mos_refs
 from .measure import (
     _measure_ac,
     _measure_cmrr,
@@ -28,6 +28,7 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     corner (foundry techs only); ``None`` uses the tech's nominal corner.
     """
     name, ports, body = _parse_subckt(netlist_text)
+    unsized = unsized_mos_refs(body, result)
     body = _inject_sizes(body, result)
     body_dut = _dut(tech, name, body, corner)
     topo = _Topo(ports)
@@ -43,12 +44,18 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
         "cmrr_db": None, "psrr_db": None,
     }
     notes: list[str] = []
+    if unsized:
+        notes.append("unsized MOSFET(s) in the simulation deck (simulator "
+                     f"default W/L applies): {', '.join(unsized)}")
     polarity = None
     ac_clean = False
+    def _oops(bench: str, e: Exception) -> None:
+        notes.append(f"{bench} bench failed: {type(e).__name__}: {e}")
+
     try:
         out["power_w"] = _measure_power(*args)
-    except Exception:
-        pass
+    except Exception as e:
+        _oops("power", e)
     try:
         g, gbw, pm, reason, polarity = _measure_ac(*args)
         out["gain_db"], out["gbw_hz"], out["phase_margin_deg"] = g, gbw, pm
@@ -58,31 +65,31 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
             bias = _bias_diagnostic(netlist_text, result, tech, spec)
             if bias:
                 notes.append(bias)
-    except Exception:
-        pass
+    except Exception as e:
+        _oops("AC gain", e)
     try:
         out["slew_rate_vps"] = _measure_sr(
             *args, polarity=polarity, sr_hint=spec.slew_rate_min_vps)
-    except Exception:
-        pass
+    except Exception as e:
+        _oops("slew-rate", e)
     try:
         out["output_swing_max_v"], out["output_swing_min_v"] = \
             _measure_swing(*args, polarity=polarity)
-    except Exception:
-        pass
+    except Exception as e:
+        _oops("output-swing", e)
     # CMRR/PSRR are relative to the differential gain: without a clean Adm
     # measurement the ratio is garbage-on-garbage, so they stay None.
     if ac_clean:
         try:
             out["cmrr_db"] = _measure_cmrr(*args, polarity=polarity,
                                            adm_db=out["gain_db"])
-        except Exception:
-            pass
+        except Exception as e:
+            _oops("CMRR", e)
         try:
             out["psrr_db"] = _measure_psrr(*args, polarity=polarity,
                                            adm_db=out["gain_db"])
-        except Exception:
-            pass
+        except Exception as e:
+            _oops("PSRR", e)
     if notes:
         out["notes"] = notes  # type: ignore[assignment]  # advisory, not a metric
     return out
