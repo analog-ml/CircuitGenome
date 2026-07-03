@@ -28,26 +28,30 @@ def _get_modules():
 #     (current_source/folded_cascode/telescopic) to avoid the B1 spurious
 #     match where current_mirror_tail's diode-connected m1 mimics a
 #     magic_battery_bias nmos_leg, causing FBR to prefer magic_battery_bias.
-#   - magic_battery_bias is paired with current_mirror_tail_* or
-#     active_load_nmos+current_mirror_tail_pmos so rail 7 is present;
-#     no 0-rail combos (where mref-only magic_battery_bias and resistor_bias
-#     are structurally identical) are included.
+#   - magic_battery_bias is paired with combos that keep at least one rail
+#     (no 0-rail combos, where mref-only magic_battery_bias and resistor_bias
+#     are structurally identical).
+# It must also satisfy the bias flavor filter (bias_compatibility.py):
+# diode_connected only where no consumed rail is gnd-flavored (NMOS
+# current-source gates, NMOS mirror-tail references), magic_battery only
+# where none is vdd-flavored -- mixed-flavor consumer sets keep only
+# resistor_bias.
 _ONE_STAGE_COMBOS = [
     # ── input_pair: differential_pair_pmos ──────────────────────────────────
     ("differential_pair_pmos",            "telescopic_cascode_load_pmos",                 "current_mirror_tail_pmos",         "diode_connected_mosfet_bias"),
     ("differential_pair_pmos",            "resistor_load_gnd",                            "resistor_tail_vdd",                "diode_connected_mosfet_bias"),
-    ("differential_pair_pmos",            "active_load_nmos",                             "current_mirror_tail_pmos",         "magic_battery_bias"),
-    ("differential_pair_pmos",            "current_source_load_nmos",                     "cascode_current_mirror_tail_pmos", "diode_connected_mosfet_bias"),
+    ("differential_pair_pmos",            "active_load_nmos",                             "cascode_current_mirror_tail_pmos", "diode_connected_mosfet_bias"),
+    ("differential_pair_pmos",            "current_source_load_nmos",                     "resistor_tail_vdd",                "magic_battery_bias"),
     # ── input_pair: differential_pair_nmos ──────────────────────────────────
     ("differential_pair_nmos",            "active_load_pmos",                             "current_mirror_tail_nmos",         "magic_battery_bias"),
     ("differential_pair_nmos",            "current_source_load_pmos",                     "resistor_tail_gnd",                "resistor_bias"),
     ("differential_pair_nmos",            "resistor_load_vdd",                            "resistor_tail_gnd",                "diode_connected_mosfet_bias"),
-    ("differential_pair_nmos",            "telescopic_cascode_load_nmos",                 "resistor_tail_gnd",                "resistor_bias"),
+    ("differential_pair_nmos",            "telescopic_cascode_load_nmos",                 "cascode_current_mirror_tail_nmos", "magic_battery_bias"),
     # ── input_pair: degenerated variants ────────────────────────────────────
-    ("differential_pair_nmos_degenerated","folded_cascode_load_nmos_input_single_output", "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias"),
-    ("differential_pair_pmos_degenerated","folded_cascode_load_pmos_input_single_output", "cascode_current_mirror_tail_pmos", "magic_battery_bias"),
+    ("differential_pair_nmos_degenerated","folded_cascode_load_nmos_input_single_output", "resistor_tail_gnd",                "resistor_bias"),
+    ("differential_pair_pmos_degenerated","folded_cascode_load_pmos_input_single_output", "resistor_tail_vdd",                "magic_battery_bias"),
     # ── input_pair: inverter_based_input (tail pruned to absent) ────────────
-    ("inverter_based_input",              "folded_cascode_load_pmos_input_single_output", _CANONICAL_TAIL,                    "diode_connected_mosfet_bias"),
+    ("inverter_based_input",              "folded_cascode_load_nmos_input_single_output", _CANONICAL_TAIL,                    "diode_connected_mosfet_bias"),
 ]
 
 
@@ -99,21 +103,23 @@ def test_round_trip_one_stage_opamp(
 # 11 combos cover all 3 compensation variants, all 3 second_stage variants,
 # and all 5 input_pair variants across representative base combinations.
 # Combos avoid the known B1 ambiguity (current_mirror_tail_nmos + resistor_bias
-# → spurious magic_battery_bias wins); see _ONE_STAGE_COMBOS comment above.
+# → spurious magic_battery_bias wins) and satisfy the bias flavor filter
+# (second_stage adds a rail-5 requirement: common_source/differential_ota are
+# vdd-flavored, common_drain gnd-flavored); see _ONE_STAGE_COMBOS comment.
 _TWO_STAGE_COMBOS = [
     # fmt: off
     # input_pair                           load                                        tail_current                         bias_gen                        compensation                        second_stage
     ("differential_pair_pmos",             "telescopic_cascode_load_pmos",             "current_mirror_tail_pmos",          "diode_connected_mosfet_bias",  "miller_cap",                       "common_source"),
-    ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "diode_connected_mosfet_bias",  "miller_cap",                       "common_drain"),
-    ("differential_pair_pmos",             "active_load_nmos",                         "current_mirror_tail_pmos",          "magic_battery_bias",           "miller_cap",                       "differential_ota_second_stage"),
-    ("differential_pair_pmos",             "current_source_load_nmos",                 "cascode_current_mirror_tail_pmos",  "diode_connected_mosfet_bias",  "miller_cap_with_nulling_resistor", "common_source"),
+    ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "magic_battery_bias",           "miller_cap",                       "common_drain"),
+    ("differential_pair_pmos",             "active_load_nmos",                         "current_mirror_tail_pmos",          "diode_connected_mosfet_bias",  "miller_cap",                       "differential_ota_second_stage"),
+    ("differential_pair_pmos",             "current_source_load_nmos",                 "resistor_tail_vdd",                 "resistor_bias",                "miller_cap_with_nulling_resistor", "common_source"),
     ("differential_pair_nmos",             "active_load_pmos",                         "current_mirror_tail_nmos",          "magic_battery_bias",           "miller_cap_with_nulling_resistor", "common_drain"),
     ("differential_pair_nmos",             "current_source_load_pmos",                 "resistor_tail_gnd",                 "resistor_bias",                "miller_cap_with_nulling_resistor", "differential_ota_second_stage"),
     ("differential_pair_nmos",             "resistor_load_vdd",                        "resistor_tail_gnd",                 "diode_connected_mosfet_bias",  "indirect_compensation",            "common_source"),
     ("differential_pair_nmos",             "telescopic_cascode_load_nmos",             "resistor_tail_gnd",                 "resistor_bias",                "indirect_compensation",            "common_drain"),
-    ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_single_output", "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias", "indirect_compensation",          "differential_ota_second_stage"),
-    ("differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_single_output", "cascode_current_mirror_tail_pmos", "magic_battery_bias",          "miller_cap",                     "common_source"),
-    ("inverter_based_input",               "folded_cascode_load_pmos_input_single_output", _CANONICAL_TAIL,                 "diode_connected_mosfet_bias",  "miller_cap_with_nulling_resistor", "common_drain"),
+    ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_single_output", "resistor_tail_gnd",             "diode_connected_mosfet_bias",  "indirect_compensation",            "differential_ota_second_stage"),
+    ("differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_single_output", "resistor_tail_vdd",             "magic_battery_bias",           "miller_cap",                       "common_drain"),
+    ("inverter_based_input",               "folded_cascode_load_pmos_input_single_output", _CANONICAL_TAIL,                 "magic_battery_bias",           "miller_cap_with_nulling_resistor", "common_drain"),
     # fmt: on
 ]
 
@@ -173,21 +179,29 @@ def test_round_trip_two_stage_opamp(
 # loads (inverter_based_input excluded: it needs a neutral-load topology).
 # Only folded_cascode_load_*_input_differential_output loads produce a real
 # (non-absent) cmfb instance; all other loads get cmfb_absent and cannot test
-# the cmfb patterns. Combos avoid the B1 ambiguity (current_mirror_tail_nmos
-# + resistor_bias → spurious magic_battery_bias).
+# the cmfb patterns.  A real cmfb makes rail 4 gnd-flavored (its NMOS tail
+# gate), so diode_connected_mosfet_bias never survives the flavor filter
+# here: rows use magic_battery_bias where every consumed rail is gnd-flavored
+# (fc_pmos load + resistor tail + common_drain stages) and resistor_bias
+# everywhere else.  Combos avoid the B1 ambiguity (current_mirror_tail_nmos
+# + resistor_bias → spurious magic_battery_bias) by pairing fc_nmos loads
+# (which force resistor_bias) with resistor_tail_gnd or the cascode NMOS tail
+# (whose stacked reference diode doesn't mimic a magic_battery leg) -- the
+# real current_mirror_tail_nmos + resistor_bias FD circuits the enumeration
+# now produces remain subject to B1 (pre-existing recognizer gap).
 _TWO_STAGE_FULLY_DIFF_COMBOS = [
     # fmt: off
     # input_pair                             load                                                  tail_current                         bias_gen                        cmfb                     comp_p                              comp_n                              second_stage_p                  second_stage_n
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "diode_connected_mosfet_bias",  "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source",                "common_source"),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "cascode_current_mirror_tail_pmos",  "magic_battery_bias",           "dda_cmfb",              "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_drain",                 "common_drain"),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "diode_connected_mosfet_bias",  "resistive_sense_cmfb",  "indirect_compensation",            "indirect_compensation",            "differential_ota_second_stage","differential_ota_second_stage"),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "magic_battery_bias",           "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source",                "common_drain"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "current_mirror_tail_nmos",          "magic_battery_bias",           "resistive_sense_cmfb",  "miller_cap",                       "indirect_compensation",            "common_source",                "differential_ota_second_stage"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "diode_connected_mosfet_bias",  "dda_cmfb",              "indirect_compensation",            "miller_cap",                       "common_drain",                 "common_source"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "diode_connected_mosfet_bias",  "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "indirect_compensation",            "differential_ota_second_stage","common_drain"),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "resistor_bias",                "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source",                "common_source"),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "magic_battery_bias",           "dda_cmfb",              "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_drain",                 "common_drain"),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "cascode_current_mirror_tail_pmos",  "resistor_bias",                "resistive_sense_cmfb",  "indirect_compensation",            "indirect_compensation",            "differential_ota_second_stage","differential_ota_second_stage"),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "resistor_bias",                "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source",                "common_drain"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "resistor_bias",                "resistive_sense_cmfb",  "miller_cap",                       "indirect_compensation",            "common_source",                "differential_ota_second_stage"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "resistor_bias",                "dda_cmfb",              "indirect_compensation",            "miller_cap",                       "common_drain",                 "common_source"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "resistor_bias",                "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "indirect_compensation",            "differential_ota_second_stage","common_drain"),
     ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "resistor_bias",                "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source",                "common_source"),
-    ("differential_pair_pmos_degenerated",  "folded_cascode_load_pmos_input_differential_output",  "cascode_current_mirror_tail_pmos",  "magic_battery_bias",           "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_source",                "common_drain"),
-    ("differential_pair_nmos_degenerated",  "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "diode_connected_mosfet_bias",  "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "differential_ota_second_stage","differential_ota_second_stage"),
+    ("differential_pair_pmos_degenerated",  "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "magic_battery_bias",           "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_drain",                 "common_drain"),
+    ("differential_pair_nmos_degenerated",  "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "resistor_bias",                "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "differential_ota_second_stage","differential_ota_second_stage"),
     ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "resistor_bias",                "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source",                "differential_ota_second_stage"),
     # fmt: on
 ]
@@ -267,35 +281,38 @@ _THREE_STAGE_SE_COMBOS = [
     # Covers: all 3 comp variants, all 3 ss/ts variants, both polarities,
     # degenerated pairs, several load types.
     # Avoided: resistor_bias + current_mirror_tail_nmos (B1 ambiguity).
+    # Flavor rule (bias_compatibility.py): rails 5 AND 6 constrain the bias
+    # here -- diode_connected needs every consumed rail vdd-flavored,
+    # magic_battery all gnd-flavored, mixed sets keep resistor_bias.
     ("differential_pair_pmos", "active_load_nmos", "current_mirror_tail_pmos",
      "diode_connected_mosfet_bias", "common_source", "common_source",
      "miller_cap", "miller_cap"),
-    ("differential_pair_pmos", "active_load_nmos", "cascode_current_mirror_tail_pmos",
+    ("differential_pair_pmos", "active_load_nmos", "resistor_tail_vdd",
      "magic_battery_bias", "common_drain", "common_drain",
      "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
-    ("differential_pair_nmos", "active_load_pmos", "current_mirror_tail_nmos",
+    ("differential_pair_nmos", "active_load_pmos", "resistor_tail_gnd",
      "diode_connected_mosfet_bias", "differential_ota_second_stage", "differential_ota_second_stage",
      "indirect_compensation", "indirect_compensation"),
     ("differential_pair_pmos", "current_source_load_nmos", "resistor_tail_vdd",
-     "diode_connected_mosfet_bias", "common_source", "common_drain",
+     "resistor_bias", "common_source", "common_drain",
      "miller_cap", "indirect_compensation"),
-    ("differential_pair_nmos", "current_source_load_pmos", "resistor_tail_gnd",
-     "diode_connected_mosfet_bias", "common_drain", "common_source",
+    ("differential_pair_nmos", "current_source_load_pmos", "cascode_current_mirror_tail_nmos",
+     "resistor_bias", "common_drain", "common_source",
      "indirect_compensation", "miller_cap"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_single_output",
      "cascode_current_mirror_tail_pmos", "resistor_bias",
      "differential_ota_second_stage", "common_source",
      "miller_cap_with_nulling_resistor", "indirect_compensation"),
     ("differential_pair_pmos_degenerated", "active_load_nmos",
-     "cascode_current_mirror_tail_pmos", "magic_battery_bias",
+     "cascode_current_mirror_tail_pmos", "diode_connected_mosfet_bias",
      "common_source", "differential_ota_second_stage",
      "miller_cap", "miller_cap_with_nulling_resistor"),
     ("differential_pair_nmos_degenerated", "active_load_pmos",
-     "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias",
-     "common_drain", "differential_ota_second_stage",
+     "current_mirror_tail_nmos", "magic_battery_bias",
+     "common_drain", "common_drain",
      "miller_cap_with_nulling_resistor", "miller_cap"),
     ("differential_pair_pmos", "telescopic_cascode_load_pmos",
-     "current_mirror_tail_pmos", "diode_connected_mosfet_bias",
+     "resistor_tail_vdd", "resistor_bias",
      "differential_ota_second_stage", "common_drain",
      "indirect_compensation", "miller_cap_with_nulling_resistor"),
 ]
@@ -307,44 +324,48 @@ _THREE_STAGE_FD_COMBOS = [
     # both polarities, degenerated pairs, cross-path asymmetry.
     # FBR assigns 4 same-category comp slots and 4 same-category ss slots via
     # connectivity scoring on distinct nets.
+    # The real cmfb makes rail 4 gnd-flavored, so (as in the FD 2-stage
+    # combos) diode_connected never survives: magic_battery where every
+    # consumed rail is gnd-flavored, resistor_bias everywhere else, and
+    # current_mirror_tail_nmos avoided (B1 vs resistor_bias).
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "current_mirror_tail_pmos", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "current_mirror_tail_pmos", "resistor_bias", "resistive_sense_cmfb",
      "common_source", "common_source", "miller_cap", "miller_cap",
      "common_source", "common_source", "miller_cap", "miller_cap"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "cascode_current_mirror_tail_pmos", "magic_battery_bias", "dda_cmfb",
+     "resistor_tail_vdd", "magic_battery_bias", "dda_cmfb",
      "common_drain", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
      "common_drain", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
-     "current_mirror_tail_nmos", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "cascode_current_mirror_tail_nmos", "resistor_bias", "resistive_sense_cmfb",
      "differential_ota_second_stage", "differential_ota_second_stage",
      "indirect_compensation", "indirect_compensation",
      "differential_ota_second_stage", "differential_ota_second_stage",
      "indirect_compensation", "indirect_compensation"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "resistor_tail_vdd", "diode_connected_mosfet_bias", "dda_cmfb",
+     "resistor_tail_vdd", "resistor_bias", "dda_cmfb",
      "common_source", "common_source", "miller_cap", "miller_cap",
      "common_source", "common_source", "indirect_compensation", "indirect_compensation"),
     ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
-     "cascode_current_mirror_tail_nmos", "magic_battery_bias", "dda_cmfb",
+     "cascode_current_mirror_tail_nmos", "resistor_bias", "dda_cmfb",
      "common_source", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
      "common_drain", "common_source", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "cascode_current_mirror_tail_pmos", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "cascode_current_mirror_tail_pmos", "resistor_bias", "resistive_sense_cmfb",
      "common_source", "common_drain", "miller_cap", "miller_cap",
      "common_source", "common_drain", "miller_cap", "miller_cap"),
     ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
-     "resistor_tail_gnd", "diode_connected_mosfet_bias", "resistive_sense_cmfb",
+     "resistor_tail_gnd", "resistor_bias", "resistive_sense_cmfb",
      "differential_ota_second_stage", "common_source", "indirect_compensation", "indirect_compensation",
      "differential_ota_second_stage", "common_source", "indirect_compensation", "indirect_compensation"),
     ("differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_differential_output",
-     "cascode_current_mirror_tail_pmos", "magic_battery_bias", "resistive_sense_cmfb",
-     "common_drain", "differential_ota_second_stage",
+     "resistor_tail_vdd", "magic_battery_bias", "resistive_sense_cmfb",
+     "common_drain", "common_drain",
      "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
-     "common_drain", "differential_ota_second_stage",
+     "common_drain", "common_drain",
      "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_differential_output",
-     "cascode_current_mirror_tail_nmos", "diode_connected_mosfet_bias", "dda_cmfb",
+     "cascode_current_mirror_tail_nmos", "resistor_bias", "dda_cmfb",
      "differential_ota_second_stage", "common_drain", "indirect_compensation", "indirect_compensation",
      "differential_ota_second_stage", "common_drain", "indirect_compensation", "indirect_compensation"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",

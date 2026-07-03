@@ -1,5 +1,15 @@
 import pytest
-from circuitgenome.synthesizer.bias_pruning import needed_bias_outputs, prune_bias_generation
+from circuitgenome.synthesizer.bias_compatibility import (
+    is_bias_flavor_compatible,
+    provided_rail_flavors,
+    rail_flavor_from_diode,
+    required_rail_flavors,
+)
+from circuitgenome.synthesizer.bias_pruning import (
+    needed_bias_outputs,
+    prune_bias_generation,
+    prune_redundant_tail_diode,
+)
 from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
@@ -123,7 +133,9 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
     """bias1/bias2/bias3 of a differential-output folded-cascode load each
     resolve to a distinct net_bias rail (no floating gates, no accidental
     rail sharing); bias_cmfb resolves to net_cmfb_out, driven by the cmfb
-    module's output."""
+    module's output.  This consumer set mixes rail flavors (rail 1 vdd-, rail
+    4/7 gnd-flavored), so only the tunable resistor_bias survives the flavor
+    filter (bias_compatibility.py)."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
@@ -132,7 +144,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
@@ -576,12 +588,17 @@ def test_enumerate_circuits_count():
     12), for 84 effective combinations -- of those, 70 also have an
     output_cardinality compatible with single_ended (the 14
     "differential"-cardinality combos are excluded; see
-    test_is_output_type_compatible_*) x 3 bias x 3 comp x 3 second = 1890."""
+    test_is_output_type_compatible_*). Across the 70 x 3 second_stage = 210
+    (combo, second_stage) pairs, the bias flavor filter (see
+    test_is_bias_flavor_compatible_*) keeps resistor_bias on all 210 (tunable
+    rails), diode_connected_mosfet_bias on the 72 pairs with no gnd-flavored
+    rail requirement, and magic_battery_bias on the 36 with no vdd-flavored
+    one -- 318 bias-level combos x 3 comp = 954."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 1890
+    assert len(circuits) == 954
 
 
 def test_enumerate_circuits_fully_differential_count():
@@ -593,13 +610,18 @@ def test_enumerate_circuits_fully_differential_count():
     "differential"-cardinality load -- the only loads with a real bias_cmfb
     consumer -- and keep both cmfb variants (14 x 2 = 28); the other 42 have
     no bias_cmfb consumer, so is_cmfb_compatible collapses cmfb to 1 canonical
-    variant (42 x 1 = 42). 28 + 42 = 70 effective load/cmfb combinations, x 3
-    bias x (3 comp x 3 second)^2 = 70 x 3^5 = 17010."""
+    variant (42 x 1 = 42). 28 + 42 = 70 effective load/cmfb combinations.
+    Across the 70 x 9 (second_stage_p x second_stage_n) = 630 stage pairs,
+    the bias flavor filter keeps resistor_bias on all 630, diode_connected on
+    92 (no gnd-flavored requirement -- impossible whenever the cmfb is real,
+    since both cmfb variants' tail gate makes rail 4 gnd-flavored) and
+    magic_battery on 29 -- 751 bias-level combos x 9 (comp_p x comp_n) =
+    6759."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 17010
+    assert len(circuits) == 6759
 
 
 def test_flat_spice_structure():
@@ -684,18 +706,22 @@ def test_synthesize_topology_filter():
 
 def test_enumerate_three_stage_single_ended_count():
     """3-stage single-ended (NMC/RNMC): 70 polarity-and-output_cardinality-valid
-    input_pair/load/tail_current combinations (see test_enumerate_circuits_count)
-    x 3 bias x 3 second stages x 3 third stages x 3 comp1 x 3 comp2 = 17010."""
+    input_pair/load/tail_current combinations (see test_enumerate_circuits_count).
+    Across the 70 x 9 (second_stage x third_stage) = 630 stage pairs, the
+    bias flavor filter keeps resistor_bias on all 630, diode_connected on 144
+    (no gnd-flavored rail requirement) and magic_battery on 36 (no
+    vdd-flavored one) -- 810 bias-level combos x 3 comp1 x 3 comp2 = 7290."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 17010
+        assert len(circuits) == 7290
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~1.38M circuits (70 x 3^9, see
+    """FD 3-stage topologies enumerate ~0.5M circuits (70 x 3^9 ≈ 1.38M
+    before the bias flavor filter; see
     test_enumerate_circuits_fully_differential_count for the 70 factor);
     just check the iterator yields a valid first circuit without
     materializing the full set."""
@@ -714,10 +740,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 17010
+    assert len(nmc) == 7290
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 17010
+    assert len(rnmc) == 7290
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
@@ -759,7 +785,9 @@ def test_three_stage_rnmc_hierarchical_spice():
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "active_load_pmos"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        # every consumed rail (5, 6, 7) is gnd-flavored here, so the
+        # gnd-flavored magic_battery_bias is the matching tracking generator
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "magic_battery_bias"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_drain"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap_with_nulling_resistor"],
     }
@@ -962,6 +990,288 @@ def test_prune_bias_generation_keeps_shared_reference_device(variant_name, share
     assert pruned.devices[0].ref == shared_ref
 
 
+# ─── Bias-rail flavor compatibility (bias_compatibility.py) ─────────────────
+
+
+@pytest.mark.parametrize(
+    "variant_name,expected",
+    [
+        ("diode_connected_mosfet_bias", {i: "vdd" for i in range(1, 8)}),
+        ("magic_battery_bias", {i: "gnd" for i in range(1, 8)}),
+        ("resistor_bias", {}),
+    ],
+)
+def test_provided_rail_flavors(variant_name, expected):
+    """Each single-flavor generator's diode-connected leg devices pin every
+    rail to the same supply (PMOS diodes -> vdd, NMOS diodes -> gnd);
+    resistor_bias has no leg diodes, so its rails are tunable (no flavor)."""
+    modules = load_modules()
+    variant = next(v for v in modules["bias_generation"] if v.name == variant_name)
+    assert provided_rail_flavors(variant) == expected
+
+
+@pytest.mark.parametrize(
+    "tail_name,expected",
+    [
+        ("current_mirror_tail_pmos", "vdd"),
+        ("cascode_current_mirror_tail_pmos", "vdd"),
+        ("current_mirror_tail_nmos", "gnd"),
+        ("cascode_current_mirror_tail_nmos", "gnd"),
+        ("resistor_tail_vdd", None),
+        ("resistor_tail_gnd", None),
+    ],
+)
+def test_rail_flavor_from_diode_tail_reference(tail_name, expected):
+    """The mirror tails' reference diode on ``bias`` resolves by channel
+    type, including the cascode tails' stacked diode whose source is an
+    internal node; resistor tails have no diode."""
+    modules = load_modules()
+    tail = next(v for v in modules["tail_current"] if v.name == tail_name)
+    assert rail_flavor_from_diode(tail.devices, "bias") == expected
+
+
+def test_required_rail_flavors_gate_consumers():
+    """A consumer gate whose source sits on a supply requires that supply's
+    flavor: current_source_load_pmos on rail 1 and common_source's PMOS
+    current source on rail 5 both hang from vdd."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    variant_map = _variant_map_for(
+        modules,
+        topo,
+        {
+            "load": "current_source_load_pmos",
+            "tail_current": "resistor_tail_vdd",
+            "second_stage": "common_source",
+        },
+    )
+    assert required_rail_flavors(topo, variant_map) == {1: {"vdd"}, 5: {"vdd"}}
+
+
+@pytest.mark.parametrize(
+    "load_name,expected",
+    [
+        # bias1 gates PMOS folding sources at vdd; bias2 gates cascodes whose
+        # source is a folding node (internal) -- consumed but unconstrained.
+        ("folded_cascode_load_nmos_input_single_output", {1: {"vdd"}}),
+        # both telescopic loads gate cascodes off in1/in2 -- no requirement.
+        ("telescopic_cascode_load_pmos", {}),
+    ],
+)
+def test_required_rail_flavors_skips_cascode_gates(load_name, expected):
+    """Consumers whose source is an internal node (cascode gates) impose no
+    flavor requirement -- no current bias generator produces a
+    cascode-appropriate level, and that gap is out of scope (issue #99)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    variant_map = _variant_map_for(
+        modules, topo, {"load": load_name, "tail_current": "resistor_tail_vdd"}
+    )
+    assert required_rail_flavors(topo, variant_map) == expected
+
+
+def test_required_rail_flavors_tail_reference_diode():
+    """A mirror tail's diode-connected reference on rail 7 requires its own
+    channel type's flavor -- including the cascode tail, whose stacked diode
+    has an internal-node source and would slip past the plain source-at-rail
+    rule."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    variant_map = _variant_map_for(
+        modules,
+        topo,
+        {"load": "resistor_load_gnd", "tail_current": "cascode_current_mirror_tail_nmos"},
+    )
+    assert required_rail_flavors(topo, variant_map) == {7: {"gnd"}}
+
+
+@pytest.mark.parametrize("cmfb_name", ["resistive_sense_cmfb", "dda_cmfb"])
+def test_required_rail_flavors_cmfb_rail_4(cmfb_name):
+    """Both cmfb variants sink their tail current through an NMOS gated by
+    rail 4 (source at gnd), so a real cmfb always makes rail 4
+    gnd-flavored."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
+    variant_map = _variant_map_for(
+        modules,
+        topo,
+        {
+            "load": "folded_cascode_load_nmos_input_differential_output",
+            "tail_current": "resistor_tail_gnd",
+            "cmfb": cmfb_name,
+            "second_stage_p": "common_source",
+            "second_stage_n": "common_source",
+        },
+    )
+    assert required_rail_flavors(topo, variant_map) == {1: {"vdd"}, 4: {"gnd"}, 5: {"vdd"}}
+
+
+def test_required_rail_flavors_can_mix_on_a_shared_rail():
+    """second_stage_p and second_stage_n share rail 5; picking one variant of
+    each flavor makes the rail demand both -- unsatisfiable by any
+    single-flavor generator (only resistor_bias survives such sets)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
+    variant_map = _variant_map_for(
+        modules,
+        topo,
+        {
+            "load": "resistor_load_gnd",
+            "tail_current": "resistor_tail_vdd",
+            "second_stage_p": "common_source",
+            "second_stage_n": "common_drain",
+        },
+    )
+    assert required_rail_flavors(topo, variant_map)[5] == {"vdd", "gnd"}
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # all consumed rails vdd-flavored <-> vdd-flavored generator
+        {"load": "current_source_load_pmos", "tail_current": "current_mirror_tail_pmos",
+         "second_stage": "common_source", "bias_gen": "diode_connected_mosfet_bias"},
+        # all consumed rails gnd-flavored <-> gnd-flavored generator
+        {"load": "current_source_load_nmos", "tail_current": "current_mirror_tail_nmos",
+         "second_stage": "common_drain", "bias_gen": "magic_battery_bias"},
+        # mixed flavors: the tunable resistor_bias always fits
+        {"load": "current_source_load_pmos", "tail_current": "current_mirror_tail_nmos",
+         "second_stage": "common_drain", "bias_gen": "resistor_bias"},
+    ],
+)
+def test_is_bias_flavor_compatible_accepts_matches_and_tunable(overrides):
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    variant_map = _variant_map_for(modules, topo, overrides)
+    assert is_bias_flavor_compatible(topo, variant_map)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # class 1 (rail 5): gnd-flavored rail on a PMOS second-stage source gate
+        {"load": "resistor_load_vdd", "tail_current": "resistor_tail_gnd",
+         "second_stage": "common_source", "bias_gen": "magic_battery_bias"},
+        # class 1 (rail 5): vdd-flavored rail on the follower's NMOS sink gate
+        {"load": "resistor_load_vdd", "tail_current": "resistor_tail_gnd",
+         "second_stage": "common_drain", "bias_gen": "diode_connected_mosfet_bias"},
+        # class 2 (rail 1): vdd-flavored rail on NMOS current-source gates
+        {"load": "current_source_load_nmos", "tail_current": "resistor_tail_gnd",
+         "second_stage": "common_drain", "bias_gen": "diode_connected_mosfet_bias"},
+        # class 3 (rail 7): vdd-flavored leg diode vs the NMOS tail's reference
+        {"load": "resistor_load_vdd", "tail_current": "current_mirror_tail_nmos",
+         "second_stage": "common_source", "bias_gen": "diode_connected_mosfet_bias"},
+    ],
+)
+def test_is_bias_flavor_compatible_rejects_mismatches(overrides):
+    """One rejection per defect class of issue #99 -- rail-5 flavor, rail-1
+    flavor, and rail-7 contention are all the same per-rail flavor check."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    variant_map = _variant_map_for(modules, topo, overrides)
+    assert not is_bias_flavor_compatible(topo, variant_map)
+
+
+def test_is_bias_flavor_compatible_ignores_cascode_only_consumers():
+    """A load whose only bias consumers are cascode gates (source on an
+    internal node) constrains nothing -- both single-flavor generators
+    remain valid."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    for bias_name in ("diode_connected_mosfet_bias", "magic_battery_bias"):
+        variant_map = _variant_map_for(
+            modules,
+            topo,
+            {"load": "telescopic_cascode_load_pmos", "tail_current": "resistor_tail_vdd",
+             "bias_gen": bias_name},
+        )
+        assert is_bias_flavor_compatible(topo, variant_map), bias_name
+
+
+def test_is_bias_flavor_compatible_runs_on_pruned_placeholders():
+    """The filter must see the variant_map *after* prune_cmfb: a load with no
+    real bias_cmfb consumer gets an empty cmfb placeholder, so rail 4 imposes
+    nothing and diode_connected stays valid -- whereas the raw (unpruned)
+    cmfb variant would wrongly demand a gnd-flavored rail 4.  build_circuit
+    guarantees this ordering (see enumerate_circuits pipeline)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
+    variant_map = _variant_map_for(
+        modules,
+        topo,
+        {
+            "load": "resistor_load_gnd",
+            "tail_current": "resistor_tail_vdd",
+            "cmfb": CANONICAL_CMFB_VARIANT,
+            "second_stage_p": "common_source",
+            "second_stage_n": "common_source",
+            "bias_gen": "diode_connected_mosfet_bias",
+        },
+    )
+    assert not is_bias_flavor_compatible(topo, variant_map)  # raw cmfb: wrong
+    variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
+    assert is_bias_flavor_compatible(topo, variant_map)
+
+
+def test_prune_redundant_tail_diode_cross_flavor_untouched():
+    """Direct-call contract: a cross-flavor leg diode is *not* the tail
+    reference's twin, so the prune leaves it alone (enumerate_circuits
+    rejects such pairings upstream via the flavor filter)."""
+    modules = load_modules()
+    diode_bias = next(v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias")
+    nmos_tail = next(v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos")
+    assert prune_redundant_tail_diode(diode_bias, nmos_tail) is diode_bias
+
+
+def test_prune_redundant_tail_diode_cascode_tail_drops_same_flavor_diode():
+    """The cascode tails' stacked reference diode counts as a reference too:
+    a same-flavor bias-leg diode on out7 is redundant and dropped."""
+    modules = load_modules()
+    magic = next(v for v in modules["bias_generation"] if v.name == "magic_battery_bias")
+    cascode_tail = next(
+        v for v in modules["tail_current"] if v.name == "cascode_current_mirror_tail_nmos"
+    )
+    pruned = prune_redundant_tail_diode(magic, cascode_tail)
+    assert len(pruned.devices) == len(magic.devices) - 1
+    assert not any(
+        dev.terminals.get("d") == "out7" and dev.terminals.get("g") == "out7"
+        for dev in pruned.devices
+    )
+
+
+def test_enumerate_circuits_excludes_flavor_mismatches():
+    """Every synthesized 2-stage single-ended circuit's bias_generation
+    delivers the right flavor on every consumed rail: no gnd-flavored
+    generator under a vdd-flavored consumer (or vice versa) on rails 1, 5,
+    or 7 (issue #99 classes 1-3)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+
+    rail1 = {"current_source_load_nmos": "gnd", "current_source_load_pmos": "vdd",
+             "folded_cascode_load_nmos_input_single_output": "vdd",
+             "folded_cascode_load_pmos_input_single_output": "gnd"}
+    rail5 = {"common_source": "vdd", "common_drain": "gnd",
+             "differential_ota_second_stage": "vdd"}
+    rail7 = {"current_mirror_tail_pmos": "vdd", "cascode_current_mirror_tail_pmos": "vdd",
+             "current_mirror_tail_nmos": "gnd", "cascode_current_mirror_tail_nmos": "gnd"}
+    provided = {"diode_connected_mosfet_bias": "vdd", "magic_battery_bias": "gnd"}
+
+    seen_resistor_only_mix = False
+    for circuit in enumerate_circuits(topo, modules):
+        flavor = provided.get(circuit.variant_map["bias_gen"].name)
+        required = {
+            rail1.get(circuit.variant_map["load"].name),
+            rail5.get(circuit.variant_map["second_stage"].name),
+            rail7.get(circuit.variant_map["tail_current"].name),
+        } - {None}
+        if flavor is not None:
+            assert required <= {flavor}, circuit.name
+        elif len(required) == 2:
+            seen_resistor_only_mix = True
+    # mixed-flavor consumer sets exist and are routed to resistor_bias
+    assert seen_resistor_only_mix
+
+
 def test_enumerate_circuits_prunes_bias_generation_for_simple_load_one_stage():
     """one_stage_opamp has no second_stage slot and resistor_tail_vdd needs no
     bias rail, so a simple load (needing none of the four bias rails) prunes
@@ -1028,14 +1338,16 @@ def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
     fully_differential topologies, which always have >=2 stages -- so
     second_stage's rail 5 is also unavoidably present. current_mirror_tail_nmos
     needs its own dedicated rail 7 -- all are present simultaneously in
-    bias_generation's static 7-leg layout, with no extension needed."""
+    bias_generation's static 7-leg layout, with no extension needed.  The
+    consumer set mixes flavors (rail 1/5 vdd-, rail 4/7 gnd-flavored), so
+    only the tunable resistor_bias survives the flavor filter."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
@@ -1050,12 +1362,12 @@ def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
     assert len(bias_variant.devices) == 13
 
     bias_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_bias_gen")}
-    assert "mn8_bias_gen" in bias_devices  # leg 7
-    assert "mp7_bias_gen" in bias_devices  # leg 7
-    assert bias_devices["mn8_bias_gen"].terminals["d"] == "net_bias7"
-    assert bias_devices["mp7_bias_gen"].terminals["d"] == "net_bias7"
-    assert bias_devices["mp7_bias_gen"].terminals["g"] == "net_bias7"
-    assert bias_devices["mp7_bias_gen"].terminals["s"] == "vdd!"
+    assert "mp8_bias_gen" in bias_devices  # leg 7 mirror
+    assert "r7_bias_gen" in bias_devices   # leg 7 resistor
+    assert bias_devices["mp8_bias_gen"].terminals["d"] == "net_bias7"
+    assert bias_devices["mp8_bias_gen"].terminals["g"] == "ibias"
+    assert bias_devices["r7_bias_gen"].terminals["t1"] == "net_bias7"
+    assert bias_devices["r7_bias_gen"].terminals["t2"] == "gnd!"
 
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
@@ -1063,12 +1375,15 @@ def test_enumerate_circuits_tail_current_gets_dedicated_rail_7():
 
 
 @pytest.mark.parametrize(
-    "bias_variant_name", ["diode_connected_mosfet_bias", "resistor_bias", "magic_battery_bias"]
+    "bias_variant_name", ["resistor_bias", "magic_battery_bias"]
 )
 def test_enumerate_circuits_tail_current_uses_rail_7_simple_load(bias_variant_name):
     """one_stage_opamp + simple load (load_needed={}) + current_mirror_tail_nmos
     (needs bias): tail gets its dedicated rail 7 (net_bias7); bias_gen is
-    pruned to shared reference + leg 7 only."""
+    pruned to shared reference + leg 7 only.  diode_connected_mosfet_bias is
+    not parametrized here: its vdd-flavored rail-7 diode would fight the NMOS
+    tail's own gnd-flavored reference diode, so the flavor filter rejects the
+    combination (see test_enumerate_circuits_excludes_cross_flavor_tail_diode)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     simple_modules = {
@@ -1090,6 +1405,38 @@ def test_enumerate_circuits_tail_current_uses_rail_7_simple_load(bias_variant_na
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
     assert tail_devices["m1_tail_current"].terminals["g"] == "net_bias7"
+
+
+@pytest.mark.parametrize(
+    "bias_variant_name,tail_variant_name",
+    [
+        ("diode_connected_mosfet_bias", "current_mirror_tail_nmos"),
+        ("diode_connected_mosfet_bias", "cascode_current_mirror_tail_nmos"),
+        ("magic_battery_bias", "current_mirror_tail_pmos"),
+        ("magic_battery_bias", "cascode_current_mirror_tail_pmos"),
+    ],
+)
+def test_enumerate_circuits_excludes_cross_flavor_tail_diode(
+    bias_variant_name, tail_variant_name
+):
+    """Rail-7 contention (issue #99 class 3): a bias leg whose diode is the
+    opposite flavor of the mirror tail's reference diode fights it for the
+    rail voltage instead of duplicating it -- the tail's reference current
+    becomes uncontrolled and no sizing can fix it.  Such combinations are
+    rejected outright, for both plain and cascode mirror tails (whose stacked
+    reference diode has an internal-node source)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    polarity = "nmos_input" if tail_variant_name.endswith("_nmos") else "pmos_input"
+    input_pair = "differential_pair_nmos" if polarity == "nmos_input" else "differential_pair_pmos"
+    load = "active_load_pmos" if polarity == "nmos_input" else "active_load_nmos"
+    simple_modules = {
+        "input_pair": [v for v in modules["input_pair"] if v.name == input_pair],
+        "load": [v for v in modules["load"] if v.name == load],
+        "tail_current": [v for v in modules["tail_current"] if v.name == tail_variant_name],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_variant_name],
+    }
+    assert list(enumerate_circuits(topo, simple_modules)) == []
 
 
 def test_enumerate_circuits_pmos_mirror_tail_prunes_rail_7_diode():
@@ -1116,32 +1463,32 @@ def test_enumerate_circuits_pmos_mirror_tail_prunes_rail_7_diode():
                    for d in bias_variant.devices)
 
 
-@pytest.mark.parametrize(
-    "bias_variant_name", ["diode_connected_mosfet_bias", "resistor_bias", "magic_battery_bias"]
-)
-def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails(bias_variant_name):
+def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails():
     """two_stage_opamp_single_ended + simple load (load_needed={}) +
     second_stage (rail 5) + current_mirror_tail_nmos (rail 7): the two roles
-    get distinct, independent bias rails."""
+    get distinct, independent bias rails.  common_source needs rail 5
+    vdd-flavored while the NMOS mirror tail needs rail 7 gnd-flavored, so
+    both single-flavor generators are flavor-rejected and the consumer set is
+    routed to the per-rail-tunable resistor_bias."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_vdd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == bias_variant_name],
+        "bias_generation": modules["bias_generation"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
     }
 
-    circuit = next(enumerate_circuits(topo, simple_modules))
+    circuits = list(enumerate_circuits(topo, simple_modules))
+    assert {c.variant_map["bias_gen"].name for c in circuits} == {"resistor_bias"}
+
+    circuit = circuits[0]
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out7"]
-    # magic_battery's rail-7 nmos diode duplicates the nmos mirror tail's own
-    # reference diode and is pruned (prune_redundant_tail_diode).
-    expected = 4 if bias_variant_name == "magic_battery_bias" else 5
-    assert len(bias_variant.devices) == expected  # shared ref + 2 (pruned) legs
+    assert len(bias_variant.devices) == 5  # shared ref + 2 resistor legs
 
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
@@ -1270,14 +1617,16 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     bias_gen is unpruned (15 devices), and each role's devices reference a
     distinct net_bias{N}. A differential-output folded-cascode load is only
     output_cardinality-compatible with fully_differential topologies, so this
-    uses the fully-differential 3-stage NMC topology."""
+    uses the fully-differential 3-stage NMC topology.  The consumer set mixes
+    rail flavors (rails 1/5/6 vdd-, rails 4/7 gnd-flavored), so only the
+    tunable resistor_bias survives the flavor filter."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
@@ -1323,7 +1672,8 @@ def test_synthesize_differential_output_folded_cascode_has_nondegenerate_cascode
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
+        # mixed rail flavors (rail 1 vdd, rails 4/7 gnd): only resistor_bias survives
+        "bias_generation": [v for v in modules["bias_generation"] if v.name == "resistor_bias"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],

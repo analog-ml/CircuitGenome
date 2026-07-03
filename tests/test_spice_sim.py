@@ -353,10 +353,12 @@ def test_fd_large_signal_metrics_stay_none():
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_fully_differential")
+    # mixed bias-rail flavors (rail 1/4 gnd, rail 5/7 vdd): only resistor_bias
+    # survives the flavor filter (bias_compatibility.py)
     want = {"input_pair": "differential_pair_pmos",
             "load": "folded_cascode_load_pmos_input_differential_output",
             "tail_current": "current_mirror_tail_pmos",
-            "bias_gen": "diode_connected_mosfet_bias",
+            "bias_gen": "resistor_bias",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
             "second_stage_p": "common_source", "second_stage_n": "common_source",
             "cmfb": "resistive_sense_cmfb"}

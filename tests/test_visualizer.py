@@ -180,6 +180,10 @@ def test_explain_incompatibility(topologies, by_name):
 
 
 def test_enumerate_circuits_count_unchanged_after_refactor(modules, topologies):
-    """Sanity check that extracting build_circuit from enumerate_circuits
-    (synthesizer.py) didn't change the total circuit count for a topology."""
-    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 210
+    """Sanity check that build_circuit (shared with enumerate_circuits in
+    synthesizer.py) applies the same filter pipeline: 70 effective
+    input_pair/load/tail_current combos keep resistor_bias (70), plus
+    diode_connected on the 36 with no gnd-flavored rail requirement and
+    magic_battery on the 36 with no vdd-flavored one (bias_compatibility.py)
+    = 142."""
+    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 142

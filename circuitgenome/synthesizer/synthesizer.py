@@ -17,6 +17,7 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
+from .bias_compatibility import is_bias_flavor_compatible
 from .bias_pruning import (
     needed_bias_outputs,
     prune_bias_generation,
@@ -99,8 +100,9 @@ def build_circuit(
     Returns ``None`` if *variant_map* is rejected by
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
-    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
-    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`.
+    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`,
+    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`, or
+    :func:`~circuitgenome.synthesizer.bias_compatibility.is_bias_flavor_compatible`.
 
     :param topology: The wiring template that defines slots and net connections.
     :param variant_map: One :class:`~circuitgenome.synthesizer.models.ModuleVariant`
@@ -122,6 +124,9 @@ def build_circuit(
     variant_map["tail_current"] = prune_tail_current(
         variant_map["tail_current"], variant_map["input_pair"]
     )
+
+    if not is_bias_flavor_compatible(topology, variant_map):
+        return None
 
     needed = needed_bias_outputs(topology, variant_map)
     bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
@@ -199,6 +204,14 @@ def enumerate_circuits(
     :func:`~circuitgenome.synthesizer.tail_current_compatibility.prune_tail_current`)
     so it contributes no devices and ``tail_current.bias`` is not counted as
     a needed bias rail.
+
+    Combinations where the ``bias_generation`` variant delivers the wrong
+    *flavor* of voltage (vdd- vs gnd-referenced) on a bias rail some consumer
+    gate needs -- structurally unbiasable, no sizing can fix them -- are
+    skipped (see
+    :func:`~circuitgenome.synthesizer.bias_compatibility.is_bias_flavor_compatible`).
+    ``resistor_bias`` rails are per-rail tunable and never flavor-rejected,
+    so mixed-flavor consumer sets survive with ``resistor_bias`` only.
 
     The ``bias_generation`` variant in each combination is pruned to only the
     ``out1``..``out7`` rails actually consumed by the other slots (see

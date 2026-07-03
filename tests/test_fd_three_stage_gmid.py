@@ -31,9 +31,11 @@ _TS_SPEC = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
                       slew_rate_min_vps=1e6, output_swing_max_v=0.8, output_swing_min_v=0.2)
 
 _FD_LOAD = "folded_cascode_load_pmos_input_differential_output"
+# This consumer set mixes bias-rail flavors (rail 1/4 gnd, rail 5/7 vdd), so
+# only resistor_bias survives the flavor filter (bias_compatibility.py).
 _FD_BASE = {"input_pair": "differential_pair_pmos", "load": _FD_LOAD,
             "tail_current": "current_mirror_tail_pmos",
-            "bias_gen": "diode_connected_mosfet_bias",
+            "bias_gen": "resistor_bias",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
             "second_stage_p": "common_source", "second_stage_n": "common_source"}
 
@@ -55,9 +57,11 @@ def test_fd_two_stage_gmid(cmfb):
     ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output", {}),
 ])
 def test_three_stage_se_gmid(topo, load, extra):
+    # fc_pmos_single's bias1 is gnd-flavored, the tail and stages vdd-flavored
+    # -- mixed, so only resistor_bias survives the flavor filter.
     want = {"input_pair": "differential_pair_pmos", "load": load,
             "tail_current": "current_mirror_tail_pmos",
-            "bias_gen": "diode_connected_mosfet_bias",
+            "bias_gen": "resistor_bias",
             "second_stage": "common_source", "third_stage": "common_source",
             "comp1": "miller_cap", "comp2": "miller_cap", **extra}
     r = _size(topo, want, _TS_SPEC)
