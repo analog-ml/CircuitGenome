@@ -28,6 +28,8 @@ class DesignSolution:
     :param worst_margin: the smallest margin (``inf`` when no measured spec
         constrains this design) — the robustness ranking key.
     :param netlist_path: the sized flat SPICE netlist written for this design.
+    :param notes: advisory lines from the measurement rig (e.g. why an
+        unconstrained metric could not be extracted).
     """
     name: str
     topology: str
@@ -36,6 +38,7 @@ class DesignSolution:
     margins: dict[str, float]
     worst_margin: float
     netlist_path: str
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -44,16 +47,20 @@ class TemplateStats:
 
     ``enumerated`` counts the candidates actually evaluated (after ``limit``);
     the rejection counters partition ``enumerated − accepted`` by the pipeline
-    stage that rejected the circuit.
+    stage that rejected the circuit.  ``rejection_reasons`` histograms the
+    per-candidate rejection details (numerals collapsed to ``#`` so identical
+    failure classes aggregate), ordered most-common first.
     """
     template: str
     enumerated: int = 0
     sizing_failed: int = 0     # solver found no sizing
     bias_infeasible: int = 0   # analytical or SPICE DC bias check rejected
     spec_failed: int = 0       # simulated, but missed ≥ 1 measured spec
+    unverified: int = 0        # a constrained spec could not be SPICE-measured
     errors: int = 0            # unexpected per-circuit exceptions
     accepted: int = 0
     runtime_s: float = 0.0
+    rejection_reasons: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -68,9 +75,10 @@ class DesignReport:
         (``highest_gain``, ``highest_gbw``, ``highest_phase_margin``,
         ``lowest_power``, ``most_robust``).
     :param unverified_specs: constrained spec fields whose measurement came
-        back ``None`` for at least one accepted circuit (e.g. swing/slew on
-        fully-differential topologies) — those solutions were *not* rejected
-        on that spec; verify it separately.
+        back ``None`` for at least one candidate (e.g. swing/slew on
+        fully-differential topologies) — such candidates are **rejected** as
+        ``unverified``; acceptance requires every constrained spec to be
+        SPICE-measured and met.
     :param runtime_s: wall-clock time for the whole run.
     """
     spec: dict

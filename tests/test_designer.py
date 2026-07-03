@@ -69,16 +69,17 @@ def test_design_rejects_tech_without_gmid_lut(tmp_path):
 # End-to-end (gf180mcu + ngspice)
 # ---------------------------------------------------------------------------
 
-# Enumeration indices 82+ of the two-stage SE template are the active-load
-# variants that bias on gf180mcu; a small limit stays in the resistor-load
-# range, which is enough to exercise the full reject/accept machinery.
+# With the bias flavor filter, enumeration indices 48+ of the two-stage SE
+# template are the active-load variants that bias on gf180mcu; a small limit
+# stays in the resistor-load range, which is enough to exercise the full
+# reject/accept machinery.
 _TOPO = "two_stage_opamp_single_ended"
 
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
 def test_design_end_to_end_loose_spec(tmp_path):
     # Loose spec: metrics only need to exist and clear trivial bars.  The
-    # limit reaches the active-load variants (indices 82+), which measure a
+    # limit reaches the active-load variants (indices 48+), which measure a
     # healthy CMRR — the resistor-tail ones before them are now correctly
     # rejected on the measured-CMRR gate (a resistor tail rejects poorly).
     spec = _spec(second_stage_current_ratio=2.5, gain_min_db=40,
@@ -89,8 +90,16 @@ def test_design_end_to_end_loose_spec(tmp_path):
     st = report.stats[_TOPO]
     assert st.enumerated == 100
     assert st.enumerated == (st.accepted + st.sizing_failed
-                             + st.bias_infeasible + st.spec_failed + st.errors)
+                             + st.bias_infeasible + st.spec_failed
+                             + st.unverified + st.errors)
     assert st.errors == 0
+    # Every rejection carries a (normalized) reason in the histogram.
+    assert sum(st.rejection_reasons.values()) == st.enumerated - st.accepted
+    # Acceptance is strict: constrained specs are measured on every solution.
+    for sol in report.solutions:
+        assert sol.metrics.get("gain_db") is not None
+        assert sol.metrics.get("cmrr_db") is not None
+        assert isinstance(sol.notes, list)
     # The CMRR bench is exercised and gated: some accepted circuit measured
     # it, and every measured CMRR margin is non-negative.
     measured = [s for s in report.solutions

@@ -42,11 +42,41 @@ class CircuitView:
     warnings: list[str]
 
 
+def _adopt_orphan_mosfets(
+    slot_transistors: dict[str, list[Device]],
+    fbr_result: FunctionalBlockRecognitionResult,
+    topology: TopologyTemplate,
+) -> None:
+    """Attribute slot-suffixed MOSFETs the FBR left unassigned to their slot.
+
+    Pattern matching can leave a device out of every slot when its structure
+    is ambiguous (two identical parallel diodes on one net) or incomplete (a
+    bias leg whose expected partner lives in another slot, e.g. a cascode
+    tail's reference diode).  Such a device would silently go **unsized** and
+    run at the simulator's default W/L.  Synthesized netlists name every
+    device ``{ref}_{slot_name}``, so orphans are attributed -- and therefore
+    sized -- by their ref suffix; devices whose ref matches no slot (external
+    netlists) are left alone.
+    """
+    assigned = {d.ref for devs in slot_transistors.values() for d in devs}
+    slot_names = sorted((s.name for s in topology.slots), key=len, reverse=True)
+    candidates = [d for s in fbr_result.unassigned_structures for d in s.devices]
+    candidates += list(fbr_result.unrecognized_devices)
+    for dev in candidates:
+        if dev.type not in ("nmos", "pmos") or dev.ref in assigned:
+            continue
+        slot = next((s for s in slot_names if dev.ref.endswith("_" + s)), None)
+        if slot is not None:
+            assigned.add(dev.ref)
+            slot_transistors.setdefault(slot, []).append(dev)
+
+
 def analyze_circuit(
     fbr_result: FunctionalBlockRecognitionResult, topology: TopologyTemplate
 ) -> CircuitView:
     """Build the :class:`CircuitView` from the FBR assignments."""
     slot_transistors = extract_slot_transistors(fbr_result)
+    _adopt_orphan_mosfets(slot_transistors, fbr_result, topology)
     slot_resistors = extract_slot_resistors(fbr_result)
     return CircuitView(
         slot_transistors=slot_transistors,

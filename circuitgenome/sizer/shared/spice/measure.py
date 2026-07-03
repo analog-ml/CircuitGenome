@@ -44,8 +44,9 @@ def _pols(polarity):
 
 def _lf_mag(name, ports, body_dut, vdd, ibias, fb, netmap, outexpr,
             sup_ac: bool = False):
-    """Low-frequency (1 Hz) magnitude of ``outexpr`` for a 1 V AC stimulus."""
-    control = (f"ac lin 1 1 1\nlet vod={outexpr}\n"
+    """Low-frequency (1 mHz, matching the gain bench's first AC point)
+    magnitude of ``outexpr`` for a 1 V AC stimulus."""
+    control = (f"ac lin 1 1e-3 1e-3\nlet vod={outexpr}\n"
                "wrdata __OUT__ real(vod) imag(vod)")
     deck = _deck(name, ports, body_dut, vdd, ibias, fb, netmap, control,
                  sup_ac=sup_ac)
@@ -77,11 +78,14 @@ def _pm_plausible(pm: float | None) -> bool:
     """True unless ``pm`` is outside the physical ``(0°, 180°]`` range.
 
     A stable amplifier's phase at the 0-dB crossing lies below its DC phase, so
-    ``PM = 180° + phase`` lands in ``(0°, 180°]``.  A value outside that range
-    means the crossing came from a **corrupted sweep** — typically the wrong
-    feedback polarity settling into a measurable but meaningless response
-    (seen with two-input second stages), or a phase-unwrap glitch — not from
-    the real amplifier.  ``None`` (no crossing found) carries no such evidence.
+    ``PM = 180° + phase`` lands in ``(0°, 180°]``.  A value **above 180°**
+    (phase lead on a falling gain) is a non-minimum-phase — right-half-plane —
+    response: a genuinely mis-compensated circuit, e.g. Miller-family
+    compensation wrapped around a non-inverting second stage.  A value ≤ 0°
+    means the crossing came from a corrupted sweep — typically the wrong
+    feedback polarity settling into a measurable but meaningless response, or
+    a phase-unwrap glitch.  Neither is a usable gain/GBW/PM measurement.
+    ``None`` (no crossing found) carries no such evidence.
     """
     return pm is None or 0.0 < pm <= 180.0
 
@@ -143,8 +147,12 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         settled = True
         # AC: dump real/imag of the (differential) output; mag/phase in numpy.
         # wrdata writes a scale (frequency) column per vector → [f, re, f, im].
+        # The sweep starts at 1 mHz so the first point sits below even a
+        # sub-Hz dominant pole (high-gain designs): the phase baseline and the
+        # reported low-frequency gain are then genuinely DC values — starting
+        # at 1 Hz skews the phase reference (and thus PM) by tens of degrees.
         ac = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
-                   f"ac dec 30 1 1e10\nlet vod={outexpr}\n"
+                   f"ac dec 30 1e-3 1e10\nlet vod={outexpr}\n"
                    "wrdata __OUT__ real(vod) imag(vod)")
         a = _run(ac, ["re", "im"])
         if a is None or a.shape[0] < 5 or a.shape[1] < 4:
@@ -183,6 +191,15 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         return None, None, None, reason, None
     gain_db, gbw, pm = best
     if not _pm_plausible(pm):
+        if pm > 180.0:
+            # Phase LEAD at the crossing on a falling gain = a non-minimum-
+            # phase (right-half-plane) response — a genuinely mis-compensated
+            # circuit (e.g. Miller-family compensation wrapped around a
+            # non-inverting second stage), not a sweep artifact.
+            return None, None, None, (
+                f"AC phase leads at the 0-dB crossing (PM {pm:.0f}° > 180°) — "
+                "right-half-plane response; the stage-inversion/compensation "
+                "combination is unsound"), None
         # Every settled branch was corrupt: its gain/GBW come from the same
         # meaningless sweep, so discard the extraction rather than report it.
         return None, None, None, (

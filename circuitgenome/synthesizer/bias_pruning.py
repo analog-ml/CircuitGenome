@@ -48,6 +48,7 @@ changes, as long as no single device's terminals reference two different
 from __future__ import annotations
 import dataclasses
 
+from .bias_compatibility import rail_flavor_from_diode
 from .models import Device, ModuleVariant, TopologyTemplate
 
 _BIAS_RAILS = tuple(f"out{i}" for i in range(1, 8))
@@ -119,3 +120,40 @@ def prune_bias_generation(variant: ModuleVariant, needed: set[int]) -> ModuleVar
     new_ports = [p for p in variant.ports if p.name not in drop_rails]
 
     return dataclasses.replace(variant, ports=new_ports, devices=new_devices)
+
+
+def prune_redundant_tail_diode(
+    bias_variant: ModuleVariant, tail_variant: ModuleVariant
+) -> ModuleVariant:
+    """Drop the rail-7 diode when the tail brings its own reference diode.
+
+    Current-mirror tails convert the rail-7 current into their mirror-gate
+    voltage with their own diode-connected reference device on ``bias``
+    (``d == g == bias``).  A bias-generation leg whose ``out7`` device is a
+    diode-connected MOSFET of the same *flavor* (see
+    :func:`~circuitgenome.synthesizer.bias_compatibility.rail_flavor_from_diode`)
+    then sits **in parallel** with that reference: the two identical diodes
+    split the leg current, so the tail mirror no longer sees the full
+    reference current (and the recognizer cannot tell them apart, leaving one
+    unassigned and unsized).  Dropping the bias-side diode leaves rail 7 as a
+    clean current source/sink into the tail's own diode.  Gate-driven mirror
+    legs and resistor legs (no rail-7 diode) are untouched, as is everything
+    when the tail has no diode on ``bias`` (resistor tails, pruned
+    placeholders).  Cross-flavor pairings -- where the leg's diode would
+    *fight* the tail's reference instead of duplicating it -- are rejected
+    upstream by
+    :func:`~circuitgenome.synthesizer.bias_compatibility.is_bias_flavor_compatible`
+    and never reach this prune.
+    """
+    tail_flavor = rail_flavor_from_diode(tail_variant.devices, "bias")
+    if tail_flavor is None:
+        return bias_variant
+    if rail_flavor_from_diode(bias_variant.devices, "out7") != tail_flavor:
+        return bias_variant
+    new_devices = [
+        dev for dev in bias_variant.devices
+        if not (dev.type in ("nmos", "pmos")
+                and dev.terminals.get("d") == "out7"
+                and dev.terminals.get("g") == "out7")
+    ]
+    return dataclasses.replace(bias_variant, devices=new_devices)

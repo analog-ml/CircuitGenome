@@ -6,17 +6,20 @@ gm/Id sizer (recognizer + sizer), keep the circuits whose **ngspice-measured**
 metrics meet the target spec, export the survivors as sized flat SPICE
 netlists, and report statistics with the best design points.
 
-Acceptance gates on measured metrics only: a circuit is rejected when its
-sizing fails, its DC bias is infeasible (analytical or SPICE-grounded), or any
-spec ngspice *did* measure is missed.  A measurement the rig could not extract
-for a given circuit (e.g. swing/slew on fully-differential topologies) never
-disqualifies it — the affected spec fields are surfaced in the report's
-``unverified_specs`` instead.
+Acceptance is strict: a circuit is rejected when its sizing fails, its DC bias
+is infeasible (analytical or SPICE-grounded), any measured spec is missed, or
+a constrained spec could **not** be SPICE-measured (stage ``unverified`` —
+this includes structurally unmeasurable cases such as swing/slew on
+fully-differential topologies).  The affected spec fields are surfaced in the
+report's ``unverified_specs``, and every rejection's detail is histogrammed in
+each template's ``rejection_reasons``.
 """
 from __future__ import annotations
 
 import json
+import re
 import time
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass, field
 from functools import partial
@@ -39,8 +42,8 @@ from .models import DesignReport, DesignSolution, TemplateStats
 
 # Metric key → (SizingSpec attribute, is_min_spec) for every metric the ngspice
 # rig measures (mirrors the CLI's spice_keys).  A constrained spec whose
-# measurement comes back None for an accepted circuit is reported in
-# DesignReport.unverified_specs rather than failing the circuit.
+# measurement comes back None rejects the candidate (stage "unverified") and is
+# reported in DesignReport.unverified_specs.
 _MEASURED_SPECS: dict[str, tuple[str, bool]] = {
     "gain_db": ("gain_min_db", True),
     "gbw_hz": ("gbw_min_hz", True),
@@ -82,16 +85,23 @@ def _margins(sim: dict[str, float | None], spec: SizingSpec) -> dict[str, float]
     return out
 
 
+def _normalize_reason(detail: str) -> str:
+    """Collapse numerals to ``#`` so identical failure classes aggregate."""
+    return re.sub(r"[-+]?\d+\.?\d*([eE][-+]?\d+)?", "#", detail)[:160] or "(no detail)"
+
+
 @dataclass
 class _Outcome:
     """Picklable per-candidate result returned by the worker."""
     index: int
     variants: dict[str, str]
-    stage: str  # "accepted" | "sizing_failed" | "bias_infeasible" | "spec_failed" | "error"
+    stage: str  # "accepted" | "sizing_failed" | "bias_infeasible" | "spec_failed" | "unverified" | "error"
     metrics: dict[str, float | None] = field(default_factory=dict)
     margins: dict[str, float] = field(default_factory=dict)
     netlist: str = ""  # sized netlist text, only when accepted
     detail: str = ""
+    notes: list[str] = field(default_factory=list)
+    unverified_attrs: list[str] = field(default_factory=list)  # spec fields not measured
 
 
 def _evaluate_candidate(
@@ -121,12 +131,26 @@ def _evaluate_candidate(
                             detail=next(iter(result.warnings), ""))
         sim = simulate_metrics(netlist_text, result, tech, spec)
         metrics = {k: sim.get(k) for k in _MEASURED_SPECS}
+        notes = list(sim.get("notes") or [])
         margins = _margins(sim, spec)
         if any(m < 0 for m in margins.values()):
+            missed = sorted(k for k, m in margins.items() if m < 0)
             return _Outcome(index, variants, "spec_failed",
-                            metrics=metrics, margins=margins)
+                            metrics=metrics, margins=margins, notes=notes,
+                            detail="missed spec(s): " + ", ".join(missed))
+        unmeasured = sorted(
+            attr for key, (attr, _is_min) in _MEASURED_SPECS.items()
+            if getattr(spec, attr) is not None and sim.get(key) is None)
+        if unmeasured:
+            detail = ("constrained spec(s) not SPICE-measurable: "
+                      + ", ".join(unmeasured))
+            if notes:
+                detail += " — " + "; ".join(notes)
+            return _Outcome(index, variants, "unverified", metrics=metrics,
+                            margins=margins, notes=notes, detail=detail,
+                            unverified_attrs=unmeasured)
         return _Outcome(index, variants, "accepted", metrics=metrics,
-                        margins=margins,
+                        margins=margins, notes=notes,
                         netlist=sized_netlist(netlist_text, result))
     except Exception as e:  # count, report, and keep the run going
         return _Outcome(index, variants, "error",
@@ -258,12 +282,14 @@ def design(
         spec={k: v for k, v in asdict(spec).items() if v is not None},
         tech=tech.name,
     )
+    unverified_attrs: set[str] = set()
     t_run = time.perf_counter()
 
     for topology in selected:
         say(f"Template: {topology.name}")
         t0 = time.perf_counter()
         stats = TemplateStats(template=topology.name)
+        reasons: Counter[str] = Counter()
         worker = partial(_evaluate_candidate, topology=topology, tech=tech, spec=spec)
         tdir = output_dir / topology.name
 
@@ -280,25 +306,25 @@ def design(
                     name=name, topology=topology.name, variants=outcome.variants,
                     metrics=outcome.metrics, margins=outcome.margins,
                     worst_margin=min(outcome.margins.values(), default=float("inf")),
-                    netlist_path=str(path)))
+                    netlist_path=str(path), notes=outcome.notes))
             else:
                 setattr(stats, outcome.stage, getattr(stats, outcome.stage) + 1)
+                reasons[_normalize_reason(outcome.detail)] += 1
+                unverified_attrs.update(outcome.unverified_attrs)
             if stats.enumerated % _PROGRESS_EVERY == 0:
                 say(f"  {stats.enumerated} evaluated, {stats.accepted} accepted "
                     f"({time.perf_counter() - t0:.0f}s)")
 
         stats.runtime_s = time.perf_counter() - t0
+        stats.rejection_reasons = dict(reasons.most_common())
         report.stats[topology.name] = stats
         say(f"  done: {stats.accepted}/{stats.enumerated} accepted "
             f"in {stats.runtime_s:.1f}s")
 
     report.best_points = _best_points(report.solutions)
-    # Constrained specs that went unmeasured on at least one accepted circuit:
-    # those solutions were accepted without that spec being SPICE-verified.
-    report.unverified_specs = sorted({
-        attr for s in report.solutions
-        for key, (attr, _is_min) in _MEASURED_SPECS.items()
-        if getattr(spec, attr) is not None and s.metrics.get(key) is None})
+    # Constrained specs that could not be measured on at least one candidate:
+    # those candidates were rejected as "unverified".
+    report.unverified_specs = sorted(unverified_attrs)
     report.runtime_s = time.perf_counter() - t_run
     _write_report(report, output_dir)
     return report

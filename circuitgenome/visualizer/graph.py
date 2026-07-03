@@ -17,11 +17,15 @@ from __future__ import annotations
 import itertools
 from dataclasses import dataclass, field
 
-from circuitgenome.synthesizer.cmfb_compatibility import is_cmfb_compatible
+from circuitgenome.synthesizer.bias_compatibility import is_bias_flavor_compatible
+from circuitgenome.synthesizer.cmfb_compatibility import is_cmfb_compatible, prune_cmfb
 from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
-from circuitgenome.synthesizer.tail_current_compatibility import is_tail_current_compatible
+from circuitgenome.synthesizer.tail_current_compatibility import (
+    is_tail_current_compatible,
+    prune_tail_current,
+)
 
 # Nets that connect to every slot and would otherwise dominate the graph with
 # edges unrelated to the topology's signal path.
@@ -138,5 +142,20 @@ def explain_incompatibility(topology: TopologyTemplate, variant_map: dict[str, M
         reasons.append(
             "input_pair doesn't use a tail current; only the canonical tail_current "
             "variant is allowed (is_tail_current_compatible)."
+        )
+    # The flavor filter runs on the same variant_map build_circuit hands it:
+    # with cmfb/tail_current already pruned, so emptied placeholders impose
+    # no bias-rail requirement.
+    pruned = dict(variant_map)
+    if "cmfb" in pruned and "load" in pruned:
+        pruned["cmfb"] = prune_cmfb(pruned["cmfb"], pruned["load"])
+    if "tail_current" in pruned and "input_pair" in pruned:
+        pruned["tail_current"] = prune_tail_current(
+            pruned["tail_current"], pruned["input_pair"]
+        )
+    if not is_bias_flavor_compatible(topology, pruned):
+        reasons.append(
+            "bias_generation delivers the wrong flavor (vdd- vs gnd-referenced) "
+            "on a consumed bias rail (is_bias_flavor_compatible)."
         )
     return reasons

@@ -162,22 +162,33 @@ templates (excluding the 14 combinations using a differential-output cascode
 load) and **56** are valid for fully-differential templates (excluding the 28
 combinations using a single-output cascode or telescopic-cascode load).
 
-The 1-stage template therefore produces **210 distinct circuits**
-(70 × 3). The 2-stage single-ended template produces **1 890 circuits**
-(70 × 3 × 3 × 3); the 2-stage fully-differential template, which has two
+The ``bias_generation`` choice is not a free ×3 factor: the "Bias flavor
+compatibility filter" below rejects combinations whose generator delivers the
+wrong flavor (vdd- vs gnd-referenced) on a consumed bias rail. The tunable
+``resistor_bias`` always survives; each single-flavor generator survives only
+the combinations whose consumed rails all match its flavor.
+
+The 1-stage template therefore produces **142 distinct circuits** (70
+combinations keep ``resistor_bias``, 36 also keep
+``diode_connected_mosfet_bias``, 36 ``magic_battery_bias``). The 2-stage
+single-ended template produces **954 circuits** (70 × 3 ``second_stage`` =
+210 pairs; 210 + 72 diode-compatible + 36 magic-compatible = 318, × 3
+``compensation``). The 2-stage fully-differential template, which has two
 ``compensation`` slots, two ``second_stage`` slots (one per output path), and
-one ``cmfb`` slot, produces **17 010 circuits** (70 × 3\ :sup:`5`). Of the 56
+one ``cmfb`` slot, produces **6 759 circuits**: of the 56
 fully-differential-compatible ``input_pair``/``load``/``tail_current``
 combinations, only the 14 using a ``"differential"``-cardinality load keep
 both ``cmfb`` variants (14 × 2 = 28); the other 42 collapse ``cmfb`` to a
 single canonical variant (42 × 1 = 42) -- 28 + 42 = 70 effective
-load/``cmfb`` combinations, × 3\ :sup:`5` = 17 010 (see "CMFB compatibility
-filter" below). Each 3-stage single-ended template adds two more
-``second_stage`` slots (gm2, gm3) and two ``compensation`` slots (Cm1, Cm2) on
-top of the 1-stage base, producing **17 010 circuits** (70 × 3\ :sup:`5`).
-Each 3-stage fully-differential template duplicates those four slots per
-output path (and keeps the single ``cmfb`` slot), producing
-**1 377 810 circuits** (70 × 3\ :sup:`9`).
+load/``cmfb`` combinations (see "CMFB compatibility filter" below), × 9
+``second_stage`` pairs = 630, of which 92 also keep ``diode_connected`` and
+29 ``magic_battery`` (751 total), × 9 ``compensation`` pairs. Each 3-stage
+single-ended template adds two more ``second_stage`` slots (gm2, gm3) and two
+``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
+**7 290 circuits** (630 stage pairs + 144 diode-compatible + 36
+magic-compatible = 810, × 9 ``compensation`` pairs). Each 3-stage
+fully-differential template duplicates those four slots per output path (and
+keeps the single ``cmfb`` slot), producing **491 427 circuits**.
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -287,6 +298,43 @@ counted as a needed bias rail. To extend: wire a new or edited ``input_pair``
 variant's tail-side device terminal(s) to ``tail`` to make it a genuine
 ``tail_current`` consumer -- no code changes needed
 (``circuitgenome/synthesizer/tail_current_compatibility.py``).
+
+Bias flavor compatibility filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every ``bias_generation`` leg delivers its rail voltage through a
+diode-connected MOSFET that pins the rail to one supply -- its *flavor*: a
+PMOS diode hangs from vdd (rail ≈ ``VDD − |V_GSP|``, suited to PMOS gates
+whose source sits at vdd), an NMOS diode sits on gnd (rail ≈ ``V_GSN``,
+suited to NMOS gates whose source sits at gnd). ``diode_connected_mosfet_bias``
+makes every rail vdd-flavored, ``magic_battery_bias`` gnd-flavored;
+``resistor_bias`` legs have no diode (``out_i = I_leg × R_i``), so each rail
+is independently tunable and has no flavor.
+
+A consumer gate fed the wrong flavor is structurally unbiasable -- the device
+is massively over- or under-driven and no sizing can recover an operating
+point (issue #99 measured three such defect classes, none of which ever
+reached a sound DC bias). ``enumerate_circuits`` therefore rejects any
+combination whose generator delivers the wrong flavor on a *consumed* rail.
+Both sides are derived structurally from the devices (no YAML tags): a
+consumer MOSFET whose gate lands on a bias rail requires its source's supply
+(consumers whose source is an internal node -- cascode gates -- impose
+nothing), and a diode-connected device on the rail (a current-mirror tail's
+reference, including the cascode tails' stacked reference) requires its own
+channel type's flavor. A same-flavor bias-leg diode facing a mirror tail's
+reference diode is redundant rather than conflicting, and is dropped by
+``prune_redundant_tail_diode`` (see
+:mod:`circuitgenome.synthesizer.bias_pruning`); a cross-flavor one would
+fight the tail's reference for the rail voltage, so the combination is
+rejected.
+
+Because ``bias_generation`` is one slot of the enumeration product, rejection
+acts as routing: consumer sets whose rails all want one flavor keep the
+matching single-flavor generator (plus ``resistor_bias``); mixed-flavor sets
+(e.g. a vdd-flavored second stage with a gnd-flavored mirror tail) keep only
+``resistor_bias``. The filter buys honest rejection statistics and less
+wasted SPICE work, not new working circuits
+(``circuitgenome/synthesizer/bias_compatibility.py``).
 
 Bias-rail pruning
 ~~~~~~~~~~~~~~~~~

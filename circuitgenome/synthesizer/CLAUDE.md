@@ -40,12 +40,15 @@ SPICE netlists.
   (`is_cmfb_compatible`, `prune_cmfb`).
 - `tail_current_compatibility.py` — tail_current-slot compatibility filter
   and pruning (`is_tail_current_compatible`, `prune_tail_current`).
+- `bias_compatibility.py` — bias-rail flavor compatibility filter
+  (`is_bias_flavor_compatible`; helpers `rail_flavor_from_diode`,
+  `provided_rail_flavors`, `required_rail_flavors`).
 - `bias_pruning.py` — bias-rail pruning (`needed_bias_outputs`,
-  `prune_bias_generation`).
+  `prune_bias_generation`, `prune_redundant_tail_diode`).
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 
-These six modules all follow the same shape (see "Pattern for small internal
+These seven modules all follow the same shape (see "Pattern for small internal
 pure-function modules" below) and are invoked, in this order, from
 `enumerate_circuits` (see "pipeline order" below).
 
@@ -164,6 +167,27 @@ and `tail_current.bias` is not counted by `needed_bias_outputs`. To support
 a new/edited `input_pair` variant as a genuine `tail_current` consumer, wire
 one of its device terminals to `tail` -- no code changes needed here.
 
+## Bias flavor compatibility filter (`bias_compatibility.py`)
+
+Every `bias_generation` leg pins its rail to one supply via its
+diode-connected device — the rail's **flavor**: PMOS diode → vdd-referenced
+(`diode_connected_mosfet_bias`), NMOS diode → gnd-referenced
+(`magic_battery_bias`); `resistor_bias` legs have no diode, so their rails
+are per-rail tunable (no flavor, never rejected). A consumer gate fed the
+wrong flavor is structurally unbiasable — no sizing can fix it (issue #99).
+`is_bias_flavor_compatible` rejects a combination when a **consumed** rail's
+required flavor contradicts the generator's. Both sides are derived
+**structurally** (no YAML tags, so nothing can drift from the devices):
+required flavor per rail = the supply a consumer gate's source sits on
+(internal-node sources — cascode gates — impose nothing), or the channel
+type of a diode-connected device on the rail (a mirror tail's reference,
+incl. the cascode tails' stacked one). Requirements only arise from actual
+device references, so unconsumed rails (later dropped by
+`prune_bias_generation`) never reject; the filter runs **after**
+`prune_cmfb`/`prune_tail_current` so emptied placeholders impose nothing.
+Rejection acts as routing: single-flavor consumer sets keep the matching
+generator (+ `resistor_bias`); mixed-flavor sets keep only `resistor_bias`.
+
 ## Bias-rail pruning (`bias_pruning.py`)
 
 - `needed_bias_outputs(topology, variant_map)` does a **structural** check
@@ -177,6 +201,12 @@ one of its device terminals to `tail` -- no code changes needed here.
   shared-reference-plus-7-legs layout for all variants; see the module
   docstring for the full algorithm. If `needed` covers all of `{1..7}`,
   `variant` is returned unchanged.
+- `prune_redundant_tail_diode(bias_variant, tail_variant)` drops the bias
+  leg's rail-7 diode when a mirror tail brings its own reference diode of the
+  same flavor (via `bias_compatibility.rail_flavor_from_diode` — one shared
+  definition of flavor): the two diodes would otherwise sit in parallel and
+  split the reference current. Cross-flavor pairings never reach it — they
+  are rejected upstream by `is_bias_flavor_compatible`.
 - Invoked once per combination in `enumerate_circuits`, **after**
   `is_combination_valid`, **before** `_build_port_net_map`/`_resolve_devices`.
   The pruned variant replaces `variant_map[slot.name]` for the
@@ -213,20 +243,24 @@ filters/transforms:
    compatibility filter" above).
 7. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
    replacing `variant_map["tail_current"]`.
-8. `needed_bias_outputs` → `prune_bias_generation`, replacing
-   `variant_map[bias_gen_slot]`.
-9. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
-   then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
-   `load` slot's `port_net_map` is captured separately as
-   `load_port_net_map`.
-10. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+8. `is_bias_flavor_compatible(topology, variant_map)` — skip if the
+   `bias_generation` variant delivers the wrong flavor on a consumed bias
+   rail (see "Bias flavor compatibility filter" above; must run after the
+   cmfb/tail_current prunes so placeholders impose nothing).
+9. `needed_bias_outputs` → `prune_bias_generation` →
+   `prune_redundant_tail_diode`, replacing `variant_map[bias_gen_slot]`.
+10. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+    then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
+    `load` slot's `port_net_map` is captured separately as
+    `load_port_net_map`.
+11. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
     topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
     net-merge pass for `load` ports declared `alias_of` another `load` port
     (see "Net-naming & wiring conventions" above).
-11. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+12. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
     devices)`.
 
-Any new per-combination transform should slot in between steps 4 and 9,
+Any new per-combination transform should slot in between steps 4 and 10,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 

@@ -98,7 +98,8 @@ The synthesizer works by combining **module variants** according to a **topology
 
 Not every module combination forms a valid circuit, so `enumerate_circuits`
 applies a set of compatibility filters — **polarity**, **output-cardinality**,
-**CMFB**, and **tail-current** — that prune invalid or redundant combinations,
+**CMFB**, **tail-current**, and **bias flavor** — that prune invalid or
+redundant combinations,
 and the two three-stage compensation schemes (**NMC** and **RNMC**) reuse the
 existing second-stage and compensation modules. The exact per-topology circuit
 counts, the rules behind each filter, and how to extend them are documented in
