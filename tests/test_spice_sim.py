@@ -225,3 +225,88 @@ def test_honest_twin_measurement_unaffected():
     assert sim["gain_db"] is not None and sim["gain_db"] > 0
     pm = sim["phase_margin_deg"]
     assert pm is not None and 0 < pm <= 180
+
+
+# --- CMRR / PSRR / output swing / two-edge slew -----------------------------
+
+@ngspice
+def test_new_metrics_measured_on_generic_two_stage():
+    """The generic 5 V two-stage measures all four new metrics with physically
+    plausible values: CMRR/PSRR well above the gain floor, output swing inside
+    the rails straddling mid-supply, slew rate near the analytical ibias/Cc."""
+    text, result, tech, spec = _active_load_two_stage_se("generic", 5.0, 80, 3.5e6)
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+
+    assert sim["cmrr_db"] is not None and 20.0 < sim["cmrr_db"] < 200.0
+    assert sim["psrr_db"] is not None and 20.0 < sim["psrr_db"] < 200.0
+
+    hi, lo = sim["output_swing_max_v"], sim["output_swing_min_v"]
+    assert hi is not None and lo is not None
+    assert 0.0 <= lo < 2.5 < hi <= 5.0
+
+    # min(rising, falling) slew: positive and within an order of magnitude of
+    # the analytical internal limit ibias/Cc.
+    sr = sim["slew_rate_vps"]
+    assert sr is not None and sr > 0
+    sr_analytic = spec.ibias / (result.cc_pf * 1e-12)
+    assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
+
+
+@ngspice
+def test_cmrr_psrr_none_without_clean_gain():
+    """CMRR/PSRR are ratios against the differential gain: a circuit whose AC
+    measurement is not a clean positive gain must report them as None (a
+    non-amplifying circuit once measured 'CMRR 242 dB' from numerical noise)."""
+    from pathlib import Path
+
+    ckt = (Path(__file__).resolve().parent.parent / "circuits"
+           / "two_stage_opamp_single_ended" / "circuit_1201_flat.ckt")
+    if not ckt.exists():
+        pytest.skip("circuit_1201 fixture not present")
+    text = ckt.read_text()
+    parsed = parse(text)
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=10e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=5e5)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+
+    assert sim["gain_db"] is not None and sim["gain_db"] <= 0
+    assert sim["cmrr_db"] is None
+    assert sim["psrr_db"] is None
+
+
+@ngspice
+def test_fd_large_signal_metrics_stay_none():
+    """Swing and slew are single-ended-only benches: a fully-differential
+    circuit keeps them (and, absent a clean FD gain, CMRR/PSRR) as None."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_fully_differential")
+    want = {"input_pair": "differential_pair_pmos",
+            "load": "folded_cascode_load_pmos_input_differential_output",
+            "tail_current": "current_mirror_tail_pmos",
+            "bias_gen": "diode_connected_mosfet_bias",
+            "comp_p": "miller_cap", "comp_n": "miller_cap",
+            "second_stage_p": "common_source", "second_stage_n": "common_source",
+            "cmfb": "resistive_sense_cmfb"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=50,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=1e6)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+
+    assert sim["slew_rate_vps"] is None
+    assert sim["output_swing_max_v"] is None
+    assert sim["output_swing_min_v"] is None

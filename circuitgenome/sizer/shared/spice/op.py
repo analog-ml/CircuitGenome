@@ -69,8 +69,9 @@ def read_op_operating_point(
 def _op_bias_problems(op: dict[str, dict[str, float]]) -> tuple[list[str], list[str]]:
     """Return ``(triode_refs, starved_refs)`` from an operating-point dict.
 
-    Starved: drain current below 0.1 µA (device effectively off). Triode: |Vds|
-    below |Vdsat| (a current source/amplifier device pushed out of saturation).
+    Starved: drain current below 0.1 µA (device effectively off). Triode:
+    ``|Vds| < |Vdsat|`` (a current source/amplifier device pushed out of
+    saturation).
     """
     triode, starved = [], []
     for ref, d in op.items():
