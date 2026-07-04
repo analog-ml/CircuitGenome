@@ -683,6 +683,17 @@ modules:
   - name: common_drain
     category: second_stage
     display_name: "Common-Drain (PMOS Source Follower) Second Stage"
+    unsupported: >-
+      issue #125: a follower gain stage is A2 ~ 1, so the whole amp is a
+      one-gain-stage OTA + buffer (~30-40 dB) that no current spec (52-80
+      dB) can accept, and every compensation variant in the library is a
+      Miller-family cap that bootstraps to ~0 around the follower -- the
+      sizer's Cc-based GBW/PM/SR plan does not describe these candidates
+      (it also models the stage as gm2*Rout2, +56 dB optimistic). Parking
+      also empties the three_stage NMC pools (after issue #114 every
+      surviving NMC candidate contained a follower). Un-park when a
+      buffer-aware stage model (A2 ~ 1 gain, swing-through-Vgs, non-Miller
+      compensation strategy) exists -- see issues #125/#126
     ports:
       - {name: in,   role: input}
       - {name: out,  role: output}
@@ -702,6 +713,10 @@ modules:
   - name: common_drain_nmos
     category: second_stage
     display_name: "Common-Drain (NMOS Source Follower) Second Stage"
+    unsupported: >-
+      issue #125: same follower rationale as common_drain (A2 ~ 1,
+      bootstrapped Miller compensation, gm2*Rout2 gain model fiction),
+      plus body effect (bulk at gnd) lowers A2 further
     ports:
       - {name: in,   role: input}
       - {name: out,  role: output}

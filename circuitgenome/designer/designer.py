@@ -7,7 +7,9 @@ metrics meet the target spec, export the survivors as sized flat SPICE
 netlists, and report statistics with the best design points.
 
 Acceptance is strict: a circuit is rejected when its sizing fails, its DC bias
-is infeasible (analytical or SPICE-grounded), any measured spec is missed, or
+is infeasible (analytical or SPICE-grounded), the sizer's own gain estimate
+falls more than ``_ANALYTIC_GAIN_TOL_DB`` below ``gain_min_db`` (issue #125 —
+the SPICE bench is skipped for these), any measured spec is missed, or
 a constrained spec could **not** be SPICE-measured (stage ``unverified`` —
 this includes structurally unmeasurable cases such as swing/slew on
 fully-differential topologies).  The affected spec fields are surfaced in the
@@ -65,6 +67,14 @@ _BEST_CRITERIA: dict[str, tuple[str, bool]] = {
 }
 
 _PROGRESS_EVERY = 25
+
+# Analytic gain gate (issue #125): when the sizer's own gain estimate falls
+# this far below the spec, the candidate cannot recover in SPICE (the
+# analytic model matches ngspice to <0.1 dB on the families this catches,
+# e.g. resistor-load first stages whose gm2 is ceiling-clamped) — skip the
+# full SPICE bench.  Candidates within the band still go to SPICE, which
+# remains the only authority for accepts.
+_ANALYTIC_GAIN_TOL_DB = 3.0
 
 
 def _margins(sim: dict[str, float | None], spec: SizingSpec) -> dict[str, float]:
@@ -129,6 +139,14 @@ def _evaluate_candidate(
         else:
             return _Outcome(index, variants, "bias_infeasible",
                             detail=next(iter(result.warnings), ""))
+        analytic_gain = result.metrics.get("gain_db")
+        if (spec.gain_min_db is not None and analytic_gain is not None
+                and analytic_gain < spec.gain_min_db - _ANALYTIC_GAIN_TOL_DB):
+            return _Outcome(
+                index, variants, "spec_failed",
+                detail=(f"analytic gain_db {analytic_gain:.1f} < spec "
+                        f"{spec.gain_min_db:.1f} - {_ANALYTIC_GAIN_TOL_DB:.0f} "
+                        f"tolerance — SPICE skipped"))
         sim = simulate_metrics(netlist_text, result, tech, spec)
         metrics = {k: sim.get(k) for k in _MEASURED_SPECS}
         notes = list(sim.get("notes") or [])

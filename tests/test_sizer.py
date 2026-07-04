@@ -32,11 +32,16 @@ def _tech():
     return load_tech()  # built-in generic (0.25µm-like params)
 
 
-def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = None):
+def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = None,
+                  include_unsupported: bool = False):
+    # include_unsupported opts parked variants back into the pool — needed by
+    # the NMC fixtures, whose canonical shape (follower second stage, issue
+    # #114) uses the followers parked per issue #125.
     modules = load_modules()
     topologies = load_topologies()
     topology = next(t for t in topologies if t.name == topology_name)
-    for circuit in enumerate_circuits(topology, modules):
+    config = {"include_unsupported": True} if include_unsupported else None
+    for circuit in enumerate_circuits(topology, modules, config=config):
         if variant_filter is None:
             return topology, circuit
         if all(circuit.variant_map.get(k, {}).name == v for k, v in variant_filter.items()):
@@ -44,8 +49,10 @@ def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = No
     raise ValueError(f"No matching circuit found for {topology_name} with {variant_filter}")
 
 
-def _fbr(topology_name: str, variant_filter: dict[str, str] | None = None):
-    topology, circuit = _make_circuit(topology_name, variant_filter)
+def _fbr(topology_name: str, variant_filter: dict[str, str] | None = None,
+         include_unsupported: bool = False):
+    topology, circuit = _make_circuit(topology_name, variant_filter,
+                                      include_unsupported)
     spice = to_flat_spice(circuit)
     parsed = parse(spice)
     sr_result = recognize(parsed)
@@ -604,7 +611,9 @@ def three_stage_nmc_se_fbr():
     # NMC's comp1 wraps the second+third stage cascade: two common-source
     # stages compose non-inverting and are rejected by the compensation
     # parity filter (issue #114), so this uses the canonical NMC shape --
-    # non-inverting follower second stage, inverting CS output stage.
+    # non-inverting follower second stage, inverting CS output stage. The
+    # followers are parked per issue #125, so the sizer coverage here rides
+    # on the include_unsupported opt-in.
     return _fbr("three_stage_opamp_nmc_single_ended", {
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
@@ -613,7 +622,7 @@ def three_stage_nmc_se_fbr():
         "third_stage":  "common_source",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
-    })
+    }, include_unsupported=True)
 
 
 @pytest.fixture(scope="module")
@@ -632,7 +641,8 @@ def three_stage_rnmc_se_fbr():
 @pytest.fixture(scope="module")
 def three_stage_nmc_fd_fbr():
     # Follower second stage + CS output stage per path -- see
-    # three_stage_nmc_se_fbr (compensation parity filter, issue #114).
+    # three_stage_nmc_se_fbr (compensation parity filter, issue #114;
+    # followers parked per issue #125, hence include_unsupported).
     return _fbr("three_stage_opamp_nmc_fully_differential", {
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
@@ -646,7 +656,7 @@ def three_stage_nmc_fd_fbr():
         "comp1_n":         "miller_cap",
         "comp2_p":         "miller_cap",
         "comp2_n":         "miller_cap",
-    })
+    }, include_unsupported=True)
 
 
 @pytest.fixture(scope="module")
@@ -826,7 +836,9 @@ def _fbr_pmos_cs_second_stage(topology_name: str):
 
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == topology_name)
-    for circuit in enumerate_circuits(topology, modules):
+    # NMC circuits require a follower stage (parked, issue #125) — opt in.
+    for circuit in enumerate_circuits(topology, modules,
+                                      config={"include_unsupported": True}):
         parsed = parse(to_flat_spice(circuit))
         sr_result = recognize(parsed)
         fbr_result = assign_slots(sr_result, topology)
@@ -860,7 +872,8 @@ def test_three_stage_pmos_cs_metrics_present():
 def test_topology_mismatch_warns():
     """Sizing a single-ended netlist against a fully-differential topology
     yields stage slots with no signal device — surface a warning, not silence."""
-    _, se_circuit = _make_circuit("three_stage_opamp_nmc_single_ended")
+    _, se_circuit = _make_circuit("three_stage_opamp_nmc_single_ended",
+                                  include_unsupported=True)
     parsed = parse(to_flat_spice(se_circuit))
     sr_result = recognize(parsed)
     fd_topology = next(

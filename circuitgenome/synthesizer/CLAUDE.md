@@ -345,6 +345,18 @@ round-trip tests). Currently parked:
   unbuildable even with `include_unsupported`; in NMC 3-stage chains
   (ota + CS = 3 inversions) it builds, which is how the recognizer
   round-trip tests keep covering its pattern.
+- `common_drain` / `common_drain_nmos` (issue #125): a follower gain
+  stage is A2 ≈ 1, so any amp using one as its output gain stage is a
+  one-gain-stage OTA + buffer (~30–40 dB) that no current spec (52–80 dB)
+  can accept; every compensation variant in the library is a Miller-family
+  cap, which bootstraps to ~0 around a follower, so the sizer's Cc-based
+  GBW/PM/SR plan (and its gm2·Rout2 gain model, +56 dB optimistic) does
+  not describe these candidates. Consequence: after issue #114's parity
+  filter, every surviving `three_stage_opamp_nmc_*` candidate contained a
+  follower, so the NMC pools now enumerate **zero** circuits (RNMC keeps
+  its follower-free combinations). Un-park when a buffer-aware stage
+  model exists (A2 ≈ 1, swing-through-Vgs, non-Miller compensation) —
+  see issues #125/#126.
 
 ## `enumerate_circuits` pipeline order
 

@@ -179,7 +179,10 @@ def test_gnd_referenced_legs_bias_in_spice():
     want = {"input_pair": "differential_pair_nmos", "load": "active_load_pmos",
             "tail_current": "current_mirror_tail_nmos", "second_stage": "common_drain_nmos",
             "compensation": "miller_cap"}
-    circ = next(c for c in enumerate_circuits(topo, mods)
+    # common_drain_nmos (a same-polarity follower, the gnd-referenced-leg
+    # demander this test needs) is parked per issue #125 — opt back in.
+    circ = next(c for c in enumerate_circuits(topo, mods,
+                                              config={"include_unsupported": True})
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
     parsed = parse(text)
