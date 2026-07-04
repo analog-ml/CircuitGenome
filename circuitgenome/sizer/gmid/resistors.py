@@ -14,7 +14,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from circuitgenome.synthesizer.models import Device
+
 from ..shared.models import SizingSpec, TechParams, TransistorSizing
+from ..shared.taxonomy import RAILS, is_signal_device
 from .blocks import OpAmpBlocks
 from .intent import GmIdIntent
 
@@ -88,13 +91,25 @@ def size_resistors(
         if r_val > 0:
             gd_tail_override = 1.0 / r_val
 
-    # --- Resistor bias legs (bias_gen-slot resistors): out_i = ibias·R_i ---
+    # --- Tunable bias legs (bias_gen-slot resistors): out_i = ibias·R_i ---
+    # Each leg's rail level is derived from what actually consumes the rail
+    # (issue #100): a cascode consumer needs Vgs above its stack's saturation
+    # floor, a supply-referenced gate needs one Vgs from its supply. Rails
+    # whose consumers give no derivable level keep the old representative
+    # value.
     bias_res = slot_resistors.get("bias_gen", [])
     if bias_res and spec.ibias > 0:
-        v_gate = _representative_bias_vgs(blocks, sizing) or 0.5 * (spec.vdd - spec.vss)
-        r_val = v_gate / spec.ibias
+        consumers = [d for name, b in blocks.blocks.items() if name != "bias_gen"
+                     for d in b.mosfets]
+        v_fallback = _representative_bias_vgs(blocks, sizing) or 0.5 * (spec.vdd - spec.vss)
         for r in bias_res:
-            out[r.ref] = r_val
+            rail = next((t for t in (r.terminals.get("t1"), r.terminals.get("t2"))
+                         if t and t not in RAILS), None)
+            v_abs = (_bias_rail_target_v(rail, consumers, sizing, spec)
+                     if rail else None)
+            v_gate = v_abs - spec.vss if v_abs is not None and v_abs > spec.vss \
+                else v_fallback
+            out[r.ref] = v_gate / spec.ibias
 
     # --- CMFB resistive-sense averager (cmfb-slot resistors): large, low-load ---
     cmfb_res = slot_resistors.get("cmfb", [])
@@ -108,6 +123,77 @@ def size_resistors(
     return out, MetricModifiers(gm1_factor=gm1_factor,
                                 gd_tail_override=gd_tail_override,
                                 gd_out_extra=gd_out_extra)
+
+
+def _bias_rail_target_v(rail_net: str, consumers: list[Device],
+                        sizing: dict[str, TransistorSizing],
+                        spec: SizingSpec) -> float | None:
+    """Absolute voltage the consumers of *rail_net* need it to sit at.
+
+    Per consumer MOSFET gated by the rail (diode-connected consumers are a
+    current interface, not a voltage demand — skipped):
+
+    - source on a supply: one planned ``|Vgs|`` from that supply;
+    - source on an internal node (cascode gates): the stack's saturation
+      floor/ceiling (:func:`_stack_node_v`) plus the consumer's ``|Vgs|``.
+
+    Returns the mean over the derivable consumers (a shared rail with
+    conflicting demands gets the compromise a single resistor can offer),
+    or ``None`` when no consumer yields a level.
+    """
+    targets: list[float] = []
+    for dev in consumers:
+        if dev.terminals.get("g") != rail_net or dev.terminals.get("d") == rail_net:
+            continue
+        s = sizing.get(dev.ref)
+        src = dev.terminals.get("s")
+        if not (s and s.vgs_v and src):
+            continue
+        sign = 1.0 if dev.type == "nmos" else -1.0
+        if src in RAILS:
+            base = spec.vdd if src == "vdd!" else spec.vss
+        else:
+            base = _stack_node_v(src, dev, consumers, sizing, spec)
+            if base is None:
+                continue
+        targets.append(base + sign * abs(s.vgs_v))
+    return sum(targets) / len(targets) if targets else None
+
+
+def _stack_node_v(node: str, consumer: Device, mosfets: list[Device],
+                  sizing: dict[str, TransistorSizing],
+                  spec: SizingSpec) -> float | None:
+    """Saturation floor (NMOS) / ceiling (PMOS) of internal *node*.
+
+    Walks the same-type stack from *node* toward the consumer's back rail,
+    summing each device's planned ``Vdsat`` so everything below (NMOS) /
+    above (PMOS) the cascode stays saturated. A signal device in the stack
+    (telescopic loads: the cascode sits on the input pair) anchors the walk
+    at its own saturation edge with the gate at the input common mode,
+    ``Vcm ∓ (|Vgs| - |Vdsat|)``. Returns ``None`` when the stack cannot be
+    traced (no device below, sizing missing, or wrong terminating rail).
+    """
+    sign = 1.0 if consumer.type == "nmos" else -1.0
+    vcm = (spec.vdd + spec.vss) / 2.0
+    acc = 0.0
+    seen: set[str] = set()
+    while node not in RAILS:
+        if node in seen:
+            return None
+        seen.add(node)
+        dev = next((d for d in mosfets
+                    if d.type == consumer.type and d.ref != consumer.ref
+                    and d.terminals.get("d") == node), None)
+        s = sizing.get(dev.ref) if dev else None
+        if not (dev and s and s.vgs_v and s.vds_sat_v):
+            return None
+        if is_signal_device(dev):
+            return vcm - sign * (abs(s.vgs_v) - abs(s.vds_sat_v)) + sign * acc
+        acc += abs(s.vds_sat_v)
+        node = dev.terminals.get("s")
+    if (consumer.type == "nmos") == (node == "vdd!"):
+        return None  # stack terminated on the wrong supply
+    return (spec.vdd if node == "vdd!" else spec.vss) + sign * acc
 
 
 def _representative_bias_vgs(blocks: OpAmpBlocks,
