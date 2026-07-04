@@ -61,15 +61,16 @@ def size_gmid(
     plan = plan_devices(view, currents, spec, tech, intent)
 
     # Phase 4 — Size: LUT geometry, DC bias check/repair, resistor network.
-    sizing, geom_warnings = assign_geometry_gmid(
+    sizing, geom_warnings, geom_feasible = assign_geometry_gmid(
         plan.model, view.all_transistors, view.slot_transistors,
-        currents.ids_map, plan.tintents, plan.gm_req_map, tech)
+        currents.ids_map, plan.tintents, plan.gm_req_map, tech,
+        vod_max_map=plan.vod_max_map)
     sizing, dc_warnings, bias_feasible = check_dc_operating_point(
         plan.model, view.blocks, view.slot_transistors, view.all_transistors,
         currents.ids_map, sizing, spec, tech)
     sizing, si_warnings, si_feasible = check_stage_interface(
         plan.model, view.blocks, sizing, plan.gm_req_map, spec, tech)
-    bias_feasible = bias_feasible and si_feasible
+    bias_feasible = bias_feasible and si_feasible and geom_feasible
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
         plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf)

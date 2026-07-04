@@ -21,8 +21,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..shared.device_model import GmIdModel
+from ..shared.device_model import CASCODE, SIGNAL, GmIdModel
 from ..shared.models import TechParams, TransistorSizing
+from ..shared.taxonomy import STAGE_SLOTS
 from .blocks import LoadKind, classify_load
 
 if TYPE_CHECKING:
@@ -42,6 +43,72 @@ _FD_PAIRS = (("second_stage_p", "second_stage_n"),
 #: load mirror slightly strong settles the node toward the load's supply rail,
 #: keeping the input pair saturated with the load at the edge of saturation.
 _LOAD_CS_MARGIN = 1.05
+
+#: Fraction of the swing-derived Vdsat budget (``vod_max_map``) the plan
+#: targets for output-path devices.  The swing bench reads the tracking
+#: region out to small-signal slope ≥ 0.7, which cuts off noticeably before
+#: the Vdsat point — a device sized exactly at the budget measures ~50 mV
+#: short of the spec (issue #126).  Half the budget is the validated margin;
+#: devices whose solved/policy Vdsat already fits are untouched.
+_SWING_VDSAT_FRACTION = 0.5
+
+
+def swing_gm_id_floor(
+    model: GmIdModel, dtype: str, l_um: float, vod_max: float,
+) -> tuple[float, bool]:
+    """gm/Id floor so ``vds_sat ≤ _SWING_VDSAT_FRACTION · vod_max``.
+
+    Returns ``(floor, fits_raw_budget)``.  ``floor`` is the smallest LUT
+    gm/Id meeting the margin target (weaker inversion = lower Vdsat), or the
+    table's weakest-inversion point as best effort when no point reaches the
+    target.  ``fits_raw_budget`` is ``False`` when even the weakest inversion
+    cannot fit the *raw* budget — the output stage cannot meet the swing
+    spec at all.
+    """
+    axis = [float(g) for g in model.lut.gm_id_axis]
+    target = vod_max * _SWING_VDSAT_FRACTION
+    for g in axis:
+        if model.lut.vdsat(dtype, g, l_um) <= target:
+            return g, True
+    weakest = axis[-1]
+    return weakest, model.lut.vdsat(dtype, weakest, l_um) <= vod_max
+
+
+def _output_stage_slots(slot_transistors: dict[str, list]) -> frozenset[str]:
+    """Slots whose devices sit on the amplifier output node.
+
+    ``compute_requirements`` puts swing bounds on second/third-stage devices
+    *and* on the first-stage load; for a multi-stage circuit only the last
+    stage touches the output, so the load's entry must not re-bias the first
+    stage here.  One-stage circuits keep the load as the output path.
+    """
+    if any(s in slot_transistors for s in STAGE_SLOTS):
+        return STAGE_SLOTS
+    return frozenset({"load"})
+
+
+def _mirror_tied_refs(all_transistors: dict[str, tuple]) -> set[str]:
+    """Refs whose W is later overwritten by :func:`_apply_mirror_ratios`.
+
+    A per-device gm/Id floor cannot stick on a mirror *output* — its geometry
+    tracks the diode reference's inversion level — so such devices are only
+    checked against the raw budget after the mirror pass.
+    """
+    groups: dict[tuple, list[str]] = {}
+    diodes: dict[tuple, str] = {}
+    for ref, (device, _slot) in all_transistors.items():
+        gate = device.terminals.get("g")
+        if not gate:
+            continue
+        key = (gate, device.type)
+        groups.setdefault(key, []).append(ref)
+        if device.terminals.get("d") == gate:
+            diodes.setdefault(key, ref)
+    tied: set[str] = set()
+    for key, members in groups.items():
+        if len(members) >= 2 and key in diodes:
+            tied.update(m for m in members if m != diodes[key])
+    return tied
 
 
 def _apply_symmetry(
@@ -150,15 +217,39 @@ def assign_geometry_gmid(
     intents: dict[str, "TransistorIntent"],  # ref → resolved per-device design intent
     gm_target_map: dict[str, float],        # ref → required gm in A/V (signal devices)
     tech: TechParams,
-) -> tuple[dict[str, TransistorSizing], list[str]]:
-    """Return ``({ref: TransistorSizing}, warnings)`` for the gm/Id path.
+    vod_max_map: dict[str, float] | None = None,  # ref → max VDS_sat in V (swing)
+) -> tuple[dict[str, TransistorSizing], list[str], bool]:
+    """Return ``({ref: TransistorSizing}, warnings, feasible)`` for the gm/Id path.
 
     Geometry follows each device's :class:`~.intent.TransistorIntent`: its role,
     its (per-block) gm/Id region and channel length.  Signal devices ignore the
     intent's gm/Id and solve it from ``gm_target_map``.
+
+    ``vod_max_map`` carries the output-swing Vdsat budgets: output-path devices
+    get a gm/Id floor targeting ``_SWING_VDSAT_FRACTION`` of their budget.
+    Excluded from the floor (but still checked against the raw budget):
+
+    * **mirror outputs** — their inversion tracks the diode reference;
+    * **signal devices under a cascode first-stage load** — their ``V_GS`` is
+      the stage-interface pin (:mod:`.stage_interface`), and moving it for
+      swing breaks the knife-edge saturation window (measured: 18 accepted
+      folded-cascode + common_source candidates lost to a blanket floor).
+      Those candidates' high loop gain keeps the swing bench tracking well
+      past the Vdsat point, so the floor is not needed there.
+
+    ``feasible`` is ``False`` when an output-path device cannot fit its raw
+    budget even at the weakest inversion.
     """
     g = tech.width
     warnings: list[str] = []
+    feasible = True
+    vod_max_map = vod_max_map or {}
+    out_slots = _output_stage_slots(slot_transistors)
+    mirror_tied = _mirror_tied_refs(all_transistors)
+    cascode_load = any(
+        intents[d.ref].role == CASCODE
+        for d in slot_transistors.get("load", [])
+        if d.ref in intents)
 
     def snap_w(w_um: float) -> float:
         v = round(w_um / g.step) * g.step
@@ -167,11 +258,25 @@ def assign_geometry_gmid(
     # --- 1+2: per-device geometry from the LUT (block intent → gm/Id, L), W snapped ---
     W: dict[str, float] = {}
     L: dict[str, float] = {}
-    for ref, (device, _slot) in all_transistors.items():
+    for ref, (device, slot) in all_transistors.items():
         ti = intents[ref]
+        gm_id_min = None
+        vod = vod_max_map.get(ref)
+        if (vod is not None and slot in out_slots and ref not in mirror_tied
+                and not (cascode_load and ti.role == SIGNAL)):
+            gm_id_min, fits = swing_gm_id_floor(
+                model, device.type, model.length_for(ti.l_mult), vod)
+            if not fits:
+                feasible = False
+                warnings.append(
+                    f"{ref}: output stage cannot meet the swing spec — even "
+                    f"weak-inversion VDS_sat exceeds the {vod:.2f} V budget "
+                    f"(rail-to-spec headroom); relax the swing spec or raise "
+                    f"the supply.")
         geo = model.geometry_for(
             device.type, ids_map[ref], ti.role, gm_target_map.get(ref),
             gm_id=ti.gm_id, l_um=model.length_for(ti.l_mult),
+            gm_id_min=gm_id_min,
         )
         W[ref] = snap_w(geo.w_um)
         L[ref] = geo.l_um
@@ -202,4 +307,15 @@ def assign_geometry_gmid(
             vgs_v=model.vgs(device.type, W[ref], L[ref], ids),
             vds_sat_v=model.vds_sat(device.type, W[ref], L[ref], ids),
         )
-    return sizing, warnings
+
+    # --- 7: raw swing budget on mirror-tied output devices (post-mirror W) ---
+    for ref, (_device, slot) in all_transistors.items():
+        vod = vod_max_map.get(ref)
+        if (vod is not None and slot in out_slots and ref in mirror_tied
+                and sizing[ref].vds_sat_v > vod):
+            feasible = False
+            warnings.append(
+                f"{ref}: output stage cannot meet the swing spec — its mirror "
+                f"group's VDS_sat {sizing[ref].vds_sat_v:.2f} V exceeds the "
+                f"{vod:.2f} V budget (rail-to-spec headroom).")
+    return sizing, warnings, feasible

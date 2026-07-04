@@ -231,6 +231,7 @@ class GmIdModel:
     def geometry_for(
         self, dtype: str, ids: float, role: str, gm_target: float | None = None,
         *, gm_id: float | None = None, l_um: float | None = None,
+        gm_id_min: float | None = None,
     ) -> GeomResult:
         """Compute (W, L) for a device from its role and (optional) gm target.
 
@@ -243,6 +244,10 @@ class GmIdModel:
         explicit channel length.  When ``None`` they fall back to the role policy,
         so the default behaviour is unchanged.  ``gm_id`` is ignored for a signal
         device with a gm target — its gm/Id is always solved from the spec.
+
+        ``gm_id_min`` floors the operating gm/Id regardless of role — used to
+        cap VDS_sat for output-swing (weaker inversion = lower Vdsat).  Raising
+        a solved signal gm/Id is spec-safe: gm = (gm/Id)·Id only grows.
         """
         l_um = l_um if l_um is not None else self.role_length(role)
         capped = False
@@ -254,6 +259,8 @@ class GmIdModel:
             if gm_id > ceiling:
                 gm_id, capped = ceiling, True
             gm_id = max(gm_id, float(self.lut.gm_id_axis[0]))
+        if gm_id_min is not None:
+            gm_id = max(gm_id, gm_id_min)
         idw = self.lut.id_per_w(dtype, gm_id, l_um)
         w_um = abs(ids) / idw if idw > 0 else self.tech.width.max
         return GeomResult(w_um=w_um, l_um=l_um, gm_id=gm_id, gm_id_capped=capped)

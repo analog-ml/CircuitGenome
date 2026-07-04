@@ -53,7 +53,7 @@ def test_mirror_ratio_is_exact(tech, model):
     ids = {"mref": 10e-6, "mout": 25e-6}
     roles = {"mref": CURRENT_SOURCE, "mout": CURRENT_SOURCE}
 
-    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
+    sizing, _, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
 
     assert sizing["mout"].l_um == sizing["mref"].l_um            # matched length
     expected = _snap_w(tech, 2.5 * sizing["mref"].w_um)
@@ -73,7 +73,7 @@ def test_matched_pair_symmetry(tech, model):
     roles = {"m1": SIGNAL, "m2": SIGNAL}
     gmt = {"m1": 1e-4, "m2": 1e-4}
 
-    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), gmt, tech)
+    sizing, _, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), gmt, tech)
     assert sizing["m1"].w_um == sizing["m2"].w_um
     assert sizing["m1"].l_um == sizing["m2"].l_um
 
@@ -82,7 +82,7 @@ def test_geometry_on_grid(tech, model):
     d = Device(ref="m1", type="pmos", terminals={"d": "o1", "g": "in1", "s": "t"})
     all_t = {"m1": (d, "input_pair")}
     slot_t = {"input_pair": [d]}
-    sizing, _ = assign_geometry_gmid(
+    sizing, _, _ = assign_geometry_gmid(
         model, all_t, slot_t, {"m1": 5e-6}, _intents({"m1": SIGNAL}), {"m1": 1e-4}, tech)
     s = sizing["m1"]
     assert s.w_um == pytest.approx(_snap_w(tech, s.w_um))
@@ -117,7 +117,7 @@ def test_current_source_load_gets_margin(tech, model):
     the node settle toward the load's supply rail.
     """
     all_t, slot_t, ids, roles = _cs_load_circuit()
-    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
+    sizing, _, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
     exact = _snap_w(tech, 0.5 * sizing["mref"].w_um)
     expected = _snap_w(tech, 1.05 * exact)
     assert expected > exact  # margin representable on this width grid
@@ -129,7 +129,7 @@ def test_no_margin_without_a_tail(tech, model):
     """Without a tail current the balance is not knife-edge: exact ratio kept."""
     all_t, slot_t, ids, roles = _cs_load_circuit()
     del all_t["mt"], ids["mt"], roles["mt"], slot_t["tail_current"]
-    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
+    sizing, _, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
     exact = _snap_w(tech, 0.5 * sizing["mref"].w_um)
     assert sizing["ml1"].w_um == pytest.approx(exact)
 
@@ -140,7 +140,87 @@ def test_over_ceiling_request_warns_and_clamps(tech, model):
     all_t = {"m1": (d, "input_pair")}
     slot_t = {"input_pair": [d]}
     # gm_target/Id = 1e-3 / 5e-6 = 200 /V, far above the table ceiling (~24).
-    sizing, warns = assign_geometry_gmid(
+    sizing, warns, _ = assign_geometry_gmid(
         model, all_t, slot_t, {"m1": 5e-6}, _intents({"m1": SIGNAL}), {"m1": 1e-3}, tech)
     assert any("ceiling" in w for w in warns)
     assert sizing["m1"].w_um <= tech.width.max
+
+# --- swing-derived Vdsat budgets (vod_max_map, issue #126) -------------------
+
+def _output_stage_device():
+    d = Device(ref="mp1", type="pmos",
+               terminals={"d": "out", "g": "mid", "s": "vdd!"})
+    all_t = {"mp1": (d, "second_stage")}
+    slot_t = {"second_stage": [d]}
+    return all_t, slot_t
+
+
+def test_swing_budget_floors_output_gm_id(model, tech):
+    """An output-stage device's Vdsat is pushed to half its swing budget."""
+    all_t, slot_t = _output_stage_device()
+    ids, gmt = {"mp1": 50e-6}, {"mp1": 3e-4}   # solved gm/Id = 6 (strong)
+    base, _, _ = assign_geometry_gmid(
+        model, all_t, slot_t, ids, _intents({"mp1": SIGNAL}), gmt, tech)
+    sized, warns, feasible = assign_geometry_gmid(
+        model, all_t, slot_t, ids, _intents({"mp1": SIGNAL}), gmt, tech,
+        vod_max_map={"mp1": 0.3})
+    assert feasible and not warns
+    assert base["mp1"].vds_sat_v > 0.15          # solved point missed the margin
+    assert sized["mp1"].vds_sat_v <= 0.15 + 5e-3  # floored to ~budget/2
+    # spec-safe: the realized gm can only grow past the requirement
+    gm = model.gm("pmos", sized["mp1"].w_um, sized["mp1"].l_um, 50e-6)
+    assert gm >= 3e-4 * 0.99
+
+
+def test_swing_budget_infeasible_flags(model, tech):
+    """A budget below even weak-inversion Vdsat fails sizing explicitly."""
+    all_t, slot_t = _output_stage_device()
+    _, warns, feasible = assign_geometry_gmid(
+        model, all_t, slot_t, {"mp1": 50e-6}, _intents({"mp1": SIGNAL}),
+        {"mp1": 3e-4}, tech, vod_max_map={"mp1": 0.02})
+    assert not feasible
+    assert any("swing" in w for w in warns)
+
+
+def test_swing_budget_skips_mirror_outputs(model, tech):
+    """A mirror-tied output device keeps the diode's inversion level."""
+    mref = Device(ref="mref", type="nmos",
+                  terminals={"d": "nbias", "g": "nbias", "s": "0"})
+    mout = Device(ref="mout", type="nmos",
+                  terminals={"d": "out", "g": "nbias", "s": "0"})
+    all_t = {"mref": (mref, "bias_gen"), "mout": (mout, "second_stage")}
+    slot_t = {"bias_gen": [mref], "second_stage": [mout]}
+    ids = {"mref": 10e-6, "mout": 25e-6}
+    roles = {"mref": CURRENT_SOURCE, "mout": CURRENT_SOURCE}
+    base, _, _ = assign_geometry_gmid(
+        model, all_t, slot_t, ids, _intents(roles), {}, tech)
+    sized, _, feasible = assign_geometry_gmid(
+        model, all_t, slot_t, ids, _intents(roles), {}, tech,
+        vod_max_map={"mout": 0.3})
+    assert feasible
+    assert sized["mout"].w_um == base["mout"].w_um   # ratio to the diode kept
+
+
+def test_swing_budget_spares_driver_under_cascode_load(model, tech):
+    """With a cascode first-stage load, the driver's V_GS is the stage
+    interface pin — the swing floor must not move it."""
+    from circuitgenome.sizer.shared.device_model import CASCODE
+
+    d = Device(ref="mp1", type="pmos",
+               terminals={"d": "out", "g": "mid", "s": "vdd!"})
+    lc = Device(ref="ml_casc", type="pmos",
+                terminals={"d": "mid", "g": "bc", "s": "lx"})
+    all_t = {"mp1": (d, "second_stage"), "ml_casc": (lc, "load")}
+    slot_t = {"second_stage": [d], "load": [lc]}
+    intents = _intents({"mp1": SIGNAL})
+    intents["ml_casc"] = TransistorIntent(ref="ml_casc", block="cascode",
+                                          role=CASCODE, gm_id=8.0, l_mult=3.0,
+                                          rationale="")
+    ids = {"mp1": 50e-6, "ml_casc": 10e-6}
+    base, _, _ = assign_geometry_gmid(
+        model, all_t, slot_t, ids, intents, {"mp1": 3e-4}, tech)
+    sized, _, feasible = assign_geometry_gmid(
+        model, all_t, slot_t, ids, intents, {"mp1": 3e-4}, tech,
+        vod_max_map={"mp1": 0.3})
+    assert feasible
+    assert sized["mp1"].vgs_v == base["mp1"].vgs_v   # pin level untouched
