@@ -24,6 +24,9 @@ Before implementing:
 - No error handling for impossible scenarios.
 - If you write 200 lines and it could be 50, rewrite it.
 
+**Explaination**
+- Explain any issues, problems, or decisions that arise during coding in layman's terms.
+
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
 ## 3. Surgical Changes
