@@ -33,9 +33,15 @@ _FD_PAIRS = (("second_stage_p", "second_stage_n"),
 
 
 def _apply_symmetry(
-    W: dict[str, float], L: dict[str, float], slot_transistors: dict[str, list]
+    W: dict[str, float], L: dict[str, float], slot_transistors: dict[str, list],
+    ids_map: dict[str, float],
 ) -> None:
-    """Matched pairs share the anchor device's geometry (plain assignment)."""
+    """Matched pairs share the anchor device's geometry (plain assignment).
+
+    Devices match only at the same planned IDS — a folded-cascode load's
+    folding sinks (pair + cascode current) and its cascode devices (cascode
+    current only) are distinct groups.
+    """
     def equalize(refs: list[str]) -> None:
         anchor = refs[0]
         for r in refs[1:]:
@@ -44,10 +50,12 @@ def _apply_symmetry(
     for slot, devices in slot_transistors.items():
         if slot not in _SYMMETRY_SLOTS:
             continue
-        for dtype in ("nmos", "pmos"):
-            grp = [d.ref for d in devices if d.type == dtype and d.ref in W]
-            if grp:
-                equalize(grp)
+        groups: dict[tuple, list[str]] = {}
+        for d in devices:
+            if d.type in ("nmos", "pmos") and d.ref in W:
+                groups.setdefault((d.type, ids_map.get(d.ref)), []).append(d.ref)
+        for grp in groups.values():
+            equalize(grp)
 
     for sp, sn in _FD_PAIRS:
         p_devs, n_devs = slot_transistors.get(sp, []), slot_transistors.get(sn, [])
@@ -139,7 +147,7 @@ def assign_geometry_gmid(
                 f"(the design will fall short).")
 
     # --- 3: symmetry (matched pairs share the anchor's geometry) ---
-    _apply_symmetry(W, L, slot_transistors)
+    _apply_symmetry(W, L, slot_transistors, ids_map)
 
     # --- 4: current-mirror ratios (exact, no Fraction approximation) ---
     _apply_mirror_ratios(W, L, all_transistors, ids_map, snap_w)

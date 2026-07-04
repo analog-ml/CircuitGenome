@@ -86,16 +86,18 @@ def _bias_leg_r(blocks_mosfets, sizing, rail="net_bias2"):
 
 
 def test_tunable_leg_nmos_cascode_rail():
-    """NMOS cascode consumer: rail = Vdsat(bottom) + Vgs(cascode) above gnd."""
+    """NMOS cascode consumer: rail = Vdsat(bottom) + margin + Vgs(cascode)
+    above gnd."""
     from circuitgenome.synthesizer.models import Device
     casc = Device(ref="mn1_load", type="nmos",
                   terminals={"d": "net_x", "g": "net_bias2", "s": "net_fold"})
     bottom = Device(ref="mn3_load", type="nmos",
                     terminals={"d": "net_fold", "g": "net_bias1", "s": "gnd!"})
+    from circuitgenome.sizer.gmid.resistors import _CASCODE_SAT_MARGIN_V as m
     sizing = {"mn1_load": _casc_sz("mn1_load", 0.45, 0.12),
               "mn3_load": _casc_sz("mn3_load", 0.40, 0.15)}
     r = _bias_leg_r({"load": [casc, bottom]}, sizing)
-    assert r == pytest.approx((0.15 + 0.45) / 15e-6)   # 40 kΩ
+    assert r == pytest.approx((0.15 + m + 0.45) / 15e-6)
 
 
 def test_tunable_leg_pmos_cascode_anchors_at_input_pair():
@@ -106,11 +108,12 @@ def test_tunable_leg_pmos_cascode_anchors_at_input_pair():
                   terminals={"d": "net_out", "g": "net_bias2", "s": "net_in1"})
     ip = Device(ref="m1_input_pair", type="pmos",
                 terminals={"d": "net_in1", "g": "vin", "s": "net_tail"})
+    from circuitgenome.sizer.gmid.resistors import _CASCODE_SAT_MARGIN_V as m
     sizing = {"mp1_load": _casc_sz("mp1_load", 0.50, 0.10),
               "m1_input_pair": _casc_sz("m1_input_pair", 0.40, 0.10)}
     r = _bias_leg_r({"load": [casc], "input_pair": [ip]}, sizing)
-    # Vcm + (|Vgs_ip| - |Vdsat_ip|) - |Vgs_casc| = 0.5 + 0.3 - 0.5 = 0.3 V
-    assert r == pytest.approx(0.3 / 15e-6)             # 20 kΩ
+    # Vcm + (|Vgs_ip| - |Vdsat_ip| - margin) - |Vgs_casc| = 0.5 + (0.3 - m) - 0.5
+    assert r == pytest.approx((0.3 - m) / 15e-6)
 
 
 def test_tunable_leg_conflicting_supply_gates_take_mean():
