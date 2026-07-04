@@ -22,6 +22,14 @@ from .blocks import OpAmpBlocks
 from .intent import GmIdIntent
 
 
+# Saturation margin (V) added per device when a cascode-rail walk budgets the
+# stack's Vdsat sum.  Placing a node exactly at the planned saturation edge is
+# a knife edge: the LUT's Vgs/Vdsat are characterized at Vds=Vdd/2, so the
+# realized operating point lands a few tens of mV off and the SPICE bias check
+# reads the device as triode.
+_CASCODE_SAT_MARGIN_V = 0.1
+
+
 @dataclass(frozen=True)
 class MetricModifiers:
     """How the sized resistor network alters the metric evaluation (Phase 5).
@@ -166,12 +174,14 @@ def _stack_node_v(node: str, consumer: Device, mosfets: list[Device],
     """Saturation floor (NMOS) / ceiling (PMOS) of internal *node*.
 
     Walks the same-type stack from *node* toward the consumer's back rail,
-    summing each device's planned ``Vdsat`` so everything below (NMOS) /
-    above (PMOS) the cascode stays saturated. A signal device in the stack
+    summing each device's planned ``Vdsat`` plus a saturation margin
+    (:data:`_CASCODE_SAT_MARGIN_V`) so everything below (NMOS) / above (PMOS)
+    the cascode stays saturated with slack. A signal device in the stack
     (telescopic loads: the cascode sits on the input pair) anchors the walk
-    at its own saturation edge with the gate at the input common mode,
-    ``Vcm ∓ (|Vgs| - |Vdsat|)``. Returns ``None`` when the stack cannot be
-    traced (no device below, sizing missing, or wrong terminating rail).
+    a margin inside its own saturation edge with the gate at the input common
+    mode, ``Vcm ∓ (|Vgs| - |Vdsat| - margin)``. Returns ``None`` when the
+    stack cannot be traced (no device below, sizing missing, or wrong
+    terminating rail).
     """
     sign = 1.0 if consumer.type == "nmos" else -1.0
     vcm = (spec.vdd + spec.vss) / 2.0
@@ -188,8 +198,11 @@ def _stack_node_v(node: str, consumer: Device, mosfets: list[Device],
         if not (dev and s and s.vgs_v and s.vds_sat_v):
             return None
         if is_signal_device(dev):
-            return vcm - sign * (abs(s.vgs_v) - abs(s.vds_sat_v)) + sign * acc
-        acc += abs(s.vds_sat_v)
+            return (vcm
+                    - sign * (abs(s.vgs_v) - abs(s.vds_sat_v)
+                              - _CASCODE_SAT_MARGIN_V)
+                    + sign * acc)
+        acc += abs(s.vds_sat_v) + _CASCODE_SAT_MARGIN_V
         node = dev.terminals.get("s")
     if (consumer.type == "nmos") == (node == "vdd!"):
         return None  # stack terminated on the wrong supply

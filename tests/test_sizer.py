@@ -933,3 +933,86 @@ def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
     assert len(ip) == 2
     a, b = (result.transistors[r] for r in ip)
     assert a.w_um == b.w_um and a.l_um == b.l_um  # matched differential pair
+
+
+# ---------------------------------------------------------------------------
+# Cascode-load current plan (KCL at the folding node)
+# ---------------------------------------------------------------------------
+
+def _ids_plan(topology_name: str, variant_filter: dict[str, str]):
+    from circuitgenome.sizer.shared.preprocess import (
+        assign_ids, deduplicate_devices, extract_slot_transistors)
+    _parsed, _sr, fbr_result, _topology = _fbr(topology_name, variant_filter)
+    slot_transistors = extract_slot_transistors(fbr_result)
+    spec = SizingSpec(vdd=5.0, vss=0.0, ibias=20e-6, cl=5e-12)
+    return assign_ids(slot_transistors, deduplicate_devices(slot_transistors), spec)
+
+
+def test_folded_cascode_load_current_plan():
+    """Folding sinks carry pair + cascode current; the rest carry ibias/2."""
+    ids = _ids_plan("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_single_output"})
+    # mn3/mn4 sink the pair branch (ibias/2) plus the cascode branch (ibias/2).
+    assert ids["mn3_load"] == pytest.approx(20e-6)
+    assert ids["mn4_load"] == pytest.approx(20e-6)
+    for ref in ("mn1_load", "mn2_load",
+                "mp1_load", "mp2_load", "mp3_load", "mp4_load"):
+        assert ids[ref] == pytest.approx(10e-6)
+
+
+def test_folded_cascode_load_nmos_input_current_plan():
+    """NMOS-input mirror image: the PMOS folding sources carry pair + cascode."""
+    ids = _ids_plan("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_nmos",
+        "load": "folded_cascode_load_nmos_input_single_output"})
+    assert ids["mp1_load"] == pytest.approx(20e-6)
+    assert ids["mp2_load"] == pytest.approx(20e-6)
+    for ref in ("mp3_load", "mp4_load",
+                "mn1_load", "mn2_load", "mn3_load", "mn4_load"):
+        assert ids[ref] == pytest.approx(10e-6)
+
+
+def test_telescopic_cascode_load_current_plan():
+    """No folding node: the whole telescopic stack carries the pair current."""
+    ids = _ids_plan("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_pmos",
+        "load": "telescopic_cascode_load_pmos"})
+    for ref in ("mp1_load", "mp2_load",
+                "mn1_load", "mn2_load", "mn3_load", "mn4_load"):
+        assert ids[ref] == pytest.approx(10e-6)
+
+
+def test_simple_load_current_plan_unchanged():
+    """Non-cascode loads keep the generic ibias/2-per-device rule."""
+    ids = _ids_plan("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos"})
+    assert ids["m1_load"] == pytest.approx(10e-6)
+    assert ids["m2_load"] == pytest.approx(10e-6)
+
+
+def test_folded_cascode_sink_tracks_bias_leg_gmid():
+    """gm/Id path: the folding sinks mirror the bias leg at the sink current.
+
+    The rail-1 leg diode (mn1_bias_gen) carries ibias; the folding sinks are
+    planned at ibias too, so the mirror ratio is 1 → identical W and L.
+    """
+    tech = load_tech("ptm45")
+    parsed, sr_result, fbr_result, topology = _fbr(
+        "two_stage_opamp_single_ended", {
+            "input_pair": "differential_pair_pmos",
+            "load": "folded_cascode_load_pmos_input_single_output"})
+    spec = SizingSpec(
+        vdd=1.0, vss=0.0, ibias=20e-6, cl=2e-12,
+        second_stage_current_ratio=2.5,
+        gain_min_db=50, gbw_min_hz=5e6, phase_margin_min_deg=60,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.solver_status == "GMID"
+    sink = result.transistors["mn3_load"]
+    leg = result.transistors["mn1_bias_gen"]
+    assert sink.ids_a == pytest.approx(20e-6)
+    assert sink.w_um == leg.w_um and sink.l_um == leg.l_um
+    # Cascode devices carry half the sink current and size independently.
+    assert result.transistors["mn1_load"].ids_a == pytest.approx(10e-6)
