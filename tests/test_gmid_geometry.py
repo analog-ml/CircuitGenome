@@ -90,6 +90,50 @@ def test_geometry_on_grid(tech, model):
     assert tech.length.min <= s.l_um <= tech.length.max
 
 
+def _cs_load_circuit():
+    """Single-ended first stage: mirrored current-source loads + a MOSFET tail."""
+    mref = Device(ref="mref", type="nmos",
+                  terminals={"d": "nbias", "g": "nbias", "s": "0"})
+    ml1 = Device(ref="ml1", type="nmos",
+                 terminals={"d": "o1", "g": "nbias", "s": "0"})
+    ml2 = Device(ref="ml2", type="nmos",
+                 terminals={"d": "o2", "g": "nbias", "s": "0"})
+    mt = Device(ref="mt", type="pmos",
+                terminals={"d": "t", "g": "pbias", "s": "vdd!"})
+    all_t = {"mref": (mref, "bias_gen"), "ml1": (ml1, "load"),
+             "ml2": (ml2, "load"), "mt": (mt, "tail_current")}
+    slot_t = {"bias_gen": [mref], "load": [ml1, ml2], "tail_current": [mt]}
+    # Currents large enough that a 5% width margin is representable on the grid.
+    ids = {"mref": 200e-6, "ml1": 100e-6, "ml2": 100e-6, "mt": 200e-6}
+    roles = {r: CURRENT_SOURCE for r in ids}
+    return all_t, slot_t, ids, roles
+
+
+def test_current_source_load_gets_margin(tech, model):
+    """A single-ended plain current-source load runs _LOAD_CS_MARGIN strong.
+
+    The exact mirror ratio would leave the load-vs-tail current balance on a
+    knife edge (no feedback fixes the fold node); the deliberate margin makes
+    the node settle toward the load's supply rail.
+    """
+    all_t, slot_t, ids, roles = _cs_load_circuit()
+    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
+    exact = _snap_w(tech, 0.5 * sizing["mref"].w_um)
+    expected = _snap_w(tech, 1.05 * exact)
+    assert expected > exact  # margin representable on this width grid
+    assert sizing["ml1"].w_um == pytest.approx(expected)
+    assert sizing["ml2"].w_um == pytest.approx(expected)
+
+
+def test_no_margin_without_a_tail(tech, model):
+    """Without a tail current the balance is not knife-edge: exact ratio kept."""
+    all_t, slot_t, ids, roles = _cs_load_circuit()
+    del all_t["mt"], ids["mt"], roles["mt"], slot_t["tail_current"]
+    sizing, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
+    exact = _snap_w(tech, 0.5 * sizing["mref"].w_um)
+    assert sizing["ml1"].w_um == pytest.approx(exact)
+
+
 def test_over_ceiling_request_warns_and_clamps(tech, model):
     """A gm/Id beyond the weak-inversion ceiling is clamped with a warning."""
     d = Device(ref="m1", type="nmos", terminals={"d": "o1", "g": "in1", "s": "0"})
