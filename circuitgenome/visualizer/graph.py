@@ -21,6 +21,9 @@ from circuitgenome.synthesizer.cmfb_compatibility import is_cmfb_compatible
 from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
+from circuitgenome.synthesizer.second_stage_compatibility import (
+    is_second_stage_compatible,
+)
 from circuitgenome.synthesizer.tail_current_compatibility import (
     is_tail_current_compatible,
 )
@@ -134,6 +137,11 @@ def explain_incompatibility(topology: TopologyTemplate, variant_map: dict[str, M
     if not is_combination_valid(variant_map):
         reasons.append(
             "Polarity mismatch between input_pair/load/tail_current (is_combination_valid)."
+        )
+    if not is_second_stage_compatible(topology, variant_map):
+        reasons.append(
+            "second_stage signal device has the input pair's own channel type; "
+            "the stage-interface DC level is unreachable (is_second_stage_compatible)."
         )
     if not is_output_type_compatible(topology, variant_map):
         reasons.append(

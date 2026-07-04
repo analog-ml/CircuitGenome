@@ -38,6 +38,8 @@ SPICE netlists.
 
 - `polarity_compatibility.py` — polarity compatibility filter
   (`is_combination_valid`).
+- `second_stage_compatibility.py` — stage-interface level compatibility
+  filter (`is_second_stage_compatible`).
 - `output_compatibility.py` — output-cardinality compatibility filter
   (`is_output_type_compatible`).
 - `cmfb_compatibility.py` — cmfb-slot compatibility filter and pruning
@@ -51,7 +53,7 @@ SPICE netlists.
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 
-These six modules all follow the same shape (see "Pattern for small internal
+These seven modules all follow the same shape (see "Pattern for small internal
 pure-function modules" below) and are invoked, in this order, from
 `enumerate_circuits` (see "pipeline order" below).
 
@@ -118,6 +120,23 @@ polarity doesn't match `input_pair`'s (untagged variants, e.g.
 `inverter_based_input` and all `bias_generation` variants, impose no
 constraint). To support a new/edited variant, just add the right `polarity:`
 tag in YAML — no code changes needed.
+
+## Stage-interface compatibility filter (`second_stage_compatibility.py`)
+
+A `second_stage` variant whose *signal device* (the transistor whose gate is
+the `in` port) has the **same** channel type as the input pair is
+structurally unbiasable when it senses the first stage's output (issue
+#109): an NMOS pair's output window is confined high (its floor is the tail
+node) while an NMOS-gate stage needs its gate a `Vgs` above gnd — disjoint,
+so no sizing can bias the interface (mirror-type loads pin the pair in
+triode, range-limited loads rail). `is_second_stage_compatible` detects the
+signal device structurally (no YAML tags) and only constrains
+`second_stage`-category slots whose `in` net is one of the load's output
+nets (`load.out`/`out1`/`out2`) — the 3-stage topologies' `third_stage`
+slot senses the second stage's wide-swing output instead and is deliberately
+unconstrained. Untagged input pairs (`inverter_based_input`) impose no
+constraint. New `second_stage` variants are classified automatically by
+whichever device gates `in`.
 
 ## Output-cardinality compatibility filter (`output_compatibility.py`)
 
@@ -246,33 +265,36 @@ filters/transforms:
    (the `bias_generation` slot is excluded from the product — its variant
    is constructed in step 9).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
-3. `is_output_type_compatible(topology, variant_map)` — skip on
+3. `is_second_stage_compatible(topology, variant_map)` — skip on
+   stage-interface level mismatch (see "Stage-interface compatibility
+   filter" above).
+4. `is_output_type_compatible(topology, variant_map)` — skip on
    output-cardinality mismatch.
-4. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
+5. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
    irrelevant for this `load` (see "CMFB compatibility filter" above).
-5. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
+6. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
    `variant_map["cmfb"]` (only if the topology has a `cmfb` slot).
-6. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
+7. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
    variant choice is irrelevant for this `input_pair` (see "Tail-current
    compatibility filter" above).
-7. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
+8. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
    replacing `variant_map["tail_current"]`.
-8. `construct_bias_generation(topology, variant_map, bias_legs)` →
+9. `construct_bias_generation(topology, variant_map, bias_legs)` →
    `variant_map[bias_gen_slot]` (see "Demand-driven bias construction"
    above; must run after the cmfb/tail_current prunes so placeholders
    demand nothing).
-9. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
-   then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
-   `load` slot's `port_net_map` is captured separately as
-   `load_port_net_map`.
-10. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+10. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+    then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
+    `load` slot's `port_net_map` is captured separately as
+    `load_port_net_map`.
+11. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
     topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
     net-merge pass for `load` ports declared `alias_of` another `load` port
     (see "Net-naming & wiring conventions" above).
-11. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+12. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
     devices)`.
 
-Any new per-combination transform should slot in between steps 4 and 9,
+Any new per-combination transform should slot in between steps 5 and 10,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 

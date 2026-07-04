@@ -180,6 +180,18 @@ def test_explain_incompatibility(topologies, by_name):
     reasons2 = explain_incompatibility(topo, cardinality_bad)
     assert any("output_cardinality" in r for r in reasons2)
 
+    stage_bad = _variant_map(by_name, {
+        "input_pair": "differential_pair_nmos",
+        "load": "resistor_load_vdd",
+        "tail_current": "current_mirror_tail_nmos",
+        "compensation": "miller_cap",
+        "second_stage": "common_source",
+    })
+    reasons3 = explain_incompatibility(
+        topologies["two_stage_opamp_single_ended"], stage_bad
+    )
+    assert any("stage-interface" in r for r in reasons3)
+
 
 def test_enumerate_circuits_count_unchanged_after_refactor(modules, topologies):
     """Sanity check that build_circuit (shared with enumerate_circuits in

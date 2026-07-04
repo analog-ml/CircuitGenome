@@ -30,6 +30,7 @@ from .models import (
 )
 from .net_aliasing import apply_net_rename, compute_alias_net_rename
 from .output_compatibility import is_output_type_compatible
+from .second_stage_compatibility import is_second_stage_compatible
 from .tail_current_compatibility import is_tail_current_compatible, prune_tail_current
 
 _default_bias_legs_cache: BiasLegLibrary | None = None
@@ -112,6 +113,7 @@ def build_circuit(
 
     Returns ``None`` if *variant_map* is rejected by
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
+    :func:`~circuitgenome.synthesizer.second_stage_compatibility.is_second_stage_compatible`,
     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
     :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
     :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`.
@@ -129,6 +131,8 @@ def build_circuit(
     variant_map = dict(variant_map)  # don't mutate caller's dict
 
     if not is_combination_valid(variant_map):
+        return None
+    if not is_second_stage_compatible(topology, variant_map):
         return None
     if not is_output_type_compatible(topology, variant_map):
         return None
@@ -186,6 +190,15 @@ def enumerate_circuits(
     Combinations that mix incompatible ``polarity`` tags (see
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
+
+    Combinations where a ``second_stage`` slot sensing the first stage's
+    output has a signal device of the same channel type as the input pair
+    (see
+    :func:`~circuitgenome.synthesizer.second_stage_compatibility.is_second_stage_compatible`)
+    are also skipped -- the first stage's reachable output window and the
+    second stage's required gate level are disjoint, so no sizing can bias
+    the interface (the ``third_stage`` slot senses a wide-swing node instead
+    and is not constrained).
 
     Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't
     match *topology*'s ``output_type`` (see

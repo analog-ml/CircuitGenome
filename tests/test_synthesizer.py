@@ -6,6 +6,10 @@ from circuitgenome.synthesizer.bias_construction import (
 )
 from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
+from circuitgenome.synthesizer.second_stage_compatibility import (
+    is_second_stage_compatible,
+    signal_device_type,
+)
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.tail_current_compatibility import (
     CANONICAL_TAIL_CURRENT_VARIANT,
@@ -140,7 +144,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source_pmos"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
@@ -332,6 +336,126 @@ def test_enumerate_circuits_excludes_polarity_mismatches():
                 f"({input_pair.polarity}) vs {slot_name}={variant.name} "
                 f"({variant.polarity})"
             )
+
+
+def test_second_stage_signal_device_types():
+    """Each second_stage variant's signal device (the transistor whose gate
+    is the `in` port) is detected structurally: NMOS for common_source and
+    differential_ota_second_stage, PMOS for common_source_pmos and
+    common_drain."""
+    modules = load_modules()
+    types = {v.name: signal_device_type(v) for v in modules["second_stage"]}
+    assert types == {
+        "common_source": "nmos",
+        "common_source_pmos": "pmos",
+        "common_drain": "pmos",
+        "differential_ota_second_stage": "nmos",
+    }
+
+
+def test_second_stage_filter_rejects_same_polarity_stage():
+    """A second_stage whose signal device has the input pair's own channel
+    type is structurally unbiasable (issue #109): the pair's reachable
+    output window and the stage's required gate level are disjoint. An NMOS
+    pair is rejected with the NMOS-gate stages, a PMOS pair with the
+    PMOS-gate stages."""
+    modules = load_modules()
+    topologies = load_topologies()
+    two_stage_se_topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+
+    bad_combos = [
+        ("differential_pair_nmos", "common_source"),
+        ("differential_pair_nmos", "differential_ota_second_stage"),
+        ("differential_pair_nmos_degenerated", "common_source"),
+        ("differential_pair_pmos", "common_drain"),
+        ("differential_pair_pmos", "common_source_pmos"),
+        ("differential_pair_pmos_degenerated", "common_drain"),
+    ]
+    for input_pair, second_stage in bad_combos:
+        variant_map = {
+            "input_pair": by_name[input_pair],
+            "second_stage": by_name[second_stage],
+        }
+        assert not is_second_stage_compatible(two_stage_se_topo, variant_map), (
+            input_pair, second_stage,
+        )
+
+
+def test_second_stage_filter_allows_complementary_stage_and_untagged_pair():
+    """The complement pairings pass -- an NMOS pair's high output level
+    suits the PMOS-gate stages and vice versa -- and the untagged
+    inverter_based_input imposes no constraint at all (its output sits near
+    mid-rail, reachable by either gate type)."""
+    modules = load_modules()
+    topologies = load_topologies()
+    two_stage_se_topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+
+    good_combos = [
+        ("differential_pair_nmos", "common_drain"),
+        ("differential_pair_nmos", "common_source_pmos"),
+        ("differential_pair_nmos_degenerated", "common_source_pmos"),
+        ("differential_pair_pmos", "common_source"),
+        ("differential_pair_pmos", "differential_ota_second_stage"),
+        ("differential_pair_pmos_degenerated", "common_source"),
+    ]
+    good_combos += [
+        ("inverter_based_input", ss.name) for ss in modules["second_stage"]
+    ]
+    for input_pair, second_stage in good_combos:
+        variant_map = {
+            "input_pair": by_name[input_pair],
+            "second_stage": by_name[second_stage],
+        }
+        assert is_second_stage_compatible(two_stage_se_topo, variant_map), (
+            input_pair, second_stage,
+        )
+
+
+def test_second_stage_filter_leaves_third_stage_unconstrained():
+    """Only the slot sensing the first stage's output is constrained: the
+    3-stage topologies' third_stage slot senses net_mid2 -- the second
+    stage's wide-swing common-source output, which can meet either gate
+    level -- so any third_stage variant passes as long as second_stage
+    itself is compatible."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "three_stage_opamp_nmc_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+
+    for third_stage in modules["second_stage"]:
+        variant_map = {
+            "input_pair": by_name["differential_pair_nmos"],
+            "second_stage": by_name["common_source_pmos"],
+            "third_stage": third_stage,
+        }
+        assert is_second_stage_compatible(topo, variant_map), third_stage.name
+
+    # ...but the same NMOS-gate variant in the *second_stage* slot still fails.
+    variant_map = {
+        "input_pair": by_name["differential_pair_nmos"],
+        "second_stage": by_name["common_source"],
+        "third_stage": by_name["common_source"],
+    }
+    assert not is_second_stage_compatible(topo, variant_map)
+
+
+def test_enumerate_circuits_excludes_same_polarity_second_stages():
+    """Every synthesized 2-stage single-ended circuit pairs a tagged input
+    pair with a second_stage whose signal device is the complementary
+    channel type."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+
+    pair_type = {"nmos_input": "nmos", "pmos_input": "pmos"}
+    for circuit in enumerate_circuits(topo, modules):
+        input_pair = circuit.variant_map["input_pair"]
+        if input_pair.polarity is None:
+            continue
+        stage_type = signal_device_type(circuit.variant_map["second_stage"])
+        assert stage_type != pair_type[input_pair.polarity], circuit.name
 
 
 def test_output_cardinality_tags_cover_folded_and_telescopic_cascode_loads():
@@ -615,14 +739,17 @@ def test_enumerate_circuits_count():
     12), for 84 effective combinations -- of those, 70 also have an
     output_cardinality compatible with single_ended (the 14
     "differential"-cardinality combos are excluded; see
-    test_is_output_type_compatible_*). The bias generator is constructed,
-    not enumerated, so it contributes no factor: 70 x 3 second_stage x 3
-    comp = 630."""
+    test_is_output_type_compatible_*). is_second_stage_compatible keeps 2 of
+    the 4 second_stage variants for the 60 combos using a tagged
+    differential pair and all 4 for the 10 inverter_based_input combos (see
+    test_second_stage_filter_*). The bias generator is constructed, not
+    enumerated, so it contributes no factor: (60 x 2 + 10 x 4) x 3 comp =
+    480."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 630
+    assert len(circuits) == 480
 
 
 def test_enumerate_circuits_fully_differential_count():
@@ -634,15 +761,17 @@ def test_enumerate_circuits_fully_differential_count():
     "differential"-cardinality load -- the only loads with a real bias_cmfb
     consumer -- and keep both cmfb variants (14 x 2 = 28); the other 42 have
     no bias_cmfb consumer, so is_cmfb_compatible collapses cmfb to 1 canonical
-    variant (42 x 1 = 42). 28 + 42 = 70 effective load/cmfb combinations.
-    The bias generator is constructed, not enumerated, so it contributes no
-    factor: 70 x 9 (second_stage_p x second_stage_n) x 9 (comp_p x comp_n)
-    = 5670."""
+    variant (42 x 1 = 42). 28 + 42 = 70 effective load/cmfb combinations, 60
+    of which use a tagged differential pair and keep 2 of the 4 second_stage
+    variants per output path (see test_second_stage_filter_*; both
+    second_stage_p and second_stage_n sense the first stage). The bias
+    generator is constructed, not enumerated, so it contributes no factor:
+    (60 x 2^2 + 10 x 4^2) x 9 (comp_p x comp_n) = 3600."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 5670
+    assert len(circuits) == 3600
 
 
 def test_flat_spice_structure():
@@ -725,15 +854,18 @@ def test_synthesize_topology_filter():
 def test_enumerate_three_stage_single_ended_count():
     """3-stage single-ended (NMC/RNMC): 70 polarity-and-output_cardinality-valid
     input_pair/load/tail_current combinations (see test_enumerate_circuits_count).
-    The bias generator is constructed, not enumerated, so it contributes no
-    factor: 70 x 9 (second_stage x third_stage) x 3 comp1 x 3 comp2 =
-    5670."""
+    Only the second_stage slot senses the first stage, so it keeps 2 of the 4
+    second_stage variants for the 60 tagged-pair combos (all 4 for the 10
+    inverter combos); the third_stage slot is unconstrained and keeps all 4
+    (see test_second_stage_filter_*). The bias generator is constructed, not
+    enumerated, so it contributes no factor: (60 x 2 + 10 x 4) x 4
+    third_stage x 3 comp1 x 3 comp2 = 5760."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 5670
+        assert len(circuits) == 5760
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
@@ -757,10 +889,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 5670
+    assert len(nmc) == 5760
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 5670
+    assert len(rnmc) == 5760
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
@@ -1228,7 +1360,8 @@ def test_enumerate_circuits_constructed_bias_matches_consumer_flavors():
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
 
-    rail5_diode = {"common_source": "pmos", "common_drain": "nmos",
+    rail5_diode = {"common_source": "pmos", "common_source_pmos": "nmos",
+                   "common_drain": "nmos",
                    "differential_ota_second_stage": "pmos"}
     for circuit in enumerate_circuits(topo, modules):
         bias = circuit.variant_map["bias_gen"]
@@ -1301,8 +1434,9 @@ def test_enumerate_circuits_constructs_rail_5_leg_for_two_stage_simple_load():
 
 def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
     """A real-cmfb fully-differential combination mixes rail kinds --
-    gate_vdd (rails 1, 5), tunable (rails 2, 3), gate_gnd (rail 4, the cmfb
-    tail), and current_source (rail 7, the NMOS mirror tail's diode) -- and
+    gate_vdd (rail 1), tunable (rails 2, 3), gate_gnd (rails 4 and 5, the
+    cmfb tail and the PMOS second stage's NMOS sink gate), and
+    current_source (rail 7, the NMOS mirror tail's diode) -- and
     the constructed generator serves all of them at once, with a single
     shared pref branch and no rail-7 diode of its own. Under the retired
     single-flavor variants this consumer set could only enumerate with
@@ -1315,7 +1449,7 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source_pmos"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
@@ -1407,9 +1541,9 @@ def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails():
     """two_stage_opamp_single_ended + simple load + second_stage (rail 5) +
     current_mirror_tail_nmos (rail 7): the two roles get distinct,
     independent bias rails -- and *each* gets its structurally right leg
-    (vdd-referenced diode for common_source, bare current source for the
-    tail), where the retired single-flavor generators could only cover this
-    mixed set with resistor_bias."""
+    (gnd-referenced diode for common_source_pmos, bare current source for
+    the tail), where the retired single-flavor generators could only cover
+    this mixed set with resistor_bias."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     simple_modules = {
@@ -1417,7 +1551,7 @@ def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails():
         "load": [v for v in modules["load"] if v.name == "resistor_load_vdd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source_pmos"],
     }
 
     circuits = list(enumerate_circuits(topo, simple_modules))
@@ -1426,7 +1560,7 @@ def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails():
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out7"]
-    # master + cascoded pref branch (7) + gate_vdd leg (2)
+    # master + cascoded pref branch (7) + gate_gnd leg (2)
     # + bare current-source leg (1)
     assert len(bias_variant.devices) == 11
 
@@ -1556,7 +1690,11 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     cascode legs + one bare current leg = 23 devices), and each role's
     devices reference a distinct net_bias{N}. A differential-output folded-cascode load is only
     output_cardinality-compatible with fully_differential topologies, so this
-    uses the fully-differential 3-stage NMC topology."""
+    uses the fully-differential 3-stage NMC topology. The second_stage pool
+    carries both common_source variants: the stage-interface filter forces
+    the NMOS pair's second_stage_p/n slots onto common_source_pmos (rail 5:
+    gate_gnd) while the unconstrained third_stage_p/n slots take
+    common_source (rail 6: gate_vdd)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
     simple_modules = {
@@ -1564,7 +1702,7 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name in ("common_source", "common_source_pmos")],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
 
@@ -1611,7 +1749,7 @@ def test_synthesize_differential_output_folded_cascode_has_nondegenerate_cascode
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source_pmos"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
@@ -1655,7 +1793,7 @@ def test_synthesize_alias_of_load_merges_in_and_out_nets():
     wires load.in1 and load.out1 to separate nets (net_diff1 and
     net_loadout1), but the net-merge pass collapses them back into one --
     so r1_load (load.in1), m1_input_pair (input_pair.out1), and
-    mn1_second_stage_n (which senses the load's output) all land on the same
+    mp1_second_stage_n (which senses the load's output) all land on the same
     net, restoring the single shared in/out node these devices assume."""
     modules = load_modules()
     topologies = load_topologies()
@@ -1667,7 +1805,7 @@ def test_synthesize_alias_of_load_merges_in_and_out_nets():
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_gnd"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source_pmos"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
@@ -1675,6 +1813,6 @@ def test_synthesize_alias_of_load_merges_in_and_out_nets():
 
     load_in1_net = devices["r1_load"].terminals["t2"]
     input_pair_out1_net = devices["m1_input_pair"].terminals["d"]
-    second_stage_n_sense_net = devices["mn1_second_stage_n"].terminals["g"]
+    second_stage_n_sense_net = devices["mp1_second_stage_n"].terminals["g"]
 
     assert load_in1_net == input_pair_out1_net == second_stage_n_sense_net
