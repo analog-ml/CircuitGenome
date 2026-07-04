@@ -1037,3 +1037,82 @@ def test_folded_cascode_sink_tracks_bias_leg_gmid():
     assert sink.w_um == leg.w_um and sink.l_um == leg.l_um
     # Cascode devices carry half the sink current and size independently.
     assert result.transistors["mn1_load"].ids_a == pytest.approx(10e-6)
+
+
+# ---------------------------------------------------------------------------
+# Stage-interface window check + repair (issue #124)
+# ---------------------------------------------------------------------------
+
+_GF180_SPEC = dict(
+    vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+    second_stage_current_ratio=2.5,
+    gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60,
+)
+
+
+def _size_gf180(variants, **spec_overrides):
+    tech = load_tech("gf180mcu")
+    parsed, sr_result, fbr_result, topology = _fbr(
+        "two_stage_opamp_single_ended", variants)
+    spec = SizingSpec(**{**_GF180_SPEC, **spec_overrides})
+    return size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+
+
+def test_stage_interface_repairs_telescopic_cs():
+    """Telescopic PMOS load + NMOS common-source: the mirror stack is moved to
+    weak inversion until the second stage's pin level clears it (issue #124:
+    unrepaired, the pin sits ~60 mV below the stack and mn2_load triodes)."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "telescopic_cascode_load_pmos",
+        "second_stage": "common_source"})
+    assert result.solver_status == "GMID"
+    assert result.bias_feasible
+    assert not any("stage interface" in w for w in result.warnings)
+    # Physical window: the mirror output leg needs the first-stage output at
+    # Vgs(mn3 diode) + Vdsat(mn2 cascode); the second stage pins it at its Vgs.
+    stack = (abs(result.transistors["mn3_load"].vgs_v)
+             + result.transistors["mn2_load"].vds_sat_v)
+    pin = abs(result.transistors["mn1_second_stage"].vgs_v)
+    assert stack + 0.049 <= pin
+
+
+def test_stage_interface_repairs_follower_pin():
+    """Telescopic PMOS load + PMOS follower: the follower's pin level
+    (Vout − |Vgs|) starts far below the mirror stack; repair moves the
+    follower toward weak inversion (smaller |Vgs| → higher pin, spec-safe)
+    and the mirror toward a lower stack until both clear."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "telescopic_cascode_load_pmos",
+        "second_stage": "common_drain"})
+    assert result.bias_feasible
+    assert not any("stage interface" in w for w in result.warnings)
+    stack = (abs(result.transistors["mn3_load"].vgs_v)
+             + result.transistors["mn2_load"].vds_sat_v)
+    vout_q = (3.3 + 0.0) / 2.0
+    pin = vout_q - abs(result.transistors["mp1_second_stage"].vgs_v)
+    assert stack + 0.049 <= pin
+
+
+def test_stage_interface_rejects_unclosable_gap():
+    """At a 2.0 V supply the PMOS follower cannot pin the node above the
+    telescopic mirror stack at any LUT point: honest plan-time reject with an
+    explanatory warning instead of a wasted SPICE evaluation."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "telescopic_cascode_load_pmos",
+        "second_stage": "common_drain"}, vdd=2.0)
+    assert not result.bias_feasible
+    assert any("stage interface" in w for w in result.warnings)
+
+
+def test_stage_interface_leaves_fitting_candidates_alone():
+    """A folded-cascode load whose window already contains the pin (the
+    benchmark's passing family) stays feasible with no warning."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_single_output",
+        "second_stage": "common_source"})
+    assert result.bias_feasible
+    assert not any("stage interface" in w for w in result.warnings)
