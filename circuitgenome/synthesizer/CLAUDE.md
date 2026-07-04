@@ -80,14 +80,16 @@ list is current.
   terminal that references it.
 - `vdd`/`gnd` ports auto-connect to `vdd!`/`gnd!` unless the topology
   overrides them.
-- **Bias rails**: the topology YAML statically wires `bias_gen`'s 7
-  output rails (`out1..out7`) to one role each (the constructed variant
+- **Bias rails**: the topology YAML statically wires `bias_gen`'s 8
+  output rails (`out1..out8`) to one role each (the constructed variant
   only declares ports for consumed rails, so unconsumed connections are
   simply unused): `net_bias1..4`
   connect `out1-4` to `load.bias1/bias2/bias3/bias_cmfb` (same index);
   `net_bias5`/`net_bias6` connect `out5`/`out6` to `second_stage*.bias`/
   `third_stage*.bias` (shared by `_p`/`_n` instances in fully-differential
-  topologies); `net_bias7` connects `out7` to `tail_current.bias`. All of
+  topologies); `net_bias7` connects `out7` to `tail_current.bias`;
+  `net_bias8` connects `out8` to `tail_current.bias_casc` (the cascode
+  tails' wide-swing cascode-gate level, issue #111). All of
   these connections are static (no per-combination rewiring).
   `resistor_tail_vdd/gnd` declare `bias` as `optional` and are never wired.
   In `fully_differential` topologies, `net_bias4` also feeds the `cmfb`

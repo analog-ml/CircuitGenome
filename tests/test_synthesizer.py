@@ -1097,24 +1097,27 @@ def test_required_rail_kinds_second_stage_rail_5(stage_name, expected):
 @pytest.mark.parametrize(
     "tail_name,expected",
     [
-        ("current_mirror_tail_nmos", "current_source"),
-        ("cascode_current_mirror_tail_nmos", "current_source"),
-        ("current_mirror_tail_pmos", "current_sink"),
-        ("cascode_current_mirror_tail_pmos", "current_sink"),
+        ("current_mirror_tail_nmos", {7: "current_source"}),
+        ("cascode_current_mirror_tail_nmos",
+         {7: "current_source", 8: "cascode_gnd"}),
+        ("current_mirror_tail_pmos", {7: "current_sink"}),
+        ("cascode_current_mirror_tail_pmos",
+         {7: "current_sink", 8: "cascode_vdd"}),
     ],
 )
 def test_required_rail_kinds_mirror_tails_are_current_interfaces(tail_name, expected):
     """A mirror tail brings its own reference diode on rail 7, making the
     rail a *current* interface: an NMOS diode wants current sourced in, a
     PMOS diode wants it sunk out. The diode vote wins over the tail's own
-    mirror-output gate riding on the same rail, and the cascode tails'
-    stacked diode (internal-node source) resolves by channel type."""
+    mirror-output gate riding on the same rail. The wide-swing cascode
+    tails (issue #111) additionally consume rail 8 as a cascode level
+    (output cascode gate with its source on an internal stack node)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     variant_map = _variant_map_for(
         modules, topo, {"load": "resistor_load_gnd", "tail_current": tail_name}
     )
-    assert required_rail_kinds(topo, variant_map) == {7: expected}
+    assert required_rail_kinds(topo, variant_map) == expected
 
 
 def test_required_rail_kinds_third_stage_uses_rail_6():
@@ -1229,8 +1232,7 @@ def test_required_rail_kinds_all_seven_rails():
 )
 def test_rail_flavor_from_diode_tail_reference(tail_name, expected):
     """The mirror tails' reference diode on ``bias`` resolves by channel
-    type, including the cascode tails' stacked diode whose source is an
-    internal node; resistor tails have no diode."""
+    type; resistor tails have no diode."""
     modules = load_modules()
     tail = next(v for v in modules["tail_current"] if v.name == tail_name)
     assert rail_flavor_from_diode(tail.devices, "bias") == expected
@@ -1347,22 +1349,27 @@ def test_construct_bias_generation_mixed_flavors_share_one_generator():
 
 
 @pytest.mark.parametrize(
-    "tail_name,leg_refs",
+    "tail_name,out_ports,leg_refs",
     [
         # NMOS tail diode: current sourced in from a bare PMOS mirror (pref;
         # the pref branch arrives cascoded, with its ncasc level branch).
-        ("current_mirror_tail_nmos",
+        ("current_mirror_tail_nmos", ["out7"],
          {"mnref", "mnfeed", "mpfeed", "mpcasc", "mncdio", "mnpref", "mncasc",
           "mppref", "mp7"}),
-        ("cascode_current_mirror_tail_nmos",
+        # Wide-swing cascode tails (issue #111) also consume rail 8 as a
+        # cascode level leg (diode + floor resistor).
+        ("cascode_current_mirror_tail_nmos", ["out7", "out8"],
          {"mnref", "mnfeed", "mpfeed", "mpcasc", "mncdio", "mnpref", "mncasc",
-          "mppref", "mp7"}),
+          "mppref", "mp7", "mp8", "mn8", "r8"}),
         # PMOS tail diode: current sunk out by a bare NMOS mirror (ibias).
-        ("current_mirror_tail_pmos", {"mnref", "mn7"}),
-        ("cascode_current_mirror_tail_pmos", {"mnref", "mn7"}),
+        ("current_mirror_tail_pmos", ["out7"], {"mnref", "mn7"}),
+        ("cascode_current_mirror_tail_pmos", ["out7", "out8"],
+         {"mnref", "mn7", "mn8", "mp8", "r8"}),
     ],
 )
-def test_construct_bias_generation_rail_7_is_bare_current_leg(tail_name, leg_refs):
+def test_construct_bias_generation_rail_7_is_bare_current_leg(
+    tail_name, out_ports, leg_refs
+):
     """Rail 7 legs carry current into/out of the tail's own reference diode
     and bring no diode of their own -- a second diode would either split the
     reference current (same flavor) or fight the tail's diode for the rail
@@ -1372,7 +1379,7 @@ def test_construct_bias_generation_rail_7_is_bare_current_leg(tail_name, leg_ref
         "one_stage_opamp",
         {"load": "resistor_load_gnd", "tail_current": tail_name},
     )
-    assert [p.name for p in variant.ports if p.name.startswith("out")] == ["out7"]
+    assert [p.name for p in variant.ports if p.name.startswith("out")] == out_ports
     assert {d.ref for d in variant.devices} == leg_refs
     assert not any(
         d.terminals.get("d") == "out7" and d.terminals.get("g") == "out7"
@@ -1512,25 +1519,31 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
 
 
 @pytest.mark.parametrize(
-    "tail_variant_name,expected_bias_refs",
+    "tail_variant_name,expected_out_ports,expected_bias_refs",
     [
         # NMOS tail diode -> bare PMOS current-source leg (needs the pref
         # branch, which arrives cascoded with its ncasc level branch)
-        ("current_mirror_tail_nmos",
+        ("current_mirror_tail_nmos", ["out7"],
          {"mnref_bias_gen", "mnfeed_bias_gen", "mpfeed_bias_gen",
           "mpcasc_bias_gen", "mncdio_bias_gen", "mnpref_bias_gen",
           "mncasc_bias_gen", "mppref_bias_gen", "mp7_bias_gen"}),
-        ("cascode_current_mirror_tail_nmos",
+        # Wide-swing cascode tails (issue #111) also consume rail 8 as a
+        # cascode level leg (diode + floor resistor).
+        ("cascode_current_mirror_tail_nmos", ["out7", "out8"],
          {"mnref_bias_gen", "mnfeed_bias_gen", "mpfeed_bias_gen",
           "mpcasc_bias_gen", "mncdio_bias_gen", "mnpref_bias_gen",
-          "mncasc_bias_gen", "mppref_bias_gen", "mp7_bias_gen"}),
+          "mncasc_bias_gen", "mppref_bias_gen", "mp7_bias_gen",
+          "mp8_bias_gen", "mn8_bias_gen", "r8_bias_gen"}),
         # PMOS tail diode -> bare NMOS current-sink leg (master only)
-        ("current_mirror_tail_pmos", {"mnref_bias_gen", "mn7_bias_gen"}),
-        ("cascode_current_mirror_tail_pmos", {"mnref_bias_gen", "mn7_bias_gen"}),
+        ("current_mirror_tail_pmos", ["out7"],
+         {"mnref_bias_gen", "mn7_bias_gen"}),
+        ("cascode_current_mirror_tail_pmos", ["out7", "out8"],
+         {"mnref_bias_gen", "mn7_bias_gen",
+          "mn8_bias_gen", "mp8_bias_gen", "r8_bias_gen"}),
     ],
 )
 def test_enumerate_circuits_rail_7_current_leg_feeds_tail_diode(
-    tail_variant_name, expected_bias_refs
+    tail_variant_name, expected_out_ports, expected_bias_refs
 ):
     """Every mirror tail gets a bare current leg on its dedicated rail 7 --
     no bias-side diode to duplicate the tail's reference (the parallel-diode
@@ -1550,7 +1563,8 @@ def test_enumerate_circuits_rail_7_current_leg_feeds_tail_diode(
 
     circuit = next(enumerate_circuits(topo, simple_modules))
     bias_variant = circuit.variant_map["bias_gen"]
-    assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out7"]
+    assert [p.name for p in bias_variant.ports
+            if p.name.startswith("out")] == expected_out_ports
     assert not any(
         d.terminals.get("d") == "out7" and d.terminals.get("g") == "out7"
         for d in bias_variant.devices

@@ -295,7 +295,7 @@ def diode_connected_mosfet_bias_legs(
     Each discovered leg's nmos+pmos pair is appended to
     :attr:`HookMatch.extra_devices`, and its output net is recorded as
     ``legN_out`` in :attr:`HookMatch.extra_pins` (1-indexed by discovery
-    order -- which of the seven canonical bias rails (``out1``..``out7``) a
+    order -- which of the eight canonical bias rails (``out1``..``out8``) a
     leg corresponds to is not a structural property of the leg itself, and
     is left for FBR/topology context to determine if needed). The first
     discovered leg's supply net is also recorded as ``vdd``.

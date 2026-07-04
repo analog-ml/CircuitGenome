@@ -19,7 +19,7 @@ module is built around:
 - ``gate_gnd`` -- mirror image: consumer gate with source at gnd (NMOS
   current sink); NMOS diode leg one ``V_GSN`` above gnd.
 - ``current_source`` -- the consumer brings its own NMOS reference diode (a
-  current-mirror tail, including the cascode tails' stacked diode). The rail
+  current-mirror tail's mirror diode). The rail
   is a *current* interface: the leg is a bare PMOS mirror sourcing the
   reference current into the consumer's diode. A voltage-style leg here
   would either duplicate the consumer's diode (parallel diodes splitting the
@@ -55,7 +55,7 @@ from __future__ import annotations
 
 from .models import BiasLegLibrary, Device, ModuleVariant, PortDef, TopologyTemplate
 
-_BIAS_NET_INDEX = {f"net_bias{i}": i for i in range(1, 8)}
+_BIAS_NET_INDEX = {f"net_bias{i}": i for i in range(1, 9)}
 _SUPPLIES = ("vdd", "gnd")
 
 #: Rail kinds whose legs mirror from the PMOS-side reference gate. Present
@@ -135,7 +135,7 @@ def required_rail_kinds(
     """Return ``{rail_index: kind}`` for every bias rail actually consumed.
 
     A rail is consumed when any device terminal of the slot's variant
-    references the port the topology wires to ``net_bias1``..``net_bias7``
+    references the port the topology wires to ``net_bias1``..``net_bias8``
     (declared-but-unwired ``optional`` ports are ignored, exactly like the
     retired ``needed_bias_outputs``). The kind combines the per-device votes
     of :func:`_device_votes` across all consuming slots:

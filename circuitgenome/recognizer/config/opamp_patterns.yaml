@@ -494,15 +494,14 @@ patterns:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
       - {ref: mp3, type: pmos}
-      - {ref: mp4, type: pmos}
     same_net:
-      - [mp1.d, mp1.g, mp2.g, mp3.s]                # internal_0 (mp1 diode-connected; cascode-gate bias node)
-      - [mp1.s, mp1.b, mp2.s, mp2.b, mp3.b, mp4.b]  # shared vdd
-      - [mp3.d, mp3.g, mp4.g]                       # bias (mp3 diode-connected; mirror-gate bias node)
-      - [mp2.d, mp4.s]                              # internal_1 (output-leg cascode node)
+      - [mp1.d, mp1.g, mp2.g]                # bias (mp1 diode-connected; mirror-gate bias node)
+      - [mp1.s, mp1.b, mp2.s, mp2.b, mp3.b]  # shared vdd
+      - [mp2.d, mp3.s]                       # internal_1 (output-leg cascode node)
     pins:
-      bias: mp3.g
-      out: mp4.d
+      bias: mp1.g
+      bias_casc: mp3.g
+      out: mp3.d
       vdd: mp1.s
 
   - name: cascode_current_mirror_tail_nmos
@@ -512,15 +511,14 @@ patterns:
       - {ref: mn1, type: nmos}
       - {ref: mn2, type: nmos}
       - {ref: mn3, type: nmos}
-      - {ref: mn4, type: nmos}
     same_net:
-      - [mn1.d, mn1.g, mn2.g, mn3.s]                # internal_0 (mn1 diode-connected; cascode-gate bias node)
-      - [mn1.s, mn1.b, mn2.s, mn2.b, mn3.b, mn4.b]  # shared gnd
-      - [mn3.d, mn3.g, mn4.g]                       # bias (mn3 diode-connected; mirror-gate bias node)
-      - [mn2.d, mn4.s]                              # internal_1 (output-leg cascode node)
+      - [mn1.d, mn1.g, mn2.g]                # bias (mn1 diode-connected; mirror-gate bias node)
+      - [mn1.s, mn1.b, mn2.s, mn2.b, mn3.b]  # shared gnd
+      - [mn2.d, mn3.s]                       # internal_1 (output-leg cascode node)
     pins:
-      bias: mn3.g
-      out: mn4.d
+      bias: mn1.g
+      bias_casc: mn3.g
+      out: mn3.d
       gnd: mn1.s
 
   - name: resistor_tail_vdd

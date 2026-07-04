@@ -71,7 +71,7 @@ def test_build_edges_one_stage_opamp_no_self_loops(topologies, by_name):
 
     graph = topology_to_graph(topo, variant_map)
 
-    assert len(graph.edges) == 8
+    assert len(graph.edges) == 9  # incl. the static rail-8 tail bias_casc edge
     assert not any(e.source == e.target for e in graph.edges)
 
     diff1_edges = [e for e in graph.edges if e.net == "net_diff1"]
