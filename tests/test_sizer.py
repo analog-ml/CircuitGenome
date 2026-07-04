@@ -351,6 +351,27 @@ def test_size_two_stage_cc_from_sr(two_stage_fbr):
     assert cc_f <= cc_max_from_sr * 1.001  # 0.1% tolerance for rounding
 
 
+def test_size_two_stage_cc_stability_floor(two_stage_fbr):
+    """A loose SR must not inflate Cc to the SR bound (issue #108).
+
+    SR only *upper*-bounds Cc, so Cc sits on the ~0.25·CL stability floor,
+    keeping the GBW-side gm1 requirement clear of the weak-inversion ceiling.
+    """
+    from circuitgenome.sizer.shared.preprocess import _CC_STABILITY_RATIO
+
+    parsed, sr_result, fbr_result, topology = two_stage_fbr
+    tech = _tech()
+    spec = SizingSpec(
+        vdd=5.0, vss=0.0, ibias=20e-6, cl=5e-12,
+        slew_rate_min_vps=3e5, gbw_min_hz=2e6, phase_margin_min_deg=60,
+    )
+    result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+    assert result.cc_pf is not None
+    cc_f = result.cc_pf * 1e-12
+    assert cc_f == pytest.approx(_CC_STABILITY_RATIO * spec.cl)  # not ibias/SR = 66.7 pF
+    assert cc_f <= spec.ibias / spec.slew_rate_min_vps  # SR still met (with margin)
+
+
 def test_size_two_stage_symmetry(two_stage_fbr):
     """Matched pairs within input_pair, load, tail_current must have equal W and L."""
     parsed, sr_result, fbr_result, topology = two_stage_fbr

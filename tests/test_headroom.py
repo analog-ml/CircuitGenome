@@ -61,10 +61,23 @@ def test_tail_gm_id_for_headroom_monotone(model):
 
 
 def test_headroom_violation_warns(model, tech):
-    # vdd=1.0, mid-rail Vcm, PMOS pair → net_tail near vdd → tail starved.
-    slot, allt, ids, sizing, spec = _scenario(model, vdd=1.0)
-    _, warns = _apply_headroom(model, slot, allt, ids, sizing, spec, tech)
+    # vdd=0.8, mid-rail Vcm, PMOS pair → net_tail near vdd and even a
+    # weak-inversion pair cannot make room → warn, sizing untouched.
+    slot, allt, ids, sizing, spec = _scenario(model, vdd=0.8)
+    sized, warns = _apply_headroom(model, slot, allt, ids, sizing, spec, tech)
     assert warns and "headroom" in warns[0]
+    assert sized["m1_input_pair"].w_um == sizing["m1_input_pair"].w_um
+
+
+def test_headroom_repairs_pair_toward_weak_inversion(model, tech):
+    # vdd=1.0: the as-sized pair leaves no tail headroom, but moving the pair
+    # toward weak inversion (smaller |Vgs|) makes room (issue #108 follow-up:
+    # a gm requirement is a minimum, so the stronger pair is spec-safe).
+    slot, allt, ids, sizing, spec = _scenario(model, vdd=1.0)
+    sized, warns = _apply_headroom(model, slot, allt, ids, sizing, spec, tech)
+    assert warns == []
+    assert abs(sized["m1_input_pair"].vgs_v) < abs(sizing["m1_input_pair"].vgs_v)
+    assert sized["m1_tail_current"].vds_sat_v < sizing["m1_tail_current"].vds_sat_v
 
 
 def test_headroom_ok_at_high_supply(model, tech):

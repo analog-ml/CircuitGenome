@@ -168,3 +168,37 @@ def test_no_resistors_for_active_circuit():
     """An all-active circuit gets no extra (degeneration/tail/bias) resistors."""
     r = _size(input_pair="differential_pair_pmos")
     assert r.resistors == {}
+
+
+# --- compensation resistors (issue #108) -----------------------------------
+def test_comp_resistor_zero_on_output_pole():
+    """Nulling R = (Cc+CL)/(gm2·Cc) places the compensation zero on the
+    output pole."""
+    from circuitgenome.synthesizer.models import Device
+    ss = [Device(ref="m1_second_stage", type="nmos",
+                 terminals={"d": "out", "g": "net_mid", "s": "gnd!"})]
+    r = Device(ref="r1_compensation", type="resistor",
+               terminals={"t1": "net_mid", "t2": "cn"})
+    blocks = build_blocks({"second_stage": ss}, {"compensation": [r]})
+    sizing = {"m1_second_stage": _sz("m1_second_stage", "nmos")}
+    out, _ = size_resistors(
+        blocks, {"compensation": [r]}, {}, sizing, _FakeModel(),
+        _spec(), load_tech("ptm45"), GmIdIntent(), cc_pf=2.0)
+    # (2p + 2p) / (1 mS · 2p) = 2 kΩ
+    assert out["r1_compensation"] == pytest.approx((2e-12 + 2e-12) / (1e-3 * 2e-12))
+
+
+@pytest.mark.parametrize("variant", ["miller_cap_with_nulling_resistor",
+                                     "indirect_compensation"])
+def test_comp_resistor_sized_end_to_end(variant):
+    """Compensation-slot resistors get a deliberate value, not the 1 kΩ
+    placeholder, and flow out through SizingResult.resistors."""
+    res = _size(compensation=variant)
+    comp_r = {k: v for k, v in res.resistors.items() if "comp" in k}
+    assert comp_r, f"{variant}: compensation resistor not sized"
+    cc_f = res.cc_pf * 1e-12
+    for v in comp_r.values():
+        assert v > 0 and v != pytest.approx(1e3, rel=1e-6)
+        # zero placement is bounded by the stage gm: R·Cc/(Cc+CL) = 1/gm2
+        gm2 = (cc_f + _spec().cl) / (v * cc_f)
+        assert 1e-5 < gm2 < 1e-1   # µS–tens-of-mS: a physical stage gm

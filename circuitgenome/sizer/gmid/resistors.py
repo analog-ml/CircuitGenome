@@ -1,10 +1,11 @@
 """Size the non-load resistor blocks of a gm/Id-sized op-amp.
 
 The Level-1 sizer (and gm/Id phase 1) only sized rail-referenced ``load``
-resistors; `resistor_bias`, `resistor_tail`, and source-**degeneration** r1/r2
-kept the 1 kΩ netlist placeholder, mis-biasing those variants. This module sizes
-each per its role and reports the two metric effects (degeneration on gm1,
-resistor-tail output conductance on CMRR).
+resistors; `resistor_bias`, `resistor_tail`, source-**degeneration** r1/r2, and
+the **compensation** nulling/series resistors kept the 1 kΩ netlist placeholder,
+mis-biasing those variants. This module sizes each per its role and reports the
+two metric effects (degeneration on gm1, resistor-tail output conductance on
+CMRR).
 
 Sized values flow out through ``SizingResult.resistors`` and
 ``spice_sim._inject_sizes`` replaces the placeholder, exactly like the load
@@ -55,12 +56,15 @@ def size_resistors(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
+    cc_pf: float | None = None,
+    cc2_pf: float | None = None,
 ) -> tuple[dict[str, float], MetricModifiers]:
     """Return ``(extra_resistors, metric_modifiers)``.
 
     ``extra_resistors`` is ``{ref: ohms}`` for the degeneration / tail / bias /
-    cmfb resistors; the :class:`MetricModifiers` carry their metric effects
-    into the evaluation phase.
+    cmfb / compensation resistors; the :class:`MetricModifiers` carry their
+    metric effects into the evaluation phase.  ``cc_pf``/``cc2_pf`` are the
+    planned compensation cap(s) the compensation-slot resistors pair with.
     """
     out: dict[str, float] = {}
     gm1_factor = 1.0
@@ -128,9 +132,44 @@ def size_resistors(
         # sense node → adds 1/R_sense to the differential output conductance.
         gd_out_extra = 1.0 / intent.cmfb_sense_r if intent.cmfb_sense_r > 0 else 0.0
 
+    # --- Compensation-slot resistors (nulling / indirect series R) ---
+    # The synthesizer emits every resistor at a 1 kΩ placeholder; the series
+    # R of `miller_cap_with_nulling_resistor` / `indirect_compensation` must
+    # instead track the stage it bridges: R = (Cc+CL)/(gm_out·Cc) places the
+    # compensation zero on the output pole (issue #108).
+    comp_slots = [(name, rs) for name, rs in slot_resistors.items()
+                  if name.startswith("comp")]
+    if comp_slots and cc_pf:
+        gm_out = _output_stage_gm(blocks, sizing, model)
+        if gm_out > 0:
+            for name, rs in comp_slots:
+                slot_cc_f = (cc2_pf if "comp2" in name and cc2_pf else cc_pf) * 1e-12
+                r_val = (slot_cc_f + spec.cl) / (gm_out * slot_cc_f)
+                for r in rs:
+                    out[r.ref] = r_val
+
     return out, MetricModifiers(gm1_factor=gm1_factor,
                                 gd_tail_override=gd_tail_override,
                                 gd_out_extra=gd_out_extra)
+
+
+def _output_stage_gm(blocks: OpAmpBlocks, sizing: dict[str, TransistorSizing],
+                     model) -> float:
+    """Realized gm of the output gain stage's signal device (0.0 if unknown).
+
+    The compensation network wraps the last gain stage, so its resistor is
+    sized against that stage's gm — third stage when present, else second.
+    """
+    for name in ("third_stage", "third_stage_p", "third_stage_n",
+                 "second_stage", "second_stage_p", "second_stage_n"):
+        b = blocks.blocks.get(name)
+        for d in (b.mosfets if b else []):
+            s = sizing.get(d.ref)
+            if s and is_signal_device(d):
+                g = model.gm(d.type, s.w_um, s.l_um, s.ids_a)
+                if g > 0:
+                    return g
+    return 0.0
 
 
 def _bias_rail_target_v(rail_net: str, consumers: list[Device],

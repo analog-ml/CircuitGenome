@@ -197,7 +197,9 @@ def test_gnd_referenced_legs_bias_in_spice():
 @ngspice
 def test_check_bias_soundness_distinguishes_biasing_from_railed():
     """The SPICE DC verdict: a genuinely biasing design is sound; a circuit whose
-    operating point rails (circuit_0010 at 1.0 V) is flagged not-sound."""
+    operating point rails (circuit_0019 at 1.0 V) is flagged not-sound.
+    (circuit_0010, the previous specimen, biases fine since the issue-#108 Cc /
+    headroom-repair fixes.)"""
     from pathlib import Path
 
     topo = next(t for t in load_topologies()
@@ -208,11 +210,11 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
     ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
     assert ok and reason is None
 
-    # circuit_0010: output stage current-mismatched → operating point rails
+    # circuit_0019: output stage current-mismatched → operating point rails
     ckt = (Path(__file__).resolve().parent.parent / "circuits"
-           / "two_stage_opamp_single_ended" / "circuit_0010_flat.ckt")
+           / "two_stage_opamp_single_ended" / "circuit_0019_flat.ckt")
     if not ckt.exists():
-        pytest.skip("circuit_0010 fixture not present")
+        pytest.skip("circuit_0019 fixture not present")
     text = ckt.read_text()
     parsed = parse(text)
     fbr = assign_slots(recognize(parsed), topo)

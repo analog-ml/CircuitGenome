@@ -55,6 +55,11 @@ def extract_slot_resistors(
 # driven device into conduction: V_node ≈ Vth + this.
 _RESISTOR_LOAD_OVERDRIVE = 0.15
 
+# Miller-compensation stability floor: Cc ≥ this fraction of CL keeps the
+# pole split wide enough for a ~60° phase-margin budget (Allen-Holberg's
+# Cc > 0.22·CL, rounded up for margin).
+_CC_STABILITY_RATIO = 0.25
+
 
 def size_load_resistors(
     slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
@@ -317,20 +322,22 @@ def compute_requirements(
         cc_min_f = tech.cap.min * 1e-12
         cc_max_f = tech.cap.max * 1e-12
 
-        # From slew rate: Cc = iBias / SR
-        cc_from_sr = (
-            spec.ibias / spec.slew_rate_min_vps
-            if spec.slew_rate_min_vps
-            else cc_min_f
-        )
-        cc_f = max(cc_min_f, min(cc_from_sr, cc_max_f))
+        # Pick the *smallest* stable Cc: the pole-split floor ~0.25·CL keeps
+        # the output pole clear of GBW for a ~60° PM budget.  The slew rate
+        # only *upper*-bounds Cc (SR = iBias/Cc — a smaller Cc slews faster),
+        # and every pF above the floor inflates the GBW-side gm1 requirement
+        # 2π·GBW·Cc/k_fs toward the weak-inversion ceiling (issue #108).
+        cc_ub_f = cc_max_f
+        if spec.slew_rate_min_vps:
+            cc_ub_f = min(cc_ub_f, spec.ibias / spec.slew_rate_min_vps)
+        cc_f = max(cc_min_f, min(_CC_STABILITY_RATIO * spec.cl, cc_ub_f))
 
     # Cc2 for three-stage (inner cap = Cc1/4); None for two-stage and one-stage.
     cc2_pf: float | None = None
     cc2_f: float = 0.0
 
     if has_second_stage and cc_f > 0:
-        # From GBW: GBW = k_fs·gm1 / (2π·Cc)  (with the SR-bounded Cc).
+        # From GBW: GBW = k_fs·gm1 / (2π·Cc)  (with the stability-floor Cc).
         # This is the primary gm1 driver; Cc stays within the SR bound because
         # we do NOT inflate Cc here to accommodate gain.  A non-mirror load
         # (k_fs<1) needs a proportionally larger device gm1.
