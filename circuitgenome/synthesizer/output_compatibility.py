@@ -38,13 +38,21 @@ assignment depends on which of these rules applies:
   disconnected node. -> ``output_cardinality: "differential"``, compatible
   only with ``output_type: "fully_differential"``.
 
+``current_source_load_{pmos,nmos}`` carry the ``"differential"`` tag for an
+*electrical* reason instead of a port-wiring one: their branch devices are
+plain current sources gated by ``bias_cmfb``, so the load only has a defined
+operating point when the CMFB loop drives that gate -- which only
+``fully_differential`` topologies provide (issue #112; the untapped-branch
+filter, :mod:`~circuitgenome.synthesizer.load_branch_compatibility`, would
+independently reject them in ``single_ended`` topologies).
+
 The other 6 ``load`` variants (resistor/active/current-source loads) declare
 ``out1``/``out2`` as ``alias_of: in1``/``in2`` and ``out`` as ``optional`` --
 their devices reference only ``in1``/``in2``, and a net-merge pass (see
 :mod:`~circuitgenome.synthesizer.net_aliasing`) collapses ``out1``/``out2``'s
 assigned net back onto ``in1``/``in2``'s after assembly, regardless of
-``output_type``. They're therefore untagged (``output_cardinality`` is
-``None``) and compatible with every topology.
+``output_type``. The 4 resistor/active loads are therefore untagged
+(``output_cardinality`` is ``None``) and compatible with every topology.
 
 To extend: tag new or edited ``load`` variants with
 ``output_cardinality: "single"`` / ``"differential"`` in

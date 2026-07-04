@@ -158,12 +158,14 @@ loads) declares `out1`/`out2` as mandatory cascode-output nodes, which only a
 `fully_differential` topology wires (to `net_loadout1`/`net_loadout2`).
 `is_output_type_compatible` rejects a combination if `load`'s
 `output_cardinality` (if set) doesn't match the topology's `output_type` --
-otherwise the mandatory port(s) would be left floating (unconnected)
-(untagged loads, i.e. resistor/active/current-source, impose no constraint --
-their `out1`/`out2` are `alias_of in1`/`in2` and merged back by
-`net_aliasing.py` regardless of `output_type`). To support a new/edited
-`load` variant, just add the right `output_cardinality:` tag in YAML — no
-code changes needed.
+otherwise the mandatory port(s) would be left floating (unconnected).
+`current_source_load_*` carry the `"differential"` tag for an electrical
+reason instead: their `bias_cmfb`-gated branch devices need the CMFB loop
+that only `fully_differential` topologies wire (issue #112). Untagged loads
+(resistor/active) impose no constraint -- their `out1`/`out2` are
+`alias_of in1`/`in2` and merged back by `net_aliasing.py` regardless of
+`output_type`. To support a new/edited `load` variant, just add the right
+`output_cardinality:` tag in YAML — no code changes needed.
 
 ## Untapped-load-branch compatibility filter (`load_branch_compatibility.py`)
 
@@ -182,13 +184,18 @@ cascode loads' folding/cascode devices); loads that never put a MOSFET drain
 on `in1` are unconstrained. `fully_differential` topologies tap both
 branches and are out of scope (CM definition there is the CMFB loop's job).
 New `load` variants are classified automatically by what their devices
-connect to `in1`.
+connect to `in1`. Note: `current_source_load_*` are also tagged
+`output_cardinality: "differential"` (their gates are CMFB-driven), so the
+cardinality filter already excludes them from single-ended topologies —
+this filter is the structural guard for any future rail-gated load branch.
 
 ## CMFB compatibility filter & pruning (`cmfb_compatibility.py`)
 
-Of the 12 `load` variants, only the 2 tagged `output_cardinality:
-"differential"` declare `bias_cmfb` as a real `role: input` consumer; the
-other 10 declare it `role: optional` and never reference it, so
+Of the 12 `load` variants, only the 4 tagged `output_cardinality:
+"differential"` (the 2 differential-output folded-cascode loads and the 2
+`current_source_load_*`, whose branch devices are gated by `bias_cmfb` —
+issue #112) declare `bias_cmfb` as a real `role: input` consumer; the
+other 8 declare it `role: optional` and never reference it, so
 `cmfb.out -> net_cmfb_out -> load.bias_cmfb` drives nothing.
 `is_cmfb_compatible` rejects combinations where `load`'s
 `output_cardinality` isn't `"differential"` and `cmfb` isn't
@@ -339,5 +346,5 @@ relevant slot's entry in `variant_map`" pattern.
 - Broad coverage uses `pytest.mark.parametrize` over variant names / expected
   sets.
 - Full-enumeration count tests are exact for 1- and 2-stage topologies; the
-  3-stage fully-differential topology (~0.46M combos) is only checked via
+  3-stage fully-differential topology (~1.56M combos) is only checked via
   `next()` (non-empty) for speed, never materialized in full.
