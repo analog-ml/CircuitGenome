@@ -43,21 +43,37 @@ def constructed_bias_legs(
 
     - **Pass 1 (NMOS-referenced)**: every nmos with gate on ``mref``'s
       diode node (the ``ibias`` net) and source on ``mref``'s source (gnd)
-      mirrors the master. If a diode-connected pmos (``d == g``, ``s == b``)
-      sits on its drain, the pair is a vdd-flavored leg *or* the ``pref``
-      branch (structurally identical -- both are claimed; which is which
-      doesn't matter for sizing); the pmos-diode node is remembered as a
-      potential PMOS-side reference gate. A bare mirror (no pmos diode) is
-      claimed alone -- a current-sink leg into a consumer's own diode.
+      mirrors the master. What sits on its drain names the leg:
+
+      - a plain diode-connected pmos (``d == g``, ``s == b``): a vdd-flavored
+        leg *or* the ``pref`` branch's diode (structurally identical -- both
+        are claimed; which is which doesn't matter for sizing); the
+        pmos-diode node is remembered as a potential PMOS-side reference
+        gate;
+      - a *riding* pmos diode (``d == g`` on the drain, ``s`` on an internal
+        node) whose source returns to its bulk supply through an unclaimed
+        resistor: a **cascode_vdd leg** (diode + floor resistor,
+        ``out = vdd - |V_GSP| - I*R``) -- all three devices are claimed;
+      - an nmos **cascode** (source on the drain node) topped by a plain
+        pmos diode: the **cascoded pref branch** (the cascode pins the
+        mirror's Vds; its gate rides the wide-swing ``ncasc`` level, whose
+        generator branch is claimed by pass 2 as an ordinary gnd-flavored
+        leg) -- the cascode and diode are claimed, the diode node becomes a
+        reference gate;
+      - nothing: a bare mirror, claimed alone -- a current-sink leg into a
+        consumer's own diode.
     - **Pass 2 (PMOS-referenced)**: every pmos gated on a pass-1 pmos-diode
       node with source on that diode's supply is a leg *only if* its drain
-      hosts a diode-connected nmos (a gnd-flavored leg, or a current-source
-      leg into a mirror tail's own reference diode) or a resistor returning
-      to ``mref``'s gnd (a tunable resistor leg). The drain condition keeps
+      hosts a diode-connected nmos (a gnd-flavored leg -- including the pref
+      branch's ``ncasc`` generator -- a **cascode_gnd leg** when the diode
+      rides an unclaimed resistor to gnd, or a current-source leg into a
+      mirror tail's own reference diode) or a resistor returning to
+      ``mref``'s gnd (a tunable resistor leg). The drain condition keeps
       consumer devices out: a second-stage PMOS gated by a vdd-flavored rail
       has neither on its drain.
 
-    Returns ``None`` when pass 2 claims nothing: the structure is then the
+    Returns ``None`` when neither pass finds constructed-only evidence (no
+    PMOS-referenced leg and no cascode_vdd leg): the structure is then the
     exact shape :func:`diode_connected_mosfet_bias_legs` discovers, and that
     pattern (listed after this one) claims it instead -- keeping legacy
     single-flavor netlists recognized under their historical names.
@@ -82,7 +98,19 @@ def constructed_bias_legs(
     extra_devices: list[Device] = []
     extra_pins: dict[str, str] = {}
     leg_count = 0
+    constructed_only = 0  # shapes the legacy N-only pattern cannot claim
     pnodes: list[tuple[str, str]] = []  # (diode node, its vdd supply)
+
+    def _resistor_between(net_a: str, net_b: str) -> Device | None:
+        return next(
+            (
+                r for r in netlist.devices
+                if r.ref not in claimed
+                and r.type == "resistor"
+                and {r.terminals["t1"], r.terminals["t2"]} == {net_a, net_b}
+            ),
+            None,
+        )
 
     # --- Pass 1: NMOS mirrors of the master reference ---
     for nmos_leg in netlist.devices:
@@ -112,6 +140,64 @@ def constructed_bias_legs(
             extra_devices.append(pmos_diode)
             extra_pins.setdefault("vdd", pmos_diode.terminals["s"])
             pnodes.append((out_net, pmos_diode.terminals["s"]))
+            continue
+
+        # cascode_vdd leg: a pmos diode *riding* the drain node (source on an
+        # internal "mid" net) whose floor resistor returns to its bulk supply.
+        riding_diode = next(
+            (
+                p for p in netlist.devices
+                if p.ref not in claimed
+                and p.type == "pmos"
+                and p.terminals["d"] == out_net
+                and p.terminals["g"] == out_net
+                and p.terminals["s"] != p.terminals["b"]
+            ),
+            None,
+        )
+        if riding_diode is not None:
+            floor_r = _resistor_between(
+                riding_diode.terminals["s"], riding_diode.terminals["b"])
+            if floor_r is not None:
+                claimed.update({riding_diode.ref, floor_r.ref})
+                extra_devices.extend([riding_diode, floor_r])
+                extra_pins.setdefault("vdd", riding_diode.terminals["b"])
+                constructed_only += 1
+                continue
+
+        # Cascoded pref branch: an nmos cascode stacked on the mirror's drain,
+        # topped by a plain pmos diode (its gate rides the ncasc level, whose
+        # generator branch pass 2 claims as an ordinary gnd-flavored leg).
+        cascode = next(
+            (
+                c for c in netlist.devices
+                if c.ref not in claimed
+                and c.type == "nmos"
+                and c.terminals["s"] == out_net
+                and c.terminals["g"] != ibias_net
+            ),
+            None,
+        )
+        if cascode is not None:
+            top_diode = next(
+                (
+                    p for p in netlist.devices
+                    if p.ref not in claimed
+                    and p.type == "pmos"
+                    and p.terminals["d"] == cascode.terminals["d"]
+                    and p.terminals["g"] == cascode.terminals["d"]
+                    and p.terminals["s"] == p.terminals["b"]
+                ),
+                None,
+            )
+            if top_diode is not None:
+                pnode = cascode.terminals["d"]
+                claimed.update({cascode.ref, top_diode.ref})
+                extra_devices.extend([cascode, top_diode])
+                extra_pins[f"leg{leg_count}_out"] = pnode  # relabel: the diode node
+                extra_pins.setdefault("vdd", top_diode.terminals["s"])
+                pnodes.append((pnode, top_diode.terminals["s"]))
+                constructed_only += 1
 
     # --- Pass 2: PMOS-referenced legs gated on a pass-1 diode node ---
     p_leg_count = 0
@@ -140,12 +226,19 @@ def constructed_bias_legs(
                 extra_devices.append(pmos_leg)
                 claimed.add(pmos_leg.ref)
                 # A plain diode (s == b) is the leg's own gnd-referenced
-                # output diode -- claim it too. A stacked diode (s on an
-                # internal node: a cascode mirror tail's reference) belongs
-                # to its consumer; the pmos is a bare current-source leg.
+                # output diode -- claim it too. A diode riding a floor
+                # resistor to gnd is a cascode_gnd leg -- claim both. Any
+                # other stacked diode (s on an internal node: a cascode
+                # mirror tail's reference) belongs to its consumer; the
+                # pmos is a bare current-source leg.
                 if nmos_diode.terminals["s"] == nmos_diode.terminals["b"]:
                     extra_devices.append(nmos_diode)
                     claimed.add(nmos_diode.ref)
+                else:
+                    floor_r = _resistor_between(nmos_diode.terminals["s"], gnd_net)
+                    if floor_r is not None:
+                        extra_devices.extend([nmos_diode, floor_r])
+                        claimed.update({nmos_diode.ref, floor_r.ref})
                 continue
 
             resistor_leg = next(
@@ -165,7 +258,7 @@ def constructed_bias_legs(
                 extra_devices.extend([pmos_leg, resistor_leg])
                 claimed.update({pmos_leg.ref, resistor_leg.ref})
 
-    if p_leg_count == 0:
+    if p_leg_count == 0 and constructed_only == 0:
         return None
 
     return HookMatch(extra_devices=extra_devices, extra_pins=extra_pins)

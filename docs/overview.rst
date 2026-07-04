@@ -313,13 +313,25 @@ Each consumed rail is classified structurally (no YAML tags) into a *kind*:
   mirror with no diode of its own. A bias-side diode here would either sit
   in parallel with the tail's reference (splitting the current) or fight it
   (issue #99's measured rail-7 contention) -- both are now unconstructable.
-- ``tunable`` -- no structurally implied level (cascode gates whose source
-  is an internal node, or conflicting demands on a shared rail): a mirror
-  into a resistor, ``out = I_leg × R``, per-rail tunable by the sizer.
+- ``cascode_gnd`` / ``cascode_vdd`` -- a cascode gate (consumer source on an
+  internal node) needs its ``V_GS`` plus the saturation floor of the stack
+  toward its back supply. The leg is a mirror into a diode-connected device
+  riding a small floor resistor (``out = V_GS + I × R`` from that supply):
+  the diode covers the large, Vth-dependent ``V_GS`` part -- tracking the
+  consumer over process and temperature -- and the resistor covers only the
+  small Vdsat floor; both are sized per rail by the sizer from the consumer
+  stack (issue #99's parked cascode class).
+- ``tunable`` -- no structurally implied level (conflicting demands on a
+  shared rail): a mirror into a resistor, ``out = I_leg × R``, per-rail
+  tunable by the sizer.
 
 The constructed variant (name ``constructed_bias``) always carries an NMOS
 master reference on the ``ibias`` pin; a ``pref`` branch deriving the
-PMOS-side mirror reference is emitted only when some leg needs it. Only
+PMOS-side mirror reference is emitted only when some leg needs it. The pref
+branch is *cascoded*: a wide-swing ``ncasc`` level (PMOS mirror into a
+narrow diode) pins the branch mirror's Vds near the master's instead of at
+``vdd - |V_GSP|`` -- closing most of the extra-mirror-hop λ error that
+issue #103's A/B measured against the retired ``magic_battery_bias``. Only
 consumed rails get a port and a leg -- unconsumed rails simply don't exist.
 The leg templates live in ``config/bias_legs.yaml``; the demand analysis and
 assembly in :mod:`circuitgenome.synthesizer.bias_construction`.

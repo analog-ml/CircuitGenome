@@ -187,25 +187,39 @@ def test_cmfb_variant_names_and_ports():
 
 def test_bias_leg_library_structure():
     """The leg library provides the multi-reference core plus exactly the
-    five rail kinds, and every template's nets stay within the contract
-    (ibias/pref/out/vdd/gnd).  Legs referencing pref are the ones the pref
-    branch exists for; the gate_vdd and current_sink legs mirror the master
-    directly via ibias."""
+    seven rail kinds, and every template's nets stay within the contract
+    (ibias/pref/out/mid/vdd/gnd).  Legs referencing pref are the ones the
+    pref branch exists for; the gate_vdd, current_sink, and cascode_vdd legs
+    mirror the master directly via ibias."""
     library = load_bias_legs()
 
     assert set(library.legs) == {
-        "gate_vdd", "gate_gnd", "current_source", "current_sink", "tunable",
+        "gate_vdd", "gate_gnd", "current_source", "current_sink",
+        "cascode_gnd", "cascode_vdd", "tunable",
     }
     assert len(library.reference) == 1
     (mref,) = library.reference
     assert mref.type == "nmos"
     assert mref.terminals["d"] == mref.terminals["g"] == "ibias"
 
-    # pref branch: NMOS mirror of the master into a diode-connected PMOS.
-    assert [d.type for d in library.pref_branch] == ["nmos", "pmos"]
-    assert library.pref_branch[1].terminals["d"] == library.pref_branch[1].terminals["g"] == "pref"
+    # Cascoded pref branch: NMOS mirror of the master, cascoded by an NMOS
+    # riding the wide-swing ncasc level, into a diode-connected PMOS. The
+    # ncasc generator (mpcasc + narrow diode) mirrors the small feed_pref
+    # feeder copy, NOT pref itself -- gating it from pref would close a
+    # startup loop with a degenerate all-off operating point.
+    assert [d.type for d in library.pref_branch] == [
+        "nmos", "pmos", "pmos", "nmos", "nmos", "nmos", "pmos"]
+    by_ref = {d.ref: d for d in library.pref_branch}
+    assert by_ref["mppref"].terminals["d"] == by_ref["mppref"].terminals["g"] == "pref"
+    assert by_ref["mpfeed"].terminals["d"] == by_ref["mpfeed"].terminals["g"] == "feed_pref"
+    assert by_ref["mnfeed"].terminals["g"] == "ibias"
+    assert by_ref["mncasc"].terminals["g"] == "ncasc"
+    assert by_ref["mncasc"].terminals["s"] == by_ref["mnpref"].terminals["d"]
+    assert by_ref["mncdio"].terminals["d"] == by_ref["mncdio"].terminals["g"] == "ncasc"
+    assert by_ref["mpcasc"].terminals["d"] == "ncasc"
+    assert by_ref["mpcasc"].terminals["g"] == "feed_pref"
 
-    allowed_nets = {"ibias", "pref", "out", "vdd", "gnd"}
+    allowed_nets = {"ibias", "pref", "out", "mid", "vdd", "gnd"}
     for kind, devices in library.legs.items():
         for dev in devices:
             assert set(dev.terminals.values()) <= allowed_nets, (kind, dev.ref)
@@ -216,13 +230,23 @@ def test_bias_leg_library_structure():
         for kind, devices in library.legs.items()
         if any("pref" in d.terminals.values() for d in devices)
     }
-    assert uses_pref == {"gate_gnd", "current_source", "tunable"}
+    assert uses_pref == {"gate_gnd", "current_source", "tunable", "cascode_gnd"}
 
     # Current legs are bare mirrors: no diode of their own (the consumer's
     # reference diode owns the rail voltage).
     for kind in ("current_source", "current_sink"):
         (dev,) = library.legs[kind]
         assert dev.terminals["d"] == "out" and dev.terminals["g"] != "out"
+
+    # Cascode legs: a level diode on the rail riding a floor resistor to the
+    # back supply (out = V_GS + I*R, the V_GS part tracking the consumer).
+    for kind, dtype, back in (("cascode_gnd", "nmos", "gnd"),
+                              ("cascode_vdd", "pmos", "vdd")):
+        diode = next(d for d in library.legs[kind] if d.type == dtype)
+        assert diode.terminals["d"] == diode.terminals["g"] == "out"
+        assert diode.terminals["s"] == "mid"
+        r = next(d for d in library.legs[kind] if d.type == "resistor")
+        assert {r.terminals["t1"], r.terminals["t2"]} == {"mid", back}
 
 
 def test_polarity_tags_cover_input_pair_load_tail_current():
@@ -827,12 +851,12 @@ def test_required_rail_kinds_simple_load_one_stage():
     assert required_rail_kinds(topo, variant_map) == {}
 
 
-def test_required_rail_kinds_telescopic_cascode_is_tunable():
+def test_required_rail_kinds_telescopic_cascode_is_cascode_kind():
     """A telescopic cascode load only references bias1
     (bias2/bias3/bias_cmfb are declared optional but unused), and its
-    consumers are cascode gates whose source is an internal node -- no
-    structural level is implied, so the rail falls back to the tunable
-    resistor leg."""
+    consumers are PMOS cascode gates whose source is an internal node -- the
+    rail needs |V_GS| plus the stack's saturation ceiling below vdd, i.e.
+    the cascode_vdd level leg."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     variant_map = _variant_map_for(
@@ -840,13 +864,13 @@ def test_required_rail_kinds_telescopic_cascode_is_tunable():
         topo,
         {"load": "telescopic_cascode_load_pmos", "tail_current": "resistor_tail_vdd"},
     )
-    assert required_rail_kinds(topo, variant_map) == {1: "tunable"}
+    assert required_rail_kinds(topo, variant_map) == {1: "cascode_vdd"}
 
 
 def test_required_rail_kinds_folded_cascode_single_output():
     """A single-output folded-cascode load references bias1 (folding-source
     gates with source on a supply -> gate kind of that supply) and bias2
-    (cascode gates, internal-node source -> tunable)."""
+    (PMOS cascode gates, internal-node source -> cascode_vdd)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     variant_map = _variant_map_for(
@@ -857,15 +881,16 @@ def test_required_rail_kinds_folded_cascode_single_output():
             "tail_current": "resistor_tail_gnd",
         },
     )
-    assert required_rail_kinds(topo, variant_map) == {1: "gate_vdd", 2: "tunable"}
+    assert required_rail_kinds(topo, variant_map) == {1: "gate_vdd", 2: "cascode_vdd"}
 
 
 def test_required_rail_kinds_folded_cascode_differential_output():
     """A differential-output folded-cascode load references all four of its
-    bias rails: folding sources at vdd (rail 1 gate_vdd), two cascode ranks
-    (rails 2/3 tunable), and the output tail sinks at gnd (rail 4
-    gate_gnd -- wired straight to net_bias4 in topologies without a cmfb
-    slot)."""
+    bias rails: folding sources at vdd (rail 1 gate_vdd), the PMOS cascode
+    rank off the folding nodes (rail 2 cascode_vdd), the NMOS cascode rank
+    over the output tails (rail 3 cascode_gnd), and the output tail sinks at
+    gnd (rail 4 gate_gnd -- wired straight to net_bias4 in topologies
+    without a cmfb slot)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     variant_map = _variant_map_for(
@@ -877,7 +902,7 @@ def test_required_rail_kinds_folded_cascode_differential_output():
         },
     )
     assert required_rail_kinds(topo, variant_map) == {
-        1: "gate_vdd", 2: "tunable", 3: "tunable", 4: "gate_gnd",
+        1: "gate_vdd", 2: "cascode_vdd", 3: "cascode_gnd", 4: "gate_gnd",
     }
 
 
@@ -961,7 +986,8 @@ def test_required_rail_kinds_cmfb_rail_4(cmfb_name):
         },
     )
     assert required_rail_kinds(topo, variant_map) == {
-        1: "gate_vdd", 2: "tunable", 3: "tunable", 4: "gate_gnd", 5: "gate_vdd",
+        1: "gate_vdd", 2: "cascode_vdd", 3: "cascode_gnd", 4: "gate_gnd",
+        5: "gate_vdd",
     }
 
 
@@ -1023,7 +1049,7 @@ def test_required_rail_kinds_all_seven_rails():
         },
     )
     assert required_rail_kinds(topo, variant_map) == {
-        1: "gate_vdd", 2: "tunable", 3: "tunable", 4: "gate_gnd",
+        1: "gate_vdd", 2: "cascode_vdd", 3: "cascode_gnd", 4: "gate_gnd",
         5: "gate_vdd", 6: "gate_vdd", 7: "current_source",
     }
 
@@ -1105,18 +1131,22 @@ def test_construct_bias_generation_gate_gnd_leg_brings_pref_branch():
     )
     assert [p.name for p in variant.ports] == ["ibias", "out5", "vdd", "gnd"]
     devices = {d.ref: d for d in variant.devices}
-    assert set(devices) == {"mnref", "mnpref", "mppref", "mp5", "mn5"}
+    assert set(devices) == {"mnref", "mnfeed", "mpfeed", "mpcasc", "mncdio",
+                            "mnpref", "mncasc", "mppref", "mp5", "mn5"}
     assert devices["mp5"].terminals == {"d": "out5", "g": "pref", "s": "vdd", "b": "vdd"}
     assert devices["mn5"].terminals == {"d": "out5", "g": "out5", "s": "gnd", "b": "gnd"}
-    assert "pref" not in {p.name for p in variant.ports}
+    # The cascoded pref branch pins mnpref's drain via the ncasc level.
+    assert devices["mncasc"].terminals["s"] == devices["mnpref"].terminals["d"]
+    assert devices["mncasc"].terminals["g"] == devices["mncdio"].terminals["d"]
+    assert {p.name for p in variant.ports}.isdisjoint({"pref", "prefsrc", "ncasc"})
 
 
 def test_construct_bias_generation_mixed_flavors_share_one_generator():
     """The redesign's flagship case: a real-cmfb fully-differential consumer
-    set mixes gate_vdd (rails 1, 5), gate_gnd (rail 4), and tunable (rails
+    set mixes gate_vdd (rails 1, 5), gate_gnd (rail 4), and cascode (rails
     2, 3) demands -- one constructed generator serves all of them, with a
-    single shared pref branch.  Under the retired single-flavor variants
-    this set could only enumerate with resistor_bias."""
+    single shared (cascoded) pref branch.  Under the retired single-flavor
+    variants this set could only enumerate with resistor_bias."""
     variant = _constructed_for(
         "two_stage_opamp_fully_differential",
         {
@@ -1131,26 +1161,40 @@ def test_construct_bias_generation_mixed_flavors_share_one_generator():
         "ibias", "out1", "out2", "out3", "out4", "out5", "vdd", "gnd",
     ]
     devices = {d.ref: d for d in variant.devices}
-    # master + one pref branch + 5 legs of 2 devices
-    assert len(devices) == 13
-    assert {"mnpref", "mppref"} <= set(devices)
+    # master + cascoded pref branch (7) + gate legs of 2 (rails 1, 4, 5)
+    # + cascode legs of 3 (rails 2, 3)
+    assert len(devices) == 20
+    assert {"mnfeed", "mpfeed", "mpcasc", "mncdio",
+            "mnpref", "mncasc", "mppref"} <= set(devices)
     # gate_vdd legs (rails 1, 5): PMOS diode on the rail
     for i in (1, 5):
         assert devices[f"mp{i}"].terminals["g"] == f"out{i}"
     # gate_gnd leg (rail 4): NMOS diode on the rail, PMOS mirror from pref
     assert devices["mn4"].terminals["g"] == "out4"
     assert devices["mp4"].terminals["g"] == "pref"
-    # tunable legs (rails 2, 3): resistor to gnd
-    for i in (2, 3):
-        assert devices[f"r{i}"].terminals == {"t1": f"out{i}", "t2": "gnd"}
+    # cascode_vdd leg (rail 2, PMOS cascode consumers): PMOS diode riding a
+    # floor resistor to vdd, mirror off ibias
+    assert devices["mp2"].terminals == {"d": "out2", "g": "out2", "s": "mid2", "b": "vdd"}
+    assert devices["r2"].terminals == {"t1": "mid2", "t2": "vdd"}
+    assert devices["mn2"].terminals["g"] == "ibias"
+    # cascode_gnd leg (rail 3, NMOS cascode consumers): NMOS diode riding a
+    # floor resistor to gnd, mirror off pref
+    assert devices["mn3"].terminals == {"d": "out3", "g": "out3", "s": "mid3", "b": "gnd"}
+    assert devices["r3"].terminals == {"t1": "mid3", "t2": "gnd"}
+    assert devices["mp3"].terminals["g"] == "pref"
 
 
 @pytest.mark.parametrize(
     "tail_name,leg_refs",
     [
-        # NMOS tail diode: current sourced in from a bare PMOS mirror (pref).
-        ("current_mirror_tail_nmos", {"mnref", "mnpref", "mppref", "mp7"}),
-        ("cascode_current_mirror_tail_nmos", {"mnref", "mnpref", "mppref", "mp7"}),
+        # NMOS tail diode: current sourced in from a bare PMOS mirror (pref;
+        # the pref branch arrives cascoded, with its ncasc level branch).
+        ("current_mirror_tail_nmos",
+         {"mnref", "mnfeed", "mpfeed", "mpcasc", "mncdio", "mnpref", "mncasc",
+          "mppref", "mp7"}),
+        ("cascode_current_mirror_tail_nmos",
+         {"mnref", "mnfeed", "mpfeed", "mpcasc", "mncdio", "mnpref", "mncasc",
+          "mppref", "mp7"}),
         # PMOS tail diode: current sunk out by a bare NMOS mirror (ibias).
         ("current_mirror_tail_pmos", {"mnref", "mn7"}),
         ("cascode_current_mirror_tail_pmos", {"mnref", "mn7"}),
@@ -1280,8 +1324,9 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
     assert [p.name for p in bias_variant.ports] == [
         "ibias", "out1", "out2", "out3", "out4", "out5", "out7", "vdd", "gnd",
     ]
-    # master + pref branch + 5 two-device legs + 1 bare current leg
-    assert len(bias_variant.devices) == 14
+    # master + cascoded pref branch (7) + 3 two-device gate legs
+    # + 2 three-device cascode legs + 1 bare current leg
+    assert len(bias_variant.devices) == 21
 
     bias_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_bias_gen")}
     # rail 7: bare PMOS current source from pref into the tail's own diode
@@ -1290,9 +1335,12 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
     assert "r7_bias_gen" not in bias_devices
     # rail 4 (cmfb tail): gnd-referenced diode leg
     assert bias_devices["mn4_bias_gen"].terminals["g"] == "net_bias4"
-    # rails 2/3 (cascode gates): tunable resistor legs
-    assert bias_devices["r2_bias_gen"].terminals["t2"] == "gnd!"
+    # rails 2/3 (cascode gates): level diodes riding floor resistors to the
+    # back supply (rail 2 serves PMOS cascodes -> vdd, rail 3 NMOS -> gnd)
+    assert bias_devices["r2_bias_gen"].terminals["t2"] == "vdd!"
+    assert bias_devices["mp2_bias_gen"].terminals["g"] == "net_bias2"
     assert bias_devices["r3_bias_gen"].terminals["t2"] == "gnd!"
+    assert bias_devices["mn3_bias_gen"].terminals["g"] == "net_bias3"
 
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
@@ -1302,11 +1350,16 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
 @pytest.mark.parametrize(
     "tail_variant_name,expected_bias_refs",
     [
-        # NMOS tail diode -> bare PMOS current-source leg (needs pref branch)
+        # NMOS tail diode -> bare PMOS current-source leg (needs the pref
+        # branch, which arrives cascoded with its ncasc level branch)
         ("current_mirror_tail_nmos",
-         {"mnref_bias_gen", "mnpref_bias_gen", "mppref_bias_gen", "mp7_bias_gen"}),
+         {"mnref_bias_gen", "mnfeed_bias_gen", "mpfeed_bias_gen",
+          "mpcasc_bias_gen", "mncdio_bias_gen", "mnpref_bias_gen",
+          "mncasc_bias_gen", "mppref_bias_gen", "mp7_bias_gen"}),
         ("cascode_current_mirror_tail_nmos",
-         {"mnref_bias_gen", "mnpref_bias_gen", "mppref_bias_gen", "mp7_bias_gen"}),
+         {"mnref_bias_gen", "mnfeed_bias_gen", "mpfeed_bias_gen",
+          "mpcasc_bias_gen", "mncdio_bias_gen", "mnpref_bias_gen",
+          "mncasc_bias_gen", "mppref_bias_gen", "mp7_bias_gen"}),
         # PMOS tail diode -> bare NMOS current-sink leg (master only)
         ("current_mirror_tail_pmos", {"mnref_bias_gen", "mn7_bias_gen"}),
         ("cascode_current_mirror_tail_pmos", {"mnref_bias_gen", "mn7_bias_gen"}),
@@ -1373,8 +1426,9 @@ def test_enumerate_circuits_second_stage_and_tail_current_get_distinct_rails():
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out7"]
-    # master + pref branch + gate_vdd leg (2) + bare current-source leg (1)
-    assert len(bias_variant.devices) == 6
+    # master + cascoded pref branch (7) + gate_vdd leg (2)
+    # + bare current-source leg (1)
+    assert len(bias_variant.devices) == 11
 
     tail_devices = {ref: dev for ref, dev in circuit.devices if ref.endswith("_tail_current")}
     assert tail_devices["m1_tail_current"].terminals["d"] == "net_bias7"
@@ -1498,9 +1552,9 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     third_stage (rails 5 and 6), a current-mirror tail (rail 7), and the cmfb
     slot itself (rail 4, via cmfb.bias) together consume all seven bias
     rails -- the constructed generator carries one leg per rail (master +
-    pref branch + five 2-device legs + two tunable legs + one bare current
-    leg = 16 devices), and each role's devices reference a distinct
-    net_bias{N}. A differential-output folded-cascode load is only
+    cascoded pref branch (7) + four 2-device gate legs + two 3-device
+    cascode legs + one bare current leg = 23 devices), and each role's
+    devices reference a distinct net_bias{N}. A differential-output folded-cascode load is only
     output_cardinality-compatible with fully_differential topologies, so this
     uses the fully-differential 3-stage NMC topology."""
     modules = load_modules()
@@ -1520,7 +1574,7 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == [
         "out1", "out2", "out3", "out4", "out5", "out6", "out7",
     ]
-    assert len(bias_variant.devices) == 16
+    assert len(bias_variant.devices) == 23
 
     load_terms = {t for ref, dev in circuit.devices if ref.endswith("_load") for t in dev.terminals.values()}
     second_stage_terms = {t for ref, dev in circuit.devices if "_second_stage" in ref for t in dev.terminals.values()}

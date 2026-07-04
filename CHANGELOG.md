@@ -3,6 +3,42 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-07-04 (cascode leg kinds + cascoded pref branch — bias phase 2)
+
+Follow-up to the demand-driven bias construction below (the two items its PR
+parked). Enumeration counts are unchanged (construction, not enumeration).
+
+### Added
+
+- **`cascode_gnd`/`cascode_vdd` rail kinds** (issue #99's parked cascode
+  class): a consumer gate whose source is an *internal* node (a cascode
+  gate) now votes a cascode kind instead of falling to `tunable`. The leg is
+  a mirror into a diode-connected device riding a small floor resistor
+  (`out = V_GS + I·R` from the back supply): the diode covers the large,
+  Vth-dependent part of the level — *tracking* the consumer over
+  process/temperature, which a bare resistor level cannot — and the resistor
+  covers only the small Vdsat floor. `tunable` remains for genuinely
+  conflicting shared-rail demands.
+- **Cascoded `pref` branch**: a wide-swing `ncasc` level (PMOS mirror into
+  a narrow diode) gates a cascode that pins the pref mirror's Vds near the
+  master reference's instead of `vdd − |V_GSP|`, closing most of the ~4%
+  extra-mirror-hop λ error the #103 A/B measured against the retired
+  `magic_battery_bias`. The `ncasc` branch mirrors a small uncascoded
+  `feed_pref` feeder copy rather than `pref` itself — the pref-gated form
+  closes a loop with a degenerate all-off operating point (the classic
+  wide-swing startup hazard), which the designer A/B caught ngspice
+  converging to on 18 circuits.
+- **Sizer `bias_levels` pass** (`circuitgenome/sizer/gmid/bias_levels.py`):
+  re-sizes each cascode leg's diode to the consumers' planned `V_GS` and its
+  floor resistor to the stack floor (reusing the #100/#104 stack walk), and
+  sizes the `ncasc` level headroom-aware — clamping back to the intent-table
+  default when the supply leaves no room (1 V PTM techs keep working).
+- Recognizer: `constructed_bias_legs` learns the three new shapes (cascode
+  legs on both sides, the cascoded pref chain); a cascode leg counts as
+  constructed-only evidence, so no-`pref` shapes with cascode legs (e.g. a
+  telescopic load with a PMOS mirror tail) resolve to `constructed_bias`.
+- Sizer taxonomy: gates on `*_ncasc` are bias-reference gates, excluded from
+  `is_signal_device` like `*_pref`.
 ## 2026-07-04 (cascode-load-aware current plan)
 
 PR (`fix/cascode-load-current-plan`). Targets
