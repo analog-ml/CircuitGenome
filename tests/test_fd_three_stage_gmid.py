@@ -51,16 +51,22 @@ def test_fd_two_stage_gmid(cmfb):
         assert cmfb_r and all(v > 1e5 for v in cmfb_r)
 
 
-@pytest.mark.parametrize("topo,load,extra", [
-    ("three_stage_opamp_nmc_single_ended", "folded_cascode_load_pmos_input_single_output", {}),
-    ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output", {}),
+@pytest.mark.parametrize("topo,load,ss,ts,extra", [
+    # NMC's comp1 wraps the ss+ts cascade: CS+CS composes non-inverting and
+    # is rejected by the compensation parity filter (issue #114) -- use the
+    # canonical NMC shape (follower ss, CS output stage). RNMC wraps single
+    # stages, so CS+CS stays valid there.
+    ("three_stage_opamp_nmc_single_ended", "folded_cascode_load_pmos_input_single_output",
+     "common_drain", "common_source", {}),
+    ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output",
+     "common_source", "common_source", {}),
 ])
-def test_three_stage_se_gmid(topo, load, extra):
+def test_three_stage_se_gmid(topo, load, ss, ts, extra):
     # fc_pmos_single's bias1 is gnd-flavored, the tail and stages vdd-flavored
     # -- mixed, so only resistor_bias survives the flavor filter.
     want = {"input_pair": "differential_pair_pmos", "load": load,
             "tail_current": "current_mirror_tail_pmos",
-            "second_stage": "common_source", "third_stage": "common_source",
+            "second_stage": ss, "third_stage": ts,
             "comp1": "miller_cap", "comp2": "miller_cap", **extra}
     r = _size(topo, want, _TS_SPEC)
     assert r.solver_status == "GMID"

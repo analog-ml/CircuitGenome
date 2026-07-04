@@ -719,7 +719,14 @@ modules:
   - name: differential_ota_second_stage
     category: second_stage
     display_name: "Differential OTA Second Stage"
-    # A simple folded-cascode OTA used as the second stage.
+    # Despite the name/comment history ("a simple folded-cascode OTA"), this
+    # is two cascaded common-source stages (in -> mn1 -> d1 -> mn2 -> out).
+    unsupported: >-
+      issue #114: two cascaded common-source stages, not an OTA -- the
+      composite is non-inverting, so every Miller-family compensation
+      variant around it is positive feedback (RHP response, PM > 180 deg),
+      and the internal d1 node is a second gain stage/pole the sizer's
+      single-gm2 stage model cannot see
     ports:
       - {name: in,   role: input}
       - {name: out,  role: output}

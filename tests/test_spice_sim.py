@@ -239,23 +239,53 @@ def test_pm_plausible_range():
     assert not measure._pm_plausible(285.0)
 
 
+# Miller compensation wrapped around differential_ota_second_stage (two
+# cascaded common-source stages -- a non-inverting composite): the variant
+# is parked as unsupported AND the compensation parity filter makes the
+# combination unconstructable (issue #114), so this specimen is frozen in
+# its external-netlist form. The measurement-layer plausibility guard it
+# regression-tests remains the defense for netlists the synthesizer can no
+# longer produce.
+_RHP_SPECIMEN_NETLIST = """\
+.subckt dut ibias in1 in2 out vdd! gnd!
+m1_input_pair net_diff1 in1 net_tail net_tail pmos
+m2_input_pair net_mid in2 net_tail net_tail pmos
+r1_load net_diff1 gnd! 1k
+r2_load net_mid gnd! 1k
+r1_tail_current vdd! net_tail 1k
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mn5_bias_gen net_bias5 ibias gnd! gnd! nmos
+mp5_bias_gen net_bias5 net_bias5 vdd! vdd! pmos
+c1_compensation net_mid out 1p
+mp1_second_stage second_stage_d1 net_bias5 vdd! vdd! pmos
+mp2_second_stage out net_bias5 vdd! vdd! pmos
+mn1_second_stage second_stage_d1 net_mid gnd! gnd! nmos
+mn2_second_stage out second_stage_d1 gnd! gnd! nmos
+.ends"""
+
+
 def _resistor_tail_two_stage_se(second_stage):
     """Size a gf180 resistor-load/resistor-tail two-stage; return sim inputs.
 
     With ``second_stage="differential_ota_second_stage"`` only the corrupted
     AC polarity settles in the rig (PM extracts at ~266°) — the regression
-    case for the plausibility guard.  ``"common_source"`` is its honest twin.
+    case for the plausibility guard; it comes from the frozen
+    ``_RHP_SPECIMEN_NETLIST`` (unconstructable since issue #114).
+    ``"common_source"`` is its honest, still-synthesizable twin.
     """
-    mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_single_ended")
-    want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
-            "tail_current": "resistor_tail_vdd",
-            "compensation": "miller_cap", "second_stage": second_stage}
-    circ = next(c for c in enumerate_circuits(topo, mods)
-                if all(c.variant_map.get(k) and c.variant_map[k].name == v
-                       for k, v in want.items()))
-    text = to_flat_spice(circ, name="dut")
+    if second_stage == "differential_ota_second_stage":
+        text = _RHP_SPECIMEN_NETLIST
+    else:
+        mods = load_modules()
+        want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+                "tail_current": "resistor_tail_vdd",
+                "compensation": "miller_cap", "second_stage": second_stage}
+        circ = next(c for c in enumerate_circuits(topo, mods)
+                    if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                           for k, v in want.items()))
+        text = to_flat_spice(circ, name="dut")
     parsed = parse(text)
     fbr = assign_slots(recognize(parsed), topo)
     tech = load_tech("gf180mcu")
