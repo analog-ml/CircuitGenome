@@ -40,6 +40,8 @@ SPICE netlists.
   (`is_combination_valid`).
 - `second_stage_compatibility.py` — stage-interface level compatibility
   filter (`is_second_stage_compatible`).
+- `compensation_compatibility.py` — compensation inversion-parity filter
+  (`is_compensation_compatible`, helper `stage_inversions`).
 - `output_compatibility.py` — output-cardinality compatibility filter
   (`is_output_type_compatible`).
 - `load_branch_compatibility.py` — untapped-load-branch compatibility filter
@@ -55,7 +57,7 @@ SPICE netlists.
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 
-These eight modules all follow the same shape (see "Pattern for small internal
+These nine modules all follow the same shape (see "Pattern for small internal
 pure-function modules" below) and are invoked, in this order, from
 `enumerate_circuits` (see "pipeline order" below).
 
@@ -147,6 +149,29 @@ senses the second stage's wide-swing output instead and is deliberately
 unconstrained. Untagged input pairs (`inverter_based_input`) impose no
 constraint. New `second_stage` variants are classified automatically by
 whichever device gates `in` and where its source sits.
+
+## Compensation parity filter (`compensation_compatibility.py`)
+
+Every `compensation` variant couples `in` to `out` through a capacitor
+(Miller family). That coupling is negative feedback (pole splitting) only
+around an *inverting* stage chain; around a non-inverting chain **with
+gain** it is positive feedback — a right-half-plane AC response whose
+gain/GBW/PM cannot be measured (issue #114:
+`differential_ota_second_stage`, two cascaded common-source stages, PM
+measured 270–281°). Chain parity = the number of common-source inversions
+along the `in -> out` device path (`stage_inversions`: gate→drain hop
+inverts, a follower's gate→source hop doesn't); `is_compensation_compatible`
+rejects a combination when a compensation slot's wrapped chain has a
+**positive even** inversion count. Followers alone (zero inversions, zero
+gain — the Miller cap bootstraps to ~0, benign) are deliberately allowed: a
+strict odd-parity rule would ban the issue #110 followers from every
+2-stage topology. The chain composes across slots via the topology's
+`in`/`out` nets, so in NMC 3-stage topologies `comp1` (wrapping the
+second+third stage cascade) rejects CS+CS composites — standard NMC
+requires a non-inverting second stage and an inverting output stage.
+Structural (no YAML tags); anything unclassifiable (a comp variant that
+doesn't couple `in`/`out`, a chain the walk can't follow) imposes no
+constraint.
 
 ## Output-cardinality compatibility filter (`output_compatibility.py`)
 
@@ -302,54 +327,70 @@ loadable (recognizer patterns, visualizer, and hand-built variant maps keep
 working) but is dropped from every slot's candidate pool by
 `enumerate_circuits` before the product is formed;
 `config={"include_unsupported": True}` opts back in (used by the recognizer
-round-trip tests). Currently only `inverter_based_input` (issue #113): it is
-self-biased — quiescent current set by W/L at the Vcm-pinned gate voltage,
-not `spec.ibias` — and the gm/Id sizer has no fixed-Vgs sizing path, so
-every candidate shipped mA-scale crowbar currents (gf180: 90/90 bias✗).
-Un-park by adding that sizing path and removing the tag.
+round-trip tests). Currently parked:
+
+- `inverter_based_input` (issue #113): self-biased — quiescent current set
+  by W/L at the Vcm-pinned gate voltage, not `spec.ibias` — and the gm/Id
+  sizer has no fixed-Vgs sizing path, so every candidate shipped mA-scale
+  crowbar currents (gf180: 90/90 bias✗). Un-park by adding that sizing
+  path and removing the tag.
+- `differential_ota_second_stage` (issue #114): not the folded-cascode OTA
+  its name claims — two cascaded common-source stages, so the composite is
+  non-inverting and every Miller-family compensation wrap is positive
+  feedback (also independently rejected by the compensation parity filter),
+  and its internal `d1` node is a second gain stage/pole the sizer's
+  single-gm2 stage model (`compute_requirements`' `ids_2`/`rout2`) cannot
+  see. Note the opt-in only restores it where the parity filter permits —
+  in 2-stage topologies every comp slot wraps it directly, so it stays
+  unbuildable even with `include_unsupported`; in NMC 3-stage chains
+  (ota + CS = 3 inversions) it builds, which is how the recognizer
+  round-trip tests keep covering its pattern.
 
 ## `enumerate_circuits` pipeline order
 
 1. `itertools.product` over per-slot candidate variants → `variant_map`
    (the `bias_generation` slot is excluded from the product — its variant
-   is constructed in step 10; variants tagged `unsupported` are dropped
+   is constructed in step 11; variants tagged `unsupported` are dropped
    from the pool unless `config={"include_unsupported": True}`, see
    "Unsupported (parked) variants" above).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_second_stage_compatible(topology, variant_map)` — skip on
    stage-interface level mismatch (see "Stage-interface compatibility
    filter" above).
-4. `is_output_type_compatible(topology, variant_map)` — skip on
+4. `is_compensation_compatible(topology, variant_map)` — skip if a
+   compensation slot wraps a non-inverting stage chain with gain (see
+   "Compensation parity filter" above).
+5. `is_output_type_compatible(topology, variant_map)` — skip on
    output-cardinality mismatch.
-5. `is_load_branch_compatible(topology, variant_map)` — skip if a
+6. `is_load_branch_compatible(topology, variant_map)` — skip if a
    `single_ended` topology's untapped branch node would be left
    high-impedance by the load (see "Untapped-load-branch compatibility
    filter" above).
-6. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
+7. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
    irrelevant for this `load` (see "CMFB compatibility filter" above).
-7. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
+8. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
    `variant_map["cmfb"]` (only if the topology has a `cmfb` slot).
-8. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
+9. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
    variant choice is irrelevant for this `input_pair` (see "Tail-current
    compatibility filter" above).
-9. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
-   replacing `variant_map["tail_current"]`.
-10. `construct_bias_generation(topology, variant_map, bias_legs)` →
+10. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
+    replacing `variant_map["tail_current"]`.
+11. `construct_bias_generation(topology, variant_map, bias_legs)` →
     `variant_map[bias_gen_slot]` (see "Demand-driven bias construction"
     above; must run after the cmfb/tail_current prunes so placeholders
     demand nothing).
-11. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+12. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
     then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
     `load` slot's `port_net_map` is captured separately as
     `load_port_net_map`.
-12. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+13. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
     topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
     net-merge pass for `load` ports declared `alias_of` another `load` port
     (see "Net-naming & wiring conventions" above).
-13. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+14. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
     devices)`.
 
-Any new per-combination transform should slot in between steps 6 and 11,
+Any new per-combination transform should slot in between steps 7 and 12,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 

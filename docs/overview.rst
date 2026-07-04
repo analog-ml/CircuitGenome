@@ -79,7 +79,9 @@ Module categories
        compensation
    * - Second stage
      - Common-source (NMOS/PMOS), common-drain source follower (PMOS/NMOS),
-       differential OTA
+       differential OTA (parked as ``unsupported``, issue #114: actually two
+       cascaded common-source stages -- non-inverting, incompatible with
+       Miller-family compensation)
 
 .. rubric:: Input pair
 
@@ -151,7 +153,14 @@ current is set by W/L at the gate voltage the wiring pins to Vcm, not by
 ``spec.ibias`` — and the gm/Id sizer has no fixed-Vgs sizing path for it, so
 ``enumerate_circuits`` drops it from the candidate pool (pass
 ``config={"include_unsupported": True}`` to enumerate it anyway, e.g. for
-recognizer round-trips).
+recognizer round-trips). The 5th ``second_stage`` variant,
+``differential_ota_second_stage``, is parked the same way (issue #114):
+despite its name it is two cascaded common-source stages, so its ``in`` →
+``out`` composite is *non-inverting* — Miller-family compensation around it
+is positive feedback (a right-half-plane AC response whose gain/GBW/PM
+cannot be measured; see the "Compensation parity filter" below) — and its
+internal ``d1`` node is a second gain stage/pole that the sizer's
+single-gm2 stage model cannot see.
 
 Of the remaining 4 × 12 × 6 = 288 possible ``input_pair`` / ``load`` /
 ``tail_current`` combinations, only 72 have compatible PMOS/NMOS polarities
@@ -177,29 +186,35 @@ core combination carries exactly one, structurally matched bias generator.
 The 1-stage template therefore produces **48 distinct circuits**. In the
 multi-stage templates, the ``second_stage`` slot that senses the first
 stage's output keeps only the level-reachable ``second_stage`` variants
-(the "Stage-interface compatibility filter" below): 3 of the 5 for the 24
-PMOS-pair combinations (``common_source``,
-``differential_ota_second_stage``, ``common_drain``), 2 of the 5 for the 24
-NMOS-pair combinations (``common_source_pmos``, ``common_drain_nmos``).
-The 2-stage single-ended template thus produces **360 circuits**
-((24 × 3 + 24 × 2) × 3 ``compensation``). The 2-stage
+(the "Stage-interface compatibility filter" below): 2 of the 4 enumerable
+variants for the 24 PMOS-pair combinations (``common_source``,
+``common_drain``), 2 of the 4 for the 24 NMOS-pair combinations
+(``common_source_pmos``, ``common_drain_nmos``);
+``differential_ota_second_stage`` is parked as ``unsupported`` (issue
+#114, see above). The 2-stage single-ended template thus produces
+**288 circuits** ((24 × 2 + 24 × 2) × 3 ``compensation``). The 2-stage
 fully-differential template, which has two ``compensation`` slots, two
 ``second_stage`` slots (one per output path, both sensing the first
-stage), and one ``cmfb`` slot, produces **4 212 circuits**: of the 48
+stage), and one ``cmfb`` slot, produces **2 592 circuits**: of the 48
 fully-differential-compatible ``input_pair``/``load``/``tail_current``
 combinations, the 24 using a ``"differential"``-cardinality load (the two
 differential-output cascode loads and the two ``current_source_load_*``)
 keep both ``cmfb`` variants (24 × 2 = 48); the other 24 collapse ``cmfb``
 to a single canonical variant (24 × 1 = 24) -- 48 + 24 = 72 effective
-load/``cmfb`` combinations (see "CMFB compatibility filter" below) -- (36
-× 3² + 36 × 2²) × 9 ``compensation`` pairs = 4 212. Each 3-stage
+load/``cmfb`` combinations (see "CMFB compatibility filter" below) -- 72
+× 2² × 9 ``compensation`` pairs = 2 592. Each 3-stage
 single-ended template adds two more ``second_stage`` slots (gm2, gm3 --
-only gm2 senses the first stage; gm3 keeps all 5 variants) and two
-``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
-**5 400 circuits** ((24 × 3 + 24 × 2) × 5 × 9 ``compensation``
-pairs). Each 3-stage fully-differential template duplicates those four
-slots per output path (and keeps the single ``cmfb`` slot), producing
-**947 700 circuits** ((36 × 3² + 36 × 2²) × 5² × 3⁴).
+only gm2 senses the first stage; gm3 keeps all 4 enumerable variants) and
+two ``compensation`` slots (Cm1, Cm2) on top of the 1-stage base. In the
+NMC scheme Cm1 wraps the gm2+gm3 cascade, so the "Compensation parity
+filter" below rejects the 2 CS×CS gm2/gm3 pairings per polarity (a
+non-inverting composite with gain), keeping 6 of the 8: **2 592 circuits**
+(48 × 6 × 9 ``compensation`` pairs); in the RNMC scheme each capacitor
+wraps a single stage and all 8 pairings survive: **3 456 circuits**
+(48 × 8 × 9). Each 3-stage fully-differential template duplicates those
+four slots per output path (and keeps the single ``cmfb`` slot), producing
+**209 952 circuits** (NMC, 72 × (6 × 9)²) and **373 248 circuits**
+(RNMC, 72 × (8 × 9)²).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -255,6 +270,34 @@ unconstrained, as are combinations using the untagged
 ``inverter_based_input`` (its output level sits near mid-rail, reachable by
 either gate type)
 (``circuitgenome/synthesizer/second_stage_compatibility.py``).
+
+Compensation parity filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every ``compensation`` variant couples its ``in`` port to its ``out`` port
+through a capacitor (Miller family). Wired across a stage chain, that
+coupling is *negative* feedback — pole splitting — only when the chain is
+inverting; around a non-inverting chain *with gain* the same capacitor is
+positive feedback, and the AC response develops a right-half-plane
+character whose gain/GBW/PM cannot be measured (issue #114:
+``differential_ota_second_stage``, two cascaded common-source stages,
+measured PM 270–281°).
+
+A chain's parity is its number of common-source inversions: each
+gate-to-drain hop inverts, a follower's gate-to-source hop does not — and
+a follower also contributes no gain, so a Miller capacitor around a pure
+follower chain is bootstrapped to ``C·(1−A) ≈ 0``: useless but benign.
+``enumerate_circuits`` therefore skips only combinations where a
+``compensation`` slot wraps a chain whose total inversion count is a
+*positive even* number. The check composes across slots: in the NMC
+3-stage topologies ``comp1`` wraps the second+third stage cascade, so two
+common-source stages (non-inverting composite with gain) are rejected —
+standard nested-Miller sign structure requires a non-inverting second
+stage and an inverting output stage. The check is structural (device
+terminal walks, no YAML tags), so new ``second_stage`` and
+``compensation`` variants are classified automatically; anything
+unclassifiable imposes no constraint
+(``circuitgenome/synthesizer/compensation_compatibility.py``).
 
 Output-cardinality compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -702,7 +745,8 @@ categories:
        ``common_drain_nmos`` (NMOS source follower + NMOS sink; the
        follower's source is the sink's drain, all bulks on gnd),
        ``differential_ota_second_stage`` (2 PMOS + 2 NMOS, cross-coupled via
-       an internal ``d1`` node).
+       an internal ``d1`` node; parked as ``unsupported`` for synthesis,
+       issue #114 -- the pattern still serves external netlists).
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search

@@ -9,6 +9,10 @@ from circuitgenome.synthesizer.load_branch_compatibility import (
     is_load_branch_compatible,
     untapped_branch_is_dc_defined,
 )
+from circuitgenome.synthesizer.compensation_compatibility import (
+    is_compensation_compatible,
+    stage_inversions,
+)
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
 from circuitgenome.synthesizer.second_stage_compatibility import (
     is_second_stage_compatible,
@@ -485,6 +489,136 @@ def test_enumerate_circuits_excludes_unreachable_second_stages():
         assert required == pair_type[input_pair.polarity], circuit.name
 
 
+def test_stage_inversions_per_variant():
+    """Each second_stage variant's in -> out inversion count is detected
+    structurally: 1 for the common-source stages (one gate-to-drain hop),
+    0 for the followers (gate-to-source hop), 2 for
+    differential_ota_second_stage (two cascaded common-source hops through
+    its internal d1 node -- the non-inverting composite of issue #114)."""
+    modules = load_modules()
+    inversions = {v.name: stage_inversions(v) for v in modules["second_stage"]}
+    assert inversions == {
+        "common_source": 1,
+        "common_source_pmos": 1,
+        "common_drain": 0,
+        "common_drain_nmos": 0,
+        "differential_ota_second_stage": 2,
+    }
+
+
+def test_compensation_filter_rejects_noninverting_gain_second_stage():
+    """Miller-family compensation around differential_ota_second_stage (a
+    non-inverting composite with gain) is positive feedback -- the RHP
+    response of issue #114 -- for every compensation variant in the
+    library."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+
+    for comp in modules["compensation"]:
+        variant_map = {
+            "second_stage": by_name["differential_ota_second_stage"],
+            "compensation": comp,
+        }
+        assert not is_compensation_compatible(topo, variant_map), comp.name
+
+
+def test_compensation_filter_allows_inverting_and_follower_second_stages():
+    """A single common-source stage (inverting -- true pole-splitting) and
+    the followers (zero inversions but also zero gain: the Miller capacitor
+    is bootstrapped to ~0, benign) all stay enumerable -- a strict
+    odd-parity rule would have banned the issue #110 followers."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+
+    for second_stage in ("common_source", "common_source_pmos",
+                         "common_drain", "common_drain_nmos"):
+        for comp in modules["compensation"]:
+            variant_map = {
+                "second_stage": by_name[second_stage],
+                "compensation": comp,
+            }
+            assert is_compensation_compatible(topo, variant_map), (
+                second_stage, comp.name,
+            )
+
+
+def test_compensation_filter_nmc_composite_chain():
+    """In the NMC 3-stage topology comp1 wraps the second+third stage
+    cascade (net_mid1 -> out), so the chain parity composes: two
+    common-source stages (non-inverting with gain -- standard NMC requires a
+    non-inverting second stage and an inverting output stage) are rejected,
+    a CS + follower cascade (one inversion) passes, and
+    differential_ota_second_stage + CS (three inversions, the sign-correct
+    nesting) passes the parity rule."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    miller = by_name["miller_cap"]
+
+    def variant_map(ss, ts):
+        return {
+            "second_stage": by_name[ss],
+            "third_stage": by_name[ts],
+            "comp1": miller,
+            "comp2": miller,
+        }
+
+    assert not is_compensation_compatible(topo, variant_map("common_source", "common_source"))
+    assert not is_compensation_compatible(topo, variant_map("common_source", "common_source_pmos"))
+    assert is_compensation_compatible(topo, variant_map("common_source", "common_drain"))
+    assert is_compensation_compatible(topo, variant_map("common_drain", "common_source"))
+    assert is_compensation_compatible(topo, variant_map("common_drain", "common_drain_nmos"))
+    assert is_compensation_compatible(
+        topo, variant_map("differential_ota_second_stage", "common_source")
+    )
+
+
+def test_compensation_filter_rnmc_wraps_single_stages():
+    """In the RNMC 3-stage topology each compensation wraps a single stage
+    (comp1: third_stage, comp2: second_stage), so a CS + CS combination is
+    fine (each wrapped stage is inverting on its own) -- only a stage that
+    is itself non-inverting with gain (differential_ota_second_stage) is
+    rejected."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_rnmc_single_ended")
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    miller = by_name["miller_cap"]
+
+    def variant_map(ss, ts):
+        return {
+            "second_stage": by_name[ss],
+            "third_stage": by_name[ts],
+            "comp1": miller,
+            "comp2": miller,
+        }
+
+    assert is_compensation_compatible(topo, variant_map("common_source", "common_source"))
+    assert not is_compensation_compatible(
+        topo, variant_map("differential_ota_second_stage", "common_source")
+    )
+    assert not is_compensation_compatible(
+        topo, variant_map("common_source", "differential_ota_second_stage")
+    )
+
+
+def test_enumerate_circuits_excludes_positive_feedback_compensation():
+    """No enumerated NMC circuit wraps comp1 around a non-inverting
+    second+third stage cascade with gain: the composed inversion count
+    along every compensation path is either odd (inverting) or zero (pure
+    follower chain, no gain)."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_single_ended")
+
+    for circuit in enumerate_circuits(topo, modules):
+        total = (
+            stage_inversions(circuit.variant_map["second_stage"])
+            + stage_inversions(circuit.variant_map["third_stage"])
+        )
+        assert total == 0 or total % 2 == 1, circuit.name
+
+
 def test_output_cardinality_tags_cover_cascode_and_current_source_loads():
     """Single-output folded-cascode and telescopic-cascode loads declare a
     mandatory `out` (wired only in single_ended topologies) and are tagged
@@ -842,13 +976,21 @@ def test_enumerate_circuits_tail_current_present_iff_not_inverter_based_input():
 def test_inverter_based_input_is_parked_unsupported():
     """inverter_based_input carries an ``unsupported:`` reason tag (issue
     #113: self-biased with Vgs pinned at Vcm, and the gm/Id sizer has no
-    fixed-Vgs sizing path); every other variant is enumerable."""
+    fixed-Vgs sizing path); differential_ota_second_stage likewise (issue
+    #114: two cascaded common-source stages, non-inverting composite --
+    positive feedback under every Miller-family compensation variant, and a
+    second gain stage/pole the single-gm2 sizing model cannot see); every
+    other variant is enumerable."""
+    parked = {
+        "inverter_based_input": "#113",
+        "differential_ota_second_stage": "#114",
+    }
     modules = load_modules()
     for variants in modules.values():
         for v in variants:
-            if v.name == "inverter_based_input":
+            if v.name in parked:
                 assert v.unsupported is not None
-                assert "#113" in v.unsupported
+                assert parked[v.name] in v.unsupported
             else:
                 assert v.unsupported is None
 
@@ -903,18 +1045,20 @@ def test_enumerate_circuits_count():
     reason, with is_load_branch_compatible as the structural guard for the
     untapped branch node; issue #112; see
     test_is_output_type_compatible_*). is_second_stage_compatible
-    keeps the level-reachable second_stage variants: 3 of the 5 for the 24
-    PMOS-pair combos (common_source, differential_ota, common_drain), 2 of
-    the 5 for the 24 NMOS-pair combos (common_source_pmos,
-    common_drain_nmos) (see
-    test_second_stage_filter_*). The bias generator is constructed, not
-    enumerated, so it contributes no factor: (24 x 3 + 24 x 2) x 3
-    comp = 360."""
+    keeps the level-reachable second_stage variants
+    (differential_ota_second_stage is parked as unsupported, issue #114):
+    2 of the 4 for the 24 PMOS-pair combos (common_source, common_drain),
+    2 of the 4 for the 24 NMOS-pair combos (common_source_pmos,
+    common_drain_nmos) (see test_second_stage_filter_*); all remaining
+    stages have 0 or 1 inversions, so is_compensation_compatible prunes
+    nothing further here. The bias generator is constructed, not
+    enumerated, so it contributes no factor: (24 x 2 + 24 x 2) x 3
+    comp = 288."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 360
+    assert len(circuits) == 288
 
 
 def test_enumerate_circuits_fully_differential_count():
@@ -928,16 +1072,17 @@ def test_enumerate_circuits_fully_differential_count():
     #112) and keep both cmfb variants (24 x 2 = 48); the other 24 have no
     bias_cmfb consumer, so is_cmfb_compatible collapses cmfb to 1 canonical
     variant (24 x 1 = 24). 48 + 24 = 72 effective load/cmfb combinations --
-    36 PMOS-pair (3 reachable second_stage variants per output path), 36
-    NMOS-pair (2 per path; see test_second_stage_filter_*; both
+    36 PMOS-pair and 36 NMOS-pair, each with 2 reachable second_stage
+    variants per output path (differential_ota_second_stage is parked as
+    unsupported, issue #114; see test_second_stage_filter_*; both
     second_stage_p and second_stage_n sense the first stage). The bias
     generator is constructed, not enumerated, so it contributes no factor:
-    (36 x 3^2 + 36 x 2^2) x 9 (comp_p x comp_n) = 4212."""
+    72 x 2^2 x 9 (comp_p x comp_n) = 2592."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 4212
+    assert len(circuits) == 2592
 
 
 def test_flat_spice_structure():
@@ -1023,23 +1168,37 @@ def test_enumerate_three_stage_single_ended_count():
     and untapped-branch filters, with inverter_based_input parked as
     unsupported, issue #113; see test_enumerate_circuits_count).
     Only the second_stage slot senses the first stage, so it keeps the
-    level-reachable variants (3 of 5 for PMOS-pair combos, 2 of 5 for
-    NMOS-pair); the third_stage slot is unconstrained
-    and keeps all 5 (see test_second_stage_filter_*). The bias generator is
-    constructed, not enumerated, so it contributes no factor:
-    (24 x 3 + 24 x 2) x 5 third_stage x 3 comp1 x 3 comp2 = 5400."""
+    level-reachable variants (2 of 4 per pair polarity --
+    differential_ota_second_stage is parked as unsupported, issue #114);
+    the third_stage slot is unconstrained by the stage-interface filter and
+    keeps all 4 (see test_second_stage_filter_*).
+
+    The compensation parity filter (issue #114) then splits the schemes: in
+    NMC, comp1 wraps the second+third stage cascade, so the two
+    CS-stage x CS-stage pairings per polarity (a non-inverting composite
+    with gain) are rejected -- 6 of the 8 ss x ts pairings survive; in
+    RNMC each compensation wraps a single stage (never a positive even
+    inversion count), so all 8 survive. The bias generator is constructed,
+    not enumerated, so it contributes no factor:
+    NMC:  48 x 6 x 3 comp1 x 3 comp2 = 2592;
+    RNMC: 48 x 8 x 3 comp1 x 3 comp2 = 3456."""
     modules = load_modules()
     topologies = load_topologies()
-    for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
+    expected = {
+        "three_stage_opamp_nmc_single_ended": 2592,
+        "three_stage_opamp_rnmc_single_ended": 3456,
+    }
+    for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 5400
+        assert len(circuits) == count
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
-    """FD 3-stage topologies enumerate ~0.95M circuits
-    ((36 x 3^2 + 36 x 2^2) x 5^2 third-stage pairs x 3^4
-    compensation variants; see
+    """FD 3-stage topologies enumerate ~0.2-0.4M circuits (72 effective
+    load/cmfb combos x per-path ss x ts x comp1 x comp2 on both paths --
+    2 x 4 x 9 per path, with NMC keeping 6 of the 8 ss x ts pairings per
+    path under the compensation parity filter, issue #114; see
     test_enumerate_circuits_fully_differential_count for the 72-combo
     split); just check the iterator yields a valid first circuit without
     materializing the full set."""
@@ -1058,10 +1217,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 5400
+    assert len(nmc) == 2592
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 5400
+    assert len(rnmc) == 3456
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 
@@ -1070,15 +1229,21 @@ def test_three_stage_nmc_flat_spice_structure():
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "three_stage_opamp_nmc_single_ended")
 
+    # Both ss/ts slots draw from the second_stage pool; a CS-only pool would
+    # make comp1 wrap a non-inverting CS+CS cascade, which the compensation
+    # parity filter rejects (issue #114) -- add the follower so the first
+    # valid product combo is the NMC-legal common_source + common_drain.
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name in ("common_source", "common_drain")],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
+    assert circuit.variant_map["second_stage"].name == "common_source"
+    assert circuit.variant_map["third_stage"].name == "common_drain"
     spice = to_flat_spice(circuit, name="test_3stage")
 
     assert spice.startswith(".subckt test_3stage")
@@ -1804,18 +1969,24 @@ def test_enumerate_circuits_third_stage_uses_rail_6():
     """In three_stage_opamp_nmc_single_ended, a simple load and resistor tail
     need no bias rails, but second_stage and third_stage each tap their own
     dedicated rail (5 and 6 respectively) -- two gate_vdd legs off the
-    master, no pref branch."""
+    master, no pref branch. The second_stage pool needs the follower next
+    to common_source: a CS-only pool would give comp1 a non-inverting CS+CS
+    cascade, rejected by the compensation parity filter (issue #114); the
+    first valid combo is ss=common_source, ts=common_drain, whose bias
+    device is likewise a PMOS on vdd (gate_vdd rail 6)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_single_ended")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
-        "second_stage": [v for v in modules["second_stage"] if v.name == "common_source"],
+        "second_stage": [v for v in modules["second_stage"] if v.name in ("common_source", "common_drain")],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
+    assert circuit.variant_map["second_stage"].name == "common_source"
+    assert circuit.variant_map["third_stage"].name == "common_drain"
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == ["out5", "out6"]
@@ -1876,10 +2047,13 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     devices reference a distinct net_bias{N}. A differential-output folded-cascode load is only
     output_cardinality-compatible with fully_differential topologies, so this
     uses the fully-differential 3-stage NMC topology. The second_stage pool
-    carries both common_source variants: the stage-interface filter forces
-    the NMOS pair's second_stage_p/n slots onto common_source_pmos (rail 5:
-    gate_gnd) while the unconstrained third_stage_p/n slots take
-    common_source (rail 6: gate_vdd)."""
+    pairs common_source_pmos with the common_drain follower: the
+    stage-interface filter forces the NMOS pair's second_stage_p/n slots
+    onto common_source_pmos (rail 5: gate_gnd), and the compensation parity
+    filter (issue #114) rejects a CS third stage behind it (comp1 would
+    wrap a non-inverting CS+CS cascade), so the third_stage_p/n slots take
+    common_drain -- whose bias device is likewise a PMOS on vdd (rail 6:
+    gate_vdd)."""
     modules = load_modules()
     topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_nmc_fully_differential")
     simple_modules = {
@@ -1887,11 +2061,13 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
         "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
-        "second_stage": [v for v in modules["second_stage"] if v.name in ("common_source", "common_source_pmos")],
+        "second_stage": [v for v in modules["second_stage"] if v.name in ("common_source_pmos", "common_drain")],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
 
     circuit = next(enumerate_circuits(topo, simple_modules))
+    assert circuit.variant_map["second_stage_p"].name == "common_source_pmos"
+    assert circuit.variant_map["third_stage_p"].name == "common_drain"
     bias_variant = circuit.variant_map["bias_gen"]
 
     assert [p.name for p in bias_variant.ports if p.name.startswith("out")] == [

@@ -19,6 +19,7 @@ from typing import Iterator
 
 from .bias_construction import construct_bias_generation
 from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
+from .compensation_compatibility import is_compensation_compatible
 from .polarity_compatibility import is_combination_valid
 from .loader import load_bias_legs, load_modules, load_topologies
 from .models import (
@@ -115,6 +116,7 @@ def build_circuit(
     Returns ``None`` if *variant_map* is rejected by
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
     :func:`~circuitgenome.synthesizer.second_stage_compatibility.is_second_stage_compatible`,
+    :func:`~circuitgenome.synthesizer.compensation_compatibility.is_compensation_compatible`,
     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
     :func:`~circuitgenome.synthesizer.load_branch_compatibility.is_load_branch_compatible`,
     :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
@@ -135,6 +137,8 @@ def build_circuit(
     if not is_combination_valid(variant_map):
         return None
     if not is_second_stage_compatible(topology, variant_map):
+        return None
+    if not is_compensation_compatible(topology, variant_map):
         return None
     if not is_output_type_compatible(topology, variant_map):
         return None
@@ -193,7 +197,8 @@ def enumerate_circuits(
 
     Variants parked with an ``unsupported:`` reason tag in the modules YAML
     are dropped from every slot's candidate pool before the product is
-    formed (currently only ``inverter_based_input``, issue #113), unless
+    formed (currently ``inverter_based_input``, issue #113, and
+    ``differential_ota_second_stage``, issue #114), unless
     ``config={"include_unsupported": True}`` -- see the ``config`` parameter.
 
     Combinations that mix incompatible ``polarity`` tags (see
@@ -208,6 +213,15 @@ def enumerate_circuits(
     second stage's required gate level are disjoint, so no sizing can bias
     the interface (the ``third_stage`` slot senses a wide-swing node instead
     and is not constrained).
+
+    Combinations where a ``compensation`` slot wraps a non-inverting stage
+    chain *with gain* -- a positive even number of common-source inversions
+    between the compensation's ``in`` and ``out`` nets (see
+    :func:`~circuitgenome.synthesizer.compensation_compatibility.is_compensation_compatible`)
+    -- are also skipped: a Miller-family capacitor around such a chain is
+    positive feedback, producing a right-half-plane AC response whose
+    gain/GBW/PM cannot be measured (issue #114). Pure follower chains (zero
+    inversions, no gain) are benign and stay allowed.
 
     Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't
     match *topology*'s ``output_type`` (see
@@ -277,11 +291,10 @@ def enumerate_circuits(
     :param config: Optional per-enumeration filter dictionary. Supported key:
                    ``include_unsupported`` (bool, default ``False``) —
                    when ``True``, variants parked with an ``unsupported:``
-                   reason tag (currently only ``inverter_based_input``,
-                   issue #113: the gm/Id sizer has no fixed-Vgs sizing path
-                   for self-biased inputs) are enumerated anyway. Intended
-                   for round-trip tests and future un-parking work, not for
-                   design runs.
+                   reason tag (currently ``inverter_based_input``, issue
+                   #113, and ``differential_ota_second_stage``, issue #114)
+                   are enumerated anyway. Intended for round-trip tests and
+                   future un-parking work, not for design runs.
     :raises ValueError: If a required module category (other than
                         ``bias_generation``) has no available variants
                         (after dropping ``unsupported``-tagged ones).

@@ -601,11 +601,15 @@ _THREE_STAGE_SPEC = dict(
 
 @pytest.fixture(scope="module")
 def three_stage_nmc_se_fbr():
+    # NMC's comp1 wraps the second+third stage cascade: two common-source
+    # stages compose non-inverting and are rejected by the compensation
+    # parity filter (issue #114), so this uses the canonical NMC shape --
+    # non-inverting follower second stage, inverting CS output stage.
     return _fbr("three_stage_opamp_nmc_single_ended", {
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
-        "second_stage": "common_source",
+        "second_stage": "common_drain",
         "third_stage":  "common_source",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
@@ -627,13 +631,15 @@ def three_stage_rnmc_se_fbr():
 
 @pytest.fixture(scope="module")
 def three_stage_nmc_fd_fbr():
+    # Follower second stage + CS output stage per path -- see
+    # three_stage_nmc_se_fbr (compensation parity filter, issue #114).
     return _fbr("three_stage_opamp_nmc_fully_differential", {
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
         "cmfb":            "resistive_sense_cmfb",
-        "second_stage_p":  "common_source",
-        "second_stage_n":  "common_source",
+        "second_stage_p":  "common_drain",
+        "second_stage_n":  "common_drain",
         "third_stage_p":   "common_source",
         "third_stage_n":   "common_source",
         "comp1_p":         "miller_cap",
