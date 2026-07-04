@@ -82,6 +82,7 @@ design exploration, or topology studies.
    api/sizer/gmid/geometry
    api/sizer/gmid/bias
    api/sizer/gmid/resistors
+   api/sizer/gmid/bias_levels
    api/sizer/gmid/evaluate
 
 .. toctree::

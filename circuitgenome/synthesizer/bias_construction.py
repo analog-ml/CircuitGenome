@@ -27,11 +27,17 @@ module is built around:
   issue #99).
 - ``current_sink`` -- mirror image for a PMOS-diode consumer: bare NMOS
   mirror sinking the reference current.
-- ``tunable`` -- no structurally implied level: cascode gates whose source
-  is an internal node (no bias level derivable from the netlist alone;
-  issue #99's parked cascode discussion), or conflicting demands on a shared
-  rail. The leg is a PMOS mirror into a resistor (``out = I_leg * R``),
-  per-rail tunable by the sizer (issue #100).
+- ``cascode_gnd`` -- an NMOS cascode gate: consumer gate on the rail with
+  its source on an *internal* node (a stacked device below). The rail must
+  sit at the cascode's ``V_GS`` plus the saturation floor of the stack under
+  it, so the leg is a diode-connected NMOS (the tracking ``V_GS`` part) on a
+  small floor resistor (``out = V_GSN + I*R``), both sized per-rail by the
+  sizer from the consumer stack (issue #99's parked cascode class).
+- ``cascode_vdd`` -- mirror image for PMOS cascode gates: diode-connected
+  PMOS on a resistor to vdd (``out = vdd - |V_GSP| - I*R``).
+- ``tunable`` -- no structurally implied level: conflicting demands on a
+  shared rail. The leg is a PMOS mirror into a resistor
+  (``out = I_leg * R``), per-rail tunable by the sizer (issue #100).
 
 The leg templates and the multi-reference core (NMOS master on the ``ibias``
 pin, plus a ``pref`` branch deriving the PMOS-side mirror reference, emitted
@@ -55,7 +61,11 @@ _SUPPLIES = ("vdd", "gnd")
 #: Rail kinds whose legs mirror from the PMOS-side reference gate. Present
 #: for documentation; the pref branch is actually emitted on a structural
 #: check (an instantiated leg terminal referencing ``pref``).
-PREF_KINDS = frozenset({"gate_gnd", "current_source", "tunable"})
+PREF_KINDS = frozenset({"gate_gnd", "current_source", "tunable", "cascode_gnd"})
+
+#: Template-local nets instantiated once per rail (rewritten ``{net}{i}``);
+#: every other template net (ibias/pref/vdd/gnd) is shared across legs.
+_PER_LEG_NETS = ("out", "mid")
 
 
 def rail_flavor_from_diode(devices: list[Device], node: str) -> str | None:
@@ -79,8 +89,10 @@ def rail_flavor_from_diode(devices: list[Device], node: str) -> str | None:
     return None
 
 
-def _device_votes(variant: ModuleVariant, port_name: str) -> tuple[set[str], set[str]]:
-    """Return ``(diode_kinds, gate_kinds)`` demanded on *port_name*.
+def _device_votes(
+    variant: ModuleVariant, port_name: str
+) -> tuple[set[str], set[str], set[str]]:
+    """Return ``(diode_kinds, gate_kinds, cascode_kinds)`` demanded on *port_name*.
 
     Per consumer MOSFET whose gate lands on the port:
 
@@ -90,10 +102,14 @@ def _device_votes(variant: ModuleVariant, port_name: str) -> tuple[set[str], set
       diode wants it sunk out (``current_sink``);
     - else, source on a supply: the gate needs a voltage one ``V_GS`` from
       that supply (``gate_vdd`` / ``gate_gnd``);
-    - else (source on an internal node -- cascode gates): no vote.
+    - else (source on an internal node -- a cascode gate): the gate needs
+      its ``V_GS`` plus the stack's saturation floor, referenced to the
+      supply its channel type conducts toward (``cascode_gnd`` for NMOS,
+      ``cascode_vdd`` for PMOS).
     """
     diode_kinds: set[str] = set()
     gate_kinds: set[str] = set()
+    cascode_kinds: set[str] = set()
     for dev in variant.devices:
         if dev.type not in ("nmos", "pmos"):
             continue
@@ -105,7 +121,11 @@ def _device_votes(variant: ModuleVariant, port_name: str) -> tuple[set[str], set
             )
         elif dev.terminals.get("s") in _SUPPLIES:
             gate_kinds.add(f"gate_{dev.terminals['s']}")
-    return diode_kinds, gate_kinds
+        else:
+            cascode_kinds.add(
+                "cascode_gnd" if dev.type == "nmos" else "cascode_vdd"
+            )
+    return diode_kinds, gate_kinds, cascode_kinds
 
 
 def required_rail_kinds(
@@ -124,13 +144,17 @@ def required_rail_kinds(
       rail a current interface, and any mirror gates riding on it (the tail's
       output device) are slaved to that diode, not to the leg;
     - a single gate kind is taken as-is;
-    - conflicting votes, or no votes at all (cascode gates), fall back to
-      ``tunable`` -- the honest "no structural level implied" answer.
+    - a single cascode kind (and no diode/gate votes) is taken as-is -- a
+      supply-referenced gate sharing the rail would need one ``V_GS`` where
+      the cascode needs ``V_GS`` plus a floor, so that mix is a conflict;
+    - conflicting votes fall back to ``tunable`` -- the honest "no single
+      structural level implied" answer.
 
     Unconsumed rails are absent from the result and get no leg at all.
     """
     diode_votes: dict[int, set[str]] = {}
     gate_votes: dict[int, set[str]] = {}
+    cascode_votes: dict[int, set[str]] = {}
     consumed: set[int] = set()
     for slot in topology.slots:
         if slot.category == "bias_generation":
@@ -146,18 +170,22 @@ def required_rail_kinds(
             if idx is None or port_name not in used_local_nets:
                 continue
             consumed.add(idx)
-            diode_kinds, gate_kinds = _device_votes(variant, port_name)
+            diode_kinds, gate_kinds, cascode_kinds = _device_votes(variant, port_name)
             diode_votes.setdefault(idx, set()).update(diode_kinds)
             gate_votes.setdefault(idx, set()).update(gate_kinds)
+            cascode_votes.setdefault(idx, set()).update(cascode_kinds)
 
     kinds: dict[int, str] = {}
     for idx in consumed:
         diodes = diode_votes.get(idx, set())
         gates = gate_votes.get(idx, set())
+        cascodes = cascode_votes.get(idx, set())
         if len(diodes) == 1:
             kinds[idx] = next(iter(diodes))
-        elif not diodes and len(gates) == 1:
+        elif not diodes and len(gates) == 1 and not cascodes:
             kinds[idx] = next(iter(gates))
+        elif not diodes and not gates and len(cascodes) == 1:
+            kinds[idx] = next(iter(cascodes))
         else:
             kinds[idx] = "tunable"
     return kinds
@@ -171,13 +199,15 @@ def construct_bias_generation(
     """Assemble the bias-generation variant this combination needs.
 
     Emits the master reference, one leg per consumed rail (template chosen by
-    :func:`required_rail_kinds`, with ``out`` rewritten to ``out{i}`` and each
-    ref suffixed with the rail index), and the ``pref`` branch when any
-    instantiated leg references the ``pref`` net. The result is a normal
+    :func:`required_rail_kinds`, with the per-leg nets ``out``/``mid``
+    rewritten to ``out{i}``/``mid{i}`` and each ref suffixed with the rail
+    index), and the ``pref`` branch when any instantiated leg references the
+    ``pref`` net. The result is a normal
     :class:`~circuitgenome.synthesizer.models.ModuleVariant` (name
     ``constructed_bias``) -- downstream wiring, serialization, and the
-    recognizer treat it like any other variant. ``pref`` is not a port, so it
-    resolves to a slot-internal net.
+    recognizer treat it like any other variant. ``pref`` (and the pref
+    branch's ``prefsrc``/``ncasc``, and the cascode legs' ``mid{i}``) are not
+    ports, so they resolve to slot-internal nets.
     """
     kinds = required_rail_kinds(topology, variant_map)
 
@@ -186,7 +216,7 @@ def construct_bias_generation(
     for idx in sorted(kinds):
         for tmpl in library.legs[kinds[idx]]:
             terminals = {
-                term: (f"out{idx}" if net == "out" else net)
+                term: (f"{net}{idx}" if net in _PER_LEG_NETS else net)
                 for term, net in tmpl.terminals.items()
             }
             if "pref" in terminals.values():

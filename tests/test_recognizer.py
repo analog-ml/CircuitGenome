@@ -16,12 +16,17 @@ _CANONICAL_TAIL = "current_mirror_tail_pmos"
 def _expected_pattern_name(variant):
     """The pattern each slot's variant should resolve to.  The constructed
     bias generator resolves to constructed_bias when it has PMOS-referenced
-    legs; purely NMOS-referenced shapes (and the bare master) keep the
-    historical diode_connected_mosfet_bias pattern, whose hook discovers the
-    identical device set (see hooks.constructed_bias_legs)."""
+    legs or a cascode leg (a floor resistor -- a shape the legacy hook
+    cannot claim); purely NMOS-referenced diode/mirror shapes (and the bare
+    master) keep the historical diode_connected_mosfet_bias pattern, whose
+    hook discovers the identical device set (see
+    hooks.constructed_bias_legs)."""
     if variant.category == "bias_generation":
-        has_p_side = any(d.terminals.get("g") == "pref" for d in variant.devices)
-        return "constructed_bias" if has_p_side else "diode_connected_mosfet_bias"
+        constructed = any(
+            d.terminals.get("g") == "pref" or d.type == "resistor"
+            for d in variant.devices
+        )
+        return "constructed_bias" if constructed else "diode_connected_mosfet_bias"
     return variant.name
 
 

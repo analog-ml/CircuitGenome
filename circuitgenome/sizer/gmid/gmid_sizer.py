@@ -11,8 +11,9 @@ sizer, as five phases with explicit hand-offs:
    from the spec, per-device design intent from the functional-block registry
    → :class:`~.plan.SizingPlan`.
 4. **Size** — deterministic geometry from the LUT (:mod:`.geometry`), the DC
-   operating-point check and tail repair (:mod:`.bias`), and the non-load
-   resistor network (:mod:`.resistors`).
+   operating-point check and tail repair (:mod:`.bias`), the non-load
+   resistor network (:mod:`.resistors`), and the constructed-bias level
+   tuning (:mod:`.bias_levels`).
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
 
 The model-independent topology math is reused from the
@@ -30,6 +31,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 from ..shared.models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
+from .bias_levels import tune_bias_levels
 from .evaluate import evaluate_circuit
 from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent
@@ -66,6 +68,9 @@ def size_gmid(
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
         plan.model, spec, tech, intent)
+    sizing, level_r = tune_bias_levels(
+        view.blocks, currents.ids_map, sizing, plan.model, spec, tech)
+    extra_r = {**extra_r, **level_r}
 
     # Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.
     metrics, margins = evaluate_circuit(

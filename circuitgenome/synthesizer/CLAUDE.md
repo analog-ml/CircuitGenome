@@ -187,15 +187,30 @@ emptied placeholders demand nothing). `required_rail_kinds` classifies every
   tails' stacked diode) → `current_source`/`current_sink` (the rail is a
   current interface; the leg is a **bare** mirror — no bias-side diode to
   duplicate or fight the tail's reference, issue #99's rail-7 classes);
-- internal-node sources (cascode gates) or conflicting votes → `tunable`
-  (mirror into a resistor, per-rail sizable; the cascode-level gap is
-  issue #99's parked follow-up).
+- a consumer gate whose source is an **internal** node (cascode gates) →
+  `cascode_gnd`/`cascode_vdd` (a level leg: diode-connected device riding a
+  small floor resistor to the back supply, `out = V_GS + I·R`; the diode
+  covers the Vth-tracking `V_GS` part, the resistor only the small Vdsat
+  floor — both sized per rail by the sizer's `bias_levels` pass from the
+  consumer stack, issue #99's formerly-parked cascode class);
+- conflicting votes → `tunable` (mirror into a resistor, per-rail sizable).
 
 `construct_bias_generation` assembles the variant (`constructed_bias`) from
 `config/bias_legs.yaml`: an NMOS master diode on `ibias` (always), a `pref`
 branch deriving the PMOS-side reference (only when a leg references `pref`;
 `pref` is not a port, so it resolves to a slot-internal net), and one leg
-per consumed rail (`out` → `out{i}`, refs suffixed with the rail index).
+per consumed rail (per-leg nets `out`/`mid` → `out{i}`/`mid{i}`, refs
+suffixed with the rail index). The pref branch is **cascoded**: a wide-swing
+`ncasc` level branch (PMOS mirror into a narrow diode) gates a cascode that
+pins the branch mirror's Vds near the master's, closing most of the
+extra-mirror-hop λ error (#103's A/B vs `magic_battery_bias`). The `ncasc`
+branch mirrors `feed_pref` — a small uncascoded feeder copy of the pref
+derivation — NOT `pref` itself: gating it from `pref` closes a loop with a
+degenerate all-off operating point that ngspice measurably converges to on
+some circuits (the classic wide-swing startup hazard). The
+`feed_pref`/`prefsrc`/`ncasc` nets are slot-internal like `pref`, and gates
+on `*_pref`/`*_ncasc` are excluded from `is_signal_device` (sizer taxonomy;
+`feed_pref` is named so its prefixed form ends in `_pref`).
 Only consumed rails get ports/legs, so the old flavor filter
 (`is_bias_flavor_compatible`), rail pruning (`prune_bias_generation`), and
 redundant-diode prune (`prune_redundant_tail_diode`) are all subsumed —
@@ -203,10 +218,12 @@ mismatches are unconstructable rather than filtered (decision record for the
 retired filter: issue #102; redesign: the issue #99 follow-up discussion).
 
 Recognizer coupling: the `constructed_bias` pattern + `constructed_bias_legs`
-hook (recognizer) discover the constructed shape per leg; purely
-NMOS-referenced shapes still resolve to the historical
+hook (recognizer) discover the constructed shape per leg, including the
+cascode legs (diode + floor resistor) and the cascoded pref chain; purely
+NMOS-referenced diode/mirror shapes still resolve to the historical
 `diode_connected_mosfet_bias` pattern (its hook finds the identical device
-set), and the legacy monolith patterns remain for external netlists.
+set — a cascode leg or pref cascode counts as constructed-only evidence),
+and the legacy monolith patterns remain for external netlists.
 
 ## Pattern for small internal pure-function modules
 

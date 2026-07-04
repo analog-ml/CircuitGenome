@@ -151,11 +151,14 @@ def test_resistor_tail_and_bias_sized():
     assert any("tail_current" in ref for ref in rt.resistors)
     assert all(v > 1e3 for v in rt.resistors.values())   # not the 1 kΩ placeholder
 
-    # A cascode-consumer rail (folded-cascode bias2) gets a tunable resistor
-    # leg in the constructed bias generator.
+    # A cascode-consumer rail (folded-cascode bias2) gets a cascode_gnd
+    # level leg: the diode covers the consumer's Vgs, the floor resistor
+    # only the stack's Vdsat floor (floor/ibias -- ~kΩ to tens of kΩ, well
+    # below the retired whole-level value of Vgs-plus-floor over ibias).
     rb = _size(load="folded_cascode_load_pmos_input_single_output")
     assert any("bias_gen" in ref for ref in rb.resistors)
-    assert all(v > 1e4 for v in rb.resistors.values())   # ~Vgs/ibias, tens of kΩ
+    r_leg = next(v for k, v in rb.resistors.items() if "bias_gen" in k)
+    assert 1e3 < r_leg < 3e4
 
 
 def test_no_resistors_for_active_circuit():
