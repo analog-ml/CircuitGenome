@@ -295,11 +295,26 @@ filters/transforms:
 5. Documented via a dedicated `docs/api/<name>.rst` (`automodule` directive),
    linked from `docs/index.rst`'s API Reference toctree.
 
+## Unsupported (parked) variants
+
+A variant tagged `unsupported: <reason>` in `opamp_modules.yaml` stays
+loadable (recognizer patterns, visualizer, and hand-built variant maps keep
+working) but is dropped from every slot's candidate pool by
+`enumerate_circuits` before the product is formed;
+`config={"include_unsupported": True}` opts back in (used by the recognizer
+round-trip tests). Currently only `inverter_based_input` (issue #113): it is
+self-biased — quiescent current set by W/L at the Vcm-pinned gate voltage,
+not `spec.ibias` — and the gm/Id sizer has no fixed-Vgs sizing path, so
+every candidate shipped mA-scale crowbar currents (gf180: 90/90 bias✗).
+Un-park by adding that sizing path and removing the tag.
+
 ## `enumerate_circuits` pipeline order
 
 1. `itertools.product` over per-slot candidate variants → `variant_map`
    (the `bias_generation` slot is excluded from the product — its variant
-   is constructed in step 10).
+   is constructed in step 10; variants tagged `unsupported` are dropped
+   from the pool unless `config={"include_unsupported": True}`, see
+   "Unsupported (parked) variants" above).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_second_stage_compatible(topology, variant_map)` — skip on
    stage-interface level mismatch (see "Stage-interface compatibility

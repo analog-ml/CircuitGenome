@@ -191,6 +191,11 @@ def enumerate_circuits(
     """Yield one :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
     for every valid combination of module variants in *topology*.
 
+    Variants parked with an ``unsupported:`` reason tag in the modules YAML
+    are dropped from every slot's candidate pool before the product is
+    formed (currently only ``inverter_based_input``, issue #113), unless
+    ``config={"include_unsupported": True}`` -- see the ``config`` parameter.
+
     Combinations that mix incompatible ``polarity`` tags (see
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
@@ -269,9 +274,17 @@ def enumerate_circuits(
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
                     return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
-    :param config: Reserved for future per-enumeration filters (currently unused).
+    :param config: Optional per-enumeration filter dictionary. Supported key:
+                   ``include_unsupported`` (bool, default ``False``) —
+                   when ``True``, variants parked with an ``unsupported:``
+                   reason tag (currently only ``inverter_based_input``,
+                   issue #113: the gm/Id sizer has no fixed-Vgs sizing path
+                   for self-biased inputs) are enumerated anyway. Intended
+                   for round-trip tests and future un-parking work, not for
+                   design runs.
     :raises ValueError: If a required module category (other than
-                        ``bias_generation``) has no available variants.
+                        ``bias_generation``) has no available variants
+                        (after dropping ``unsupported``-tagged ones).
 
     Example::
 
@@ -285,10 +298,13 @@ def enumerate_circuits(
         for circuit in enumerate_circuits(topology, modules):
             print(to_flat_spice(circuit))
     """
+    include_unsupported = bool((config or {}).get("include_unsupported"))
     product_slots = [s for s in topology.slots if s.category != "bias_generation"]
     per_slot: list[list[ModuleVariant]] = []
     for slot in product_slots:
         candidates = modules.get(slot.category, [])
+        if not include_unsupported:
+            candidates = [v for v in candidates if v.unsupported is None]
         if not candidates:
             raise ValueError(f"No module variants found for category '{slot.category}'")
         per_slot.append(candidates)

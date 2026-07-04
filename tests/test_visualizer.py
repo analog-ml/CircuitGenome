@@ -203,8 +203,9 @@ def test_explain_incompatibility(topologies, by_name):
 
 def test_enumerate_circuits_count_unchanged_after_refactor(modules, topologies):
     """Sanity check that build_circuit (shared with enumerate_circuits in
-    synthesizer.py) applies the same filter pipeline: 56 effective
-    input_pair/load/tail_current combos (70 minus the 14 current_source_load_*
-    combos pruned by the untapped-branch filter, issue #112), each with its
-    one constructed bias generator."""
-    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 56
+    synthesizer.py) applies the same filter pipeline: 48 effective
+    input_pair/load/tail_current combos (current_source_load_* excluded
+    from single-ended, issue #112; inverter_based_input parked as
+    unsupported, issue #113), each with its one constructed bias
+    generator."""
+    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 48

@@ -69,6 +69,7 @@ def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant
             devices=devices,
             polarity=entry.get("polarity"),
             output_cardinality=entry.get("output_cardinality"),
+            unsupported=entry.get("unsupported"),
         )
         by_category.setdefault(variant.category, []).append(variant)
     return by_category

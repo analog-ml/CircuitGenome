@@ -12,6 +12,11 @@ from circuitgenome.recognizer.functional_block_recognizer import assign_slots
 # tail_current_compatibility.py.
 _CANONICAL_TAIL = "current_mirror_tail_pmos"
 
+# inverter_based_input is parked as unsupported for synthesis (issue #113:
+# no fixed-Vgs sizing path), but the recognizer must still handle external
+# netlists containing it, so the round-trip builders opt back in.
+_INCLUDE_UNSUPPORTED = {"include_unsupported": True}
+
 
 def _expected_pattern_name(variant):
     """The pattern each slot's variant should resolve to.  The constructed
@@ -84,7 +89,7 @@ def test_round_trip_one_stage_opamp(
         "compensation":    modules["compensation"],
         "second_stage":    modules["second_stage"],
     }
-    circuit = next(enumerate_circuits(topology, simple_modules))
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_UNSUPPORTED))
 
     sr_result = recognize(parse(to_flat_spice(circuit)))
 
@@ -163,7 +168,7 @@ def test_round_trip_two_stage_opamp(
         "compensation":    [v for v in modules["compensation"]    if v.name == compensation],
         "second_stage":    [v for v in modules["second_stage"]    if v.name == second_stage],
     }
-    circuit = next(enumerate_circuits(topology, simple_modules))
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_UNSUPPORTED))
 
     sr_result = recognize(parse(to_flat_spice(circuit)))
 
@@ -256,7 +261,7 @@ def test_round_trip_two_stage_fully_diff(
         "compensation":    [v for v in modules["compensation"]    if v.name in (comp_p, comp_n)],
         "second_stage":    [v for v in modules["second_stage"]    if v.name in (second_stage_p, second_stage_n)],
     }
-    circuit = next(enumerate_circuits(topology, simple_modules))
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_UNSUPPORTED))
 
     sr_result = recognize(parse(to_flat_spice(circuit)))
 
@@ -448,7 +453,7 @@ def _run_three_stage_se(modules, topology, input_pair, load, tail_current,
         # comp1 and comp2 both have category 'compensation'; both slots draw from this pool.
         "compensation":    [v for v in modules["compensation"]    if v.name in (comp1, comp2)],
     }
-    circuit = next(enumerate_circuits(topology, simple_modules))
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_UNSUPPORTED))
     sr_result = recognize(parse(to_flat_spice(circuit)))
     assert sr_result.unrecognized_devices == [], (
         f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"
@@ -479,7 +484,7 @@ def _run_three_stage_fd(modules, topology, input_pair, load, tail_current, cmfb,
         # 4 compensation-category slots (c1_p, c2_p, c1_n, c2_n) all draw from this pool.
         "compensation":    [v for v in modules["compensation"]    if v.name in (c1_p, c2_p, c1_n, c2_n)],
     }
-    circuit = next(enumerate_circuits(topology, simple_modules))
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_UNSUPPORTED))
     sr_result = recognize(parse(to_flat_spice(circuit)))
     assert sr_result.unrecognized_devices == [], (
         f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"

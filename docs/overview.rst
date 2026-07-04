@@ -48,7 +48,8 @@ Module categories
      - Variants
    * - Input pair
      - PMOS differential pair, NMOS differential pair, PMOS with source
-       degeneration, NMOS with source degeneration, inverter-based
+       degeneration, NMOS with source degeneration, inverter-based (parked
+       as ``unsupported``, issue #113: no fixed-Vgs sizing path yet)
    * - Load
      - Resistor (VDD-side / GND-side), PMOS active (current mirror), NMOS
        active (current mirror), PMOS/NMOS current source, folded cascode
@@ -144,21 +145,24 @@ Topology templates
      - Fully differential
      - Reversed Nested Miller (RNMC)
 
-Of the 5 × 12 × 6 = 360 possible ``input_pair`` / ``load`` / ``tail_current``
-combinations, only 144 have compatible PMOS/NMOS polarities (see "Polarity
-compatibility filter" below) — the rest are filtered out by
-``enumerate_circuits``. Of those 144, 72 use ``inverter_based_input``, whose
-self-biased design never references its ``tail`` port: the "Tail-current
-compatibility filter" below collapses those 72 combinations' 6
-``tail_current`` choices down to 1 canonical choice (72 -> 12), leaving
-**84** effective combinations (the 72 combinations using a
-``differential_pair_*`` variant are unaffected). Of those 84, the
+The 5th ``input_pair`` variant, ``inverter_based_input``, is parked with an
+``unsupported:`` reason tag (issue #113): it is self-biased — its quiescent
+current is set by W/L at the gate voltage the wiring pins to Vcm, not by
+``spec.ibias`` — and the gm/Id sizer has no fixed-Vgs sizing path for it, so
+``enumerate_circuits`` drops it from the candidate pool (pass
+``config={"include_unsupported": True}`` to enumerate it anyway, e.g. for
+recognizer round-trips).
+
+Of the remaining 4 × 12 × 6 = 288 possible ``input_pair`` / ``load`` /
+``tail_current`` combinations, only 72 have compatible PMOS/NMOS polarities
+(see "Polarity compatibility filter" below) — the rest are filtered out by
+``enumerate_circuits``. Of those 72, the
 "Output-cardinality compatibility filter" below further splits them by which
-output type the ``load`` supports: **56** are valid for single-ended
-templates (excluding the 14 combinations using a differential-output cascode
-load and the 14 using a ``current_source_load_*``, whose CMFB-driven gates
-need a fully-differential template; issue #112) and **56** are valid for
-fully-differential templates (excluding the 28 combinations using a
+output type the ``load`` supports: **48** are valid for single-ended
+templates (excluding the 12 combinations using a differential-output cascode
+load and the 12 using a ``current_source_load_*``, whose CMFB-driven gates
+need a fully-differential template; issue #112) and **48** are valid for
+fully-differential templates (excluding the 24 combinations using a
 single-output cascode or telescopic-cascode load). The "Untapped-load-branch
 compatibility filter" below independently guards the same
 ``current_source_load_*`` exclusion structurally: a load may not leave the
@@ -170,33 +174,32 @@ variant is *constructed* per combination from what the other slots consume
 on each bias rail (see "Demand-driven bias construction" below), so every
 core combination carries exactly one, structurally matched bias generator.
 
-The 1-stage template therefore produces **56 distinct circuits**. In the
+The 1-stage template therefore produces **48 distinct circuits**. In the
 multi-stage templates, the ``second_stage`` slot that senses the first
 stage's output keeps only the level-reachable ``second_stage`` variants
 (the "Stage-interface compatibility filter" below): 3 of the 5 for the 24
 PMOS-pair combinations (``common_source``,
 ``differential_ota_second_stage``, ``common_drain``), 2 of the 5 for the 24
-NMOS-pair combinations (``common_source_pmos``, ``common_drain_nmos``),
-and all 5 for the 8 ``inverter_based_input`` combinations. The 2-stage
-single-ended template thus produces **480 circuits**
-((24 × 3 + 24 × 2 + 8 × 5) × 3 ``compensation``). The 2-stage
+NMOS-pair combinations (``common_source_pmos``, ``common_drain_nmos``).
+The 2-stage single-ended template thus produces **360 circuits**
+((24 × 3 + 24 × 2) × 3 ``compensation``). The 2-stage
 fully-differential template, which has two ``compensation`` slots, two
 ``second_stage`` slots (one per output path, both sensing the first
-stage), and one ``cmfb`` slot, produces **6 912 circuits**: of the 56
+stage), and one ``cmfb`` slot, produces **4 212 circuits**: of the 48
 fully-differential-compatible ``input_pair``/``load``/``tail_current``
-combinations, the 28 using a ``"differential"``-cardinality load (the two
+combinations, the 24 using a ``"differential"``-cardinality load (the two
 differential-output cascode loads and the two ``current_source_load_*``)
-keep both ``cmfb`` variants (28 × 2 = 56); the other 28 collapse ``cmfb``
-to a single canonical variant (28 × 1 = 28) -- 56 + 28 = 84 effective
+keep both ``cmfb`` variants (24 × 2 = 48); the other 24 collapse ``cmfb``
+to a single canonical variant (24 × 1 = 24) -- 48 + 24 = 72 effective
 load/``cmfb`` combinations (see "CMFB compatibility filter" below) -- (36
-× 3² + 36 × 2² + 12 × 5²) × 9 ``compensation`` pairs = 6 912. Each 3-stage
+× 3² + 36 × 2²) × 9 ``compensation`` pairs = 4 212. Each 3-stage
 single-ended template adds two more ``second_stage`` slots (gm2, gm3 --
 only gm2 senses the first stage; gm3 keeps all 5 variants) and two
 ``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
-**7 200 circuits** ((24 × 3 + 24 × 2 + 8 × 5) × 5 × 9 ``compensation``
+**5 400 circuits** ((24 × 3 + 24 × 2) × 5 × 9 ``compensation``
 pairs). Each 3-stage fully-differential template duplicates those four
 slots per output path (and keeps the single ``cmfb`` slot), producing
-**1 555 200 circuits** ((36 × 3² + 36 × 2² + 12 × 5²) × 5² × 3⁴).
+**947 700 circuits** ((36 × 3² + 36 × 2²) × 5² × 3⁴).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
