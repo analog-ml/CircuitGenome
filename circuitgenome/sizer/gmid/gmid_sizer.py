@@ -11,7 +11,8 @@ sizer, as five phases with explicit hand-offs:
    from the spec, per-device design intent from the functional-block registry
    → :class:`~.plan.SizingPlan`.
 4. **Size** — deterministic geometry from the LUT (:mod:`.geometry`), the DC
-   operating-point check and tail repair (:mod:`.bias`), the non-load
+   operating-point check and tail repair (:mod:`.bias`), the stage-interface
+   window check and repair (:mod:`.stage_interface`), the non-load
    resistor network (:mod:`.resistors`), and the constructed-bias level
    tuning (:mod:`.bias_levels`).
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
@@ -37,6 +38,7 @@ from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent
 from .plan import assign_currents, plan_devices
 from .resistors import size_resistors
+from .stage_interface import check_stage_interface
 
 
 def size_gmid(
@@ -65,6 +67,9 @@ def size_gmid(
     sizing, dc_warnings, bias_feasible = check_dc_operating_point(
         plan.model, view.blocks, view.slot_transistors, view.all_transistors,
         currents.ids_map, sizing, spec, tech)
+    sizing, si_warnings, si_feasible = check_stage_interface(
+        plan.model, view.blocks, sizing, plan.gm_req_map, spec, tech)
+    bias_feasible = bias_feasible and si_feasible
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
         plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf)
@@ -83,7 +88,8 @@ def size_gmid(
         margins=margins,
         solver_status="GMID",
         cc2_pf=plan.cc2_pf,
-        warnings=view.warnings + plan.warnings + geom_warnings + dc_warnings,
+        warnings=(view.warnings + plan.warnings + geom_warnings + dc_warnings
+                  + si_warnings),
         resistors={**currents.load_resistors, **extra_r},
         bias_feasible=bias_feasible,
         transistor_intents=plan.tintents,
