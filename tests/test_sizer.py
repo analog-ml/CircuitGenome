@@ -1008,7 +1008,7 @@ def test_simple_load_current_plan_unchanged():
     """Non-cascode loads keep the generic ibias/2-per-device rule."""
     ids = _ids_plan("two_stage_opamp_single_ended", {
         "input_pair": "differential_pair_pmos",
-        "load": "current_source_load_nmos"})
+        "load": "active_load_nmos"})
     assert ids["m1_load"] == pytest.approx(10e-6)
     assert ids["m2_load"] == pytest.approx(10e-6)
 

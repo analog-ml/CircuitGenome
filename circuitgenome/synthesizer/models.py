@@ -62,14 +62,17 @@ class ModuleVariant:
                      to filter out combinations with no DC current path.
     :param output_cardinality: ``load``-only tag, either ``"single"``,
                      ``"differential"``, or ``None``. Declares which topology
-                     ``output_type`` defines a net for the variant's
-                     mandatory output port(s) (``out`` for ``"single"``,
-                     ``out1``/``out2`` for ``"differential"``); ``None`` means
-                     the variant has no such port and is compatible with
-                     either output type. Used by
-                     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`
-                     to filter out combinations that would leave the
-                     mandatory port(s) floating (unconnected).
+                     ``output_type`` the variant is structurally usable with:
+                     for the cascode loads, which ``output_type`` defines a
+                     net for the variant's mandatory output port(s) (``out``
+                     for ``"single"``, ``out1``/``out2`` for
+                     ``"differential"``); for ``current_source_load_*``,
+                     ``"differential"`` because their ``bias_cmfb``-gated
+                     branch devices need the CMFB loop that only
+                     ``fully_differential`` topologies wire (issue #112).
+                     ``None`` means the variant imposes no constraint and is
+                     compatible with either output type. Used by
+                     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`.
     """
     name: str
     category: str

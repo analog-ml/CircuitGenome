@@ -28,6 +28,7 @@ from .models import (
     SynthesizedCircuit,
     TopologyTemplate,
 )
+from .load_branch_compatibility import is_load_branch_compatible
 from .net_aliasing import apply_net_rename, compute_alias_net_rename
 from .output_compatibility import is_output_type_compatible
 from .second_stage_compatibility import is_second_stage_compatible
@@ -115,6 +116,7 @@ def build_circuit(
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
     :func:`~circuitgenome.synthesizer.second_stage_compatibility.is_second_stage_compatible`,
     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
+    :func:`~circuitgenome.synthesizer.load_branch_compatibility.is_load_branch_compatible`,
     :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
     :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`.
 
@@ -135,6 +137,8 @@ def build_circuit(
     if not is_second_stage_compatible(topology, variant_map):
         return None
     if not is_output_type_compatible(topology, variant_map):
+        return None
+    if not is_load_branch_compatible(topology, variant_map):
         return None
     if not is_cmfb_compatible(variant_map):
         return None
@@ -208,6 +212,15 @@ def enumerate_circuits(
     unconnected: only ``single_ended`` topologies define a net for
     ``load.out``, and only ``fully_differential`` topologies define
     ``net_loadout1``/``net_loadout2`` for ``load.out1``/``out2``.
+
+    Combinations where a ``single_ended`` topology's untapped first-stage
+    branch node (``load.in1``, ``net_diff1``) is left high-impedance by the
+    load -- a plain rail-referenced current source with no diode, resistor,
+    or cascode connection to define its DC voltage (see
+    :func:`~circuitgenome.synthesizer.load_branch_compatibility.is_load_branch_compatible`)
+    -- are also skipped: the node sits between two series current sources
+    with no mechanism to absorb their mismatch, so no sizing can establish
+    an operating point (issue #112).
 
     After each slot's ports are wired, a net-merge pass (see
     :func:`~circuitgenome.synthesizer.net_aliasing.compute_alias_net_rename`/
