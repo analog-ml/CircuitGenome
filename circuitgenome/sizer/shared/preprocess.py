@@ -248,10 +248,12 @@ def compute_requirements(
     spec: SizingSpec,
     model: DeviceModel,
     gd_load_r: float = 0.0,
-) -> tuple[dict[str, float], dict[str, float], float | None, float | None]:
+) -> tuple[dict[str, float], dict[str, float], float | None, float | None, list[str]]:
     """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
-    Returns ``(gm_req_map, vod_max_map, cc_pf, cc2_pf)``.  Output conductances
+    Returns ``(gm_req_map, vod_max_map, cc_pf, cc2_pf, warnings)`` where
+    ``warnings`` lists any gm requirement clamped to the weak-inversion
+    ceiling (the spec cannot be met at this bias current).  Output conductances
     come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
     model reproduces the geometry-free ``λ·Id`` exactly.
     """
@@ -403,10 +405,11 @@ def compute_requirements(
                         len([d for d in ip_devices if d.type == ip_dev.type]), 1
                     )
                     lhs = 2.0 * ip_params.mu_cox * ids_ip
-                    l_min_int = round(tech.length.min / tech.length.step)
-                    w_ceil_int = math.ceil(gm1_req ** 2 * l_min_int / lhs)
-                    w_ceil_int = min(w_ceil_int, round(tech.width.max / tech.width.step))
-                    gm1_eff = math.sqrt(lhs * w_ceil_int / l_min_int)
+                    l_min = tech.length.min
+                    w_step = tech.width.step
+                    w_um = math.ceil(gm1_req ** 2 * l_min / (lhs * w_step)) * w_step
+                    w_um = min(max(w_um, tech.width.min), tech.width.max)
+                    gm1_eff = math.sqrt(lhs * w_um / l_min)
                 pm_rad = math.radians(spec.phase_margin_min_deg)
                 gm2_req = max(
                     gm2_req,

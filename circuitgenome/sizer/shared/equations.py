@@ -16,7 +16,7 @@ import math
 # ---------------------------------------------------------------------------
 
 def gm(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
-    """Transconductance gm in A/V.
+    r"""Transconductance gm in A/V.
 
     gm = √(2·µCox·(W/L)·\|IDS\|)
 
@@ -42,7 +42,7 @@ def gm_ceiling(ids_a: float) -> float:
 
 
 def gd(lam: float, ids_a: float) -> float:
-    """Output conductance gd in A/V.
+    r"""Output conductance gd in A/V.
 
     gd = λ·\|IDS\|
 
@@ -79,7 +79,7 @@ def vgs_from_ids(
 
 
 def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
-    """Minimum \|VDS\| for saturation in V.
+    r"""Minimum \|VDS\| for saturation in V.
 
     VDS_sat = VGS − Vth = √(2·\|IDS\|·L / (µCox·W))
 
