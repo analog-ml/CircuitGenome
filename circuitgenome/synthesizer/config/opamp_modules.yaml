@@ -154,6 +154,16 @@ modules:
     # Two back-to-back CMOS inverters used as a differential input --
     # self-biased, no tail-current source needed. tail_current is pruned to
     # an empty placeholder for this variant; see tail_current_compatibility.py.
+    # Parked (issue #113): the quiescent current is set by W/L at the pinned
+    # gate voltage (Vgs = Vcm - rail), not by spec.ibias, and the gm/Id sizer
+    # has no fixed-Vgs sizing path -- it sizes these as tail-limited pairs,
+    # yielding mA-scale crowbar currents at mid-rail Vcm (gf180: 90/90 bias
+    # failures, 15 mW vs 2 mW budget). Un-park by adding a dedicated
+    # fixed-Vgs sizing path (solve W from the LUT at Vgs = Vcm, which also
+    # places the inverter trip point at Vcm) and removing this tag.
+    unsupported: >-
+      issue #113: self-biased (Vgs pinned at Vcm); the gm/Id sizer has no
+      fixed-Vgs sizing path, so candidates draw mA-scale crowbar current
     ports:
       - {name: in1,  role: input}
       - {name: in2,  role: input}

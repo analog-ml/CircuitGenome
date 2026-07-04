@@ -70,6 +70,12 @@ class ModuleVariant:
                      :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`
                      to filter out combinations that would leave the
                      mandatory port(s) floating (unconnected).
+    :param unsupported: ``None`` for enumerable variants. A non-``None``
+                     reason string parks the variant: it stays loadable
+                     (recognizer patterns and hand-built variant maps keep
+                     working) but
+                     :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`
+                     skips it unless ``config={"include_unsupported": True}``.
     """
     name: str
     category: str
@@ -78,6 +84,7 @@ class ModuleVariant:
     devices: list[Device]
     polarity: str | None = None
     output_cardinality: str | None = None
+    unsupported: str | None = None
 
     def port_names(self) -> set[str]:
         """Return the set of all port names on this variant."""

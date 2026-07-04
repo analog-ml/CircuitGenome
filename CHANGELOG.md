@@ -3,6 +3,30 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-07-04 (park inverter_based_input as unsupported — issue #113)
+
+### Changed
+
+- **`inverter_based_input` is parked**: the variant is tagged
+  `unsupported: <reason>` in `opamp_modules.yaml` and dropped from
+  `enumerate_circuits`' candidate pool. It is self-biased — its quiescent
+  current is set by W/L at the gate voltage the wiring pins to Vcm, not by
+  `spec.ibias` — but the gm/Id sizer sized it as a tail-limited pair
+  (`ids = ibias/2`, gm-target W), yielding mA-scale crowbar currents at
+  mid-rail Vcm (gf180 two-stage SE: 90/90 bias✗, 15 mW vs the 2 mW budget,
+  ~15% of the enumeration budget burned on guaranteed-dead candidates).
+  The committed gf180 LUT tops out at |Vgs| ≈ 0.96–1.08 V, so a fixed-Vgs
+  sizing path cannot even be built for 3.3 V mid-rail Vcm from the existing
+  tables; at low-supply nodes (ptm45's Vcm = 0.5 V is in-range) the path is
+  buildable — un-park the variant by adding it and removing the tag.
+- **`ModuleVariant.unsupported` + `include_unsupported`**: general parking
+  mechanism — a tagged variant stays loadable (recognizer patterns,
+  visualizer, hand-built variant maps keep working) but is not enumerated;
+  `enumerate_circuits(..., config={"include_unsupported": True})` opts back
+  in (recognizer round-trip tests use this).
+- Enumeration counts: 1-stage 70 → 60, 2-stage SE 600 → 450, 2-stage FD
+  5 760 → 3 510, 3-stage SE 9 000 → 6 750, 3-stage FD ≈1.3 M → 789 750.
+
 ## 2026-07-04 (cascode leg kinds + cascoded pref branch — bias phase 2)
 
 Follow-up to the demand-driven bias construction below (the two items its PR
