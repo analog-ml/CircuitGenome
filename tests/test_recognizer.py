@@ -108,28 +108,28 @@ def test_round_trip_one_stage_opamp(
 
 # ─── two_stage_opamp_single_ended round-trip ────────────────────────────────
 #
-# 11 combos cover all 3 compensation variants, all 4 second_stage variants,
+# 11 combos cover all 3 compensation variants, all 5 second_stage variants,
 # and all 5 input_pair variants across representative base combinations.
 # The stage-interface filter (second_stage_compatibility.py) restricts each
-# tagged pair to the complementary-gate stages: pmos pairs take
-# common_source/differential_ota, nmos pairs take
-# common_drain/common_source_pmos, inverter_based_input takes any.
+# tagged pair to the level-reachable stages: pmos pairs take
+# common_source/differential_ota/common_drain, nmos pairs take
+# common_source_pmos/common_drain_nmos, inverter_based_input takes any.
 # The constructed bias generator picks its rail-5 leg from the second stage
-# (common_source/differential_ota: gate_vdd; common_drain/common_source_pmos:
-# gate_gnd) and its rail-7 leg from the tail's reference diode; see
-# _ONE_STAGE_COMBOS comment.
+# (common_source/differential_ota/common_drain: gate_vdd;
+# common_source_pmos/common_drain_nmos: gate_gnd) and its rail-7 leg from
+# the tail's reference diode; see _ONE_STAGE_COMBOS comment.
 _TWO_STAGE_COMBOS = [
     # fmt: off
     # input_pair                           load                                        tail_current                         bias_gen                        compensation                        second_stage
     ("differential_pair_pmos",             "telescopic_cascode_load_pmos",             "current_mirror_tail_pmos",          "miller_cap",                       "common_source"),
-    ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "miller_cap",                       "differential_ota_second_stage"),
+    ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "miller_cap",                       "common_drain"),
     ("differential_pair_pmos",             "active_load_nmos",                         "current_mirror_tail_pmos",          "miller_cap",                       "differential_ota_second_stage"),
     ("differential_pair_pmos",             "current_source_load_nmos",                 "resistor_tail_vdd",                 "miller_cap_with_nulling_resistor", "common_source"),
-    ("differential_pair_nmos",             "active_load_pmos",                         "current_mirror_tail_nmos",          "miller_cap_with_nulling_resistor", "common_drain"),
+    ("differential_pair_nmos",             "active_load_pmos",                         "current_mirror_tail_nmos",          "miller_cap_with_nulling_resistor", "common_drain_nmos"),
     ("differential_pair_nmos",             "current_source_load_pmos",                 "resistor_tail_gnd",                 "miller_cap_with_nulling_resistor", "common_source_pmos"),
     ("differential_pair_nmos",             "resistor_load_vdd",                        "resistor_tail_gnd",                 "indirect_compensation",            "common_source_pmos"),
-    ("differential_pair_nmos",             "telescopic_cascode_load_nmos",             "resistor_tail_gnd",                 "indirect_compensation",            "common_drain"),
-    ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_single_output", "resistor_tail_gnd",             "indirect_compensation",            "common_drain"),
+    ("differential_pair_nmos",             "telescopic_cascode_load_nmos",             "resistor_tail_gnd",                 "indirect_compensation",            "common_drain_nmos"),
+    ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_single_output", "resistor_tail_gnd",             "indirect_compensation",            "common_drain_nmos"),
     ("differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_single_output", "resistor_tail_vdd",             "miller_cap",                       "differential_ota_second_stage"),
     ("inverter_based_input",               "folded_cascode_load_pmos_input_single_output", _CANONICAL_TAIL,                 "miller_cap_with_nulling_resistor", "common_drain"),
     # fmt: on
@@ -186,11 +186,11 @@ def test_round_trip_two_stage_opamp(
 #
 # 11 combos cover both cmfb variants, all 3 compensation variants on each of
 # comp_p and comp_n independently (including asymmetric combos 4-7 that
-# exercise FBR's same-category disambiguation), all 4 second_stage variants
+# exercise FBR's same-category disambiguation), all 5 second_stage variants
 # (the stage-interface filter restricts pmos pairs to
-# common_source/differential_ota and nmos pairs to
-# common_drain/common_source_pmos on both output paths), and all 4 input_pair
-# variants reachable with differential-output
+# common_source/differential_ota/common_drain and nmos pairs to
+# common_source_pmos/common_drain_nmos on both output paths), and all 4
+# input_pair variants reachable with differential-output
 # loads (inverter_based_input excluded: it needs a neutral-load topology).
 # Only folded_cascode_load_*_input_differential_output loads produce a real
 # (non-absent) cmfb instance; all other loads get cmfb_absent and cannot test
@@ -209,11 +209,11 @@ _TWO_STAGE_FULLY_DIFF_COMBOS = [
     ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "cascode_current_mirror_tail_pmos",  "resistive_sense_cmfb",  "indirect_compensation",            "indirect_compensation",            "differential_ota_second_stage","differential_ota_second_stage"),
     ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source",                "common_drain"),
     ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "resistive_sense_cmfb",  "miller_cap",                       "indirect_compensation",            "common_source_pmos",           "common_source_pmos"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb",              "indirect_compensation",            "miller_cap",                       "common_drain",                 "common_source"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "indirect_compensation",            "differential_ota_second_stage","common_drain"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb",              "indirect_compensation",            "miller_cap",                       "common_drain_nmos",            "common_drain_nmos"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "indirect_compensation",            "common_source_pmos",           "common_drain_nmos"),
     ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source_pmos",           "common_source_pmos"),
     ("differential_pair_pmos_degenerated",  "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_source",                "common_source"),
-    ("differential_pair_nmos_degenerated",  "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_drain",                 "common_drain"),
+    ("differential_pair_nmos_degenerated",  "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_drain_nmos",            "common_drain_nmos"),
     ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source",                "differential_ota_second_stage"),
     # fmt: on
 ]
@@ -272,7 +272,7 @@ def test_round_trip_two_stage_fully_diff(
 
 # ── Three-stage topologies ───────────────────────────────────────────────────
 #
-# All four 3-stage topologies reuse the existing 35 SR patterns:
+# All four 3-stage topologies reuse the existing 36 SR patterns:
 #   - third_stage slot has category 'second_stage' → matched by second_stage patterns
 #   - comp1/comp2 (SE) and comp1_p/comp2_p/comp1_n/comp2_n (FD) use compensation patterns
 #
@@ -290,11 +290,12 @@ _THREE_STAGE_SE_COMBOS = [
     # current_source_load_nmos, folded_cascode_load_pmos_*, telescopic_cascode_load_pmos).
     # nmos input pair → nmos_input-polarity loads (active_load_pmos,
     # current_source_load_pmos, folded_cascode_load_nmos_*, telescopic_cascode_load_nmos).
-    # Covers: all 3 comp variants, all 4 ss/ts variants, both polarities,
+    # Covers: all 3 comp variants, all 5 ss/ts variants, both polarities,
     # degenerated pairs, several load types. The stage-interface filter
-    # constrains only the ss slot (pmos pair -> common_source/ota, nmos pair
-    # -> common_drain/common_source_pmos); the ts slot senses the wide-swing
-    # gm2 output and takes any variant.
+    # constrains only the ss slot (pmos pair ->
+    # common_source/ota/common_drain, nmos pair ->
+    # common_source_pmos/common_drain_nmos); the ts slot senses the
+    # wide-swing gm2 output and takes any variant.
     # The constructed generator serves rails 5 AND 6 with per-rail legs
     # (mixed stage flavors included -- no combo needs avoiding).
     ("differential_pair_pmos", "active_load_nmos", "current_mirror_tail_pmos",
@@ -310,7 +311,7 @@ _THREE_STAGE_SE_COMBOS = [
      "common_source", "common_drain",
      "miller_cap", "indirect_compensation"),
     ("differential_pair_nmos", "current_source_load_pmos", "cascode_current_mirror_tail_nmos",
-     "common_drain", "common_source",
+     "common_drain_nmos", "common_source",
      "indirect_compensation", "miller_cap"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_single_output",
      "cascode_current_mirror_tail_pmos", 
@@ -321,8 +322,8 @@ _THREE_STAGE_SE_COMBOS = [
      "common_source", "differential_ota_second_stage",
      "miller_cap", "miller_cap_with_nulling_resistor"),
     ("differential_pair_nmos_degenerated", "active_load_pmos",
-     "current_mirror_tail_nmos", 
-     "common_drain", "common_drain",
+     "current_mirror_tail_nmos",
+     "common_drain_nmos", "common_drain_nmos",
      "miller_cap_with_nulling_resistor", "miller_cap"),
     ("differential_pair_pmos", "telescopic_cascode_load_pmos",
      "resistor_tail_vdd", 
@@ -333,11 +334,11 @@ _THREE_STAGE_SE_COMBOS = [
 _THREE_STAGE_FD_COMBOS = [
     # (input_pair, load, tail_current, bias_gen, cmfb,
     #  ss_p, ts_p, c1_p, c2_p, ss_n, ts_n, c1_n, c2_n)
-    # Covers: both cmfb variants, all 3 comp variants, all 4 ss/ts variants
+    # Covers: both cmfb variants, all 3 comp variants, all 5 ss/ts variants
     # (ss slots obey the stage-interface filter: pmos pair ->
-    # common_source/ota, nmos pair -> common_drain/common_source_pmos; ts
-    # slots are unconstrained), both polarities, degenerated pairs,
-    # cross-path asymmetry.
+    # common_source/ota/common_drain, nmos pair ->
+    # common_source_pmos/common_drain_nmos; ts slots are unconstrained),
+    # both polarities, degenerated pairs, cross-path asymmetry.
     # FBR assigns 4 same-category comp slots and 4 same-category ss slots via
     # connectivity scoring on distinct nets.
     # The real cmfb makes rail 4 gate_gnd, so every combo's constructed
@@ -364,8 +365,8 @@ _THREE_STAGE_FD_COMBOS = [
      "common_source", "common_source", "indirect_compensation", "indirect_compensation"),
     ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
      "cascode_current_mirror_tail_nmos", "dda_cmfb",
-     "common_source", "common_drain", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
-     "common_drain", "common_source", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
+     "common_drain_nmos", "common_source", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor",
+     "common_drain_nmos", "common_source", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
      "cascode_current_mirror_tail_pmos", "resistive_sense_cmfb",
      "common_source", "common_drain", "miller_cap", "miller_cap",
@@ -382,8 +383,8 @@ _THREE_STAGE_FD_COMBOS = [
      "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_differential_output",
      "cascode_current_mirror_tail_nmos", "dda_cmfb",
-     "differential_ota_second_stage", "common_drain", "indirect_compensation", "indirect_compensation",
-     "differential_ota_second_stage", "common_drain", "indirect_compensation", "indirect_compensation"),
+     "common_drain_nmos", "common_drain_nmos", "indirect_compensation", "indirect_compensation",
+     "common_drain_nmos", "common_drain_nmos", "indirect_compensation", "indirect_compensation"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
      "current_mirror_tail_pmos", "dda_cmfb",
      "common_source", "common_source",
@@ -392,8 +393,8 @@ _THREE_STAGE_FD_COMBOS = [
      "miller_cap_with_nulling_resistor", "indirect_compensation"),
     ("differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
      "resistor_tail_gnd", "resistive_sense_cmfb",
-     "common_drain", "common_drain", "miller_cap", "miller_cap",
-     "common_drain", "common_drain", "miller_cap", "miller_cap"),
+     "common_drain_nmos", "common_drain_nmos", "miller_cap", "miller_cap",
+     "common_drain_nmos", "common_drain_nmos", "miller_cap", "miller_cap"),
 ]
 
 

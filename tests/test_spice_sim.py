@@ -177,7 +177,7 @@ def test_gnd_referenced_legs_bias_in_spice():
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_nmos", "load": "active_load_pmos",
-            "tail_current": "current_mirror_tail_nmos", "second_stage": "common_drain",
+            "tail_current": "current_mirror_tail_nmos", "second_stage": "common_drain_nmos",
             "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))

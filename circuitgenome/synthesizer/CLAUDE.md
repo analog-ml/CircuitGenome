@@ -123,20 +123,26 @@ tag in YAML — no code changes needed.
 
 ## Stage-interface compatibility filter (`second_stage_compatibility.py`)
 
-A `second_stage` variant whose *signal device* (the transistor whose gate is
-the `in` port) has the **same** channel type as the input pair is
-structurally unbiasable when it senses the first stage's output (issue
-#109): an NMOS pair's output window is confined high (its floor is the tail
-node) while an NMOS-gate stage needs its gate a `Vgs` above gnd — disjoint,
-so no sizing can bias the interface (mirror-type loads pin the pair in
-triode, range-limited loads rail). `is_second_stage_compatible` detects the
-signal device structurally (no YAML tags) and only constrains
-`second_stage`-category slots whose `in` net is one of the load's output
-nets (`load.out`/`out1`/`out2`) — the 3-stage topologies' `third_stage`
-slot senses the second stage's wide-swing output instead and is deliberately
+A `second_stage` variant is structurally unbiasable against the first stage
+when the gate level its *signal device* (the transistor whose gate is the
+`in` port) requires falls outside the input pair's reachable output window
+(issue #109; follower classification: issue #110): an NMOS pair's window is
+confined high (its floor is the tail node), a PMOS pair's low — when the
+required level and the window are disjoint, no sizing can bias the
+interface (mirror-type loads pin the pair in triode, range-limited loads
+rail). The required level follows from the signal device's *source
+terminal*: common-source stages (source on a supply) put the gate one
+`Vgs` from that supply and suit the **opposite**-polarity pair; followers
+(source on the output node) put the gate one `Vgs` beyond the output,
+toward the device's back rail, and suit the **same**-polarity pair
+(`required_pair_type`). `is_second_stage_compatible` detects all of this
+structurally (no YAML tags) and only constrains `second_stage`-category
+slots whose `in` net is one of the load's output nets
+(`load.out`/`out1`/`out2`) — the 3-stage topologies' `third_stage` slot
+senses the second stage's wide-swing output instead and is deliberately
 unconstrained. Untagged input pairs (`inverter_based_input`) impose no
 constraint. New `second_stage` variants are classified automatically by
-whichever device gates `in`.
+whichever device gates `in` and where its source sits.
 
 ## Output-cardinality compatibility filter (`output_compatibility.py`)
 

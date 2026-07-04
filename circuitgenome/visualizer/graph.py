@@ -140,8 +140,9 @@ def explain_incompatibility(topology: TopologyTemplate, variant_map: dict[str, M
         )
     if not is_second_stage_compatible(topology, variant_map):
         reasons.append(
-            "second_stage signal device has the input pair's own channel type; "
-            "the stage-interface DC level is unreachable (is_second_stage_compatible)."
+            "second_stage signal device needs a gate level outside the input "
+            "pair's output window; the stage-interface DC level is unreachable "
+            "(is_second_stage_compatible)."
         )
     if not is_output_type_compatible(topology, variant_map):
         reasons.append(

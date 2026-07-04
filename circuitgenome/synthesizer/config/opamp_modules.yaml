@@ -661,7 +661,7 @@ modules:
 
   - name: common_drain
     category: second_stage
-    display_name: "Common-Drain (Source Follower) Second Stage"
+    display_name: "Common-Drain (PMOS Source Follower) Second Stage"
     ports:
       - {name: in,   role: input}
       - {name: out,  role: output}
@@ -669,9 +669,31 @@ modules:
       - {name: vdd,  role: supply}
       - {name: gnd,  role: supply}
     devices:
-      # PMOS source follower
-      - {ref: mp1, type: pmos, d: vdd, g: in,   s: out,  b: vdd}
-      - {ref: mn1, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}
+      # PMOS source follower biased by a PMOS current source: out = in +
+      # |Vgs|, level-shifting a low (PMOS-pair) first-stage output up. The
+      # follower's drain sits on the LOW rail (issue #110: d=vdd operated
+      # the device source/drain-inverted, as an uncontrolled pull-up) and
+      # its bulk ties to the source (n-well device) so the realized |Vgs|
+      # carries no body effect.
+      - {ref: mp1, type: pmos, d: gnd, g: in,   s: out,  b: out}
+      - {ref: mp2, type: pmos, d: out, g: bias,  s: vdd,  b: vdd}
+
+  - name: common_drain_nmos
+    category: second_stage
+    display_name: "Common-Drain (NMOS Source Follower) Second Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # NMOS source follower biased by an NMOS current sink: out = in -
+      # Vgs, level-shifting a high (NMOS-pair) first-stage output down --
+      # issue #110's complement of common_drain. Bulk at gnd (p-substrate
+      # device), so the realized Vgs carries body effect.
+      - {ref: mn1, type: nmos, d: vdd, g: in,   s: out,  b: gnd}
+      - {ref: mn2, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}
 
   - name: differential_ota_second_stage
     category: second_stage
