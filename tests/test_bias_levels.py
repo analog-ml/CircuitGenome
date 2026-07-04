@@ -39,28 +39,31 @@ def _size(tech="ptm45", vdd=1.0, **variant):
 def test_cascode_gnd_leg_diode_tracks_consumer_vgs():
     """The folded-cascode bias2 leg's level diode is re-sized so its Vgs
     matches the consumer cascode's planned Vgs, and the floor resistor
-    covers exactly the stack's Vdsat floor (mirror-consistent: computed
-    from the diode's post-tuning Vgs)."""
+    covers exactly the stack's Vdsat floor plus the saturation margin
+    (mirror-consistent: computed from the diode's post-tuning Vgs)."""
+    from circuitgenome.sizer.gmid.resistors import _CASCODE_SAT_MARGIN_V as m
     res = _size(load="folded_cascode_load_pmos_input_single_output")
     diode = res.transistors["mn2_bias_gen"]
     consumer = res.transistors["mn1_load"]
     bottom = res.transistors["mn3_load"]
     assert diode.vgs_v == pytest.approx(consumer.vgs_v, abs=0.05)
-    target = consumer.vgs_v + bottom.vds_sat_v
+    target = consumer.vgs_v + bottom.vds_sat_v + m
     floor = target - diode.vgs_v
     assert res.resistors["r2_bias_gen"] == pytest.approx(floor / 15e-6, rel=0.02)
 
 
 def test_cascode_vdd_leg_reaches_telescopic_anchor():
-    """The telescopic bias1 rail lands at the input-pair anchor minus the
-    cascode's |Vgs|: vdd - |Vgs(diode)| - I*R equals the target the
-    consumer stack walk derives."""
+    """The telescopic bias1 rail lands at the input-pair anchor (a
+    saturation margin inside the pair's edge) minus the cascode's |Vgs|:
+    vdd - |Vgs(diode)| - I*R equals the target the consumer stack walk
+    derives."""
+    from circuitgenome.sizer.gmid.resistors import _CASCODE_SAT_MARGIN_V as m
     res = _size(load="telescopic_cascode_load_pmos")
     diode = res.transistors["mp1_bias_gen"]
     casc = res.transistors["mp1_load"]
     ip = res.transistors["m1_input_pair"]
     spec = _spec()
-    anchor = (spec.vdd + spec.vss) / 2 + (abs(ip.vgs_v) - abs(ip.vds_sat_v))
+    anchor = (spec.vdd + spec.vss) / 2 + (abs(ip.vgs_v) - abs(ip.vds_sat_v) - m)
     target = anchor - abs(casc.vgs_v)
     rail = spec.vdd - abs(diode.vgs_v) - 15e-6 * res.resistors["r1_bias_gen"]
     assert rail == pytest.approx(target, abs=0.02)
