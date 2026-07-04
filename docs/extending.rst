@@ -179,6 +179,7 @@ Example — 3-stage op-amp with cascade (single-Miller-per-stage) compensation
        - {slot: load,         port: bias_cmfb, net: net_bias4}
        - {slot: tail_current, port: out,  net: net_tail}
        - {slot: tail_current, port: bias, net: net_bias7}
+       - {slot: tail_current, port: bias_casc, net: net_bias8}
        - {slot: bias_gen,     port: ibias, net: ibias}
        - {slot: bias_gen,     port: out1,  net: net_bias1}
        - {slot: bias_gen,     port: out2,  net: net_bias2}
@@ -187,6 +188,7 @@ Example — 3-stage op-amp with cascade (single-Miller-per-stage) compensation
        - {slot: bias_gen,     port: out5,  net: net_bias5}
        - {slot: bias_gen,     port: out6,  net: net_bias6}
        - {slot: bias_gen,     port: out7,  net: net_bias7}
+       - {slot: bias_gen,     port: out8,  net: net_bias8}
        - {slot: second_stage, port: in,   net: net_mid1}
        - {slot: second_stage, port: out,  net: net_mid2}
        - {slot: second_stage, port: bias, net: net_bias5}

@@ -338,11 +338,12 @@ Demand-driven bias construction
 
 The bias generator is not an enumerated module: ``enumerate_circuits``
 *constructs* it per combination from what the other slots actually consume
-on each of the seven bias rails (``out1``..``out4`` feed
+on each of the eight bias rails (``out1``..``out4`` feed
 ``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
 ``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, ``out7`` feeds
-``tail_current.bias``; each role's rail is independent, so the roles never
-share a bias voltage and can be sized independently).
+``tail_current.bias``, ``out8`` feeds ``tail_current.bias_casc``; each
+role's rail is independent, so the roles never share a bias voltage and can
+be sized independently).
 
 Each consumed rail is classified structurally (no YAML tags) into a *kind*:
 
@@ -352,8 +353,8 @@ Each consumed rail is classified structurally (no YAML tags) into a *kind*:
   which doubles as the mirror *master* of its consumers -- the sizer sets
   consumer currents by W/L ratio instead of matching voltages.
 - ``current_source`` / ``current_sink`` -- the consumer brings its own
-  reference diode (current-mirror tails, including the cascode tails'
-  stacked diode): the rail is a *current* interface and the leg is a bare
+  reference diode (the current-mirror tails' mirror diode): the rail is a
+  *current* interface and the leg is a bare
   mirror with no diode of its own. A bias-side diode here would either sit
   in parallel with the tail's reference (splitting the current) or fight it
   (issue #99's measured rail-7 contention) -- both are now unconstructable.
@@ -452,12 +453,15 @@ internal device structure is invisible to the template.
    * - ``tail_current``
      - ``out``, ``bias`` *(current-mirror / cascode-current-mirror variants
        wire this to the dedicated ``net_bias7`` rail; resistor-tail variants
-       declare it ``optional`` and leave it unconnected)*, ``vdd``, ``gnd``
+       declare it ``optional`` and leave it unconnected)*, ``bias_casc``
+       *(cascode-current-mirror variants only: the wide-swing cascode-gate
+       level, wired to ``net_bias8``)*, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out1``..``out7`` -- consumed rails only (``out1``-``out4``
+     - ``ibias``, ``out1``..``out8`` -- consumed rails only (``out1``-``out4``
        feed ``load``'s ``bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5``
        feeds ``second_stage.bias``, ``out6`` feeds ``third_stage.bias``,
-       ``out7`` feeds ``tail_current.bias``), ``vdd``, ``gnd``. The variant
+       ``out7`` feeds ``tail_current.bias``, ``out8`` feeds
+       ``tail_current.bias_casc``), ``vdd``, ``gnd``. The variant
        is constructed per combination by
        :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`,
        with one typed leg per consumed rail

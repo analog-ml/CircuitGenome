@@ -63,7 +63,8 @@ topologies:
       - {slot: load,         port: bias3,     net: net_bias3}
       - {slot: load,         port: bias_cmfb, net: net_bias4}
       - {slot: tail_current, port: out,   net: net_tail}
-      - {slot: tail_current, port: bias,  net: net_bias7}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
       - {slot: bias_gen,     port: ibias, net: ibias}
       - {slot: bias_gen,     port: out1,  net: net_bias1}
       - {slot: bias_gen,     port: out2,  net: net_bias2}
@@ -72,6 +73,7 @@ topologies:
       - {slot: bias_gen,     port: out5,  net: net_bias5}
       - {slot: bias_gen,     port: out6,  net: net_bias6}
       - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
 
   # ── 2-STAGE OTA (single-ended output) ──────────────────────────────────
   - name: two_stage_opamp_single_ended
@@ -102,7 +104,8 @@ topologies:
       - {slot: load,         port: bias3,     net: net_bias3}
       - {slot: load,         port: bias_cmfb, net: net_bias4}
       - {slot: tail_current, port: out,   net: net_tail}
-      - {slot: tail_current, port: bias,  net: net_bias7}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
       - {slot: bias_gen,     port: ibias, net: ibias}
       - {slot: bias_gen,     port: out1,  net: net_bias1}
       - {slot: bias_gen,     port: out2,  net: net_bias2}
@@ -111,6 +114,7 @@ topologies:
       - {slot: bias_gen,     port: out5,  net: net_bias5}
       - {slot: bias_gen,     port: out6,  net: net_bias6}
       - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
       - {slot: second_stage, port: in,    net: net_mid}
       - {slot: second_stage, port: out,   net: out}
       - {slot: second_stage, port: bias,  net: net_bias5}
@@ -148,7 +152,8 @@ topologies:
       - {slot: load,            port: bias3,     net: net_bias3}
       - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
       - {slot: tail_current,    port: out,   net: net_tail}
-      - {slot: tail_current,    port: bias,  net: net_bias7}
+      - {slot: tail_current,    port: bias,      net: net_bias7}
+      - {slot: tail_current,    port: bias_casc, net: net_bias8}
       - {slot: bias_gen,        port: ibias, net: ibias}
       - {slot: bias_gen,        port: out1,  net: net_bias1}
       - {slot: bias_gen,        port: out2,  net: net_bias2}
@@ -157,6 +162,7 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: bias_gen,        port: out8,  net: net_bias8}
       - {slot: cmfb,            port: in1,   net: net_loadout1}
       - {slot: cmfb,            port: in2,   net: net_loadout2}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
@@ -211,7 +217,8 @@ topologies:
       - {slot: load,         port: bias3,     net: net_bias3}
       - {slot: load,         port: bias_cmfb, net: net_bias4}
       - {slot: tail_current, port: out,   net: net_tail}
-      - {slot: tail_current, port: bias,  net: net_bias7}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
       - {slot: bias_gen,     port: ibias, net: ibias}
       - {slot: bias_gen,     port: out1,  net: net_bias1}
       - {slot: bias_gen,     port: out2,  net: net_bias2}
@@ -220,6 +227,7 @@ topologies:
       - {slot: bias_gen,     port: out5,  net: net_bias5}
       - {slot: bias_gen,     port: out6,  net: net_bias6}
       - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
       - {slot: second_stage, port: in,    net: net_mid1}
       - {slot: second_stage, port: out,   net: net_mid2}
       - {slot: second_stage, port: bias,  net: net_bias5}
@@ -266,7 +274,8 @@ topologies:
       - {slot: load,         port: bias3,     net: net_bias3}
       - {slot: load,         port: bias_cmfb, net: net_bias4}
       - {slot: tail_current, port: out,   net: net_tail}
-      - {slot: tail_current, port: bias,  net: net_bias7}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
       - {slot: bias_gen,     port: ibias, net: ibias}
       - {slot: bias_gen,     port: out1,  net: net_bias1}
       - {slot: bias_gen,     port: out2,  net: net_bias2}
@@ -275,6 +284,7 @@ topologies:
       - {slot: bias_gen,     port: out5,  net: net_bias5}
       - {slot: bias_gen,     port: out6,  net: net_bias6}
       - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
       - {slot: second_stage, port: in,    net: net_mid1}
       - {slot: second_stage, port: out,   net: net_mid2}
       - {slot: second_stage, port: bias,  net: net_bias5}
@@ -324,7 +334,8 @@ topologies:
       - {slot: load,            port: bias3,     net: net_bias3}
       - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
       - {slot: tail_current,    port: out,   net: net_tail}
-      - {slot: tail_current,    port: bias,  net: net_bias7}
+      - {slot: tail_current,    port: bias,      net: net_bias7}
+      - {slot: tail_current,    port: bias_casc, net: net_bias8}
       - {slot: bias_gen,        port: ibias, net: ibias}
       - {slot: bias_gen,        port: out1,  net: net_bias1}
       - {slot: bias_gen,        port: out2,  net: net_bias2}
@@ -333,6 +344,7 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: bias_gen,        port: out8,  net: net_bias8}
       - {slot: cmfb,            port: in1,   net: net_loadout1}
       - {slot: cmfb,            port: in2,   net: net_loadout2}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
@@ -399,7 +411,8 @@ topologies:
       - {slot: load,            port: bias3,     net: net_bias3}
       - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
       - {slot: tail_current,    port: out,   net: net_tail}
-      - {slot: tail_current,    port: bias,  net: net_bias7}
+      - {slot: tail_current,    port: bias,      net: net_bias7}
+      - {slot: tail_current,    port: bias_casc, net: net_bias8}
       - {slot: bias_gen,        port: ibias, net: ibias}
       - {slot: bias_gen,        port: out1,  net: net_bias1}
       - {slot: bias_gen,        port: out2,  net: net_bias2}
@@ -408,6 +421,7 @@ topologies:
       - {slot: bias_gen,        port: out5,  net: net_bias5}
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: bias_gen,        port: out8,  net: net_bias8}
       - {slot: cmfb,            port: in1,   net: net_loadout1}
       - {slot: cmfb,            port: in2,   net: net_loadout2}
       - {slot: cmfb,            port: vref,  net: vcm_ref}

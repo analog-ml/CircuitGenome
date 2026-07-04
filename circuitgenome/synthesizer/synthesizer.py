@@ -247,7 +247,9 @@ def enumerate_circuits(
     fully-differential topologies via the topology's static wiring); ``out7``
     feeds ``tail_current`` (current-mirror / cascode-current-mirror variants
     only -- resistor-tail variants declare ``bias`` as ``optional`` and need
-    no rail). Each role's rail is independent of the others, so
+    no rail); ``out8`` feeds ``tail_current.bias_casc`` (the cascode tails'
+    wide-swing cascode-gate level). Each role's rail is independent of the
+    others, so
     ``load``/``second_stage``/``third_stage``/``tail_current`` never share a
     bias voltage. Any ``bias_generation`` entries in *modules* are ignored.
 
