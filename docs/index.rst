@@ -45,8 +45,7 @@ design exploration, or topology studies.
    api/output_compatibility
    api/cmfb_compatibility
    api/tail_current_compatibility
-   api/bias_compatibility
-   api/bias_pruning
+   api/bias_construction
    api/net_aliasing
 
 .. toctree::
@@ -83,6 +82,7 @@ design exploration, or topology studies.
    api/sizer/gmid/geometry
    api/sizer/gmid/bias
    api/sizer/gmid/resistors
+   api/sizer/gmid/bias_levels
    api/sizer/gmid/evaluate
 
 .. toctree::

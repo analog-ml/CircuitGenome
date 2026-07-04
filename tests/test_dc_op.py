@@ -51,7 +51,7 @@ def test_simple_mirror_tail_no_cascode_warning():
     topo = next(t for t in load_topologies() if t.name == _TOPO)
     want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
             "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
-            "bias_gen": "diode_connected_mosfet_bias", "compensation": "miller_cap"}
+            "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
     r = _size(to_flat_spice(circ))

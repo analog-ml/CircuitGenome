@@ -3,6 +3,164 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-07-04 (cascode leg kinds + cascoded pref branch — bias phase 2)
+
+Follow-up to the demand-driven bias construction below (the two items its PR
+parked). Enumeration counts are unchanged (construction, not enumeration).
+
+### Added
+
+- **`cascode_gnd`/`cascode_vdd` rail kinds** (issue #99's parked cascode
+  class): a consumer gate whose source is an *internal* node (a cascode
+  gate) now votes a cascode kind instead of falling to `tunable`. The leg is
+  a mirror into a diode-connected device riding a small floor resistor
+  (`out = V_GS + I·R` from the back supply): the diode covers the large,
+  Vth-dependent part of the level — *tracking* the consumer over
+  process/temperature, which a bare resistor level cannot — and the resistor
+  covers only the small Vdsat floor. `tunable` remains for genuinely
+  conflicting shared-rail demands.
+- **Cascoded `pref` branch**: a wide-swing `ncasc` level (PMOS mirror into
+  a narrow diode) gates a cascode that pins the pref mirror's Vds near the
+  master reference's instead of `vdd − |V_GSP|`, closing most of the ~4%
+  extra-mirror-hop λ error the #103 A/B measured against the retired
+  `magic_battery_bias`. The `ncasc` branch mirrors a small uncascoded
+  `feed_pref` feeder copy rather than `pref` itself — the pref-gated form
+  closes a loop with a degenerate all-off operating point (the classic
+  wide-swing startup hazard), which the designer A/B caught ngspice
+  converging to on 18 circuits.
+- **Sizer `bias_levels` pass** (`circuitgenome/sizer/gmid/bias_levels.py`):
+  re-sizes each cascode leg's diode to the consumers' planned `V_GS` and its
+  floor resistor to the stack floor (reusing the #100/#104 stack walk), and
+  sizes the `ncasc` level headroom-aware — clamping back to the intent-table
+  default when the supply leaves no room (1 V PTM techs keep working).
+- Recognizer: `constructed_bias_legs` learns the three new shapes (cascode
+  legs on both sides, the cascoded pref chain); a cascode leg counts as
+  constructed-only evidence, so no-`pref` shapes with cascode legs (e.g. a
+  telescopic load with a PMOS mirror tail) resolve to `constructed_bias`.
+- Sizer taxonomy: gates on `*_ncasc` are bias-reference gates, excluded from
+  `is_signal_device` like `*_pref`.
+## 2026-07-04 (cascode-load-aware current plan)
+
+PR (`fix/cascode-load-current-plan`). Targets
+`feat/demand-driven-bias-construction`. Fixes the folding-branch starvation
+that PR #104's designer A/B exposed as the next binding defect: `assign_ids`
+treated the `load` slot generically (`ibias/n` per same-type device), so a
+folded-cascode load's bottom sinks were planned at `ibias/4` when KCL at the
+folding node requires the pair branch current (`ibias/2`) **plus** the
+cascode branch current — the pair's excess current had nowhere to go, the
+folding node railed, and every folded/telescopic candidate died in the SPICE
+bias check (`starved: mp1_load…mp4_load; in triode: m1_input_pair`).
+
+### Changed
+
+- **Current plan** (`sizer/shared/preprocess.py`): `assign_ids` detects
+  cascode loads structurally — *folding* devices (source on a supply rail,
+  drain on an input-pair drain net) carry `ibias/2 + I_casc`; every other
+  load device carries the cascode branch current `I_casc = ibias/2`;
+  a *telescopic* stack (cascode devices but no folding devices) carries the
+  pair branch current `ibias/2` throughout (the old rule gave one bank
+  `ibias/4`). Simple loads keep the generic rule. The existing mirror-ratio
+  passes then size the folding sinks off the rail-1 leg diode at the correct
+  ratio automatically.
+- **Matched-pair symmetry** (`sizer/gmid/geometry.py`,
+  `sizer/analytical/constraints.py`): symmetry groups are keyed by
+  `(type, planned IDS)` instead of type alone — a cascode load's folding
+  sinks and cascode devices are no longer forced to equal W/L (which would
+  fight the mirror-ratio constraints).
+- **Cascode-rail walk margin** (`sizer/gmid/resistors.py`): the tunable-leg
+  walk adds a 100 mV saturation margin per stacked device (and inside the
+  input-pair anchor) instead of placing nodes exactly at the planned
+  saturation edge — a knife edge the realized operating point (LUT
+  characterized at `Vds=Vdd/2`) fell off by tens of mV.
+- **Designer verdicts (gf180 two-stage SE benchmark)**: cascode-load
+  candidates passing the SPICE bias gate rise 0/252 → 24/252 (all
+  `folded_cascode_load_pmos_input_single_output`), reaching the metric
+  gates; the starvation signature disappears benchmark-wide; zero
+  non-cascode candidates change stage.
+
+### Follow-ups
+
+- The remaining 228 cascode bias rejections are a *different* defect:
+  planned-vs-realized `|Vgs|` error on rails feeding stacks whose device
+  sources sit far from the body rail — worst for telescopic loads (source
+  ≈ 0.9 V from the body ⇒ strong back-gate shift the Vsb=0 LUT cannot see;
+  realized `|Vgs|` ~270 mV over plan pins the input pair at `Vds≈0`) and
+  the PMOS side of `folded_cascode_load_nmos_input_single_output`
+  (~100 mV). Needs Vsb-aware `vgs`/`vds_sat` (or a body-effect correction)
+  in the rail planning, not more margin.
+
+## 2026-07-04 (demand-driven bias construction — typed leg library)
+
+PR (`feat/demand-driven-bias-construction`). Redesigns bias generation from
+enumerate-then-filter-then-prune to construct-from-consumer-demands (the
+redesign issue #99 parked and issue #102 anticipated).
+
+The three monolithic `bias_generation` variants delivered the *same* flavor
+of voltage on all seven rails, so mixed-flavor consumer sets — notably every
+real-cmfb fully-differential circuit, whose rail 4 is gnd-referenced while
+rails 1/5 are vdd-referenced — could only enumerate with `resistor_bias`,
+whose one-global-value sizing is the #100 bug. The flavor filter (#101)
+pruned the structurally unbiasable pairings but could not give FD circuits a
+correct generator.
+
+### Changed
+
+- **The bias generator is constructed, not enumerated.** `bias_generation`
+  leaves the slot product; `build_circuit` derives a per-combination variant
+  (`constructed_bias`) from a typed demand analysis of the other slots
+  (`circuitgenome/synthesizer/bias_construction.py`): every consumed rail is
+  classified as `gate_vdd`/`gate_gnd` (consumer gate with source on a
+  supply → diode leg that is the mirror *master* of its consumers),
+  `current_source`/`current_sink` (mirror tails' own reference diode → bare
+  current leg, no bias-side diode to duplicate or fight it), or `tunable`
+  (cascode gates / conflicting demands → resistor leg). Leg templates live
+  in `config/bias_legs.yaml` (multi-reference core: NMOS master on `ibias`,
+  plus a `pref` branch emitted only when a PMOS-referenced leg needs it).
+- **Enumeration counts drop ~3x** (no bias factor, no filtered residue):
+  1-stage 142→70, 2-stage SE 954→630, 2-stage FD 6 759→5 670, 3-stage SE
+  7 290→5 670, 3-stage FD 491 427→459 270. Every mixed-flavor consumer set
+  now gets structurally correct per-rail legs instead of routing to
+  `resistor_bias`.
+- **Recognizer**: new `constructed_bias` pattern + `constructed_bias_legs`
+  hook (per-leg discovery: NMOS-referenced pairs, the `pref` branch,
+  gnd-referenced/current/resistor legs off the PMOS-side reference). Purely
+  NMOS-referenced shapes resolve to the historical
+  `diode_connected_mosfet_bias` pattern; the three legacy monolith patterns
+  remain for external netlists. The B1 mis-recognition
+  (`resistor_bias` + `current_mirror_tail_nmos` → spurious
+  `magic_battery_bias`) no longer affects synthesized circuits.
+- **Sizer taxonomy**: `is_signal_device` now recognizes the constructed
+  generator's internal `*_pref` mirror-reference gate as a bias net —
+  without it, pref-gated legs were sized as signal devices (short L,
+  ~5 % mirror error from channel-length modulation) instead of
+  current sources (`sizer/shared/taxonomy.py`).
+- **Designer verdicts (gf180 two-stage SE benchmark)**: unique core
+  combinations reaching the metric gates rise 93 → 102. 18 mixed-flavor
+  cores (`current_source_load_nmos` × `current_mirror_tail_pmos`) that
+  previously only enumerated with mis-sized `resistor_bias` now bias; 9 are
+  honestly re-condemned — 6 whose old pass was powered by the #100 rail-7
+  corruption (a hot tail supplied the current their `common_drain` stage
+  needed), and 3 knife-edge cascode-tail cores (~3 mV of Vdsat margin)
+  tipped by the multi-reference core's extra mirror hop (~4 % cumulative
+  λ error vs the retired 2-hop `magic_battery_bias`).
+
+### Removed
+
+- `synthesizer/bias_compatibility.py` (`is_bias_flavor_compatible` — flavor
+  mismatches are now unconstructable; decision record: #102) and
+  `synthesizer/bias_pruning.py` (`prune_bias_generation` — only consumed
+  rails are built; `prune_redundant_tail_diode` — current legs carry no
+  diode). The demand analysis (`required_rail_kinds`) subsumes
+  `needed_bias_outputs`/`required_rail_flavors`.
+- The `diode_connected_mosfet_bias`/`magic_battery_bias`/`resistor_bias`
+  module variants from `opamp_modules.yaml` (their recognizer patterns
+  remain).
+
+### Follow-ups
+
+- #100 narrows to sizing the `tunable` legs (cascode-consumer rails); a
+  cascode-appropriate leg kind is the natural phase 2 of this design.
+
 ## 2026-06-24 (gm/Id pipeline redesign — PTM-only dispatch + bias-aware metrics)
 
 PR (`feat/gmid-ptm-only-bias-gating`). Targets `feat/gmid-sizing-redesign`.

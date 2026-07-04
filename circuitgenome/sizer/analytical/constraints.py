@@ -117,10 +117,15 @@ def build_model(
     for slot_name, devices in slot_transistors.items():
         if slot_name not in symmetry_slots:
             continue
-        mosfets = [d for d in devices if d.type in ("nmos", "pmos")]
-        # Group by device type; within each group all transistors are matched.
-        for dtype in ("nmos", "pmos"):
-            group = [d for d in mosfets if d.type == dtype and d.ref in W]
+        # Group by (type, planned IDS); within each group all transistors are
+        # matched.  Devices at different currents (a folded-cascode load's
+        # folding sinks vs its cascode devices) are not a matched pair —
+        # forcing them equal would fight the mirror-ratio constraints.
+        groups: dict[tuple, list] = {}
+        for d in devices:
+            if d.type in ("nmos", "pmos") and d.ref in W:
+                groups.setdefault((d.type, ids_map.get(d.ref)), []).append(d)
+        for group in groups.values():
             for i in range(1, len(group)):
                 model.add(W[group[i].ref] == W[group[0].ref])
                 model.add(L[group[i].ref] == L[group[0].ref])

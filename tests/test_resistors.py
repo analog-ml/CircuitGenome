@@ -16,8 +16,7 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 
 _TOPO = "two_stage_opamp_single_ended"
 _BASE = dict(load="active_load_nmos", tail_current="current_mirror_tail_pmos",
-             second_stage="common_source", bias_gen="diode_connected_mosfet_bias",
-             compensation="miller_cap")
+             second_stage="common_source", compensation="miller_cap")
 
 
 def _spec(gain=40):
@@ -70,6 +69,79 @@ def test_size_resistors_degeneration_factor():
     assert modifiers.gd_out_extra == 0.0   # no CMFB sense resistors here
 
 
+# --- unit: tunable bias-leg rail values (issue #100) -----------------------
+def _casc_sz(ref, vgs, vdsat):
+    return TransistorSizing(ref=ref, w_um=1, l_um=0.1, ids_a=15e-6,
+                            vgs_v=vgs, vds_sat_v=vdsat)
+
+
+def _bias_leg_r(blocks_mosfets, sizing, rail="net_bias2"):
+    """Run size_resistors with one tunable bias-leg resistor on *rail*."""
+    from circuitgenome.synthesizer.models import Device
+    r = Device(ref="r2_bias_gen", type="resistor", terminals={"t1": rail, "t2": "gnd!"})
+    blocks = build_blocks(blocks_mosfets, {"bias_gen": [r]})
+    out, _ = size_resistors(blocks, {"bias_gen": [r]}, {}, sizing, _FakeModel(),
+                            _spec(), load_tech("ptm45"), GmIdIntent())
+    return out["r2_bias_gen"]
+
+
+def test_tunable_leg_nmos_cascode_rail():
+    """NMOS cascode consumer: rail = Vdsat(bottom) + margin + Vgs(cascode)
+    above gnd."""
+    from circuitgenome.synthesizer.models import Device
+    casc = Device(ref="mn1_load", type="nmos",
+                  terminals={"d": "net_x", "g": "net_bias2", "s": "net_fold"})
+    bottom = Device(ref="mn3_load", type="nmos",
+                    terminals={"d": "net_fold", "g": "net_bias1", "s": "gnd!"})
+    from circuitgenome.sizer.gmid.resistors import _CASCODE_SAT_MARGIN_V as m
+    sizing = {"mn1_load": _casc_sz("mn1_load", 0.45, 0.12),
+              "mn3_load": _casc_sz("mn3_load", 0.40, 0.15)}
+    r = _bias_leg_r({"load": [casc, bottom]}, sizing)
+    assert r == pytest.approx((0.15 + m + 0.45) / 15e-6)
+
+
+def test_tunable_leg_pmos_cascode_anchors_at_input_pair():
+    """Telescopic-style PMOS cascode on the input-pair drain: the walk anchors
+    at the input device's saturation edge with its gate at Vcm."""
+    from circuitgenome.synthesizer.models import Device
+    casc = Device(ref="mp1_load", type="pmos",
+                  terminals={"d": "net_out", "g": "net_bias2", "s": "net_in1"})
+    ip = Device(ref="m1_input_pair", type="pmos",
+                terminals={"d": "net_in1", "g": "vin", "s": "net_tail"})
+    from circuitgenome.sizer.gmid.resistors import _CASCODE_SAT_MARGIN_V as m
+    sizing = {"mp1_load": _casc_sz("mp1_load", 0.50, 0.10),
+              "m1_input_pair": _casc_sz("m1_input_pair", 0.40, 0.10)}
+    r = _bias_leg_r({"load": [casc], "input_pair": [ip]}, sizing)
+    # Vcm + (|Vgs_ip| - |Vdsat_ip| - margin) - |Vgs_casc| = 0.5 + (0.3 - m) - 0.5
+    assert r == pytest.approx((0.3 - m) / 15e-6)
+
+
+def test_tunable_leg_conflicting_supply_gates_take_mean():
+    """A shared rail with an NMOS gnd-referenced and a PMOS vdd-referenced
+    gate gets the mean of the two demands."""
+    from circuitgenome.synthesizer.models import Device
+    n = Device(ref="mn1_load", type="nmos",
+               terminals={"d": "net_a", "g": "net_bias2", "s": "gnd!"})
+    p = Device(ref="mp1_second_stage", type="pmos",
+               terminals={"d": "net_b", "g": "net_bias2", "s": "vdd!"})
+    sizing = {"mn1_load": _casc_sz("mn1_load", 0.40, 0.10),
+              "mp1_second_stage": _casc_sz("mp1_second_stage", 0.50, 0.10)}
+    r = _bias_leg_r({"load": [n], "second_stage": [p]}, sizing)
+    # mean(0.40, 1.0 - 0.50) = 0.45 V
+    assert r == pytest.approx(0.45 / 15e-6)            # 30 kΩ
+
+
+def test_tunable_leg_fallback_when_no_level_derivable():
+    """A diode-connected consumer is a current interface — no voltage demand;
+    with no bias_gen MOSFETs either, the half-supply fallback applies."""
+    from circuitgenome.synthesizer.models import Device
+    diode = Device(ref="m1_tail_current", type="nmos",
+                   terminals={"d": "net_bias2", "g": "net_bias2", "s": "gnd!"})
+    sizing = {"m1_tail_current": _casc_sz("m1_tail_current", 0.40, 0.10)}
+    r = _bias_leg_r({"tail_current": [diode]}, sizing)
+    assert r == pytest.approx(0.5 * 1.0 / 15e-6)       # half-supply / ibias
+
+
 # --- integration ----------------------------------------------------------
 def test_degeneration_reduces_gain():
     plain = _size(input_pair="differential_pair_pmos").metrics["gain_db"]
@@ -82,9 +154,14 @@ def test_resistor_tail_and_bias_sized():
     assert any("tail_current" in ref for ref in rt.resistors)
     assert all(v > 1e3 for v in rt.resistors.values())   # not the 1 kΩ placeholder
 
-    rb = _size(bias_gen="resistor_bias")
+    # A cascode-consumer rail (folded-cascode bias2) gets a cascode_gnd
+    # level leg: the diode covers the consumer's Vgs, the floor resistor
+    # only the stack's Vdsat floor (floor/ibias -- ~kΩ to tens of kΩ, well
+    # below the retired whole-level value of Vgs-plus-floor over ibias).
+    rb = _size(load="folded_cascode_load_pmos_input_single_output")
     assert any("bias_gen" in ref for ref in rb.resistors)
-    assert all(v > 1e4 for v in rb.resistors.values())   # ~Vgs/ibias, tens of kΩ
+    r_leg = next(v for k, v in rb.resistors.items() if "bias_gen" in k)
+    assert 1e3 < r_leg < 3e4
 
 
 def test_no_resistors_for_active_circuit():

@@ -58,10 +58,11 @@ Module categories
      - Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS),
        resistor (VDD-side / GND-side)
    * - Bias generation
-     - Diode-connected MOSFET legs, magic battery current mirror, resistor
-       legs (all three: shared ibias reference + seven independent mirror
-       legs -- rails 1-4 for ``load``, rail 5 for ``second_stage``, rail 6
-       for ``third_stage``, rail 7 for ``tail_current``)
+     - No enumerated variants: constructed per combination from consumer
+       demands (see "Demand-driven bias construction" below) -- an NMOS
+       master reference on ``ibias`` plus one typed leg per consumed rail
+       (rails 1-4 for ``load``, rail 5 for ``second_stage``, rail 6 for
+       ``third_stage``, rail 7 for ``tail_current``)
    * - CMFB
      - Resistive-sense 5T OTA, differential-difference amplifier (DDA) --
        senses the load's first-stage differential outputs
@@ -93,12 +94,6 @@ Module categories
 
 .. figure:: ../gallery/modules-implementations/input_pair+load+tail_current/tail_current.svg
    :alt: Tail current variants
-   :width: 100%
-
-.. rubric:: Bias generation
-
-.. figure:: ../gallery/modules-implementations/bias_generation+cmfb/bias_generation.svg
-   :alt: Bias generation variants
    :width: 100%
 
 .. rubric:: CMFB
@@ -162,33 +157,28 @@ templates (excluding the 14 combinations using a differential-output cascode
 load) and **56** are valid for fully-differential templates (excluding the 28
 combinations using a single-output cascode or telescopic-cascode load).
 
-The ``bias_generation`` choice is not a free ×3 factor: the "Bias flavor
-compatibility filter" below rejects combinations whose generator delivers the
-wrong flavor (vdd- vs gnd-referenced) on a consumed bias rail. The tunable
-``resistor_bias`` always survives; each single-flavor generator survives only
-the combinations whose consumed rails all match its flavor.
+The ``bias_generation`` slot contributes no enumeration factor at all: its
+variant is *constructed* per combination from what the other slots consume
+on each bias rail (see "Demand-driven bias construction" below), so every
+core combination carries exactly one, structurally matched bias generator.
 
-The 1-stage template therefore produces **142 distinct circuits** (70
-combinations keep ``resistor_bias``, 36 also keep
-``diode_connected_mosfet_bias``, 36 ``magic_battery_bias``). The 2-stage
-single-ended template produces **954 circuits** (70 × 3 ``second_stage`` =
-210 pairs; 210 + 72 diode-compatible + 36 magic-compatible = 318, × 3
-``compensation``). The 2-stage fully-differential template, which has two
-``compensation`` slots, two ``second_stage`` slots (one per output path), and
-one ``cmfb`` slot, produces **6 759 circuits**: of the 56
-fully-differential-compatible ``input_pair``/``load``/``tail_current``
-combinations, only the 14 using a ``"differential"``-cardinality load keep
-both ``cmfb`` variants (14 × 2 = 28); the other 42 collapse ``cmfb`` to a
-single canonical variant (42 × 1 = 42) -- 28 + 42 = 70 effective
-load/``cmfb`` combinations (see "CMFB compatibility filter" below), × 9
-``second_stage`` pairs = 630, of which 92 also keep ``diode_connected`` and
-29 ``magic_battery`` (751 total), × 9 ``compensation`` pairs. Each 3-stage
-single-ended template adds two more ``second_stage`` slots (gm2, gm3) and two
-``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
-**7 290 circuits** (630 stage pairs + 144 diode-compatible + 36
-magic-compatible = 810, × 9 ``compensation`` pairs). Each 3-stage
-fully-differential template duplicates those four slots per output path (and
-keeps the single ``cmfb`` slot), producing **491 427 circuits**.
+The 1-stage template therefore produces **70 distinct circuits**. The
+2-stage single-ended template produces **630 circuits** (70 × 3
+``second_stage`` × 3 ``compensation``). The 2-stage fully-differential
+template, which has two ``compensation`` slots, two ``second_stage`` slots
+(one per output path), and one ``cmfb`` slot, produces **5 670 circuits**:
+of the 56 fully-differential-compatible
+``input_pair``/``load``/``tail_current`` combinations, only the 14 using a
+``"differential"``-cardinality load keep both ``cmfb`` variants (14 × 2 =
+28); the other 42 collapse ``cmfb`` to a single canonical variant (42 × 1 =
+42) -- 28 + 42 = 70 effective load/``cmfb`` combinations (see "CMFB
+compatibility filter" below), × 9 ``second_stage`` pairs × 9
+``compensation`` pairs. Each 3-stage single-ended template adds two more
+``second_stage`` slots (gm2, gm3) and two ``compensation`` slots (Cm1, Cm2)
+on top of the 1-stage base, producing **5 670 circuits** (70 × 9 stage
+pairs × 9 ``compensation`` pairs). Each 3-stage fully-differential template
+duplicates those four slots per output path (and keeps the single ``cmfb``
+slot), producing **459 270 circuits** (70 × 3⁴ × 3⁴).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -204,7 +194,7 @@ that *sources* current into ``out1``/``out2`` from vdd and a
 Each ``input_pair``, ``load``, and ``tail_current`` variant declares a
 ``polarity`` field in ``opamp_modules.yaml``: ``pmos_input``, ``nmos_input``,
 or omitted for variants that work with either polarity
-(``inverter_based_input``, and currently all ``bias_generation`` variants).
+(``inverter_based_input``).
 ``enumerate_circuits`` skips any combination where ``load``'s or
 ``tail_current``'s ``polarity`` (if set) doesn't match ``input_pair``'s. To
 extend the filter to a new or edited variant, add the matching ``polarity:``
@@ -299,86 +289,67 @@ variant's tail-side device terminal(s) to ``tail`` to make it a genuine
 ``tail_current`` consumer -- no code changes needed
 (``circuitgenome/synthesizer/tail_current_compatibility.py``).
 
-Bias flavor compatibility filter
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Demand-driven bias construction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every ``bias_generation`` leg delivers its rail voltage through a
-diode-connected MOSFET that pins the rail to one supply -- its *flavor*: a
-PMOS diode hangs from vdd (rail ≈ ``VDD − |V_GSP|``, suited to PMOS gates
-whose source sits at vdd), an NMOS diode sits on gnd (rail ≈ ``V_GSN``,
-suited to NMOS gates whose source sits at gnd). ``diode_connected_mosfet_bias``
-makes every rail vdd-flavored, ``magic_battery_bias`` gnd-flavored;
-``resistor_bias`` legs have no diode (``out_i = I_leg × R_i``), so each rail
-is independently tunable and has no flavor.
-
-A consumer gate fed the wrong flavor is structurally unbiasable -- the device
-is massively over- or under-driven and no sizing can recover an operating
-point (issue #99 measured three such defect classes, none of which ever
-reached a sound DC bias). ``enumerate_circuits`` therefore rejects any
-combination whose generator delivers the wrong flavor on a *consumed* rail.
-Both sides are derived structurally from the devices (no YAML tags): a
-consumer MOSFET whose gate lands on a bias rail requires its source's supply
-(consumers whose source is an internal node -- cascode gates -- impose
-nothing), and a diode-connected device on the rail (a current-mirror tail's
-reference, including the cascode tails' stacked reference) requires its own
-channel type's flavor. A same-flavor bias-leg diode facing a mirror tail's
-reference diode is redundant rather than conflicting, and is dropped by
-``prune_redundant_tail_diode`` (see
-:mod:`circuitgenome.synthesizer.bias_pruning`); a cross-flavor one would
-fight the tail's reference for the rail voltage, so the combination is
-rejected.
-
-Because ``bias_generation`` is one slot of the enumeration product, rejection
-acts as routing: consumer sets whose rails all want one flavor keep the
-matching single-flavor generator (plus ``resistor_bias``); mixed-flavor sets
-(e.g. a vdd-flavored second stage with a gnd-flavored mirror tail) keep only
-``resistor_bias``. The filter buys honest rejection statistics and less
-wasted SPICE work, not new working circuits
-(``circuitgenome/synthesizer/bias_compatibility.py``).
-
-Bias-rail pruning
-~~~~~~~~~~~~~~~~~
-
-Every ``bias_generation`` variant exposes seven independent output rails
-(``out1``..``out7``), one per bias-consuming role: ``out1``..``out4`` feed
+The bias generator is not an enumerated module: ``enumerate_circuits``
+*constructs* it per combination from what the other slots actually consume
+on each of the seven bias rails (``out1``..``out4`` feed
 ``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
-``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, and ``out7``
-feeds ``tail_current.bias``. Each role's rail is independent of the others --
-``load``, ``second_stage``, ``third_stage``, and ``tail_current`` never share
-a bias voltage, so each can be sized independently.
+``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, ``out7`` feeds
+``tail_current.bias``; each role's rail is independent, so the roles never
+share a bias voltage and can be sized independently).
 
-Most combinations don't need every rail: simple loads (resistor/active/
-current-source) need none of ``out1``..``out4``, telescopic cascode loads need
-one, single-output folded-cascode loads need two, and only a
-differential-output folded-cascode needs all four. Resistor-tail variants
-declare ``bias`` as ``optional`` and never need ``out7``. In a single-stage
-topology there is no ``second_stage``/``third_stage`` slot, so ``out5``/
-``out6`` are never needed.
+Each consumed rail is classified structurally (no YAML tags) into a *kind*:
+
+- ``gate_vdd`` / ``gate_gnd`` -- a consumer MOSFET gate whose source sits on
+  a supply needs a voltage one ``V_GS`` from that supply. The leg is an
+  ``ibias``-derived mirror ending in a diode-connected device on the rail,
+  which doubles as the mirror *master* of its consumers -- the sizer sets
+  consumer currents by W/L ratio instead of matching voltages.
+- ``current_source`` / ``current_sink`` -- the consumer brings its own
+  reference diode (current-mirror tails, including the cascode tails'
+  stacked diode): the rail is a *current* interface and the leg is a bare
+  mirror with no diode of its own. A bias-side diode here would either sit
+  in parallel with the tail's reference (splitting the current) or fight it
+  (issue #99's measured rail-7 contention) -- both are now unconstructable.
+- ``cascode_gnd`` / ``cascode_vdd`` -- a cascode gate (consumer source on an
+  internal node) needs its ``V_GS`` plus the saturation floor of the stack
+  toward its back supply. The leg is a mirror into a diode-connected device
+  riding a small floor resistor (``out = V_GS + I × R`` from that supply):
+  the diode covers the large, Vth-dependent ``V_GS`` part -- tracking the
+  consumer over process and temperature -- and the resistor covers only the
+  small Vdsat floor; both are sized per rail by the sizer from the consumer
+  stack (issue #99's parked cascode class).
+- ``tunable`` -- no structurally implied level (conflicting demands on a
+  shared rail): a mirror into a resistor, ``out = I_leg × R``, per-rail
+  tunable by the sizer.
+
+The constructed variant (name ``constructed_bias``) always carries an NMOS
+master reference on the ``ibias`` pin; a ``pref`` branch deriving the
+PMOS-side mirror reference is emitted only when some leg needs it. The pref
+branch is *cascoded*: a wide-swing ``ncasc`` level (PMOS mirror into a
+narrow diode) pins the branch mirror's Vds near the master's instead of at
+``vdd - |V_GSP|`` -- closing most of the extra-mirror-hop λ error that
+issue #103's A/B measured against the retired ``magic_battery_bias``. Only
+consumed rails get a port and a leg -- unconsumed rails simply don't exist.
+The leg templates live in ``config/bias_legs.yaml``; the demand analysis and
+assembly in :mod:`circuitgenome.synthesizer.bias_construction`.
+
+Because every rail gets exactly the leg its consumer requires, the
+structurally unbiasable flavor mismatches that issue #99 measured (and that
+previously had to be filtered out) can no longer be expressed, and
+mixed-flavor consumer sets -- e.g. every real-cmfb fully-differential
+circuit, whose rail 4 is gnd-referenced while rails 1/5 are vdd-referenced
+-- get correct per-rail legs instead of being routed to an all-resistor
+generator.
 
 In ``fully_differential`` topologies, the ``cmfb`` slot's ``bias`` port is
-also wired to ``out4`` (``net_bias4``), but (per the "CMFB compatibility
-filter" above) ``cmfb`` is pruned to an empty placeholder unless ``load``'s
-``output_cardinality`` is ``"differential"`` -- so rail 4 is needed under
-exactly the same condition as the "only a differential-output folded-cascode
-needs all four" rule above, whether ``single_ended`` (no ``cmfb`` slot, rail 4
-needed via ``load.bias_cmfb`` directly) or ``fully_differential`` (rail 4
-needed via ``cmfb.bias``).
-
-``enumerate_circuits`` computes which of ``out1``..``out7`` are actually
-consumed by the other slots in each combination (any subset of ``{1..7}``, not
-necessarily contiguous) and prunes the ``bias_generation`` variant down to
-just those rails, dropping the now-unused output ports and the devices that
-exist only to drive them (e.g. an unused mirror leg's diode-connected MOSFET
-or load resistor). This reduces the device count of the assembled circuit
-without changing which combinations are enumerated -- see
-:mod:`circuitgenome.synthesizer.bias_pruning`.
-
-Every ``bias_generation`` variant shares one structural layout: a *shared
-reference device* that mirrors ``ibias`` onto an internal reference node
-(never touching ``out1``..``out7``), plus one self-contained *leg* per output
-rail that mirrors the reference and delivers that rail via its own complete
-current path. Pruning drops each leg (and its output port) whose rail is not
-needed, leaving the shared reference device and the needed legs untouched.
+wired to ``out4`` (``net_bias4``), but (per the "CMFB compatibility filter"
+above) ``cmfb`` is pruned to an empty placeholder unless ``load``'s
+``output_cardinality`` is ``"differential"`` -- construction runs after that
+prune, so placeholder slots demand nothing and rail 4 gets a leg exactly
+when a real cmfb consumes it.
 
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -439,14 +410,13 @@ internal device structure is invisible to the template.
        wire this to the dedicated ``net_bias7`` rail; resistor-tail variants
        declare it ``optional`` and leave it unconnected)*, ``vdd``, ``gnd``
    * - ``bias_generation``
-     - ``ibias``, ``out1``, ``out2``, ``out3``, ``out4``, ``out5``, ``out6``,
-       ``out7`` (seven independent mirror legs off a shared ``ibias``
-       reference: ``out1``-``out4`` feed ``load``'s
-       ``bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
-       ``second_stage.bias``, ``out6`` feeds ``third_stage.bias``, ``out7``
-       feeds ``tail_current.bias``), ``vdd``, ``gnd``. Each combination's
-       :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
-       drops whichever subset of ``out1``..``out7`` isn't needed
+     - ``ibias``, ``out1``..``out7`` -- consumed rails only (``out1``-``out4``
+       feed ``load``'s ``bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5``
+       feeds ``second_stage.bias``, ``out6`` feeds ``third_stage.bias``,
+       ``out7`` feeds ``tail_current.bias``), ``vdd``, ``gnd``. The variant
+       is constructed per combination by
+       :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`,
+       with one typed leg per consumed rail
    * - ``cmfb``
      - ``in1``, ``in2`` (differential sense inputs, wired to
        ``net_loadout1``/``net_loadout2`` -- the ``load``'s cascode-output
@@ -604,13 +574,15 @@ categories:
        (PMOS / NMOS, 4 devices each), resistor (VDD-side / GND-side, each using
        a hook to reject resistors whose supply terminal isn't the global rail).
    * - ``bias_generation``
-     - 3
-     - ``diode_connected_mosfet_bias`` (NMOS reference + NMOS/PMOS leg pairs),
-       ``magic_battery_bias`` (PMOS reference + PMOS/NMOS leg pairs),
-       ``resistor_bias`` (PMOS reference + PMOS/resistor leg pairs). All three
-       use hooks (below) to discover however many output legs
-       :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`
-       left in the netlist.
+     - 4
+     - ``constructed_bias`` (the synthesizer's constructed multi-reference
+       generator; its hook discovers NMOS-referenced legs, the ``pref``
+       branch, and every PMOS-referenced leg), plus the historical
+       ``diode_connected_mosfet_bias`` (NMOS reference + NMOS/PMOS leg
+       pairs), ``magic_battery_bias`` (PMOS reference + PMOS/NMOS leg
+       pairs), and ``resistor_bias`` (PMOS reference + PMOS/resistor leg
+       pairs) for external/legacy netlists. All four use hooks (below) to
+       discover however many output legs are present.
    * - ``cmfb``
      - 2
      - ``resistive_sense_cmfb`` (2 resistors + 5T OTA: resistive averager feeds
@@ -642,18 +614,21 @@ any, runs once per base-template match and may reject the match (return
 ``None``) or accept it with extra devices/pins merged in (a
 :class:`~circuitgenome.recognizer.models.HookMatch`).
 
-Five hooks are implemented in :mod:`circuitgenome.recognizer.hooks`:
+Six hooks are implemented in :mod:`circuitgenome.recognizer.hooks`:
 
+- :func:`~circuitgenome.recognizer.hooks.constructed_bias_legs` discovers
+  the constructed generator's legs (NMOS-referenced pairs, the ``pref``
+  branch, gnd-referenced / current / resistor legs off the PMOS-side
+  reference), rejecting purely NMOS-referenced shapes so they resolve to
+  the historical pattern below.
 - :func:`~circuitgenome.recognizer.hooks.diode_connected_mosfet_bias_legs`,
   :func:`~circuitgenome.recognizer.hooks.magic_battery_bias_legs`, and
-  :func:`~circuitgenome.recognizer.hooks.resistor_bias_legs` each handle the
-  variability described in :mod:`circuitgenome.synthesizer.bias_pruning`: a
-  ``bias_generation`` variant's shared reference device is always present, but
-  the number of output "legs" (0-7, depending on which ``out1``..``out7`` rails
-  :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation` kept)
-  varies per combination. The base template matches only the reference device;
-  the hook walks the netlist to find however many legs are actually present and
-  appends their devices and ``legN_out`` pins to
+  :func:`~circuitgenome.recognizer.hooks.resistor_bias_legs` each handle a
+  historical single-flavor generator: the shared reference device is always
+  present, but the number of output "legs" (0-7) varies per netlist. The
+  base template matches only the reference device; the hook walks the
+  netlist to find however many legs are actually present and appends their
+  devices and ``legN_out`` pins to
   :class:`~circuitgenome.recognizer.models.HookMatch`.
 - :func:`~circuitgenome.recognizer.hooks.resistor_tail_vdd_check` and
   :func:`~circuitgenome.recognizer.hooks.resistor_tail_gnd_check` each accept a

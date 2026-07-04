@@ -1,0 +1,130 @@
+# Typed bias-leg library for demand-driven bias construction.
+#
+# The bias generator is no longer an enumerated module variant: it is
+# *constructed* per combination by bias_construction.py from what the other
+# slots actually consume on each bias rail (issue #99's redesign follow-up).
+# This file is the declarative half of that constructor -- a multi-reference
+# core plus one leg template per rail *kind*.
+#
+# Core (always emitted):
+#   reference     -- the master reference: a diode-connected NMOS on the ibias
+#                    pin. ibias is injected INTO the pin; the pin net itself is
+#                    the NMOS-side mirror gate reference ("nref" == ibias).
+#   pref_branch   -- derives the PMOS-side mirror gate reference from the
+#                    master: an NMOS mirror (mnpref) sinks a reference current
+#                    through a diode-connected PMOS (mppref), whose gate node
+#                    ("pref") every PMOS-referenced leg mirrors from. Emitted
+#                    only when some leg references the pref net.
+#                    The branch is **cascoded** (issue #103's phase-2
+#                    follow-up): uncascoded, mnpref runs at Vds = vdd-|VGSP|
+#                    while the master diode sits at VGS -- a ~4% lambda error
+#                    on every PMOS-referenced rail (the extra mirror hop the
+#                    #103 A/B measured against magic_battery_bias). mncasc
+#                    pins mnpref's drain near the master's Vds instead; its
+#                    gate level "ncasc" is a wide-swing (Sooch) level from a
+#                    dedicated branch: mpcasc into mncdio, a diode sized
+#                    *narrow* by the sizer so VGS(mncdio) = Vds(mnpref) +
+#                    VGS(mncasc) fits under the pref node at any supply.
+#                    mpcasc mirrors "feed_pref", a small uncascoded feeder
+#                    copy of the pref derivation (mnfeed + mpfeed), NOT pref
+#                    itself: gating it from pref would close a
+#                    pref->mpcasc->ncasc->mncasc loop with a degenerate
+#                    all-off second operating point (the classic wide-swing
+#                    startup hazard -- ngspice measurably converges to it on
+#                    some circuits). The feeder makes the whole branch a DAG
+#                    from the always-on ibias master, so startup is
+#                    guaranteed; the feeder's own ~4% hop error only shifts
+#                    the ncasc *level*, which is loose by construction.
+#                    (The net is named feed_pref so its slot-prefixed form
+#                    ends in "_pref" -- the sizer taxonomy already excludes
+#                    those gates from signal-device classification.)
+#
+# Leg templates -- instantiated once per consumed rail, with "out" rewritten
+# to out{i} and each ref suffixed with the rail index:
+#   gate_vdd       -- for consumer gates whose source sits at vdd (PMOS current
+#                     sources): NMOS mirror sinks through a diode-connected
+#                     PMOS, so the rail sits one |V_GSP| below vdd and is the
+#                     mirror *master* of its consumers.
+#   gate_gnd       -- mirror image, for consumer gates whose source sits at
+#                     gnd (NMOS current sinks): PMOS mirror sources into a
+#                     diode-connected NMOS, rail sits one V_GSN above gnd.
+#   current_source -- for a rail whose consumer brings its own NMOS reference
+#                     diode (mirror tails): a bare PMOS mirror sources the
+#                     reference current into the consumer's diode. No diode of
+#                     our own -- a second diode would sit in parallel with the
+#                     consumer's and split the reference current.
+#   current_sink   -- mirror image for PMOS-diode consumers: a bare NMOS
+#                     mirror sinks the reference current out of the consumer's
+#                     diode.
+#   cascode_gnd    -- for NMOS cascode gates (consumer source on an internal
+#                     node): the rail must sit at V_GS(cascode) plus the
+#                     saturation floor of the stack below it. PMOS mirror
+#                     sources into a diode-connected NMOS riding on a small
+#                     resistor: out = V_GSN + I*R. The diode covers the
+#                     consumer-V_GS part (the large, Vth-dependent piece --
+#                     it *tracks* process/temperature, which a bare resistor
+#                     cannot), the resistor covers only the small Vdsat
+#                     floor; both are sized per-rail by the sizer from the
+#                     consumer stack (issue #99's parked cascode class).
+#   cascode_vdd    -- mirror image for PMOS cascode gates: NMOS mirror sinks
+#                     through a diode-connected PMOS riding on a resistor to
+#                     vdd; out = vdd - (|V_GSP| + I*R).
+#   tunable        -- fallback when no structural level is implied
+#                     (conflicting demands on a shared rail): PMOS mirror
+#                     into a resistor, out = I_leg * R, per-rail tunable by
+#                     the sizer.
+#
+# Net-name contract inside the templates: ibias (master reference gate),
+# pref (PMOS reference gate, internal), out (the rail), mid (leg-internal
+# node between a cascode leg's diode and its floor resistor; rewritten
+# per-rail like out), vdd/gnd (supplies).
+
+reference:
+  devices:
+    - {ref: mnref, type: nmos, d: ibias, g: ibias, s: gnd, b: gnd}
+
+pref_branch:
+  devices:
+    - {ref: mnfeed, type: nmos, d: feed_pref, g: ibias,     s: gnd,     b: gnd}
+    - {ref: mpfeed, type: pmos, d: feed_pref, g: feed_pref, s: vdd,     b: vdd}
+    - {ref: mpcasc, type: pmos, d: ncasc,     g: feed_pref, s: vdd,     b: vdd}
+    - {ref: mncdio, type: nmos, d: ncasc,     g: ncasc,     s: gnd,     b: gnd}
+    - {ref: mnpref, type: nmos, d: prefsrc,   g: ibias,     s: gnd,     b: gnd}
+    - {ref: mncasc, type: nmos, d: pref,      g: ncasc,     s: prefsrc, b: gnd}
+    - {ref: mppref, type: pmos, d: pref,      g: pref,      s: vdd,     b: vdd}
+
+legs:
+  - kind: gate_vdd
+    devices:
+      - {ref: mn, type: nmos, d: out, g: ibias, s: gnd, b: gnd}
+      - {ref: mp, type: pmos, d: out, g: out,   s: vdd, b: vdd}
+
+  - kind: gate_gnd
+    devices:
+      - {ref: mp, type: pmos, d: out, g: pref, s: vdd, b: vdd}
+      - {ref: mn, type: nmos, d: out, g: out,  s: gnd, b: gnd}
+
+  - kind: current_source
+    devices:
+      - {ref: mp, type: pmos, d: out, g: pref, s: vdd, b: vdd}
+
+  - kind: current_sink
+    devices:
+      - {ref: mn, type: nmos, d: out, g: ibias, s: gnd, b: gnd}
+
+  - kind: cascode_gnd
+    devices:
+      - {ref: mp, type: pmos,     d: out,  g: pref, s: vdd, b: vdd}
+      - {ref: mn, type: nmos,     d: out,  g: out,  s: mid, b: gnd}
+      - {ref: r,  type: resistor, t1: mid, t2: gnd}
+
+  - kind: cascode_vdd
+    devices:
+      - {ref: mn, type: nmos,     d: out,  g: ibias, s: gnd, b: gnd}
+      - {ref: mp, type: pmos,     d: out,  g: out,   s: mid, b: vdd}
+      - {ref: r,  type: resistor, t1: mid, t2: vdd}
+
+  - kind: tunable
+    devices:
+      - {ref: mp, type: pmos,     d: out,  g: pref, s: vdd, b: vdd}
+      - {ref: r,  type: resistor, t1: out, t2: gnd}

@@ -22,7 +22,7 @@ def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
             "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
-            "bias_gen": "diode_connected_mosfet_bias", "compensation": "miller_cap"}
+            "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
@@ -114,7 +114,7 @@ def test_resistor_load_biases_in_spice():
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
             "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
-            "bias_gen": "diode_connected_mosfet_bias", "compensation": "miller_cap"}
+            "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
@@ -168,16 +168,17 @@ def test_misbiased_circuit_reports_measured_gain_and_reason():
 
 
 @ngspice
-def test_pmos_referenced_bias_gen_biases_in_spice():
-    """A magic_battery (PMOS-referenced) candidate biases soundly once the rig
-    drives the ``ibias`` pin in the right direction.  With the old hardcoded
-    inject direction the pin floated above VDD, every bias rail was dead, and
-    all 1260 magic_battery/resistor_bias candidates railed or starved."""
+def test_gnd_referenced_legs_bias_in_spice():
+    """A consumer set demanding gnd-referenced and current-source legs (the
+    shapes the retired magic_battery_bias used to cover) biases soundly with
+    the constructed generator's pref branch. (The rig's ibias direction
+    handling for PMOS-referenced pins -- external netlists -- is covered by
+    test_iref_direction_follows_reference_diode.)"""
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_nmos", "load": "active_load_pmos",
             "tail_current": "current_mirror_tail_nmos", "second_stage": "common_drain",
-            "bias_gen": "magic_battery_bias", "compensation": "miller_cap"}
+            "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
@@ -248,7 +249,6 @@ def _resistor_tail_two_stage_se(second_stage):
                 if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
             "tail_current": "resistor_tail_vdd",
-            "bias_gen": "diode_connected_mosfet_bias",
             "compensation": "miller_cap", "second_stage": second_stage}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
@@ -358,7 +358,6 @@ def test_fd_large_signal_metrics_stay_none():
     want = {"input_pair": "differential_pair_pmos",
             "load": "folded_cascode_load_pmos_input_differential_output",
             "tail_current": "current_mirror_tail_pmos",
-            "bias_gen": "resistor_bias",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
             "second_stage_p": "common_source", "second_stage_n": "common_source",
             "cmfb": "resistive_sense_cmfb"}

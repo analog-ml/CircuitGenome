@@ -22,7 +22,7 @@ the assembled circuit -- pure combinatorial duplication, plus 7-8 dead
 :data:`CANONICAL_CMFB_VARIANT` is allowed through. :func:`prune_cmfb` then
 empties that variant's ports/devices for those combinations, so it
 contributes no devices and ``cmfb.bias`` is no longer "needed" (see
-:func:`~circuitgenome.synthesizer.bias_pruning.needed_bias_outputs`).
+:func:`~circuitgenome.synthesizer.bias_construction.required_rail_kinds`).
 
 To extend: tag a new or edited ``load`` variant with
 ``output_cardinality: "differential"`` (and give it a real
@@ -62,7 +62,7 @@ def prune_cmfb(variant: ModuleVariant, load: ModuleVariant) -> ModuleVariant:
     returned unchanged. Otherwise, returns a copy of *variant* with no ports
     and no devices -- it contributes nothing to the assembled circuit, and
     ``cmfb.bias`` is no longer "needed" by
-    :func:`~circuitgenome.synthesizer.bias_pruning.needed_bias_outputs`.
+    :func:`~circuitgenome.synthesizer.bias_construction.required_rail_kinds`.
     """
     if load.output_cardinality == _CMFB_CONSUMING_CARDINALITY:
         return variant

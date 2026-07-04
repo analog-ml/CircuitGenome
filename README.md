@@ -249,14 +249,6 @@ m1 bias bias vdd vdd pmos
 m2 out bias vdd vdd pmos
 .ends
 
-.subckt diode_connected_mosfet_bias ibias out5 out7 vdd gnd
-mn1 ibias ibias gnd gnd nmos
-mn6 out5 ibias gnd gnd nmos
-mp5 out5 out5 vdd vdd pmos
-mn8 out7 ibias gnd gnd nmos
-mp7 out7 out7 vdd vdd pmos
-.ends
-
 .subckt miller_cap in out
 c1 in out 1p
 .ends
@@ -266,13 +258,20 @@ mn1 out in gnd gnd nmos
 mp1 out bias vdd vdd pmos
 .ends
 
+.subckt constructed_bias ibias out5 out7 vdd gnd
+mnref ibias ibias gnd gnd nmos
+mn5 out5 ibias gnd gnd nmos
+mp5 out5 out5 vdd vdd pmos
+mn7 out7 ibias gnd gnd nmos
+.ends
+
 .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
 Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
 Xload net_diff1 net_mid net_diff1 net_mid vdd! gnd! resistor_load_gnd
 Xtail_current net_tail net_bias7 vdd! gnd! current_mirror_tail_pmos
-Xbias_gen ibias net_bias5 net_bias7 vdd! gnd! diode_connected_mosfet_bias
 Xcompensation net_mid out miller_cap
 Xsecond_stage net_mid out net_bias5 vdd! gnd! common_source
+Xbias_gen ibias net_bias5 net_bias7 vdd! gnd! constructed_bias
 .ends
 ```
 

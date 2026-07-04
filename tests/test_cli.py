@@ -15,7 +15,6 @@ def sample_netlist(tmp_path_factory):
         "input_pair":      [v for v in modules["input_pair"]      if v.name == "differential_pair_pmos"],
         "load":            [v for v in modules["load"]            if v.name == "active_load_nmos"],
         "tail_current":    [v for v in modules["tail_current"]    if v.name == "current_mirror_tail_pmos"],
-        "bias_generation": [v for v in modules["bias_generation"] if v.name == "diode_connected_mosfet_bias"],
     }
     circuit = next(enumerate_circuits(topology, simple_modules))
     spice = to_flat_spice(circuit)

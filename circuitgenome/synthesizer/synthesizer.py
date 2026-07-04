@@ -17,19 +17,30 @@ import itertools
 from pathlib import Path
 from typing import Iterator
 
-from .bias_compatibility import is_bias_flavor_compatible
-from .bias_pruning import (
-    needed_bias_outputs,
-    prune_bias_generation,
-    prune_redundant_tail_diode,
-)
+from .bias_construction import construct_bias_generation
 from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
 from .polarity_compatibility import is_combination_valid
-from .loader import load_modules, load_topologies
-from .models import Device, ModuleVariant, SynthesizedCircuit, TopologyTemplate
+from .loader import load_bias_legs, load_modules, load_topologies
+from .models import (
+    BiasLegLibrary,
+    Device,
+    ModuleVariant,
+    SynthesizedCircuit,
+    TopologyTemplate,
+)
 from .net_aliasing import apply_net_rename, compute_alias_net_rename
 from .output_compatibility import is_output_type_compatible
 from .tail_current_compatibility import is_tail_current_compatible, prune_tail_current
+
+_default_bias_legs_cache: BiasLegLibrary | None = None
+
+
+def _default_bias_legs() -> BiasLegLibrary:
+    """Load (once) the built-in bias-leg library for bias construction."""
+    global _default_bias_legs_cache
+    if _default_bias_legs_cache is None:
+        _default_bias_legs_cache = load_bias_legs()
+    return _default_bias_legs_cache
 
 
 def _resolve_devices(
@@ -92,21 +103,28 @@ def _circuit_name(topology: TopologyTemplate, variant_map: dict[str, ModuleVaria
 def build_circuit(
     topology: TopologyTemplate,
     variant_map: dict[str, ModuleVariant],
+    bias_legs: BiasLegLibrary | None = None,
 ) -> SynthesizedCircuit | None:
     """Assemble a single :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit`
-    from *variant_map*, applying all cross-slot compatibility filters and
-    pruning passes described in :func:`enumerate_circuits`.
+    from *variant_map*, applying all cross-slot compatibility filters,
+    pruning passes, and the bias-generation construction described in
+    :func:`enumerate_circuits`.
 
     Returns ``None`` if *variant_map* is rejected by
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
-    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`,
-    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`, or
-    :func:`~circuitgenome.synthesizer.bias_compatibility.is_bias_flavor_compatible`.
+    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
+    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`.
 
     :param topology: The wiring template that defines slots and net connections.
     :param variant_map: One :class:`~circuitgenome.synthesizer.models.ModuleVariant`
-                         per slot, keyed by slot name.
+                         per slot, keyed by slot name. Any ``bias_generation``
+                         slot's entry may be omitted -- it is *constructed*
+                         from the other slots' demands (see
+                         :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`)
+                         and overwrites whatever the caller supplied.
+    :param bias_legs: Leg library for the bias construction; the built-in
+                       ``config/bias_legs.yaml`` when omitted.
     """
     variant_map = dict(variant_map)  # don't mutate caller's dict
 
@@ -125,14 +143,14 @@ def build_circuit(
         variant_map["tail_current"], variant_map["input_pair"]
     )
 
-    if not is_bias_flavor_compatible(topology, variant_map):
-        return None
-
-    needed = needed_bias_outputs(topology, variant_map)
-    bias_slot = next(s for s in topology.slots if s.category == "bias_generation")
-    variant_map[bias_slot.name] = prune_bias_generation(variant_map[bias_slot.name], needed)
-    variant_map[bias_slot.name] = prune_redundant_tail_diode(
-        variant_map[bias_slot.name], variant_map["tail_current"])
+    # Construct the bias generator from the (now pruned) consumer demands --
+    # must come after prune_cmfb/prune_tail_current so emptied placeholder
+    # slots demand nothing.
+    bias_slot = next((s for s in topology.slots if s.category == "bias_generation"), None)
+    if bias_slot is not None:
+        variant_map[bias_slot.name] = construct_bias_generation(
+            topology, variant_map, bias_legs or _default_bias_legs()
+        )
 
     all_devices: list[tuple[str, Device]] = []
     load_port_net_map: dict[str, str] = {}
@@ -205,32 +223,27 @@ def enumerate_circuits(
     so it contributes no devices and ``tail_current.bias`` is not counted as
     a needed bias rail.
 
-    Combinations where the ``bias_generation`` variant delivers the wrong
-    *flavor* of voltage (vdd- vs gnd-referenced) on a bias rail some consumer
-    gate needs -- structurally unbiasable, no sizing can fix them -- are
-    skipped (see
-    :func:`~circuitgenome.synthesizer.bias_compatibility.is_bias_flavor_compatible`).
-    ``resistor_bias`` rails are per-rail tunable and never flavor-rejected,
-    so mixed-flavor consumer sets survive with ``resistor_bias`` only.
-
-    The ``bias_generation`` variant in each combination is pruned to only the
-    ``out1``..``out7`` rails actually consumed by the other slots (see
-    :func:`~circuitgenome.synthesizer.bias_pruning.prune_bias_generation`),
-    removing unused output ports and their dedicated devices. ``out1``..
-    ``out4`` feed ``load``'s cascode bias inputs; ``out5``/``out6`` feed
+    The ``bias_generation`` slot is **not** part of the enumeration product:
+    its variant is *constructed* per combination from what the other slots
+    actually consume on each bias rail (see
+    :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`)
+    -- one leg of the matching kind per consumed rail, so flavor mismatches,
+    unused legs, and redundant rail-7 diodes cannot arise. ``out1``..
+    ``out4`` feed ``load``'s bias inputs; ``out5``/``out6`` feed
     ``second_stage``/``third_stage`` (shared across ``_p``/``_n`` instances in
     fully-differential topologies via the topology's static wiring); ``out7``
     feeds ``tail_current`` (current-mirror / cascode-current-mirror variants
     only -- resistor-tail variants declare ``bias`` as ``optional`` and need
     no rail). Each role's rail is independent of the others, so
     ``load``/``second_stage``/``third_stage``/``tail_current`` never share a
-    bias voltage.
+    bias voltage. Any ``bias_generation`` entries in *modules* are ignored.
 
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
                     return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
     :param config: Reserved for future per-enumeration filters (currently unused).
-    :raises ValueError: If a required module category has no available variants.
+    :raises ValueError: If a required module category (other than
+                        ``bias_generation``) has no available variants.
 
     Example::
 
@@ -244,19 +257,21 @@ def enumerate_circuits(
         for circuit in enumerate_circuits(topology, modules):
             print(to_flat_spice(circuit))
     """
+    product_slots = [s for s in topology.slots if s.category != "bias_generation"]
     per_slot: list[list[ModuleVariant]] = []
-    for slot in topology.slots:
+    for slot in product_slots:
         candidates = modules.get(slot.category, [])
         if not candidates:
             raise ValueError(f"No module variants found for category '{slot.category}'")
         per_slot.append(candidates)
 
+    bias_legs = _default_bias_legs()
     for combo in itertools.product(*per_slot):
         variant_map: dict[str, ModuleVariant] = {
             slot.name: variant
-            for slot, variant in zip(topology.slots, combo)
+            for slot, variant in zip(product_slots, combo)
         }
-        circuit = build_circuit(topology, variant_map)
+        circuit = build_circuit(topology, variant_map, bias_legs)
         if circuit is not None:
             yield circuit
 

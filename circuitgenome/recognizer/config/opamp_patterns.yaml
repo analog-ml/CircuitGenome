@@ -551,6 +551,28 @@ patterns:
 
   # ─── BIAS GENERATION variants ────────────────────────────────────────────────
 
+  # The synthesizer's constructed multi-reference generator (an NMOS master
+  # on ibias plus per-rail typed legs, possibly mixing vdd-/gnd-referenced,
+  # current, and resistor legs -- see synthesizer/bias_construction.py).
+  # Listed FIRST: it shares its base template with diode_connected_mosfet_bias,
+  # and assign_slots breaks connectivity-score ties by structure order. The
+  # hook rejects purely NMOS-referenced shapes so legacy single-flavor
+  # netlists still resolve to the historical patterns below.
+  - name: constructed_bias
+    category: bias_generation
+    circuit_block: bias
+    devices:
+      - {ref: mref, type: nmos}
+    same_net:
+      - [mref.d, mref.g]   # mref is diode-connected (master bias reference)
+    pins:
+      ibias: mref.g
+      gnd: mref.s
+    tech_type_from: mref   # tech_type = "n"
+    # Discovers NMOS-referenced legs, the pref branch, and every
+    # PMOS-referenced leg (nmos-diode, current, and resistor legs).
+    hook: "circuitgenome.recognizer.hooks:constructed_bias_legs"
+
   - name: diode_connected_mosfet_bias
     category: bias_generation
     circuit_block: bias

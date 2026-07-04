@@ -31,13 +31,11 @@ ONE_STAGE_VALID = {
     "input_pair": "differential_pair_pmos",
     "load": "resistor_load_gnd",
     "tail_current": "current_mirror_tail_pmos",
-    "bias_gen": "diode_connected_mosfet_bias",
 }
 TWO_STAGE_FD_VALID = {
     "input_pair": "differential_pair_pmos",
     "load": "resistor_load_gnd",
     "tail_current": "current_mirror_tail_pmos",
-    "bias_gen": "diode_connected_mosfet_bias",
     "cmfb": CANONICAL_CMFB_VARIANT,
     "comp_p": "miller_cap",
     "comp_n": "miller_cap",
@@ -57,8 +55,13 @@ def test_topology_to_graph_one_node_per_slot(topologies, by_name):
     for slot in topo.slots:
         node = by_id[slot.name]
         assert node.category == slot.category
-        assert node.variant_name == variant_map[slot.name].name
-        assert node.label == variant_map[slot.name].display_name
+        if slot.category == "bias_generation":
+            # not in variant_map (constructed by build_circuit): placeholder
+            assert node.variant_name == ""
+            assert node.label == "(bias_generation)"
+        else:
+            assert node.variant_name == variant_map[slot.name].name
+            assert node.label == variant_map[slot.name].display_name
         assert node.is_pruned is False
 
 
@@ -91,7 +94,11 @@ def test_build_edges_two_stage_fd_fanout(topologies, by_name):
 
 def test_supply_nets_excluded_from_edges(topologies, modules):
     for topo in topologies.values():
-        variant_map = {slot.name: modules[slot.category][0] for slot in topo.slots}
+        variant_map = {
+            slot.name: modules[slot.category][0]
+            for slot in topo.slots
+            if modules.get(slot.category)
+        }
         graph = topology_to_graph(topo, variant_map)
         nets = {e.net for e in graph.edges}
         assert nets.isdisjoint(SUPPLY_NETS)
@@ -103,7 +110,6 @@ def test_is_pruned_for_placeholder_variants(topologies, by_name):
         "input_pair": "inverter_based_input",
         "load": "resistor_load_vdd",
         "tail_current": CANONICAL_TAIL_CURRENT_VARIANT,
-        "bias_gen": "diode_connected_mosfet_bias",
     })
     circuit = build_circuit(one_stage, variant_map)
     assert circuit is not None
@@ -125,7 +131,6 @@ def test_build_circuit_returns_none_for_polarity_mismatch(topologies, by_name):
         "input_pair": "differential_pair_nmos",
         "load": "active_load_nmos",
         "tail_current": "current_mirror_tail_nmos",
-        "bias_gen": "diode_connected_mosfet_bias",
     })
     assert build_circuit(topo, variant_map) is None
 
@@ -136,7 +141,6 @@ def test_build_circuit_returns_none_for_output_cardinality_mismatch(topologies, 
         "input_pair": "differential_pair_nmos",
         "load": "folded_cascode_load_nmos_input_differential_output",
         "tail_current": "current_mirror_tail_nmos",
-        "bias_gen": "diode_connected_mosfet_bias",
     })
     assert build_circuit(topo, variant_map) is None
 
@@ -148,7 +152,7 @@ def test_build_circuit_matches_enumerate_circuits(topologies, modules, by_name):
     circuit = build_circuit(topo, variant_map)
     expected = next(
         c for c in enumerate_circuits(topo, modules)
-        if {k: v.name for k, v in c.variant_map.items()} == {k: v.name for k, v in variant_map.items()}
+        if all(c.variant_map[k].name == v.name for k, v in variant_map.items())
     )
 
     assert circuit.name == expected.name
@@ -164,7 +168,6 @@ def test_explain_incompatibility(topologies, by_name):
         "input_pair": "differential_pair_nmos",
         "load": "active_load_nmos",
         "tail_current": "current_mirror_tail_nmos",
-        "bias_gen": "diode_connected_mosfet_bias",
     })
     reasons = explain_incompatibility(topo, polarity_bad)
     assert any("Polarity mismatch" in r for r in reasons)
@@ -173,7 +176,6 @@ def test_explain_incompatibility(topologies, by_name):
         "input_pair": "differential_pair_nmos",
         "load": "folded_cascode_load_nmos_input_differential_output",
         "tail_current": "current_mirror_tail_nmos",
-        "bias_gen": "diode_connected_mosfet_bias",
     })
     reasons2 = explain_incompatibility(topo, cardinality_bad)
     assert any("output_cardinality" in r for r in reasons2)
@@ -182,8 +184,6 @@ def test_explain_incompatibility(topologies, by_name):
 def test_enumerate_circuits_count_unchanged_after_refactor(modules, topologies):
     """Sanity check that build_circuit (shared with enumerate_circuits in
     synthesizer.py) applies the same filter pipeline: 70 effective
-    input_pair/load/tail_current combos keep resistor_bias (70), plus
-    diode_connected on the 36 with no gnd-flavored rail requirement and
-    magic_battery on the 36 with no vdd-flavored one (bias_compatibility.py)
-    = 142."""
-    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 142
+    input_pair/load/tail_current combos, each with its one constructed bias
+    generator."""
+    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 70

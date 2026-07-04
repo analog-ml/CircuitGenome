@@ -10,7 +10,15 @@ from pathlib import Path
 
 import yaml
 
-from .models import Connection, Device, ModuleVariant, PortDef, Slot, TopologyTemplate
+from .models import (
+    BiasLegLibrary,
+    Connection,
+    Device,
+    ModuleVariant,
+    PortDef,
+    Slot,
+    TopologyTemplate,
+)
 
 _CONFIG_DIR = Path(__file__).parent / "config"
 
@@ -64,6 +72,37 @@ def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant
         )
         by_category.setdefault(variant.category, []).append(variant)
     return by_category
+
+
+def _load_devices(entries: list[dict]) -> list[Device]:
+    return [
+        Device(
+            ref=d["ref"],
+            type=d["type"],
+            terminals={k: v for k, v in d.items() if k not in ("ref", "type")},
+        )
+        for d in entries
+    ]
+
+
+def load_bias_legs(path: str | Path | None = None) -> BiasLegLibrary:
+    """Load the typed bias-leg library from a YAML file.
+
+    :param path: Path to a bias-legs YAML file.  Defaults to the built-in
+                 ``bias_legs.yaml``.
+    :returns: A :class:`~circuitgenome.synthesizer.models.BiasLegLibrary`
+              with the master reference, the ``pref`` branch, and one leg
+              template per rail kind (see the YAML header for the contract).
+    """
+    path = Path(path) if path else _config_path("bias_legs.yaml")
+    with open(path) as f:
+        data = yaml.safe_load(f)
+
+    return BiasLegLibrary(
+        reference=_load_devices(data["reference"]["devices"]),
+        pref_branch=_load_devices(data["pref_branch"]["devices"]),
+        legs={leg["kind"]: _load_devices(leg["devices"]) for leg in data["legs"]},
+    )
 
 
 def load_topologies(path: str | Path | None = None) -> list[TopologyTemplate]:
