@@ -3,16 +3,18 @@ CMFB-slot compatibility filter and pruning for
 :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`.
 
 Every ``fully_differential`` topology has a ``cmfb`` slot, wired
-``cmfb.out -> net_cmfb_out -> load.bias_cmfb``. But only 2 of the 12 ``load``
-variants -- ``folded_cascode_load_{nmos,pmos}_input_differential_output``, the
-two tagged ``output_cardinality: "differential"`` -- declare ``bias_cmfb`` as
-``role: input`` and actually reference it from a device terminal (gating
-``mn3``/``mn4`` or ``mp1``/``mp2``). The other 10 ``load`` variants declare
-``bias_cmfb`` as ``role: optional`` and never reference it, so
-``net_cmfb_out`` drives nothing for those combinations.
+``cmfb.out -> net_cmfb_out -> load.bias_cmfb``. But only 4 of the 12 ``load``
+variants -- ``folded_cascode_load_{nmos,pmos}_input_differential_output``
+(gating ``mn3``/``mn4`` or ``mp1``/``mp2``) and
+``current_source_load_{pmos,nmos}`` (gating both branch devices, issue #112),
+the four tagged ``output_cardinality: "differential"`` -- declare
+``bias_cmfb`` as ``role: input`` and actually reference it from a device
+terminal. The other 8 ``load`` variants declare ``bias_cmfb`` as
+``role: optional`` and never reference it, so ``net_cmfb_out`` drives nothing
+for those combinations.
 
 Without a filter, both ``cmfb`` variants (``resistive_sense_cmfb``/
-``dda_cmfb``) would be enumerated for every combination, but for the 10
+``dda_cmfb``) would be enumerated for every combination, but for the 8
 non-``"differential"`` loads the choice between them makes zero difference to
 the assembled circuit -- pure combinatorial duplication, plus 7-8 dead
 ``cmfb_*`` devices and an unnecessarily "needed" bias rail 4 (``cmfb.bias``).

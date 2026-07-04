@@ -266,45 +266,55 @@ modules:
   - name: current_source_load_pmos
     category: load
     polarity: nmos_input
+    output_cardinality: differential
     display_name: "Current Source Load (PMOS)"
-    # PMOS current sources only — single bias voltage (bias1) sets both
-    # branch currents. No folding/cascode: out1/out2 alias in1/in2.
+    # Plain PMOS current sources on both branches -- a single shared gate
+    # voltage sets both branch currents, so nothing in the load absorbs a
+    # load-vs-tail current mismatch. Only viable with common-mode control:
+    # the gates are driven by the CMFB loop (bias_cmfb), which is exactly
+    # the textbook FD current-source load. Tagged "differential" so the
+    # variant never enumerates in single-ended topologies (issue #112; the
+    # untapped-branch filter would reject it there anyway).
+    # No folding/cascode: out1/out2 alias in1/in2.
     ports:
       - {name: in1,       role: input}
       - {name: in2,       role: input}
       - {name: out,       role: optional}
       - {name: out1,      role: output, alias_of: in1}
       - {name: out2,      role: output, alias_of: in2}
-      - {name: bias1,     role: input}
+      - {name: bias1,     role: optional}
       - {name: bias2,     role: optional}
       - {name: bias3,     role: optional}
-      - {name: bias_cmfb, role: optional}
+      - {name: bias_cmfb, role: input}
       - {name: vdd,       role: supply}
       - {name: gnd,       role: supply}
     devices:
-      - {ref: m1, type: pmos, d: in1, g: bias1, s: vdd, b: vdd}
-      - {ref: m2, type: pmos, d: in2, g: bias1, s: vdd, b: vdd}
+      - {ref: m1, type: pmos, d: in1, g: bias_cmfb, s: vdd, b: vdd}
+      - {ref: m2, type: pmos, d: in2, g: bias_cmfb, s: vdd, b: vdd}
   - name: current_source_load_nmos
     category: load
     polarity: pmos_input
+    output_cardinality: differential
     display_name: "Current Source Load (NMOS)"
-    # NMOS current sources only — single bias voltage (bias1) sets both
-    # branch currents. No folding/cascode: out1/out2 alias in1/in2.
+    # Mirror image of current_source_load_pmos: NMOS current sinks on both
+    # branches, gates driven by the CMFB loop (bias_cmfb). Tagged
+    # "differential" -- see current_source_load_pmos (issue #112).
+    # No folding/cascode: out1/out2 alias in1/in2.
     ports:
       - {name: in1,       role: input}
       - {name: in2,       role: input}
       - {name: out,       role: optional}
       - {name: out1,      role: output, alias_of: in1}
       - {name: out2,      role: output, alias_of: in2}
-      - {name: bias1,     role: input}
+      - {name: bias1,     role: optional}
       - {name: bias2,     role: optional}
       - {name: bias3,     role: optional}
-      - {name: bias_cmfb, role: optional}
+      - {name: bias_cmfb, role: input}
       - {name: vdd,       role: supply}
       - {name: gnd,       role: supply}
     devices:
-      - {ref: m1, type: nmos, d: in1, g: bias1, s: gnd, b: gnd}
-      - {ref: m2, type: nmos, d: in2, g: bias1, s: gnd, b: gnd}
+      - {ref: m1, type: nmos, d: in1, g: bias_cmfb, s: gnd, b: gnd}
+      - {ref: m2, type: nmos, d: in2, g: bias_cmfb, s: gnd, b: gnd}
   - name: folded_cascode_load_nmos_input_single_output
     category: load
     polarity: nmos_input

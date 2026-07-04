@@ -24,8 +24,10 @@ recent first.
   visualizer, hand-built variant maps keep working) but is not enumerated;
   `enumerate_circuits(..., config={"include_unsupported": True})` opts back
   in (recognizer round-trip tests use this).
-- Enumeration counts: 1-stage 70 → 60, 2-stage SE 600 → 450, 2-stage FD
-  5 760 → 3 510, 3-stage SE 9 000 → 6 750, 3-stage FD ≈1.3 M → 789 750.
+- Enumeration counts (from the post-#112 baseline, which excluded
+  `current_source_load_*` from single-ended templates and made them real
+  CMFB consumers): 1-stage 56 → 48, 2-stage SE 480 → 360, 2-stage FD
+  6 912 → 4 212, 3-stage SE 7 200 → 5 400, 3-stage FD ≈1.56 M → 947 700.
 
 ## 2026-07-04 (cascode leg kinds + cascoded pref branch — bias phase 2)
 
