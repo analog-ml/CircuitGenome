@@ -42,6 +42,7 @@ design exploration, or topology studies.
    api/loader
    api/netlist
    api/polarity_compatibility
+   api/second_stage_compatibility
    api/output_compatibility
    api/cmfb_compatibility
    api/tail_current_compatibility

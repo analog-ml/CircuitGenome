@@ -671,6 +671,23 @@ patterns:
       bias: mp1.g
       out: mn1.d
 
+  - name: common_source_pmos
+    category: second_stage
+    circuit_block: gain_stage_2
+    devices:
+      - {ref: mp1, type: pmos}
+      - {ref: mn1, type: nmos}
+    # Both drains share the output node. Structurally the mirror image of
+    # common_source -- the same device pair matches both patterns with the
+    # in/bias pins swapped, and the FBR's connectivity scoring picks the one
+    # whose in pin lands on the stage-input net.
+    same_net:
+      - [mp1.d, mn1.d]
+    pins:
+      in: mp1.g
+      bias: mn1.g
+      out: mp1.d
+
   - name: common_drain
     category: second_stage
     circuit_block: gain_stage_2
