@@ -19,6 +19,7 @@ from .models import SizingSpec, TechParams
 from .taxonomy import (
     FULL_BIAS_SLOTS,
     HALF_BIAS_SLOTS,
+    RAILS,
     SECOND_STAGE_SLOTS,
     STAGE_SLOTS,
     THIRD_STAGE_SLOTS,
@@ -138,6 +139,49 @@ def deduplicate_devices(
     return seen
 
 
+def _cascode_load_current_plan(
+    slot_transistors: dict[str, list[Device]], spec: SizingSpec,
+) -> dict[str, float]:
+    """Per-device IDS for folded/telescopic cascode loads, from KCL at the fold.
+
+    The generic HALF_BIAS rule (``ibias/n`` per same-type device) starves
+    cascode loads: at the folding node the bottom sinks must absorb the
+    input-pair branch current *plus* the cascode branch current, or the pair's
+    excess current has nowhere to go and the whole load rails.  Structure,
+    read from the assembled netlist:
+
+    * **folding devices** — source on a supply rail, drain on an input-pair
+      drain net.  They carry ``ibias/2`` (pair branch) + ``I_casc``.
+    * **cascode devices** — source on an input-pair drain net (stacked on the
+      folding node).  They and every other load device carry the cascode
+      branch current ``I_casc``, chosen as ``ibias/2``.
+    * **telescopic** (cascode devices but no folding devices): no folding
+      node — the whole stack carries the pair branch current ``ibias/2``.
+
+    Simple loads (nothing stacked on the pair drains) return ``{}`` and keep
+    the generic rule.
+    """
+    load = [d for d in slot_transistors.get("load", [])
+            if d.type in ("nmos", "pmos")]
+    pair = [d for d in slot_transistors.get("input_pair", [])
+            if d.type in ("nmos", "pmos")]
+    if not load or not pair:
+        return {}
+    pair_drains = {d.terminals.get("d") for d in pair}
+    cascode = {d.ref for d in load if d.terminals.get("s") in pair_drains}
+    if not cascode:
+        return {}
+    folding = {d.ref for d in load
+               if d.terminals.get("s") in RAILS
+               and d.terminals.get("d") in pair_drains}
+    i_pair = spec.ibias / 2.0
+    if not folding:
+        return {d.ref: i_pair for d in load}  # telescopic
+    i_casc = spec.ibias / 2.0
+    return {d.ref: (i_pair + i_casc if d.ref in folding else i_casc)
+            for d in load}
+
+
 def assign_ids(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
@@ -145,9 +189,12 @@ def assign_ids(
 ) -> dict[str, float]:
     """Assign quiescent IDS to each transistor from KCL + spec.ibias."""
     ids_2 = spec.ibias * spec.second_stage_current_ratio
+    cascode_load = _cascode_load_current_plan(slot_transistors, spec)
     ids_map: dict[str, float] = {}
     for ref, (device, slot) in all_transistors.items():
-        if slot in HALF_BIAS_SLOTS:
+        if slot == "load" and ref in cascode_load:
+            ids_map[ref] = cascode_load[ref]
+        elif slot in HALF_BIAS_SLOTS:
             # Each transistor in a 2-transistor group carries ibias/2.
             # For n devices in the slot (e.g. degenerated pairs), divide equally.
             n = len([d for d in slot_transistors[slot] if d.type == device.type])

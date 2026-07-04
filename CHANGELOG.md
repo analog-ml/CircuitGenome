@@ -39,6 +39,55 @@ parked). Enumeration counts are unchanged (construction, not enumeration).
   telescopic load with a PMOS mirror tail) resolve to `constructed_bias`.
 - Sizer taxonomy: gates on `*_ncasc` are bias-reference gates, excluded from
   `is_signal_device` like `*_pref`.
+## 2026-07-04 (cascode-load-aware current plan)
+
+PR (`fix/cascode-load-current-plan`). Targets
+`feat/demand-driven-bias-construction`. Fixes the folding-branch starvation
+that PR #104's designer A/B exposed as the next binding defect: `assign_ids`
+treated the `load` slot generically (`ibias/n` per same-type device), so a
+folded-cascode load's bottom sinks were planned at `ibias/4` when KCL at the
+folding node requires the pair branch current (`ibias/2`) **plus** the
+cascode branch current — the pair's excess current had nowhere to go, the
+folding node railed, and every folded/telescopic candidate died in the SPICE
+bias check (`starved: mp1_load…mp4_load; in triode: m1_input_pair`).
+
+### Changed
+
+- **Current plan** (`sizer/shared/preprocess.py`): `assign_ids` detects
+  cascode loads structurally — *folding* devices (source on a supply rail,
+  drain on an input-pair drain net) carry `ibias/2 + I_casc`; every other
+  load device carries the cascode branch current `I_casc = ibias/2`;
+  a *telescopic* stack (cascode devices but no folding devices) carries the
+  pair branch current `ibias/2` throughout (the old rule gave one bank
+  `ibias/4`). Simple loads keep the generic rule. The existing mirror-ratio
+  passes then size the folding sinks off the rail-1 leg diode at the correct
+  ratio automatically.
+- **Matched-pair symmetry** (`sizer/gmid/geometry.py`,
+  `sizer/analytical/constraints.py`): symmetry groups are keyed by
+  `(type, planned IDS)` instead of type alone — a cascode load's folding
+  sinks and cascode devices are no longer forced to equal W/L (which would
+  fight the mirror-ratio constraints).
+- **Cascode-rail walk margin** (`sizer/gmid/resistors.py`): the tunable-leg
+  walk adds a 100 mV saturation margin per stacked device (and inside the
+  input-pair anchor) instead of placing nodes exactly at the planned
+  saturation edge — a knife edge the realized operating point (LUT
+  characterized at `Vds=Vdd/2`) fell off by tens of mV.
+- **Designer verdicts (gf180 two-stage SE benchmark)**: cascode-load
+  candidates passing the SPICE bias gate rise 0/252 → 24/252 (all
+  `folded_cascode_load_pmos_input_single_output`), reaching the metric
+  gates; the starvation signature disappears benchmark-wide; zero
+  non-cascode candidates change stage.
+
+### Follow-ups
+
+- The remaining 228 cascode bias rejections are a *different* defect:
+  planned-vs-realized `|Vgs|` error on rails feeding stacks whose device
+  sources sit far from the body rail — worst for telescopic loads (source
+  ≈ 0.9 V from the body ⇒ strong back-gate shift the Vsb=0 LUT cannot see;
+  realized `|Vgs|` ~270 mV over plan pins the input pair at `Vds≈0`) and
+  the PMOS side of `folded_cascode_load_nmos_input_single_output`
+  (~100 mV). Needs Vsb-aware `vgs`/`vds_sat` (or a body-effect correction)
+  in the rail planning, not more margin.
 
 ## 2026-07-04 (demand-driven bias construction — typed leg library)
 
