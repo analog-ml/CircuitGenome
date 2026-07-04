@@ -54,7 +54,7 @@ _PTM_SPEC = _ROOT / "examples" / "two_stage_se_specs" / "spec_ptm45.yaml"
 
 
 _C0001 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0001_flat.ckt"
-_C0010 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0010_flat.ckt"
+_C0019 = _ROOT / "circuits" / "two_stage_opamp_single_ended" / "circuit_0019_flat.ckt"
 
 from circuitgenome.sizer.shared.spice_sim import ngspice_available
 
@@ -115,12 +115,14 @@ def test_size_feasible_verdict(capsys, tmp_path, monkeypatch):
     assert "Performance metrics:" in out
 
 
-@pytest.mark.skipif(not (_C0010.exists() and _PTM_SPEC.exists() and ngspice_available()),
+@pytest.mark.skipif(not (_C0019.exists() and _PTM_SPEC.exists() and ngspice_available()),
                     reason="needs ngspice + ptm45 two-stage fixtures")
 def test_size_spice_bias_infeasible(capsys):
-    """circuit_0010 passes the analytical (tail-only) check but rails in SPICE →
-    the SPICE DC verdict downgrades it to INFEASIBLE (optimistic table suppressed)."""
-    main(["size", str(_C0010), "--topology", "two_stage_opamp_single_ended",
+    """circuit_0019 passes the analytical (tail-only) check but rails in SPICE →
+    the SPICE DC verdict downgrades it to INFEASIBLE (optimistic table suppressed).
+    (circuit_0010, the previous specimen, biases fine since the issue-#108 Cc /
+    headroom-repair fixes.)"""
+    main(["size", str(_C0019), "--topology", "two_stage_opamp_single_ended",
           "--spec", str(_PTM_SPEC), "--tech", "ptm45"])
     out = capsys.readouterr().out
     assert "INFEASIBLE" in out

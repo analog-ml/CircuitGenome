@@ -80,12 +80,15 @@ def test_result_carries_transistor_intents(sized):
 
 def test_per_block_override_is_local(sized):
     parsed, sr, fbr, topo, tech = sized
-    base = size_gmid(parsed, sr, fbr, topo, tech, _spec())
+    # A headroom-comfortable supply: at 1.0 V the DC headroom repair re-sizes
+    # the tail regardless of intent, which would (correctly) mask the override.
+    spec = dataclasses.replace(_spec(), vdd=2.5)
+    base = size_gmid(parsed, sr, fbr, topo, tech, spec)
 
     # Retune only the tail current source to a weaker gm/Id (higher Vdsat).
     bi = dict(DEFAULT_BLOCK_INTENTS)
     bi["tail_current"] = dataclasses.replace(bi["tail_current"], gm_id=6.0)
-    tuned = size_gmid(parsed, sr, fbr, topo, tech, _spec(), GmIdIntent(block_intents=bi))
+    tuned = size_gmid(parsed, sr, fbr, topo, tech, spec, GmIdIntent(block_intents=bi))
 
     t0, t1 = base.transistors["m1_tail_current"], tuned.transistors["m1_tail_current"]
     assert t1.vds_sat_v > t0.vds_sat_v          # lower gm/Id → larger Vdsat

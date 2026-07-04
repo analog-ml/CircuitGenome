@@ -15,9 +15,12 @@ collapsing gm1 and GBW (issue #76, cause A).
 1. **Headroom repair** — when the tail's Vdsat does not fit, try to lower it by
    raising the tail current-mirror group's gm/Id (which keeps the mirror
    consistent — the same gm/Id implies the same Vgs and a width that still
-   tracks the current ratio).  If even the table's weak-inversion limit does
-   not fit, emit an honest warning (the SPICE DC bias-soundness check then
-   grounds the final feasibility verdict).
+   tracks the current ratio).  When that alone cannot fit, also move the input
+   pair toward weak inversion (raise its gm/Id → smaller ``|Vgs|`` → more tail
+   headroom); the pair's gm requirement is a minimum, so the stronger pair is
+   spec-safe.  If even the table's weak-inversion limit does not fit, emit an
+   honest warning (the SPICE DC bias-soundness check then grounds the final
+   feasibility verdict).
 2. **Cascode-aware budget** — a *stacked* tail (cascode current source) needs
    the **sum** of the series devices' Vdsat, which a single-device check misses
    (e.g. circuit_0110).
@@ -78,9 +81,10 @@ def _apply_headroom(
     """Check/repair tail saturation headroom; return ``(sizing, warnings)``.
 
     Only active for :class:`~.device_model.GmIdModel` (the gm/Id path).  Never
-    mutates the input ``sizing`` — a repaired tail mirror group comes back in a
-    new mapping (kept even when the snapped repair leaves a small residual, so
-    the tail sits as close to fitting as the table allows).
+    mutates the input ``sizing`` — a repaired tail mirror group (and, when
+    needed, a weaker-inversion input pair) comes back in a new mapping (kept
+    even when the snapped repair leaves a small residual, so the tail sits as
+    close to fitting as the table allows).
     """
     if not isinstance(model, GmIdModel):
         return sizing, []
@@ -114,41 +118,63 @@ def _apply_headroom(
             f"input polarity."
         ]
 
-    if headroom <= 0:
-        return sizing, _warn()  # no room at all; can't size around it
+    def _resize_group(base: dict[str, TransistorSizing], devs, gm_id: float,
+                      ) -> dict[str, TransistorSizing]:
+        """Re-size *devs* at ``gm_id`` preserving each device's current."""
+        out = dict(base)
+        for dev in devs:
+            s = base.get(dev.ref)
+            idw = model.lut.id_per_w(dev.type, gm_id, s.l_um) if s else 0.0
+            if not s or idw <= 0:
+                continue
+            w_new = _snap_w(tech.width, abs(s.ids_a) / idw)
+            out[dev.ref] = TransistorSizing(
+                ref=dev.ref, w_um=w_new, l_um=s.l_um, ids_a=s.ids_a,
+                vgs_v=model.vgs(dev.type, w_new, s.l_um, s.ids_a),
+                vds_sat_v=model.vds_sat(dev.type, w_new, s.l_um, s.ids_a),
+            )
+        return out
 
-    # Try to fit by lowering the tail group's Vdsat (raise its gm/Id).
-    gm_id_new = _tail_gm_id_for_headroom(model, tc_dev.type, s_tc.l_um, headroom)
-    if gm_id_new is None:
-        return sizing, _warn()
-
-    # Re-size the whole tail current-mirror group (devices sharing the tail's
-    # gate net) at the new gm/Id, preserving each device's current — so the
-    # mirror ratios (W ∝ I at equal gm/Id) are unchanged.
+    # The tail current-mirror group: devices sharing the tail's gate net.
+    # Re-sizing it at one gm/Id preserves the mirror ratios (W ∝ I).
     tail_gate = tc_dev.terminals.get("g")
-    g = tech.width
-    repaired = dict(sizing)
-    for ref, (dev, _slot) in all_transistors.items():
-        if dev.type != tc_dev.type or dev.terminals.get("g") != tail_gate:
-            continue
-        s = sizing.get(ref)
-        if not s:
-            continue
-        idw = model.lut.id_per_w(dev.type, gm_id_new, s.l_um)
+    tail_group = [dev for dev, _slot in all_transistors.values()
+                  if dev.type == tc_dev.type and dev.terminals.get("g") == tail_gate]
+
+    # Candidate input-pair operating points: as-sized first, then progressively
+    # weaker inversion — a gm requirement is a *minimum*, so raising the pair's
+    # gm/Id (smaller |Vgs| → more tail headroom) is spec-safe.  Take the first
+    # candidate whose headroom the tail can be re-sized to fit.
+    pair_devs = [d for d in ip if d.type == ip_dev.type]
+    cands: list[tuple[float | None, float]] = [(None, headroom)]
+    for gm_id_pair in (float(g) for g in model.lut.gm_id_axis):
+        idw = model.lut.id_per_w(ip_dev.type, gm_id_pair, s_ip.l_um)
         if idw <= 0:
             continue
-        w_new = _snap_w(g, abs(s.ids_a) / idw)
-        repaired[ref] = TransistorSizing(
-            ref=ref, w_um=w_new, l_um=s.l_um, ids_a=s.ids_a,
-            vgs_v=model.vgs(dev.type, w_new, s.l_um, s.ids_a),
-            vds_sat_v=model.vds_sat(dev.type, w_new, s.l_um, s.ids_a),
-        )
+        w_p = _snap_w(tech.width, abs(s_ip.ids_a) / idw)
+        vgs_p = abs(model.vgs(ip_dev.type, w_p, s_ip.l_um, s_ip.ids_a))
+        h = (spec.vdd - (vcm + vgs_p) if ip_dev.type == "pmos"
+             else (vcm - vgs_p) - spec.vss)
+        if h > headroom + 1e-9:
+            cands.append((gm_id_pair, h))
 
-    # Verify the repair actually fit (snapping can leave a small residual).
-    s_tc2 = repaired[tc_dev.ref]
-    if model.vds_sat(tc_dev.type, s_tc2.w_um, s_tc2.l_um, s_tc2.ids_a) > headroom:
-        return repaired, _warn()
-    return repaired, []
+    best: dict[str, TransistorSizing] | None = None
+    for gm_id_pair, h in cands:
+        if h <= 0:
+            continue
+        gm_id_tail = _tail_gm_id_for_headroom(model, tc_dev.type, s_tc.l_um, h)
+        if gm_id_tail is None:
+            continue
+        repaired = sizing if gm_id_pair is None \
+            else _resize_group(sizing, pair_devs, gm_id_pair)
+        repaired = _resize_group(repaired, tail_group, gm_id_tail)
+        s_tc2 = repaired[tc_dev.ref]
+        # Verify the repair actually fit (snapping can leave a small residual).
+        if model.vds_sat(tc_dev.type, s_tc2.w_um, s_tc2.l_um, s_tc2.ids_a) <= h:
+            return repaired, []
+        best = best or repaired  # keep the closest-fitting attempt
+
+    return (best, _warn()) if best is not None else (sizing, _warn())
 
 
 def check_dc_operating_point(
