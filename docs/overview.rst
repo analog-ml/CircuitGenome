@@ -76,7 +76,8 @@ Module categories
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
    * - Second stage
-     - Common-source, common-drain (source follower), differential OTA
+     - Common-source (NMOS/PMOS), common-drain source follower (PMOS/NMOS),
+       differential OTA
 
 .. rubric:: Input pair
 
@@ -164,28 +165,30 @@ core combination carries exactly one, structurally matched bias generator.
 
 The 1-stage template therefore produces **70 distinct circuits**. In the
 multi-stage templates, the ``second_stage`` slot that senses the first
-stage's output keeps only 2 of the 4 ``second_stage`` variants when the
-input pair is a tagged ``differential_pair_*`` (the "Stage-interface
-compatibility filter" below rejects the 2 whose signal device has the
-pair's own channel type); the 10 combinations using ``inverter_based_input``
-keep all 4. The 2-stage single-ended template thus produces **480 circuits**
-((60 × 2 + 10 × 4) × 3 ``compensation``). The 2-stage fully-differential
-template, which has two ``compensation`` slots, two ``second_stage`` slots
-(one per output path, both sensing the first stage), and one ``cmfb`` slot,
-produces **3 600 circuits**: of the 56 fully-differential-compatible
-``input_pair``/``load``/``tail_current`` combinations, only the 14 using a
-``"differential"``-cardinality load keep both ``cmfb`` variants (14 × 2 =
-28); the other 42 collapse ``cmfb`` to a single canonical variant (42 × 1 =
-42) -- 28 + 42 = 70 effective load/``cmfb`` combinations (see "CMFB
-compatibility filter" below), of which 60 use a tagged pair -- (60 × 2² +
-10 × 4²) × 9 ``compensation`` pairs = 3 600. Each 3-stage single-ended
-template adds two more ``second_stage`` slots (gm2, gm3 -- only gm2 senses
-the first stage; gm3 keeps all 4 variants) and two ``compensation`` slots
-(Cm1, Cm2) on top of the 1-stage base, producing **5 760 circuits**
-((60 × 2 × 4 + 10 × 4 × 4) × 9 ``compensation`` pairs). Each 3-stage
-fully-differential template duplicates those four slots per output path
-(and keeps the single ``cmfb`` slot), producing **518 400 circuits**
-((60 × 2² × 4² + 10 × 4⁴) × 3⁴).
+stage's output keeps only the level-reachable ``second_stage`` variants
+(the "Stage-interface compatibility filter" below): 3 of the 5 for the 30
+PMOS-pair combinations (``common_source``,
+``differential_ota_second_stage``, ``common_drain``), 2 of the 5 for the 30
+NMOS-pair combinations (``common_source_pmos``, ``common_drain_nmos``),
+and all 5 for the 10 ``inverter_based_input`` combinations. The 2-stage
+single-ended template thus produces **600 circuits**
+((30 × 3 + 30 × 2 + 10 × 5) × 3 ``compensation``). The 2-stage
+fully-differential template, which has two ``compensation`` slots, two
+``second_stage`` slots (one per output path, both sensing the first
+stage), and one ``cmfb`` slot, produces **5 760 circuits**: of the 56
+fully-differential-compatible ``input_pair``/``load``/``tail_current``
+combinations, only the 14 using a ``"differential"``-cardinality load keep
+both ``cmfb`` variants (14 × 2 = 28); the other 42 collapse ``cmfb`` to a
+single canonical variant (42 × 1 = 42) -- 28 + 42 = 70 effective
+load/``cmfb`` combinations (see "CMFB compatibility filter" below) -- (30
+× 3² + 30 × 2² + 10 × 5²) × 9 ``compensation`` pairs = 5 760. Each 3-stage
+single-ended template adds two more ``second_stage`` slots (gm2, gm3 --
+only gm2 senses the first stage; gm3 keeps all 5 variants) and two
+``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
+**9 000 circuits** ((30 × 3 + 30 × 2 + 10 × 5) × 5 × 9 ``compensation``
+pairs). Each 3-stage fully-differential template duplicates those four
+slots per output path (and keeps the single ``cmfb`` slot), producing
+**1 296 000 circuits** ((30 × 3² + 30 × 2² + 10 × 5²) × 5² × 3⁴).
 
 Polarity compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -211,27 +214,35 @@ tag in YAML — no code changes needed
 Stage-interface compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A ``second_stage`` variant whose *signal device* (the transistor whose gate
-is the ``in`` port) has the **same** channel type as the input pair is
-structurally unbiasable when it senses the first stage's output: an NMOS
-pair confines its output node to the upper part of the supply range (its
-floor is the tail node, and vdd-referenced loads confine it further), while
-an NMOS-gate stage needs its gate one ``V_GS`` above gnd — the two windows
-are disjoint, so no sizing can establish the interface DC level
+A ``second_stage`` variant is structurally unbiasable against the first
+stage when the gate level its *signal device* (the transistor whose gate is
+the ``in`` port) requires falls outside the input pair's reachable output
+window: an NMOS pair confines its output node to the upper part of the
+supply range (its floor is the tail node, and vdd-referenced loads confine
+it further), a PMOS pair mirrors that low — when the required level and
+the window are disjoint, no sizing can establish the interface DC level
 (mirror-type loads let the feedback loop drag the node to the boundary and
-pin the pair in triode; range-limited loads rail outright). The PMOS mirror
-image fails the same way.
+pin the pair in triode; range-limited loads rail outright).
+
+The required level follows from the signal device's *source terminal*:
+common-source stages (source on a supply) put the gate one ``V_GS`` from
+that supply and suit the **opposite**-polarity pair (an NMOS pair's high
+output suits a PMOS-gate CS stage, and vice versa); source followers
+(source on the output node) put the gate one ``V_GS`` *beyond* the output,
+toward the device's back rail, and suit the **same**-polarity pair (an
+NMOS follower's gate is high, a PMOS follower's low — issue #110).
 
 ``enumerate_circuits`` therefore skips any combination where a
 ``second_stage``-category slot whose ``in`` net is one of the load's output
-nets (``load.out``/``out1``/``out2``) has a signal device of the input
-pair's own channel type. The check is structural (which device gates ``in``
-— no YAML tags), so new ``second_stage`` variants are classified
-automatically. The 3-stage templates' ``third_stage`` slot senses the
-*second* stage's output instead — a wide-swing common-source node that can
-meet either gate level — and is deliberately left unconstrained, as are
-combinations using the untagged ``inverter_based_input`` (its output level
-sits near mid-rail, reachable by either gate type)
+nets (``load.out``/``out1``/``out2``) requires a pair type other than the
+``input_pair``'s. The check is structural (which device gates ``in`` and
+where its source sits — no YAML tags), so new ``second_stage`` variants
+are classified automatically. The 3-stage templates' ``third_stage`` slot
+senses the *second* stage's output instead — a wide-swing common-source
+node that can meet either gate level — and is deliberately left
+unconstrained, as are combinations using the untagged
+``inverter_based_input`` (its output level sits near mid-rail, reachable by
+either gate type)
 (``circuitgenome/synthesizer/second_stage_compatibility.py``).
 
 Output-cardinality compatibility filter
@@ -578,7 +589,7 @@ and reuse its name, so a successful match's
 comparable to a
 :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
 entry's variant name. The library covers every reachable ``one_stage_opamp``
-and ``two_stage_opamp_single_ended`` variant -- 35 patterns across seven
+and ``two_stage_opamp_single_ended`` variant -- 36 patterns across seven
 categories:
 
 .. list-table::
@@ -632,15 +643,17 @@ categories:
        internal ``ind`` node + series resistor to ``out``). Connectivity scoring
        naturally disambiguates overlapping 1-device subsets without hooks.
    * - ``second_stage``
-     - 4
+     - 5
      - ``common_source`` (NMOS input + PMOS load, drains shorted to ``out``),
        ``common_source_pmos`` (the mirror image, PMOS input + NMOS sink;
        structurally identical to ``common_source`` with the ``in``/``bias``
        gate roles swapped, so both patterns match the same device pair and
        FBR's connectivity scoring picks the one whose ``in`` pin lands on
-       the stage-input net), ``common_drain`` (PMOS source-follower driving
-       NMOS tail; distinguished from ``common_source`` by ``[mp1.d, mp1.b]``
-       same_net group forcing the PMOS drain to vdd),
+       the stage-input net), ``common_drain`` (PMOS source follower + PMOS
+       current source; the follower's source/bulk tie and the source's
+       bulk-on-vdd keep it disjoint from the CS and OTA shapes),
+       ``common_drain_nmos`` (NMOS source follower + NMOS sink; the
+       follower's source is the sink's drain, all bulks on gnd),
        ``differential_ota_second_stage`` (2 PMOS + 2 NMOS, cross-coupled via
        an internal ``d1`` node).
 
@@ -780,14 +793,14 @@ output port) is promoted to ``gain_stage_3``.
 SR pattern coverage
 ~~~~~~~~~~~~~~~~~~~~
 
-The pattern library covers all 35 patterns spanning all seven topologies:
+The pattern library covers all 36 patterns spanning all seven topologies:
 
 - **one_stage_opamp**: 24 patterns (5 ``input_pair`` × 10 ``load`` × 6 real
   ``tail_current`` × 3 ``bias_generation``). The round-trip test is
   parametrized over 11 representative combinations covering every variant.
-- **two_stage_opamp_single_ended**: adds 7 new patterns (3 ``compensation`` +
-  4 ``second_stage``). The round-trip test adds 11 further combinations
-  covering all 4 ``second_stage`` variants against every stage-interface-
+- **two_stage_opamp_single_ended**: adds 8 new patterns (3 ``compensation`` +
+  5 ``second_stage``). The round-trip test adds 11 further combinations
+  covering all 5 ``second_stage`` variants against every stage-interface-
   compatible ``input_pair`` polarity, all 3 ``compensation`` variants, and
   all 5 ``input_pair`` variants.
 - **two_stage_opamp_fully_differential**: adds 4 new patterns — 2
@@ -801,7 +814,7 @@ The pattern library covers all 35 patterns spanning all seven topologies:
   ``second_stage`` pairings, and both differential input-pair polarities.
 - **three_stage_opamp_nmc_single_ended** and
   **three_stage_opamp_rnmc_single_ended**: no new patterns needed. The
-  ``third_stage`` slot reuses the ``second_stage`` category (same four
+  ``third_stage`` slot reuses the ``second_stage`` category (same five
   pattern variants); ``comp1``/``comp2`` reuse the ``compensation`` category.
   FBR's ``assigned_ids`` mechanism correctly disambiguates 2 same-category
   ``second_stage`` slots and 2 same-category ``compensation`` slots via

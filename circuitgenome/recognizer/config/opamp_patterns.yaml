@@ -693,15 +693,36 @@ patterns:
     circuit_block: gain_stage_2
     devices:
       - {ref: mp1, type: pmos}
-      - {ref: mn1, type: nmos}
-    # PMOS source == NMOS drain (shared output). PMOS drain == PMOS bulk (vdd).
+      - {ref: mp2, type: pmos}
+    # mp1 is the PMOS follower: its source, bulk (n-well source tie), and
+    # mp2's drain all share the output node; mp2 is the vdd-referenced
+    # current source (source == bulk). The source/bulk ties keep this
+    # disjoint from the CS-stage and OTA shapes (whose PMOS bulks sit on
+    # vdd away from their sources or drains).
     same_net:
-      - [mp1.s, mn1.d]
-      - [mp1.d, mp1.b]
+      - [mp1.s, mp1.b, mp2.d]
+      - [mp2.s, mp2.b]
     pins:
       in: mp1.g
-      bias: mn1.g
+      bias: mp2.g
       out: mp1.s
+
+  - name: common_drain_nmos
+    category: second_stage
+    circuit_block: gain_stage_2
+    devices:
+      - {ref: mn1, type: nmos}
+      - {ref: mn2, type: nmos}
+    # mn1 is the NMOS follower (its source is the shared output, mn2's
+    # drain); mn2 is the gnd-referenced current sink -- its source and bulk
+    # sit on gnd together with mn1's bulk (p-substrate devices).
+    same_net:
+      - [mn1.s, mn2.d]
+      - [mn1.b, mn2.s, mn2.b]
+    pins:
+      in: mn1.g
+      bias: mn2.g
+      out: mn1.s
 
   - name: differential_ota_second_stage
     category: second_stage
