@@ -5,6 +5,10 @@ from circuitgenome.synthesizer.bias_construction import (
     required_rail_kinds,
 )
 from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
+from circuitgenome.synthesizer.load_branch_compatibility import (
+    is_load_branch_compatible,
+    untapped_branch_is_dc_defined,
+)
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
 from circuitgenome.synthesizer.second_stage_compatibility import (
     is_second_stage_compatible,
@@ -574,6 +578,88 @@ def test_enumerate_circuits_excludes_output_cardinality_mismatches():
         assert circuit.variant_map["load"].output_cardinality != "single"
 
 
+def test_untapped_branch_dc_definition_covers_all_loads():
+    """The untapped branch node (in1) is DC-defined for 10 of the 12 loads:
+    by a resistor (resistor_load_*), a diode-connected MOSFET
+    (active_load_*'s reference side), or a MOSFET source terminal (the
+    cascode loads' folding/cascode devices ride the node one V_GS below
+    their gate rail). Only current_source_load_* put a bare, rail-gated
+    drain on in1 with nothing to define its voltage (issue #112)."""
+    modules = load_modules()
+    defined = {v.name: untapped_branch_is_dc_defined(v) for v in modules["load"]}
+    assert defined == {
+        "resistor_load_vdd": True,
+        "resistor_load_gnd": True,
+        "active_load_pmos": True,
+        "active_load_nmos": True,
+        "current_source_load_pmos": False,
+        "current_source_load_nmos": False,
+        "folded_cascode_load_nmos_input_single_output": True,
+        "folded_cascode_load_pmos_input_single_output": True,
+        "folded_cascode_load_nmos_input_differential_output": True,
+        "folded_cascode_load_pmos_input_differential_output": True,
+        "telescopic_cascode_load_pmos": True,
+        "telescopic_cascode_load_nmos": True,
+    }
+
+
+def test_is_load_branch_compatible_denies_current_source_loads_in_single_ended():
+    """In a single_ended topology only one first-stage branch is tapped;
+    current_source_load_* leave the untapped branch node (net_diff1)
+    high-impedance between two series current sources -- no operating point
+    is reachable by sizing (issue #112). Rejected in every single-ended
+    topology."""
+    modules = load_modules()
+    topologies = load_topologies()
+    by_name = {v.name: v for v in modules["load"]}
+
+    se_names = (
+        "one_stage_opamp",
+        "two_stage_opamp_single_ended",
+        "three_stage_opamp_nmc_single_ended",
+        "three_stage_opamp_rnmc_single_ended",
+    )
+    for topo_name in se_names:
+        topo = next(t for t in topologies if t.name == topo_name)
+        for load_name in ("current_source_load_pmos", "current_source_load_nmos"):
+            assert not is_load_branch_compatible(topo, {"load": by_name[load_name]}), (
+                topo_name,
+                load_name,
+            )
+
+
+def test_is_load_branch_compatible_allows_defined_branches_and_fd():
+    """The other 10 loads define the untapped branch node and pass in
+    single-ended topologies; fully_differential topologies tap both branches
+    (CM definition is the CMFB loop's job there), so even
+    current_source_load_* are not constrained by this filter."""
+    modules = load_modules()
+    topologies = load_topologies()
+    se_topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+    fd_topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+
+    for load in modules["load"]:
+        if load.name not in ("current_source_load_pmos", "current_source_load_nmos"):
+            assert is_load_branch_compatible(se_topo, {"load": load}), load.name
+        assert is_load_branch_compatible(fd_topo, {"load": load}), load.name
+
+
+def test_enumerate_circuits_excludes_high_z_untapped_branch_loads():
+    """No synthesized single-ended circuit uses current_source_load_*; the
+    fully-differential enumeration still includes them."""
+    modules = load_modules()
+    topologies = load_topologies()
+    cs_loads = {"current_source_load_pmos", "current_source_load_nmos"}
+
+    se_topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
+    for circuit in enumerate_circuits(se_topo, modules):
+        assert circuit.variant_map["load"].name not in cs_loads
+
+    fd_topo = next(t for t in topologies if t.name == "two_stage_opamp_fully_differential")
+    fd_loads = {c.variant_map["load"].name for c in enumerate_circuits(fd_topo, modules)}
+    assert cs_loads <= fd_loads
+
+
 def test_is_cmfb_compatible_differential_load_allows_both_cmfb_variants():
     """A load with output_cardinality "differential" has a real bias_cmfb
     consumer (folded_cascode_load_*_input_differential_output's mn3/mn4 or
@@ -762,19 +848,21 @@ def test_enumerate_circuits_count():
     12), for 84 effective combinations -- of those, 70 also have an
     output_cardinality compatible with single_ended (the 14
     "differential"-cardinality combos are excluded; see
-    test_is_output_type_compatible_*). is_second_stage_compatible keeps the
-    level-reachable second_stage variants: 3 of the 5 for the 30 PMOS-pair
-    combos (common_source, differential_ota, common_drain), 2 of the 5 for
-    the 30 NMOS-pair combos (common_source_pmos, common_drain_nmos), and
-    all 5 for the 10 inverter_based_input combos (see
+    test_is_output_type_compatible_*), and 56 additionally define the
+    untapped branch node (the 14 current_source_load_* combos are excluded
+    by is_load_branch_compatible; issue #112). is_second_stage_compatible
+    keeps the level-reachable second_stage variants: 3 of the 5 for the 24
+    PMOS-pair combos (common_source, differential_ota, common_drain), 2 of
+    the 5 for the 24 NMOS-pair combos (common_source_pmos,
+    common_drain_nmos), and all 5 for the 8 inverter_based_input combos (see
     test_second_stage_filter_*). The bias generator is constructed, not
-    enumerated, so it contributes no factor: (30 x 3 + 30 x 2 + 10 x 5) x 3
-    comp = 600."""
+    enumerated, so it contributes no factor: (24 x 3 + 24 x 2 + 8 x 5) x 3
+    comp = 480."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 600
+    assert len(circuits) == 480
 
 
 def test_enumerate_circuits_fully_differential_count():
@@ -878,21 +966,22 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 70 polarity-and-output_cardinality-valid
-    input_pair/load/tail_current combinations (see test_enumerate_circuits_count).
+    """3-stage single-ended (NMC/RNMC): 56 single-ended-valid
+    input_pair/load/tail_current combinations (polarity, output-cardinality,
+    and untapped-branch filters; see test_enumerate_circuits_count).
     Only the second_stage slot senses the first stage, so it keeps the
     level-reachable variants (3 of 5 for PMOS-pair combos, 2 of 5 for
     NMOS-pair, all 5 for inverter); the third_stage slot is unconstrained
     and keeps all 5 (see test_second_stage_filter_*). The bias generator is
     constructed, not enumerated, so it contributes no factor:
-    (30 x 3 + 30 x 2 + 10 x 5) x 5 third_stage x 3 comp1 x 3 comp2 =
-    9000."""
+    (24 x 3 + 24 x 2 + 8 x 5) x 5 third_stage x 3 comp1 x 3 comp2 =
+    7200."""
     modules = load_modules()
     topologies = load_topologies()
     for name in ("three_stage_opamp_nmc_single_ended", "three_stage_opamp_rnmc_single_ended"):
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == 9000
+        assert len(circuits) == 7200
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
@@ -917,10 +1006,10 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    assert len(nmc) == 9000
+    assert len(nmc) == 7200
     assert all(c.topology == "three_stage_opamp_nmc_single_ended" for c in nmc)
 
-    assert len(rnmc) == 9000
+    assert len(rnmc) == 7200
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 

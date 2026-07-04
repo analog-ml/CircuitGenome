@@ -18,6 +18,7 @@ import itertools
 from dataclasses import dataclass, field
 
 from circuitgenome.synthesizer.cmfb_compatibility import is_cmfb_compatible
+from circuitgenome.synthesizer.load_branch_compatibility import is_load_branch_compatible
 from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
 from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
 from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
@@ -147,6 +148,12 @@ def explain_incompatibility(topology: TopologyTemplate, variant_map: dict[str, M
     if not is_output_type_compatible(topology, variant_map):
         reasons.append(
             "load.output_cardinality doesn't match topology.output_type (is_output_type_compatible)."
+        )
+    if not is_load_branch_compatible(topology, variant_map):
+        reasons.append(
+            "load leaves the untapped single-ended branch node high-impedance; "
+            "no diode/resistor/cascode defines its DC voltage "
+            "(is_load_branch_compatible)."
         )
     if not is_cmfb_compatible(variant_map):
         reasons.append(

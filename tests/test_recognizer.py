@@ -39,20 +39,21 @@ def _get_modules():
         _MODULES = load_modules()
     return _MODULES
 
-# 11 combos covering every reachable one_stage_opamp variant: all 5
-# input_pair, all 10 load, and all 6 real tail_current variants.  The bias
-# generator is constructed per combination from the consumer demands
-# (synthesizer/bias_construction.py); _expected_pattern_name resolves which
-# recognizer pattern each constructed shape lands on.
+# 9 combos covering every reachable one_stage_opamp variant: all 5
+# input_pair, all 8 single-ended-reachable load variants
+# (current_source_load_* are pruned from single-ended topologies by
+# load_branch_compatibility.py, issue #112), and all 6 real tail_current
+# variants.  The bias generator is constructed per combination from the
+# consumer demands (synthesizer/bias_construction.py);
+# _expected_pattern_name resolves which recognizer pattern each constructed
+# shape lands on.
 _ONE_STAGE_COMBOS = [
     # ── input_pair: differential_pair_pmos ──────────────────────────────────
     ("differential_pair_pmos",            "telescopic_cascode_load_pmos",                 "current_mirror_tail_pmos"),
     ("differential_pair_pmos",            "resistor_load_gnd",                            "resistor_tail_vdd"),
     ("differential_pair_pmos",            "active_load_nmos",                             "cascode_current_mirror_tail_pmos"),
-    ("differential_pair_pmos",            "current_source_load_nmos",                     "resistor_tail_vdd"),
     # ── input_pair: differential_pair_nmos ──────────────────────────────────
     ("differential_pair_nmos",            "active_load_pmos",                             "current_mirror_tail_nmos"),
-    ("differential_pair_nmos",            "current_source_load_pmos",                     "resistor_tail_gnd"),
     ("differential_pair_nmos",            "resistor_load_vdd",                            "resistor_tail_gnd"),
     ("differential_pair_nmos",            "telescopic_cascode_load_nmos",                 "cascode_current_mirror_tail_nmos"),
     # ── input_pair: degenerated variants ────────────────────────────────────
@@ -109,7 +110,10 @@ def test_round_trip_one_stage_opamp(
 # ─── two_stage_opamp_single_ended round-trip ────────────────────────────────
 #
 # 11 combos cover all 3 compensation variants, all 5 second_stage variants,
-# and all 5 input_pair variants across representative base combinations.
+# and all 5 input_pair variants across representative base combinations
+# (current_source_load_* are pruned from single-ended topologies by
+# load_branch_compatibility.py, issue #112, so their two former rows use
+# the polarity-matched active/resistor loads instead).
 # The stage-interface filter (second_stage_compatibility.py) restricts each
 # tagged pair to the level-reachable stages: pmos pairs take
 # common_source/differential_ota/common_drain, nmos pairs take
@@ -124,9 +128,9 @@ _TWO_STAGE_COMBOS = [
     ("differential_pair_pmos",             "telescopic_cascode_load_pmos",             "current_mirror_tail_pmos",          "miller_cap",                       "common_source"),
     ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "miller_cap",                       "common_drain"),
     ("differential_pair_pmos",             "active_load_nmos",                         "current_mirror_tail_pmos",          "miller_cap",                       "differential_ota_second_stage"),
-    ("differential_pair_pmos",             "current_source_load_nmos",                 "resistor_tail_vdd",                 "miller_cap_with_nulling_resistor", "common_source"),
+    ("differential_pair_pmos",             "resistor_load_gnd",                        "resistor_tail_vdd",                 "miller_cap_with_nulling_resistor", "common_source"),
     ("differential_pair_nmos",             "active_load_pmos",                         "current_mirror_tail_nmos",          "miller_cap_with_nulling_resistor", "common_drain_nmos"),
-    ("differential_pair_nmos",             "current_source_load_pmos",                 "resistor_tail_gnd",                 "miller_cap_with_nulling_resistor", "common_source_pmos"),
+    ("differential_pair_nmos",             "active_load_pmos",                         "resistor_tail_gnd",                 "miller_cap_with_nulling_resistor", "common_source_pmos"),
     ("differential_pair_nmos",             "resistor_load_vdd",                        "resistor_tail_gnd",                 "indirect_compensation",            "common_source_pmos"),
     ("differential_pair_nmos",             "telescopic_cascode_load_nmos",             "resistor_tail_gnd",                 "indirect_compensation",            "common_drain_nmos"),
     ("differential_pair_nmos_degenerated", "folded_cascode_load_nmos_input_single_output", "resistor_tail_gnd",             "indirect_compensation",            "common_drain_nmos"),
@@ -287,9 +291,11 @@ def test_round_trip_two_stage_fully_diff(
 _THREE_STAGE_SE_COMBOS = [
     # (input_pair, load, tail_current, bias_gen, second_stage, third_stage, comp1, comp2)
     # Polarity rule: pmos input pair → pmos_input-polarity loads (active_load_nmos,
-    # current_source_load_nmos, folded_cascode_load_pmos_*, telescopic_cascode_load_pmos).
+    # folded_cascode_load_pmos_*, telescopic_cascode_load_pmos).
     # nmos input pair → nmos_input-polarity loads (active_load_pmos,
-    # current_source_load_pmos, folded_cascode_load_nmos_*, telescopic_cascode_load_nmos).
+    # folded_cascode_load_nmos_*, telescopic_cascode_load_nmos).
+    # current_source_load_* are pruned from single-ended topologies
+    # (load_branch_compatibility.py, issue #112).
     # Covers: all 3 comp variants, all 5 ss/ts variants, both polarities,
     # degenerated pairs, several load types. The stage-interface filter
     # constrains only the ss slot (pmos pair ->
@@ -307,10 +313,10 @@ _THREE_STAGE_SE_COMBOS = [
     ("differential_pair_nmos", "active_load_pmos", "resistor_tail_gnd",
      "common_source_pmos", "common_source_pmos",
      "indirect_compensation", "indirect_compensation"),
-    ("differential_pair_pmos", "current_source_load_nmos", "resistor_tail_vdd",
+    ("differential_pair_pmos", "resistor_load_gnd", "resistor_tail_vdd",
      "common_source", "common_drain",
      "miller_cap", "indirect_compensation"),
-    ("differential_pair_nmos", "current_source_load_pmos", "cascode_current_mirror_tail_nmos",
+    ("differential_pair_nmos", "active_load_pmos", "cascode_current_mirror_tail_nmos",
      "common_drain_nmos", "common_source",
      "indirect_compensation", "miller_cap"),
     ("differential_pair_pmos", "folded_cascode_load_pmos_input_single_output",

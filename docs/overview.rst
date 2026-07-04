@@ -153,26 +153,32 @@ compatibility filter" below collapses those 72 combinations' 6
 **84** effective combinations (the 72 combinations using a
 ``differential_pair_*`` variant are unaffected). Of those 84, the
 "Output-cardinality compatibility filter" below further splits them by which
-output type the ``load`` supports: **70** are valid for single-ended
+output type the ``load`` supports: 70 are valid for single-ended
 templates (excluding the 14 combinations using a differential-output cascode
 load) and **56** are valid for fully-differential templates (excluding the 28
-combinations using a single-output cascode or telescopic-cascode load).
+combinations using a single-output cascode or telescopic-cascode load). Of
+the 70 single-ended-cardinality combinations, the "Untapped-load-branch
+compatibility filter" below excludes the 14 using a plain
+``current_source_load_*`` (the untapped branch node would have no defined
+operating point; issue #112), leaving **56** valid for single-ended
+templates as well.
 
 The ``bias_generation`` slot contributes no enumeration factor at all: its
 variant is *constructed* per combination from what the other slots consume
 on each bias rail (see "Demand-driven bias construction" below), so every
 core combination carries exactly one, structurally matched bias generator.
 
-The 1-stage template therefore produces **70 distinct circuits**. In the
+The 1-stage template therefore produces **56 distinct circuits**. In the
 multi-stage templates, the ``second_stage`` slot that senses the first
 stage's output keeps only the level-reachable ``second_stage`` variants
-(the "Stage-interface compatibility filter" below): 3 of the 5 for the 30
+(the "Stage-interface compatibility filter" below): 3 of the 5 for the 24
 PMOS-pair combinations (``common_source``,
-``differential_ota_second_stage``, ``common_drain``), 2 of the 5 for the 30
+``differential_ota_second_stage``, ``common_drain``), 2 of the 5 for the 24
 NMOS-pair combinations (``common_source_pmos``, ``common_drain_nmos``),
-and all 5 for the 10 ``inverter_based_input`` combinations. The 2-stage
-single-ended template thus produces **600 circuits**
-((30 × 3 + 30 × 2 + 10 × 5) × 3 ``compensation``). The 2-stage
+and all 5 for the 8 ``inverter_based_input`` combinations (the
+fully-differential splits stay at 30/30/10). The 2-stage
+single-ended template thus produces **480 circuits**
+((24 × 3 + 24 × 2 + 8 × 5) × 3 ``compensation``). The 2-stage
 fully-differential template, which has two ``compensation`` slots, two
 ``second_stage`` slots (one per output path, both sensing the first
 stage), and one ``cmfb`` slot, produces **5 760 circuits**: of the 56
@@ -185,7 +191,7 @@ load/``cmfb`` combinations (see "CMFB compatibility filter" below) -- (30
 single-ended template adds two more ``second_stage`` slots (gm2, gm3 --
 only gm2 senses the first stage; gm3 keeps all 5 variants) and two
 ``compensation`` slots (Cm1, Cm2) on top of the 1-stage base, producing
-**9 000 circuits** ((30 × 3 + 30 × 2 + 10 × 5) × 5 × 9 ``compensation``
+**7 200 circuits** ((24 × 3 + 24 × 2 + 8 × 5) × 5 × 9 ``compensation``
 pairs). Each 3-stage fully-differential template duplicates those four
 slots per output path (and keeps the single ``cmfb`` slot), producing
 **1 296 000 circuits** ((30 × 3² + 30 × 2² + 10 × 5²) × 5² × 3⁴).
@@ -285,6 +291,28 @@ single shared in/out node regardless of ``output_type``. They're untagged
 To extend the filter to a new or edited ``load`` variant, add the matching
 ``output_cardinality:`` tag in YAML — no code changes needed
 (``circuitgenome/synthesizer/output_compatibility.py``).
+
+Untapped-load-branch compatibility filter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every ``single_ended`` topology taps only one of the first stage's two
+branch nodes (``load.out``/``out2`` → the stage-output net); the other
+(``load.in1``/``out1``, ``net_diff1``) is untapped — nothing outside the
+first stage senses or drives it, so its DC voltage must be defined by the
+load itself. ``current_source_load_*`` put a plain, rail-gated current
+source on that branch (both gates on the shared ``bias1`` rail, no diode
+connection), leaving the node high-impedance between two series current
+sources — the load device on one side, the input-pair half plus tail on the
+other. No sizing can absorb the inevitable current mismatch, and one device
+always leaves saturation (issue #112). ``enumerate_circuits`` skips these
+combinations in ``single_ended`` topologies. The check is structural (no
+YAML tags): the ``in1`` node counts as DC-defined when the load has a
+diode-connected MOSFET on it (``active_load_*``), a resistor touching it
+(``resistor_load_*``), or a MOSFET source terminal on it (the cascode
+loads' folding/cascode devices). ``fully_differential`` topologies tap both
+branches and are not constrained — the common-mode definition there is the
+CMFB loop's job
+(``circuitgenome/synthesizer/load_branch_compatibility.py``).
 
 CMFB compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

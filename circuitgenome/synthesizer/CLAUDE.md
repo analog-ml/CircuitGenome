@@ -42,6 +42,8 @@ SPICE netlists.
   filter (`is_second_stage_compatible`).
 - `output_compatibility.py` — output-cardinality compatibility filter
   (`is_output_type_compatible`).
+- `load_branch_compatibility.py` — untapped-load-branch compatibility filter
+  (`is_load_branch_compatible`, helper `untapped_branch_is_dc_defined`).
 - `cmfb_compatibility.py` — cmfb-slot compatibility filter and pruning
   (`is_cmfb_compatible`, `prune_cmfb`).
 - `tail_current_compatibility.py` — tail_current-slot compatibility filter
@@ -53,7 +55,7 @@ SPICE netlists.
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 
-These seven modules all follow the same shape (see "Pattern for small internal
+These eight modules all follow the same shape (see "Pattern for small internal
 pure-function modules" below) and are invoked, in this order, from
 `enumerate_circuits` (see "pipeline order" below).
 
@@ -163,6 +165,25 @@ their `out1`/`out2` are `alias_of in1`/`in2` and merged back by
 `load` variant, just add the right `output_cardinality:` tag in YAML — no
 code changes needed.
 
+## Untapped-load-branch compatibility filter (`load_branch_compatibility.py`)
+
+In every `single_ended` topology only one first-stage branch node is tapped
+(`load.out`/`out2` → the stage-output net); `load.in1`/`out1` (`net_diff1`)
+is untapped, so its DC voltage must be defined by the load itself. A plain
+rail-referenced current-source branch (`current_source_load_*`: gate on a
+bias rail, no diode connection) leaves that node high-impedance between two
+series current sources — no sizing can absorb the load-vs-tail current
+mismatch, and one device always leaves saturation (issue #112).
+`is_load_branch_compatible` detects this structurally (no YAML tags, like
+`second_stage_compatibility`): the `in1` node counts as DC-defined when the
+load has a diode-connected MOSFET on it (`active_load_*`), a resistor
+touching it (`resistor_load_*`), or a MOSFET source terminal on it (the
+cascode loads' folding/cascode devices); loads that never put a MOSFET drain
+on `in1` are unconstrained. `fully_differential` topologies tap both
+branches and are out of scope (CM definition there is the CMFB loop's job).
+New `load` variants are classified automatically by what their devices
+connect to `in1`.
+
 ## CMFB compatibility filter & pruning (`cmfb_compatibility.py`)
 
 Of the 12 `load` variants, only the 2 tagged `output_cardinality:
@@ -271,38 +292,42 @@ filters/transforms:
 
 1. `itertools.product` over per-slot candidate variants → `variant_map`
    (the `bias_generation` slot is excluded from the product — its variant
-   is constructed in step 9).
+   is constructed in step 10).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_second_stage_compatible(topology, variant_map)` — skip on
    stage-interface level mismatch (see "Stage-interface compatibility
    filter" above).
 4. `is_output_type_compatible(topology, variant_map)` — skip on
    output-cardinality mismatch.
-5. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
+5. `is_load_branch_compatible(topology, variant_map)` — skip if a
+   `single_ended` topology's untapped branch node would be left
+   high-impedance by the load (see "Untapped-load-branch compatibility
+   filter" above).
+6. `is_cmfb_compatible(variant_map)` — skip if `cmfb`'s variant choice is
    irrelevant for this `load` (see "CMFB compatibility filter" above).
-6. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
+7. `prune_cmfb(variant_map["cmfb"], variant_map["load"])`, replacing
    `variant_map["cmfb"]` (only if the topology has a `cmfb` slot).
-7. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
+8. `is_tail_current_compatible(variant_map)` — skip if `tail_current`'s
    variant choice is irrelevant for this `input_pair` (see "Tail-current
    compatibility filter" above).
-8. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
+9. `prune_tail_current(variant_map["tail_current"], variant_map["input_pair"])`,
    replacing `variant_map["tail_current"]`.
-9. `construct_bias_generation(topology, variant_map, bias_legs)` →
-   `variant_map[bias_gen_slot]` (see "Demand-driven bias construction"
-   above; must run after the cmfb/tail_current prunes so placeholders
-   demand nothing).
-10. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
+10. `construct_bias_generation(topology, variant_map, bias_legs)` →
+    `variant_map[bias_gen_slot]` (see "Demand-driven bias construction"
+    above; must run after the cmfb/tail_current prunes so placeholders
+    demand nothing).
+11. For each slot: `slot_connections = topology.slot_connections(slot.name)`,
     then `_build_port_net_map` + `_resolve_devices` → `all_devices`. The
     `load` slot's `port_net_map` is captured separately as
     `load_port_net_map`.
-11. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
+12. `compute_alias_net_rename(variant_map["load"], load_port_net_map,
     topology.external_ports)` → `apply_net_rename(all_devices, rename)` —
     net-merge pass for `load` ports declared `alias_of` another `load` port
     (see "Net-naming & wiring conventions" above).
-12. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
+13. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
     devices)`.
 
-Any new per-combination transform should slot in between steps 5 and 10,
+Any new per-combination transform should slot in between steps 6 and 11,
 following the same "compute once from `variant_map`, then overwrite the
 relevant slot's entry in `variant_map`" pattern.
 

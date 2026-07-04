@@ -192,10 +192,19 @@ def test_explain_incompatibility(topologies, by_name):
     )
     assert any("stage-interface" in r for r in reasons3)
 
+    load_branch_bad = _variant_map(by_name, {
+        "input_pair": "differential_pair_nmos",
+        "load": "current_source_load_pmos",
+        "tail_current": "current_mirror_tail_nmos",
+    })
+    reasons4 = explain_incompatibility(topo, load_branch_bad)
+    assert any("untapped" in r for r in reasons4)
+
 
 def test_enumerate_circuits_count_unchanged_after_refactor(modules, topologies):
     """Sanity check that build_circuit (shared with enumerate_circuits in
-    synthesizer.py) applies the same filter pipeline: 70 effective
-    input_pair/load/tail_current combos, each with its one constructed bias
-    generator."""
-    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 70
+    synthesizer.py) applies the same filter pipeline: 56 effective
+    input_pair/load/tail_current combos (70 minus the 14 current_source_load_*
+    combos pruned by the untapped-branch filter, issue #112), each with its
+    one constructed bias generator."""
+    assert len(list(enumerate_circuits(topologies["one_stage_opamp"], modules))) == 56
