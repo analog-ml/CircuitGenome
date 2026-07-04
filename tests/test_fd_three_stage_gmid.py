@@ -13,7 +13,10 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 def _size(topo_name, want, spec):
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == topo_name)
-    circ = next(c for c in enumerate_circuits(topo, mods)
+    # include_unsupported: the canonical NMC shape needs a follower second
+    # stage, and the followers are parked per issue #125.
+    circ = next(c for c in enumerate_circuits(topo, mods,
+                                              config={"include_unsupported": True})
                 if all(c.variant_map.get(k) and c.variant_map.get(k).name == v
                        for k, v in want.items()))
     parsed = parse(to_flat_spice(circ))

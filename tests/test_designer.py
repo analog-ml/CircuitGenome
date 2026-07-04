@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 import json
+from itertools import islice
 
 import pytest
 
 from circuitgenome.designer import design
-from circuitgenome.designer.designer import _margins
+from circuitgenome.designer.designer import _evaluate_candidate, _margins
+from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.sizer.shared.models import SizingSpec
 from circuitgenome.sizer.shared.spice_sim import ngspice_available
+from circuitgenome.synthesizer import enumerate_circuits, to_flat_spice
+from circuitgenome.synthesizer.loader import load_modules, load_topologies
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +44,79 @@ def test_margins_unmeasured_metric_is_skipped_not_failed():
     assert "slew_rate_vps" not in m
     assert "gbw_hz" not in m
     assert m == {"gain_db": pytest.approx(0.25)}
+
+
+# ---------------------------------------------------------------------------
+# Analytic gain gate (issue #125) — no ngspice needed
+# ---------------------------------------------------------------------------
+
+def _sizeable_item(topo, spec, tech):
+    """First enumerated candidate that sizes GMID-feasible, as a worker item."""
+    from circuitgenome.recognizer import assign_slots, parse, recognize
+    from circuitgenome.sizer import size_circuit
+    modules = load_modules()
+    for i, circuit in enumerate(islice(enumerate_circuits(topo, modules), 60), 1):
+        text = to_flat_spice(circuit, name=f"circuit_{i:04d}")
+        parsed = parse(text)
+        fbr = assign_slots(recognize(parsed), topo)
+        result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+        if result.solver_status == "GMID" and result.bias_feasible:
+            variants = {s: v.name for s, v in circuit.variant_map.items() if v}
+            return (i, text, variants)
+    return None
+
+
+def test_analytic_gain_gate_skips_spice(monkeypatch):
+    """A candidate whose analytic gain is hopeless against the spec is
+    rejected as spec_failed before any SPICE call (issue #125, defect 2)."""
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    tech = load_tech("gf180mcu")
+    spec = _spec(second_stage_current_ratio=2.0, gain_min_db=200)
+    item = _sizeable_item(topo, spec, tech)
+    if item is None:
+        pytest.skip("no GMID-feasible candidate in the first 60")
+
+    monkeypatch.setattr("circuitgenome.designer.designer.check_bias_soundness",
+                        lambda *a, **k: (True, None))
+
+    def _no_spice(*a, **k):
+        raise AssertionError("simulate_metrics must not run for a "
+                             "gate-rejected candidate")
+    monkeypatch.setattr("circuitgenome.designer.designer.simulate_metrics",
+                        _no_spice)
+
+    out = _evaluate_candidate(item, topo, tech, spec)
+    assert out.stage == "spec_failed"
+    assert out.detail.startswith("analytic gain_db")
+
+
+def test_analytic_gain_gate_within_band_reaches_spice(monkeypatch):
+    """A candidate inside the tolerance band still goes to SPICE — the
+    analytic model is never the authority on accepts."""
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    tech = load_tech("gf180mcu")
+    spec = _spec(second_stage_current_ratio=2.0, gain_min_db=10)
+    item = _sizeable_item(topo, spec, tech)
+    if item is None:
+        pytest.skip("no GMID-feasible candidate in the first 60")
+
+    monkeypatch.setattr("circuitgenome.designer.designer.check_bias_soundness",
+                        lambda *a, **k: (True, None))
+    calls = []
+
+    def _fake_sim(*a, **k):
+        calls.append(1)
+        return {"gain_db": 60.0, "notes": []}
+    monkeypatch.setattr("circuitgenome.designer.designer.simulate_metrics",
+                        _fake_sim)
+    monkeypatch.setattr("circuitgenome.designer.designer.sized_netlist",
+                        lambda *a, **k: "* sized")
+
+    out = _evaluate_candidate(item, topo, tech, spec)
+    assert calls, "simulate_metrics should have run"
+    assert out.stage == "accepted"
 
 
 # ---------------------------------------------------------------------------
