@@ -8,9 +8,6 @@ field set as the two-stage SE specs.
 |------|----------|-----|----------|
 | `spec_generic.yaml` | `generic` | 5.0 V | 80 dB |
 | `spec_ptm45.yaml` | `ptm45` | 1.0 V | 60 dB |
-| `spec_ptm32.yaml` | `ptm32` | 0.9 V | 58 dB |
-| `spec_ptm22.yaml` | `ptm22` | 0.8 V | 55 dB |
-| `spec_ptm16.yaml` | `ptm16` | 0.7 V | 52 dB (predictive node) |
 
 The fully-differential circuits aren't pre-shipped under `circuits/`; generate
 one first with `circuitgenome synthesize --topology

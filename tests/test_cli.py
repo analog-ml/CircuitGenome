@@ -162,10 +162,16 @@ def test_size_ptm45_requires_ngspice(capsys, monkeypatch):
 
 @pytest.mark.skipif(not (_C0110.exists() and _PTM_SPEC.exists()),
                     reason="ptm45 two-stage fixtures not present")
-def test_size_ptm_without_lut_errors(capsys):
-    """A PTM node without a gm/Id LUT exits cleanly instead of using Level-1."""
+def test_size_spice_model_without_lut_errors(capsys, tmp_path):
+    """A SPICE-model tech with no gm/Id LUT exits cleanly instead of using
+    Level-1. Synthesised from tech_ptm45.yaml with the gmid_lut line removed."""
+    import circuitgenome.sizer as _sz
+    src = Path(_sz.__file__).parent / "shared" / "config" / "tech_ptm45.yaml"
+    lines = [l for l in src.read_text().splitlines() if "gmid_lut" not in l]
+    nolut = tmp_path / "tech_nolut.yaml"
+    nolut.write_text("\n".join(lines) + "\n")
     with pytest.raises(SystemExit) as exc:
         main(["size", str(_C0110), "--topology", "two_stage_opamp_single_ended",
-              "--spec", str(_PTM_SPEC), "--tech", "ptm32"])
+              "--spec", str(_PTM_SPEC), "--tech", str(nolut)])
     assert exc.value.code == 1
     assert "gm/Id LUT" in capsys.readouterr().err

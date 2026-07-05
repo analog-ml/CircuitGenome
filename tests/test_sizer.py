@@ -888,7 +888,7 @@ def test_topology_mismatch_warns():
 
 
 # ---------------------------------------------------------------------------
-# PTM technology configs (45/32/22/16 nm bulk, ngspice-extracted)
+# PTM45 technology config (45 nm bulk, ngspice-extracted)
 # ---------------------------------------------------------------------------
 
 def _config_dir():
@@ -897,36 +897,22 @@ def _config_dir():
     return Path(_sz.__file__).parent / "shared" / "config"
 
 
-# node -> nominal Vdd (V)
-_PTM_NODES = {"45": 1.0, "32": 0.9, "22": 0.8, "16": 0.7}
-
-
-@pytest.mark.parametrize("node,vdd", sorted(_PTM_NODES.items()))
-def test_ptm_tech_loads_and_sizes(two_stage_fbr, node, vdd):
-    """Each PTM tech config parses; only LUT-bearing nodes are sizeable.
-
-    PTM is a gm/Id-only path: a node *with* a gm/Id LUT (ptm45) sizes via the
-    "GMID" pipeline; a node *without* one (ptm32/22/16) must raise
-    :class:`UnsupportedTechError` rather than silently using the Level-1 sizer.
-    """
-    from circuitgenome.sizer import UnsupportedTechError
-    tech = load_tech(_config_dir() / f"tech_ptm{node}.yaml")
+def test_ptm45_tech_loads_and_sizes(two_stage_fbr):
+    """The ptm45 tech config parses and sizes via the gm/Id ("GMID") pipeline."""
+    tech = load_tech(_config_dir() / "tech_ptm45.yaml")
     # sanity on parsed params: NMOS µCox > PMOS µCox > 0; |Vth| reasonable; λ > 0
     assert tech.nmos.mu_cox > tech.pmos.mu_cox > 0
     assert 0.2 < tech.nmos.vth < 0.6 and -0.6 < tech.pmos.vth < -0.2
     assert tech.nmos.lam > 0 and tech.pmos.lam > 0
+    assert tech.gmid_lut  # LUT present → gm/Id path
 
     parsed, sr_result, fbr_result, topology = two_stage_fbr
     spec = SizingSpec(
-        vdd=vdd, vss=0.0, ibias=10e-6, cl=1e-12,
+        vdd=1.0, vss=0.0, ibias=10e-6, cl=1e-12,
         second_stage_current_ratio=2.5,
         gain_min_db=40, gbw_min_hz=2.5e6,
         phase_margin_min_deg=60, slew_rate_min_vps=1e6,
     )
-    if not tech.gmid_lut:
-        with pytest.raises(UnsupportedTechError):
-            size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-        return
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
     assert result.solver_status == "GMID"
     assert result.transistors

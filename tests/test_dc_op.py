@@ -59,17 +59,19 @@ def test_simple_mirror_tail_no_cascode_warning():
     assert not any("cascode tail" in w for w in r.warnings)
 
 
-def test_ptm_without_lut_raises_unsupported():
-    """A PTM/SPICE-model node with no gm/Id LUT must error, not fall through to
-    the Level-1 square-law sizer (ptm32/22/16 have a spice_model but no LUT)."""
+def test_spice_model_without_lut_raises_unsupported():
+    """A SPICE-model tech with no gm/Id LUT must error, not fall through to the
+    Level-1 square-law sizer. Synthesised from ptm45 by dropping its LUT."""
+    from dataclasses import replace
     from circuitgenome.sizer import UnsupportedTechError
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == _TOPO)
     circ = next(enumerate_circuits(topo, mods))
     parsed = parse(to_flat_spice(circ))
     fbr = assign_slots(recognize(parsed), topo)
+    tech = replace(load_tech("ptm45"), gmid_lut=None)  # spice_model kept, LUT dropped
     with pytest.raises(UnsupportedTechError):
-        size_circuit(parsed, recognize(parsed), fbr, topo, load_tech("ptm32"), _spec())
+        size_circuit(parsed, recognize(parsed), fbr, topo, tech, _spec())
 
 
 def test_level1_path_bias_feasible_default_true():

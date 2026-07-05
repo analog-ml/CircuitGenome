@@ -9,9 +9,6 @@ both schemes identically. Each spec sets `third_stage_current_ratio: 5.0`.
 |------|----------|-----|----------|
 | `spec_generic.yaml` | `generic` | 5.0 V | 100 dB |
 | `spec_ptm45.yaml` | `ptm45` | 1.0 V | 70 dB |
-| `spec_ptm32.yaml` | `ptm32` | 0.9 V | 68 dB |
-| `spec_ptm22.yaml` | `ptm22` | 0.8 V | 65 dB |
-| `spec_ptm16.yaml` | `ptm16` | 0.7 V | 60 dB (predictive node) |
 
 The PTM specs use a slightly larger output-swing headroom (0.15 V) than the
 two-stage specs: at low VDD the three-stage output stage's VDS_sat budget is
