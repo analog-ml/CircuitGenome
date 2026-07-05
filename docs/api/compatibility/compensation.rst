@@ -1,7 +1,7 @@
 Compensation Compatibility
 ==========================
 
-.. automodule:: circuitgenome.synthesizer.compensation_compatibility
+.. automodule:: circuitgenome.synthesizer.compatibility.compensation
    :members:
    :undoc-members:
    :show-inheritance:

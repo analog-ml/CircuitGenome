@@ -34,7 +34,7 @@ no code changes needed here.
 from __future__ import annotations
 import dataclasses
 
-from .models import ModuleVariant
+from ..models import ModuleVariant
 
 CANONICAL_CMFB_VARIANT = "resistive_sense_cmfb"
 _CMFB_CONSUMING_CARDINALITY = "differential"

@@ -37,25 +37,29 @@ SPICE netlists.
   pipeline. **Primary integration point for any new per-combination
   filter/transform.**
 - `netlist.py` — `to_flat_spice` / `to_hierarchical_spice` serializers.
-- `__init__.py` — public API surface (`__all__`); `polarity_compatibility` and
-  `bias_construction` are intentionally **not** exported (see pattern below).
+- `__init__.py` — public API surface (`__all__`); the `compatibility`
+  subpackage and `bias_construction` are intentionally **not** exported (see
+  pattern below).
 
 ### Pipeline filters & pruning (internal, not in `__all__`)
 
-- `polarity_compatibility.py` — polarity compatibility filter
-  (`is_combination_valid`).
-- `second_stage_compatibility.py` — stage-interface level compatibility
-  filter (`is_second_stage_compatible`).
-- `compensation_compatibility.py` — compensation inversion-parity filter
-  (`is_compensation_compatible`, helper `stage_inversions`).
-- `output_compatibility.py` — output-cardinality compatibility filter
-  (`is_output_type_compatible`).
-- `load_branch_compatibility.py` — untapped-load-branch compatibility filter
-  (`is_load_branch_compatible`, helper `untapped_branch_is_dc_defined`).
-- `cmfb_compatibility.py` — cmfb-slot compatibility filter and pruning
-  (`is_cmfb_compatible`, `prune_cmfb`).
-- `tail_current_compatibility.py` — tail_current-slot compatibility filter
-  and pruning (`is_tail_current_compatible`, `prune_tail_current`).
+- `compatibility/` — subpackage of one-rule-per-module cross-slot filters,
+  re-exported from `compatibility/__init__.py` (the single import surface;
+  `from .compatibility import is_cmfb_compatible, ...`). Submodules:
+  - `compatibility/polarity.py` — polarity compatibility filter
+    (`is_combination_valid`).
+  - `compatibility/second_stage.py` — stage-interface level compatibility
+    filter (`is_second_stage_compatible`).
+  - `compatibility/compensation.py` — compensation inversion-parity filter
+    (`is_compensation_compatible`, helper `stage_inversions`).
+  - `compatibility/output.py` — output-cardinality compatibility filter
+    (`is_output_type_compatible`).
+  - `compatibility/load_branch.py` — untapped-load-branch compatibility filter
+    (`is_load_branch_compatible`, helper `untapped_branch_is_dc_defined`).
+  - `compatibility/cmfb.py` — cmfb-slot compatibility filter and pruning
+    (`is_cmfb_compatible`, `prune_cmfb`).
+  - `compatibility/tail_current.py` — tail_current-slot compatibility filter
+    and pruning (`is_tail_current_compatible`, `prune_tail_current`).
 - `bias_construction.py` — demand-driven bias construction
   (`required_rail_kinds`, `construct_bias_generation`; helper
   `rail_flavor_from_diode`). Not a filter: it *builds* the bias_generation
@@ -123,7 +127,7 @@ list is current.
   single shared in/out node those variants' devices assume, while leaving the
   8 cascode loads' distinct in/out nets intact.
 
-## Polarity compatibility filter (`polarity_compatibility.py`)
+## Polarity compatibility filter (`compatibility/polarity.py`)
 
 Each `input_pair`/`load`/`tail_current` variant declares
 `polarity: pmos_input | nmos_input | None`. `input_pair` is the reference:
@@ -133,7 +137,7 @@ polarity doesn't match `input_pair`'s (untagged variants, e.g.
 constraint). To support a new/edited variant, just add the right `polarity:`
 tag in YAML — no code changes needed.
 
-## Stage-interface compatibility filter (`second_stage_compatibility.py`)
+## Stage-interface compatibility filter (`compatibility/second_stage.py`)
 
 A `second_stage` variant is structurally unbiasable against the first stage
 when the gate level its *signal device* (the transistor whose gate is the
@@ -156,7 +160,7 @@ unconstrained. Untagged input pairs (`inverter_based_input`) impose no
 constraint. New `second_stage` variants are classified automatically by
 whichever device gates `in` and where its source sits.
 
-## Compensation parity filter (`compensation_compatibility.py`)
+## Compensation parity filter (`compatibility/compensation.py`)
 
 Every `compensation` variant couples `in` to `out` through a capacitor
 (Miller family). That coupling is negative feedback (pole splitting) only
@@ -179,7 +183,7 @@ Structural (no YAML tags); anything unclassifiable (a comp variant that
 doesn't couple `in`/`out`, a chain the walk can't follow) imposes no
 constraint.
 
-## Output-cardinality compatibility filter (`output_compatibility.py`)
+## Output-cardinality compatibility filter (`compatibility/output.py`)
 
 Each `load` variant declares `output_cardinality: "single" | "differential" |
 None`. `"single"` (folded-cascode single-output and telescopic-cascode loads)
@@ -198,7 +202,7 @@ that only `fully_differential` topologies wire (issue #112). Untagged loads
 `output_type`. To support a new/edited `load` variant, just add the right
 `output_cardinality:` tag in YAML — no code changes needed.
 
-## Untapped-load-branch compatibility filter (`load_branch_compatibility.py`)
+## Untapped-load-branch compatibility filter (`compatibility/load_branch.py`)
 
 In every `single_ended` topology only one first-stage branch node is tapped
 (`load.out`/`out2` → the stage-output net); `load.in1`/`out1` (`net_diff1`)
@@ -208,7 +212,7 @@ bias rail, no diode connection) leaves that node high-impedance between two
 series current sources — no sizing can absorb the load-vs-tail current
 mismatch, and one device always leaves saturation (issue #112).
 `is_load_branch_compatible` detects this structurally (no YAML tags, like
-`second_stage_compatibility`): the `in1` node counts as DC-defined when the
+`compatibility/second_stage`): the `in1` node counts as DC-defined when the
 load has a diode-connected MOSFET on it (`active_load_*`), a resistor
 touching it (`resistor_load_*`), or a MOSFET source terminal on it (the
 cascode loads' folding/cascode devices); loads that never put a MOSFET drain
@@ -220,7 +224,7 @@ connect to `in1`. Note: `current_source_load_*` are also tagged
 cardinality filter already excludes them from single-ended topologies —
 this filter is the structural guard for any future rail-gated load branch.
 
-## CMFB compatibility filter & pruning (`cmfb_compatibility.py`)
+## CMFB compatibility filter & pruning (`compatibility/cmfb.py`)
 
 Of the 14 `load` variants, only the 4 tagged `output_cardinality:
 "differential"` (the 2 differential-output folded-cascode loads and the 2
@@ -239,7 +243,7 @@ so it contributes nothing and `cmfb.bias` is not counted by
 `cmfb` consumer, tag it `output_cardinality: "differential"` and give it a
 real `bias_cmfb: role: input` -- no code changes needed here.
 
-## Tail-current compatibility filter & pruning (`tail_current_compatibility.py`)
+## Tail-current compatibility filter & pruning (`compatibility/tail_current.py`)
 
 Of the 5 `input_pair` variants, only the 4 `differential_pair_*` variants
 reference their `tail` port from a device terminal (`s`/`b: tail` on the
@@ -313,7 +317,7 @@ and the legacy monolith patterns remain for external netlists.
 
 ## Pattern for small internal pure-function modules
 
-`polarity_compatibility.py`, `bias_construction.py`, and `net_aliasing.py` all
+`compatibility/polarity.py`, `bias_construction.py`, and `net_aliasing.py` all
 follow the same template — use it for future per-combination
 filters/transforms:
 

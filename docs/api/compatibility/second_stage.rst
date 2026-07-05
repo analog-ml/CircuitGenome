@@ -1,7 +1,7 @@
 Second-Stage Compatibility
 ==========================
 
-.. automodule:: circuitgenome.synthesizer.second_stage_compatibility
+.. automodule:: circuitgenome.synthesizer.compatibility.second_stage
    :members:
    :undoc-members:
    :show-inheritance:

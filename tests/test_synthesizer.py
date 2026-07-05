@@ -4,26 +4,22 @@ from circuitgenome.synthesizer.bias_construction import (
     rail_flavor_from_diode,
     required_rail_kinds,
 )
-from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
-from circuitgenome.synthesizer.load_branch_compatibility import (
-    is_load_branch_compatible,
-    untapped_branch_is_dc_defined,
-)
-from circuitgenome.synthesizer.compensation_compatibility import (
+from circuitgenome.synthesizer.compatibility import (
+    CANONICAL_CMFB_VARIANT,
+    CANONICAL_TAIL_CURRENT_VARIANT,
+    is_cmfb_compatible,
+    is_combination_valid,
     is_compensation_compatible,
-    stage_inversions,
-)
-from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
-from circuitgenome.synthesizer.second_stage_compatibility import (
+    is_load_branch_compatible,
+    is_output_type_compatible,
     is_second_stage_compatible,
+    is_tail_current_compatible,
+    prune_cmfb,
+    prune_tail_current,
     required_pair_type,
     signal_device_type,
-)
-from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
-from circuitgenome.synthesizer.tail_current_compatibility import (
-    CANONICAL_TAIL_CURRENT_VARIANT,
-    is_tail_current_compatible,
-    prune_tail_current,
+    stage_inversions,
+    untapped_branch_is_dc_defined,
 )
 from circuitgenome.synthesizer.loader import load_bias_legs, load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits, synthesize

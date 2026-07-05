@@ -1,7 +1,7 @@
 CMFB Compatibility
 ====================
 
-.. automodule:: circuitgenome.synthesizer.cmfb_compatibility
+.. automodule:: circuitgenome.synthesizer.compatibility.cmfb
    :members:
    :undoc-members:
    :show-inheritance:

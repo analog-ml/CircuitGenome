@@ -32,6 +32,7 @@ design exploration, or topology studies.
 
    theory/sizing_flow
    theory/gmid_sizing_flow
+   theory/compatibility_filters
 
 .. toctree::
    :maxdepth: 2
@@ -41,13 +42,7 @@ design exploration, or topology studies.
    api/models
    api/loader
    api/netlist
-   api/polarity_compatibility
-   api/second_stage_compatibility
-   api/compensation_compatibility
-   api/output_compatibility
-   api/load_branch_compatibility
-   api/cmfb_compatibility
-   api/tail_current_compatibility
+   api/compatibility/index
    api/bias_construction
    api/net_aliasing
 

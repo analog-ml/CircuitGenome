@@ -1,7 +1,7 @@
 Output Compatibility
 =====================
 
-.. automodule:: circuitgenome.synthesizer.output_compatibility
+.. automodule:: circuitgenome.synthesizer.compatibility.output
    :members:
    :undoc-members:
    :show-inheritance:

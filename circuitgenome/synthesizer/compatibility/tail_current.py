@@ -27,8 +27,8 @@ is no longer "needed" (see
 :func:`~circuitgenome.synthesizer.bias_construction.required_rail_kinds`).
 
 Both the filter and the prune are required together, exactly as with
-:func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`/
-:func:`~circuitgenome.synthesizer.cmfb_compatibility.prune_cmfb`:
+:func:`~circuitgenome.synthesizer.compatibility.cmfb.is_cmfb_compatible`/
+:func:`~circuitgenome.synthesizer.compatibility.cmfb.prune_cmfb`:
 ``itertools.product`` enumerates all 6 ``tail_current`` variants for every
 combination *before* pruning runs. If :func:`prune_tail_current` ran
 unconditionally with no filter, all 6 choices for an
@@ -51,7 +51,7 @@ variant is automatically treated like ``inverter_based_input``.
 from __future__ import annotations
 import dataclasses
 
-from .models import ModuleVariant
+from ..models import ModuleVariant
 
 CANONICAL_TAIL_CURRENT_VARIANT = "current_mirror_tail_pmos"
 

@@ -18,9 +18,17 @@ from pathlib import Path
 from typing import Iterator
 
 from .bias_construction import construct_bias_generation
-from .cmfb_compatibility import is_cmfb_compatible, prune_cmfb
-from .compensation_compatibility import is_compensation_compatible
-from .polarity_compatibility import is_combination_valid
+from .compatibility import (
+    is_cmfb_compatible,
+    is_combination_valid,
+    is_compensation_compatible,
+    is_load_branch_compatible,
+    is_output_type_compatible,
+    is_second_stage_compatible,
+    is_tail_current_compatible,
+    prune_cmfb,
+    prune_tail_current,
+)
 from .loader import load_bias_legs, load_modules, load_topologies
 from .models import (
     BiasLegLibrary,
@@ -29,11 +37,7 @@ from .models import (
     SynthesizedCircuit,
     TopologyTemplate,
 )
-from .load_branch_compatibility import is_load_branch_compatible
 from .net_aliasing import apply_net_rename, compute_alias_net_rename
-from .output_compatibility import is_output_type_compatible
-from .second_stage_compatibility import is_second_stage_compatible
-from .tail_current_compatibility import is_tail_current_compatible, prune_tail_current
 
 _default_bias_legs_cache: BiasLegLibrary | None = None
 
@@ -114,13 +118,13 @@ def build_circuit(
     :func:`enumerate_circuits`.
 
     Returns ``None`` if *variant_map* is rejected by
-    :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`,
-    :func:`~circuitgenome.synthesizer.second_stage_compatibility.is_second_stage_compatible`,
-    :func:`~circuitgenome.synthesizer.compensation_compatibility.is_compensation_compatible`,
-    :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`,
-    :func:`~circuitgenome.synthesizer.load_branch_compatibility.is_load_branch_compatible`,
-    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`, or
-    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`.
+    :func:`~circuitgenome.synthesizer.compatibility.polarity.is_combination_valid`,
+    :func:`~circuitgenome.synthesizer.compatibility.second_stage.is_second_stage_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.compensation.is_compensation_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.output.is_output_type_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.load_branch.is_load_branch_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.cmfb.is_cmfb_compatible`, or
+    :func:`~circuitgenome.synthesizer.compatibility.tail_current.is_tail_current_compatible`.
 
     :param topology: The wiring template that defines slots and net connections.
     :param variant_map: One :class:`~circuitgenome.synthesizer.models.ModuleVariant`
@@ -210,13 +214,13 @@ def enumerate_circuits(
     design-space exploration as correct-but-infeasible mutation seeds.
 
     Combinations that mix incompatible ``polarity`` tags (see
-    :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`) are
+    :func:`~circuitgenome.synthesizer.compatibility.polarity.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
 
     Combinations where a ``second_stage`` slot sensing the first stage's
     output has a signal device of the same channel type as the input pair
     (see
-    :func:`~circuitgenome.synthesizer.second_stage_compatibility.is_second_stage_compatible`)
+    :func:`~circuitgenome.synthesizer.compatibility.second_stage.is_second_stage_compatible`)
     are also skipped -- the first stage's reachable output window and the
     second stage's required gate level are disjoint, so no sizing can bias
     the interface (the ``third_stage`` slot senses a wide-swing node instead
@@ -225,7 +229,7 @@ def enumerate_circuits(
     Combinations where a ``compensation`` slot wraps a non-inverting stage
     chain *with gain* -- a positive even number of common-source inversions
     between the compensation's ``in`` and ``out`` nets (see
-    :func:`~circuitgenome.synthesizer.compensation_compatibility.is_compensation_compatible`)
+    :func:`~circuitgenome.synthesizer.compatibility.compensation.is_compensation_compatible`)
     -- are also skipped: a Miller-family capacitor around such a chain is
     positive feedback, producing a right-half-plane AC response whose
     gain/GBW/PM cannot be measured (issue #114). Pure follower chains (zero
@@ -233,7 +237,7 @@ def enumerate_circuits(
 
     Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't
     match *topology*'s ``output_type`` (see
-    :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`)
+    :func:`~circuitgenome.synthesizer.compatibility.output.is_output_type_compatible`)
     are also skipped -- these would leave the load's mandatory output port(s)
     (``out`` for ``"single"``, ``out1``/``out2`` for ``"differential"``)
     unconnected: only ``single_ended`` topologies define a net for
@@ -244,7 +248,7 @@ def enumerate_circuits(
     branch node (``load.in1``, ``net_diff1``) is left high-impedance by the
     load -- a plain rail-referenced current source with no diode, resistor,
     or cascode connection to define its DC voltage (see
-    :func:`~circuitgenome.synthesizer.load_branch_compatibility.is_load_branch_compatible`)
+    :func:`~circuitgenome.synthesizer.compatibility.load_branch.is_load_branch_compatible`)
     -- are also skipped: the node sits between two series current sources
     with no mechanism to absorb their mismatch, so no sizing can establish
     an operating point (issue #112).
@@ -260,9 +264,9 @@ def enumerate_circuits(
     For topologies with a ``cmfb`` slot, combinations where ``load``'s
     ``output_cardinality`` isn't ``"differential"`` (i.e. ``cmfb.out`` would
     drive nothing) are restricted to the canonical ``cmfb`` variant (see
-    :func:`~circuitgenome.synthesizer.cmfb_compatibility.is_cmfb_compatible`),
+    :func:`~circuitgenome.synthesizer.compatibility.cmfb.is_cmfb_compatible`),
     and that variant is then pruned to an empty placeholder (see
-    :func:`~circuitgenome.synthesizer.cmfb_compatibility.prune_cmfb`) so it
+    :func:`~circuitgenome.synthesizer.compatibility.cmfb.prune_cmfb`) so it
     contributes no devices and ``cmfb.bias`` is not counted as a needed bias
     rail.
 
@@ -270,9 +274,9 @@ def enumerate_circuits(
     ``tail`` port (currently only ``inverter_based_input``, which is
     self-biased and would otherwise leave ``net_tail`` floating) are
     restricted to the canonical ``tail_current`` variant (see
-    :func:`~circuitgenome.synthesizer.tail_current_compatibility.is_tail_current_compatible`),
+    :func:`~circuitgenome.synthesizer.compatibility.tail_current.is_tail_current_compatible`),
     and that variant is then pruned to an empty placeholder (see
-    :func:`~circuitgenome.synthesizer.tail_current_compatibility.prune_tail_current`)
+    :func:`~circuitgenome.synthesizer.compatibility.tail_current.prune_tail_current`)
     so it contributes no devices and ``tail_current.bias`` is not counted as
     a needed bias rail.
 

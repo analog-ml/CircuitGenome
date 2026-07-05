@@ -1,9 +1,11 @@
 import pytest
 
-from circuitgenome.synthesizer.cmfb_compatibility import CANONICAL_CMFB_VARIANT
+from circuitgenome.synthesizer.compatibility import (
+    CANONICAL_CMFB_VARIANT,
+    CANONICAL_TAIL_CURRENT_VARIANT,
+)
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import build_circuit, enumerate_circuits
-from circuitgenome.synthesizer.tail_current_compatibility import CANONICAL_TAIL_CURRENT_VARIANT
 from circuitgenome.visualizer.graph import SUPPLY_NETS, explain_incompatibility, topology_to_graph
 
 

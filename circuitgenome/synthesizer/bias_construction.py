@@ -47,8 +47,8 @@ for the electrical layout and the template net-name contract.
 Both the demand analysis and the assembly are **structural** (actual device
 terminal references, no YAML tags), so new consumer variants are classified
 correctly without code changes. Construction must run **after**
-:func:`~circuitgenome.synthesizer.cmfb_compatibility.prune_cmfb` /
-:func:`~circuitgenome.synthesizer.tail_current_compatibility.prune_tail_current`,
+:func:`~circuitgenome.synthesizer.compatibility.cmfb.prune_cmfb` /
+:func:`~circuitgenome.synthesizer.compatibility.tail_current.prune_tail_current`,
 so emptied placeholder slots demand nothing.
 """
 from __future__ import annotations

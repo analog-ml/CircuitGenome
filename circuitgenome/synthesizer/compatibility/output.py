@@ -43,7 +43,7 @@ assignment depends on which of these rules applies:
 plain current sources gated by ``bias_cmfb``, so the load only has a defined
 operating point when the CMFB loop drives that gate -- which only
 ``fully_differential`` topologies provide (issue #112; the untapped-branch
-filter, :mod:`~circuitgenome.synthesizer.load_branch_compatibility`, would
+filter, :mod:`~circuitgenome.synthesizer.compatibility.load_branch`, would
 independently reject them in ``single_ended`` topologies).
 
 The other 6 ``load`` variants (resistor/active/current-source loads) declare
@@ -59,7 +59,7 @@ To extend: tag new or edited ``load`` variants with
 ``opamp_modules.yaml`` -- no code changes needed here.
 """
 from __future__ import annotations
-from .models import ModuleVariant, TopologyTemplate
+from ..models import ModuleVariant, TopologyTemplate
 
 _CARDINALITY_OUTPUT_TYPE = {
     "single": "single_ended",

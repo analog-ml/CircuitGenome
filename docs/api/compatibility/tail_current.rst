@@ -1,7 +1,7 @@
 Tail-Current Compatibility
 ===========================
 
-.. automodule:: circuitgenome.synthesizer.tail_current_compatibility
+.. automodule:: circuitgenome.synthesizer.compatibility.tail_current
    :members:
    :undoc-members:
    :show-inheritance:
