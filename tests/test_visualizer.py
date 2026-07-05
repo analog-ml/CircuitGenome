@@ -39,8 +39,8 @@ TWO_STAGE_FD_VALID = {
     "cmfb": CANONICAL_CMFB_VARIANT,
     "comp_p": "miller_cap",
     "comp_n": "miller_cap",
-    "second_stage_p": "common_source",
-    "second_stage_n": "common_source",
+    "second_stage_p": "common_source_nmos",
+    "second_stage_n": "common_source_nmos",
 }
 
 
@@ -185,7 +185,7 @@ def test_explain_incompatibility(topologies, by_name):
         "load": "resistor_load_vdd",
         "tail_current": "current_mirror_tail_nmos",
         "compensation": "miller_cap",
-        "second_stage": "common_source",
+        "second_stage": "common_source_nmos",
     })
     reasons3 = explain_incompatibility(
         topologies["two_stage_opamp_single_ended"], stage_bad

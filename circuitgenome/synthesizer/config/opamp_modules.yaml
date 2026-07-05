@@ -728,7 +728,7 @@ modules:
   # Voltage-gain stages (A > 1). Filled into the second_stage / third_stage
   # topology slots. Followers (gain ~ 1) live in the output_stage category below.
 
-  - name: common_source
+  - name: common_source_nmos
     category: amplification_stage
     display_name: "Common-Source Amplification Stage"
     ports:
@@ -753,7 +753,7 @@ modules:
       - {name: gnd,  role: supply}
     devices:
       # PMOS CS amplifier with NMOS current sink load -- the complement of
-      # common_source, for NMOS input pairs (issue #109): its gate sits a
+      # common_source_nmos, for NMOS input pairs (issue #109): its gate sits a
       # Vgs below vdd, inside an NMOS first stage's output window.
       - {ref: mp1, type: pmos, d: out,  g: in,   s: vdd, b: vdd}
       - {ref: mn1, type: nmos, d: out,  g: bias,  s: gnd, b: gnd}
@@ -788,7 +788,7 @@ modules:
   # and the Miller compensation stays wrapped around the amplification stage,
   # not the follower (see issues #125/#126 for the parked history).
 
-  - name: common_drain
+  - name: common_drain_pmos
     category: output_stage
     display_name: "Common-Drain (PMOS Source Follower) Output Stage"
     ports:
@@ -819,7 +819,7 @@ modules:
     devices:
       # NMOS source follower biased by an NMOS current sink: out = in -
       # Vgs, level-shifting the amplification-stage output down --
-      # issue #110's complement of common_drain. Bulk at gnd (p-substrate
+      # issue #110's complement of common_drain_pmos. Bulk at gnd (p-substrate
       # device), so the realized Vgs carries body effect.
       - {ref: mn1, type: nmos, d: vdd, g: in,   s: out,  b: gnd}
       - {ref: mn2, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}

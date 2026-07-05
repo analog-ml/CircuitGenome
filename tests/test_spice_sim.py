@@ -21,7 +21,7 @@ def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
-            "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
+            "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source_nmos",
             "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
@@ -113,7 +113,7 @@ def test_resistor_load_biases_in_spice():
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
     want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
-            "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source",
+            "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source_nmos",
             "compensation": "miller_cap"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
@@ -305,7 +305,7 @@ def _resistor_tail_two_stage_se(second_stage):
     AC polarity settles in the rig (PM extracts at ~266°) — the regression
     case for the plausibility guard; it comes from the frozen
     ``_RHP_SPECIMEN_NETLIST`` (unconstructable since issue #114).
-    ``"common_source"`` is its honest, still-synthesizable twin.
+    ``"common_source_nmos"`` is its honest, still-synthesizable twin.
     """
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_single_ended")
@@ -349,7 +349,7 @@ def test_implausible_pm_extraction_is_discarded():
 def test_honest_twin_measurement_unaffected():
     """The common-source twin of the regression circuit measures normally:
     positive gain and a physical phase margin."""
-    text, result, tech, spec = _resistor_tail_two_stage_se("common_source")
+    text, result, tech, spec = _resistor_tail_two_stage_se("common_source_nmos")
     sim = spice_sim.simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is not None and sim["gain_db"] > 0
     pm = sim["phase_margin_deg"]
@@ -425,7 +425,7 @@ def test_fd_large_signal_metrics_stay_none():
             "load": "folded_cascode_load_pmos_input_differential_output",
             "tail_current": "current_mirror_tail_pmos",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
-            "second_stage_p": "common_source", "second_stage_n": "common_source",
+            "second_stage_p": "common_source_nmos", "second_stage_n": "common_source_nmos",
             "cmfb": "resistive_sense_cmfb"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
