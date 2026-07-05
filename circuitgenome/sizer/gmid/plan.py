@@ -43,6 +43,8 @@ class SizingPlan:
 
     :param model: the gm/Id device model (LUT + L/region policy from the intent).
     :param gm_req_map: ref → required gm in A/V (0 for non-signal devices).
+    :param vod_max_map: ref → max VDS_sat in V from the output-swing spec
+        (absent = unconstrained).
     :param cc_pf / cc2_pf: compensation cap(s) in pF (``None`` when absent).
     :param tintents: ref → resolved :class:`~.intent.TransistorIntent`.
     :param warnings: gm-ceiling advisories (a spec that needs more gm than the
@@ -50,6 +52,7 @@ class SizingPlan:
     """
     model: GmIdModel
     gm_req_map: dict[str, float]
+    vod_max_map: dict[str, float]
     cc_pf: float | None
     cc2_pf: float | None
     tintents: dict[str, TransistorIntent]
@@ -87,11 +90,12 @@ def plan_devices(
 ) -> SizingPlan:
     """Derive gm requirements, compensation caps and per-device intent."""
     model = _model_for(tech, intent)
-    gm_req_map, _vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
+    gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
         view.slot_transistors, view.all_transistors, currents.ids_map,
         tech, spec, model, currents.gd_load_r,
     )
     tintents = resolve_transistor_intents(
         view.all_transistors, view.cascode_refs, intent.block_intents)
-    return SizingPlan(model=model, gm_req_map=gm_req_map, cc_pf=cc_pf,
+    return SizingPlan(model=model, gm_req_map=gm_req_map,
+                      vod_max_map=vod_max_map, cc_pf=cc_pf,
                       cc2_pf=cc2_pf, tintents=tintents, warnings=ceil_warnings)

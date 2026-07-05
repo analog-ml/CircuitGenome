@@ -271,36 +271,44 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
 
 
 def _measure_swing(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None):
-    """Unity-buffer DC sweep → ``(swing_max, swing_min)`` in V.  SE only.
+    """Inverting −1 DC sweep → ``(swing_max, swing_min)`` in V.  SE only.
 
-    Sweeps the buffered input across the supply and reads the output over the
-    contiguous **tracking region** around CM (small-signal slope ≥ 0.7 —
-    outside it the output stage has saturated and the output no longer
-    follows).  The region's edge values are the reachable output extremes.
+    The output is driven across the supply through an inverting gain −1
+    network while the non-inverting input stays at CM, so the input stage
+    never leaves its common-mode range: the sweep measures **output** swing,
+    not the intersection of output swing and ICMR (a unity buffer, whose
+    input rides with the output, conflates the two — issue #126).  Large
+    feedback resistors keep the DUT's output unloaded.
+
+    The output is read over the contiguous **tracking region** around CM
+    (small-signal slope ≤ −0.7 — outside it the output stage has saturated
+    and the output no longer follows).  The region's edge values are the
+    reachable output extremes.
     """
     if topo.fd:
         return None, None
     step = max(vdd / 200.0, 1e-3)
     for inp, inn in _pols(polarity):
         netmap = _fb_netmap(topo, inp, inn)
-        fb = f"Rfb out inn 1\nVin inp 0 dc {vcm}\n"
+        fb = (f"Rfb out inn 10meg\nRin src inn 10meg\n"
+              f"Vp inp 0 dc {vcm}\nVin src 0 dc {vcm}\n")
         deck = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
                      f"dc Vin 0 {vdd} {step}\nwrdata __OUT__ v(out)")
         a = _run(deck, ["v(out)"])
         if a is None or a.shape[0] < 20 or a.shape[1] < 2:
             continue
-        vin, vo = a[:, 0], a[:, 1]
+        vin, vo = a[:, 0], a[:, 1]           # ideal: vo = 2·vcm − vin
         slope = np.gradient(vo, vin)
-        track = slope >= 0.7
+        track = slope <= -0.7
         icm = int(np.argmin(np.abs(vin - vcm)))
         if not track[icm]:
-            continue   # buffer does not even track at CM → wrong polarity
+            continue   # loop does not even track at CM → wrong polarity
         lo = hi = icm
         while lo > 0 and track[lo - 1]:
             lo -= 1
         while hi < len(track) - 1 and track[hi + 1]:
             hi += 1
-        return float(vo[hi]), float(vo[lo])
+        return float(vo[lo]), float(vo[hi])  # inverting: max at low vin
     return None, None
 
 
