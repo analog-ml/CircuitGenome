@@ -46,11 +46,12 @@ def test_load_modules():
 
 
 def test_load_variant_names():
-    """The load category exposes 12 variants: alias-based simple loads (each
+    """The load category exposes 14 variants: alias-based simple loads (each
     split into a VDD-side and a GND-side variant, since a PMOS-input pair and
     an NMOS-input pair can't draw current from the same rail), plus
     PMOS/NMOS-input single-output and differential-output folded-cascode
-    loads, plus PMOS/NMOS telescopic-cascode loads."""
+    loads, plus PMOS/NMOS self-biased telescopic-cascode loads and their
+    PMOS/NMOS wide-swing (Sooch) twins (issue #129)."""
     modules = load_modules()
     names = {v.name for v in modules["load"]}
     assert names == {
@@ -66,6 +67,8 @@ def test_load_variant_names():
         "folded_cascode_load_pmos_input_differential_output",
         "telescopic_cascode_load_pmos",
         "telescopic_cascode_load_nmos",
+        "telescopic_cascode_load_wideswing_pmos",
+        "telescopic_cascode_load_wideswing_nmos",
     }
 
 
@@ -90,7 +93,7 @@ def test_cascode_loads_do_not_use_signal_nodes_as_bias():
         v for v in modules["load"]
         if v.name.startswith(("folded_cascode_load", "telescopic_cascode_load"))
     ]
-    assert len(cascode_variants) == 6
+    assert len(cascode_variants) == 8
     for variant in cascode_variants:
         for device in variant.devices:
             gate = device.terminals.get("g")
@@ -101,9 +104,10 @@ def test_cascode_loads_do_not_use_signal_nodes_as_bias():
 
 def test_folded_cascode_bias_port_roles():
     """Single-output folded-cascode loads require bias1+bias2 (bias3
-    optional); telescopic-cascode loads require only bias1 (bias2/bias3
-    optional); differential-output folded-cascode loads require
-    bias1+bias2+bias3+bias_cmfb."""
+    optional); self-biased telescopic-cascode loads require only bias1
+    (bias2/bias3 optional); wide-swing telescopic-cascode loads require
+    bias1+bias2 (the rail-driven cascode gate, issue #129); differential-
+    output folded-cascode loads require bias1+bias2+bias3+bias_cmfb."""
     modules = load_modules()
     by_name = {v.name: v for v in modules["load"]}
 
@@ -124,6 +128,16 @@ def test_folded_cascode_bias_port_roles():
         roles = {p.name: p.role for p in by_name[name].ports}
         assert roles["bias1"] == "input"
         assert roles["bias2"] == "optional"
+        assert roles["bias3"] == "optional"
+        assert roles["bias_cmfb"] == "optional"
+
+    for name in (
+        "telescopic_cascode_load_wideswing_pmos",
+        "telescopic_cascode_load_wideswing_nmos",
+    ):
+        roles = {p.name: p.role for p in by_name[name].ports}
+        assert roles["bias1"] == "input"
+        assert roles["bias2"] == "input"
         assert roles["bias3"] == "optional"
         assert roles["bias_cmfb"] == "optional"
 
@@ -277,8 +291,8 @@ def test_polarity_tags_cover_input_pair_load_tail_current():
         assert input_pair_polarities[name] == "nmos_input"
 
     load_polarities = [v.polarity for v in modules["load"]]
-    assert load_polarities.count("pmos_input") == 6
-    assert load_polarities.count("nmos_input") == 6
+    assert load_polarities.count("pmos_input") == 7
+    assert load_polarities.count("nmos_input") == 7
 
     tail_polarities = [v.polarity for v in modules["tail_current"]]
     assert tail_polarities.count("pmos_input") == 3
@@ -729,7 +743,7 @@ def test_enumerate_circuits_excludes_output_cardinality_mismatches():
 
 
 def test_untapped_branch_dc_definition_covers_all_loads():
-    """The untapped branch node (in1) is DC-defined for 10 of the 12 loads:
+    """The untapped branch node (in1) is DC-defined for 12 of the 14 loads:
     by a resistor (resistor_load_*), a diode-connected MOSFET
     (active_load_*'s reference side), or a MOSFET source terminal (the
     cascode loads' folding/cascode devices ride the node one V_GS below
@@ -750,6 +764,8 @@ def test_untapped_branch_dc_definition_covers_all_loads():
         "folded_cascode_load_pmos_input_differential_output": True,
         "telescopic_cascode_load_pmos": True,
         "telescopic_cascode_load_nmos": True,
+        "telescopic_cascode_load_wideswing_pmos": True,
+        "telescopic_cascode_load_wideswing_nmos": True,
     }
 
 
@@ -779,7 +795,7 @@ def test_is_load_branch_compatible_denies_current_source_loads_in_single_ended()
 
 
 def test_is_load_branch_compatible_allows_defined_branches_and_fd():
-    """The other 10 loads define the untapped branch node and pass in
+    """The other 12 loads define the untapped branch node and pass in
     single-ended topologies; fully_differential topologies tap both branches
     (CM definition is the CMFB loop's job there), so even
     current_source_load_* are not constrained by this filter."""
@@ -1041,9 +1057,9 @@ def test_enumerate_circuits_nonempty():
 def test_enumerate_circuits_count():
     """2-stage single-ended: inverter_based_input is parked as unsupported
     (issue #113: no fixed-Vgs sizing path), so enumeration covers the 4
-    tail-consuming input pairs x 12 loads x 6 tails = 288
-    input_pair/load/tail_current combinations, of which 72 are
-    polarity-valid (see test_polarity_filter_*). Of those, 48 also have an
+    tail-consuming input pairs x 14 loads x 6 tails = 336
+    input_pair/load/tail_current combinations, of which 84 are
+    polarity-valid (see test_polarity_filter_*). Of those, 60 also have an
     output_cardinality compatible with single_ended (the 24 combos using a
     differential-output cascode load or a current_source_load_* are
     excluded -- the latter carry the "differential" tag for the CMFB-loop
@@ -1052,17 +1068,19 @@ def test_enumerate_circuits_count():
     test_is_output_type_compatible_*). is_second_stage_compatible
     keeps the level-reachable second_stage variant
     (differential_ota_second_stage is parked as unsupported, issue #114;
-    the two followers likewise, issue #125): common_source for the 24
-    PMOS-pair combos, common_source_pmos for the 24 NMOS-pair combos (see
+    the two followers likewise, issue #125): common_source for the 30
+    PMOS-pair combos, common_source_pmos for the 30 NMOS-pair combos (see
     test_second_stage_filter_*); all remaining stages have 1 inversion, so
-    is_compensation_compatible prunes nothing further here. The bias
-    generator is constructed, not enumerated, so it contributes no factor:
-    (24 x 1 + 24 x 1) x 3 comp = 144."""
+    is_compensation_compatible prunes nothing further here. The two
+    wide-swing telescopic loads (issue #129) each add one single-output
+    cascode load per polarity, contributing exactly like their self-biased
+    twins. The bias generator is constructed, not enumerated, so it
+    contributes no factor: (30 x 1 + 30 x 1) x 3 comp = 180."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 144
+    assert len(circuits) == 180
 
 
 def test_enumerate_circuits_fully_differential_count():
@@ -1168,10 +1186,11 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 48 single-ended-valid
+    """3-stage single-ended (NMC/RNMC): 60 single-ended-valid
     input_pair/load/tail_current combinations (polarity, output-cardinality,
     and untapped-branch filters, with inverter_based_input parked as
-    unsupported, issue #113; see test_enumerate_circuits_count).
+    unsupported, issue #113; see test_enumerate_circuits_count -- the 60
+    includes the two wide-swing telescopic loads, issue #129).
     Only the second_stage slot senses the first stage, so it keeps the
     level-reachable variant (1 of 2 enumerable per pair polarity --
     differential_ota_second_stage is parked as unsupported, issue #114,
@@ -1189,13 +1208,13 @@ def test_enumerate_three_stage_single_ended_count():
     a single stage (never a positive even inversion count), so both
     pairings survive. The bias generator is constructed, not enumerated,
     so it contributes no factor:
-    NMC:  48 x 0 x 3 comp1 x 3 comp2 = 0;
-    RNMC: 48 x 2 x 3 comp1 x 3 comp2 = 864."""
+    NMC:  60 x 0 x 3 comp1 x 3 comp2 = 0;
+    RNMC: 60 x 2 x 3 comp1 x 3 comp2 = 1080."""
     modules = load_modules()
     topologies = load_topologies()
     expected = {
         "three_stage_opamp_nmc_single_ended": 0,
-        "three_stage_opamp_rnmc_single_ended": 864,
+        "three_stage_opamp_rnmc_single_ended": 1080,
     }
     for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
@@ -1234,7 +1253,7 @@ def test_synthesize_three_stage_single_ended_filters():
     # parity filter (issue #114) rejects every remaining CS x CS pairing.
     assert len(nmc) == 0
 
-    assert len(rnmc) == 864
+    assert len(rnmc) == 1080
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in rnmc)
 
 

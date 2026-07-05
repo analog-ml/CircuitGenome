@@ -198,6 +198,37 @@ def test_gnd_referenced_legs_bias_in_spice():
 
 
 @ngspice
+@pytest.mark.parametrize("input_pair,load", [
+    ("differential_pair_pmos", "telescopic_cascode_load_wideswing_pmos"),
+    ("differential_pair_nmos", "telescopic_cascode_load_wideswing_nmos"),
+])
+def test_wideswing_telescopic_loads_bias_in_spice(input_pair, load):
+    """The wide-swing telescopic loads (issue #129) bias soundly in SPICE:
+    their rail-driven mirror cascodes must sit saturated, which requires the
+    bias2 cascode leg to land at Vgs+Vdsat above (NMOS) / below (PMOS) the
+    mirror's self-biased gate node -- NOT at the input common-mode. Guards the
+    bias_levels regression where the mirror's bottom device (gated by the
+    self-biased mirror node, which is_signal_device misreads as a signal net)
+    anchored the leg walk at Vcm and drove the cascodes into triode."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if c.variant_map["load"].name == load
+                and c.variant_map["input_pair"].name == input_pair)
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=3e5)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID"
+    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    assert ok and reason is None
+
+
+@ngspice
 def test_check_bias_soundness_distinguishes_biasing_from_railed():
     """The SPICE DC verdict: a genuinely biasing design is sound; a circuit whose
     operating point rails (circuit_0019 at 1.0 V) is flagged not-sound.

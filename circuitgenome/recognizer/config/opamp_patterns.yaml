@@ -451,6 +451,62 @@ patterns:
       vdd: mp1.s
       gnd: mn1.b
 
+  - name: telescopic_cascode_load_wideswing_pmos
+    category: load
+    circuit_block: gain_stage_1
+    devices:
+      - {ref: mp1, type: pmos}
+      - {ref: mp2, type: pmos}
+      - {ref: mn1, type: nmos}
+      - {ref: mn2, type: nmos}
+      - {ref: mn3, type: nmos}
+      - {ref: mn4, type: nmos}
+    same_net:
+      - [mp1.g, mp2.g]                              # shared bias1 (input-pair cascode gates)
+      - [mp1.b, mp2.b]                              # shared vdd (bulk only -- sources tie to in1/in2)
+      - [mp1.d, mn3.d, mn1.g, mn2.g]                # internal_0 (mirror gate node + ref-cascode drain; no diode)
+      - [mp2.d, mn4.d]                              # single-ended output node
+      - [mn3.g, mn4.g]                              # shared bias2 (wide-swing cascode gates)
+      - [mn1.d, mn3.s]                              # internal_1 (reference-leg cascode source)
+      - [mn2.d, mn4.s]                              # internal_2 (output-leg cascode source)
+      - [mn1.s, mn2.s, mn1.b, mn2.b, mn3.b, mn4.b]  # shared gnd
+    pins:
+      in1: mp1.s
+      in2: mp2.s
+      out: mp2.d
+      bias1: mp1.g
+      bias2: mn3.g
+      vdd: mp1.b
+      gnd: mn1.b
+
+  - name: telescopic_cascode_load_wideswing_nmos
+    category: load
+    circuit_block: gain_stage_1
+    devices:
+      - {ref: mp1, type: pmos}
+      - {ref: mp2, type: pmos}
+      - {ref: mp3, type: pmos}
+      - {ref: mp4, type: pmos}
+      - {ref: mn1, type: nmos}
+      - {ref: mn2, type: nmos}
+    same_net:
+      - [mp1.g, mp2.g, mp3.d, mn1.d]                # internal_0 (mirror gate node + ref-cascode drain + input-cascode drain; no diode)
+      - [mp1.s, mp1.b, mp2.s, mp2.b, mp3.b, mp4.b]  # shared vdd
+      - [mp1.d, mp3.s]                              # internal_1 (reference-leg cascode source)
+      - [mp2.d, mp4.s]                              # internal_2 (output-leg cascode source)
+      - [mp3.g, mp4.g]                              # shared bias2 (wide-swing cascode gates)
+      - [mp4.d, mn2.d]                              # single-ended output node
+      - [mn1.g, mn2.g]                              # shared bias1 (input-pair cascode gates)
+      - [mn1.b, mn2.b]                              # shared gnd
+    pins:
+      in1: mn1.s
+      in2: mn2.s
+      out: mp4.d
+      bias1: mn1.g
+      bias2: mp3.g
+      vdd: mp1.s
+      gnd: mn1.b
+
   # ─── TAIL CURRENT variants ──────────────────────────────────────────────────
 
   - name: current_mirror_tail_nmos

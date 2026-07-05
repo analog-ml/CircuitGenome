@@ -54,7 +54,7 @@ Module categories
      - Resistor (VDD-side / GND-side), PMOS active (current mirror), NMOS
        active (current mirror), PMOS/NMOS current source, folded cascode
        (PMOS/NMOS-input, single-output & differential-output), telescopic
-       cascode (PMOS/NMOS)
+       cascode (PMOS/NMOS, self-biased & wide-swing/Sooch — issue #129)
    * - Tail current
      - Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS),
        resistor (VDD-side / GND-side)
@@ -202,8 +202,9 @@ above), and the ``second_stage`` slot that senses the first stage's output
 keeps only the level-reachable one (the "Stage-interface compatibility
 filter" below): ``common_source`` for the 24 PMOS-pair combinations,
 ``common_source_pmos`` for the 24 NMOS-pair combinations. The 2-stage
-single-ended template thus produces **144 circuits**
-((24 × 1 + 24 × 1) × 3 ``compensation``). The 2-stage
+single-ended template thus produces **180 circuits**
+((30 × 1 + 30 × 1) × 3 ``compensation``; the count grew from 144 when the
+two wide-swing telescopic loads were added, issue #129). The 2-stage
 fully-differential template, which has two ``compensation`` slots, two
 ``second_stage`` slots (one per output path, both sensing the first
 stage), and one ``cmfb`` slot, produces **648 circuits**: of the 48
@@ -224,7 +225,7 @@ pairings left, so the NMC single-ended template enumerates **0 circuits**
 (NMC structurally requires a non-inverting-without-gain stage inside the
 outer Miller loop, i.e. a follower — see the issue #125 un-park
 condition); in the RNMC scheme each capacitor wraps a single stage and
-both pairings survive: **864 circuits** (48 × 2 × 9). Each 3-stage
+both pairings survive: **1080 circuits** (60 × 2 × 9). Each 3-stage
 fully-differential template duplicates those four slots per output path
 (and keeps the single ``cmfb`` slot), producing **0 circuits** (NMC) and
 **23 328 circuits** (RNMC, 72 × (2 × 9)²).
@@ -330,7 +331,8 @@ Some ``load`` variants declare a *mandatory* port on one side of that
 conditional wiring:
 
 - ``folded_cascode_load_*_input_single_output`` and
-  ``telescopic_cascode_load_{pmos,nmos}`` declare ``out`` as mandatory. In a
+  ``telescopic_cascode_load_{pmos,nmos}`` (self-biased and
+  ``_wideswing_`` twins) declare ``out`` as mandatory. In a
   ``fully_differential`` topology, ``out`` is never wired, leaving that
   device terminal floating (disconnected).
 - ``folded_cascode_load_*_input_differential_output`` declare ``out1``/
@@ -388,7 +390,7 @@ CMFB compatibility filter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``fully_differential`` topologies have a ``cmfb`` slot, wired
-``cmfb.out -> net_cmfb_out -> load.bias_cmfb``. Of the 12 ``load`` variants,
+``cmfb.out -> net_cmfb_out -> load.bias_cmfb``. Of the 14 ``load`` variants,
 only the 4 tagged ``output_cardinality: "differential"`` declare
 ``bias_cmfb`` as a real ``role: input`` consumer:
 ``folded_cascode_load_*_input_differential_output`` (gating ``mn3``/``mn4``
@@ -708,11 +710,14 @@ categories:
        PMOS+PMOS transistors + 2 source-degeneration resistors),
        ``inverter_based_input`` (2 CMOS inverters: 2 PMOS + 2 NMOS).
    * - ``load``
-     - 12
+     - 14
      - Resistor (VDD-side / GND-side), active current mirror (PMOS / NMOS),
        current-source (PMOS / NMOS), single-output folded cascode (NMOS-input /
        PMOS-input, 8 devices each), telescopic cascode (PMOS / NMOS, 6 devices
-       each). Plus 2 differential-output folded-cascode variants
+       each) in self-biased and wide-swing/Sooch flavours (the latter drive
+       the mirror cascode gates from a ``bias2`` level rail, dropping the
+       output floor from ``Vgs+Vdsat`` to ``2*Vdsat`` -- issue #129). Plus 2
+       differential-output folded-cascode variants
        (``folded_cascode_load_{nmos,pmos}_input_differential_output``, 8 devices
        each) used exclusively by ``two_stage_opamp_fully_differential``.
    * - ``tail_current``

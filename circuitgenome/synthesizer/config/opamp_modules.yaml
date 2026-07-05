@@ -507,6 +507,74 @@ modules:
       - {ref: mn1, type: nmos, d: internal_2, g: bias1, s: in1, b: gnd}
       - {ref: mn2, type: nmos, d: out,        g: bias1, s: in2, b: gnd}
 
+  - name: telescopic_cascode_load_wideswing_pmos
+    category: load
+    polarity: pmos_input
+    output_cardinality: single
+    display_name: "Wide-Swing Telescopic-Cascode Load (PMOS, for PMOS Input Pair, Single Output)"
+    # Wide-swing (Sooch) twin of telescopic_cascode_load_pmos (issue #129):
+    # the NMOS mirror keeps a single self-biased cascode-diode reference on
+    # internal_0 (mp1 injects the reference current there; mn1/mn2 are the
+    # mirror bottom pair, gated by internal_0), but the output/reference
+    # cascodes mn3/mn4 are gated from the "bias2" level rail (a cascode_gnd
+    # leg built by the demand-driven bias construction) instead of a second
+    # stacked diode. The output-leg saturation floor drops from
+    # Vgs+Vdsat (~1.0 V) to 2*Vdsat (~0.4 V) -- biasable by construction
+    # against a 3.3 V second-stage pin instead of by knife-edge repair.
+    # mp1/mp2 are the PMOS input-pair cascodes (gated by bias1), unchanged.
+    # out = mp2.d = mn4.d is the single-ended output.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: output}
+      - {name: out1,      role: optional}
+      - {name: out2,      role: optional}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: input}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_0, g: bias1,      s: in1,        b: vdd}
+      - {ref: mp2, type: pmos, d: out,        g: bias1,      s: in2,        b: vdd}
+      - {ref: mn1, type: nmos, d: internal_1, g: internal_0, s: gnd,        b: gnd}
+      - {ref: mn2, type: nmos, d: internal_2, g: internal_0, s: gnd,        b: gnd}
+      - {ref: mn3, type: nmos, d: internal_0, g: bias2,      s: internal_1, b: gnd}
+      - {ref: mn4, type: nmos, d: out,        g: bias2,      s: internal_2, b: gnd}
+
+  - name: telescopic_cascode_load_wideswing_nmos
+    category: load
+    polarity: nmos_input
+    output_cardinality: single
+    display_name: "Wide-Swing Telescopic-Cascode Load (NMOS, for NMOS Input Pair, Single Output)"
+    # Mirror image of telescopic_cascode_load_wideswing_pmos (issue #129):
+    # the PMOS mirror keeps a single self-biased cascode-diode reference on
+    # internal_0 (mn1 pulls the reference current from there; mp1/mp2 are the
+    # mirror top pair, gated by internal_0), and the cascodes mp3/mp4 are
+    # gated from the "bias2" level rail (a cascode_vdd leg) instead of a
+    # second stacked diode. mn1/mn2 are the NMOS input-pair cascodes (gated
+    # by bias1), unchanged. out = mp4.d = mn2.d is the single-ended output.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: output}
+      - {name: out1,      role: optional}
+      - {name: out2,      role: optional}
+      - {name: bias1,     role: input}
+      - {name: bias2,     role: input}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_1, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp2, type: pmos, d: internal_2, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: internal_0, g: bias2,      s: internal_1, b: vdd}
+      - {ref: mp4, type: pmos, d: out,        g: bias2,      s: internal_2, b: vdd}
+      - {ref: mn1, type: nmos, d: internal_0, g: bias1,      s: in1,        b: gnd}
+      - {ref: mn2, type: nmos, d: out,        g: bias1,      s: in2,        b: gnd}
+
   # ─── TAIL CURRENT SOURCES ──────────────────────────────────────────────────
   # Each implementation comes in a PMOS/VDD-side and an NMOS/GND-side flavor.
   # A PMOS input pair's tail sources current down into the differential pair,

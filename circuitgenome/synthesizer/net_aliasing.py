@@ -7,8 +7,9 @@ run by :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits` after
 by ``input_pair.out1``/``out2``) and ``load.out``/``out1``/``out2`` (the
 load's actual output node(s), sensed by ``cmfb``/``second_stage*``/``comp*``
 and -- in ``single_ended`` topologies -- the stage-output net) to *separate*
-nets. This is correct for the 6 cascode ``load`` variants, where the folding
-node and the cascode's output are distinct device terminals (e.g.
+nets. This is correct for the 8 cascode ``load`` variants (4 folded-cascode,
+2 self-biased telescopic, 2 wide-swing telescopic), where the folding node and
+the cascode's output are distinct device terminals (e.g.
 ``mn1{d: out1, g: bias2, s: in1}``).
 
 For the other 6 ``load`` variants (resistor/active/current-source loads),
