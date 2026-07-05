@@ -8,9 +8,6 @@ also fits the **RNMC** variant. Each spec sets `third_stage_current_ratio: 5.0`.
 |------|----------|-----|----------|
 | `spec_generic.yaml` | `generic` | 5.0 V | 100 dB |
 | `spec_ptm45.yaml` | `ptm45` | 1.0 V | 70 dB |
-| `spec_ptm32.yaml` | `ptm32` | 0.9 V | 68 dB |
-| `spec_ptm22.yaml` | `ptm22` | 0.8 V | 65 dB |
-| `spec_ptm16.yaml` | `ptm16` | 0.7 V | 60 dB (predictive node) |
 
 Like the SE three-stage specs, these use 0.15 V output-swing headroom at the PTM
 nodes. The generic spec also raises `power_max_w` to 2 mW because the

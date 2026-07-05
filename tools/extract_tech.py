@@ -66,25 +66,6 @@ NODES: dict[str, dict] = {
         cap=(0.01, 10.0, 0.01),
         desc="PTM 45nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)",
     ),
-    "32": dict(
-        card="ptm_32nm_HP.pm", vdd=0.9, l_ext_um=0.064, w_ext_um=1.0,
-        width=(0.05, 60.0, 0.05), length=(0.032, 0.6, 0.002),
-        cap=(0.01, 10.0, 0.01),
-        desc="PTM 32nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)",
-    ),
-    "22": dict(
-        card="ptm_22nm_HP.pm", vdd=0.8, l_ext_um=0.044, w_ext_um=1.0,
-        width=(0.05, 50.0, 0.05), length=(0.022, 0.5, 0.002),
-        cap=(0.01, 10.0, 0.01),
-        desc="PTM 22nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)",
-    ),
-    "16": dict(
-        card="ptm_16nm_HP.pm", vdd=0.7, l_ext_um=0.032, w_ext_um=1.0,
-        width=(0.05, 40.0, 0.05), length=(0.016, 0.4, 0.002),
-        cap=(0.01, 10.0, 0.01),
-        desc="PTM 16nm HP (BSIM4 bulk PREDICTIVE planar extrapolation; "
-             "real 16nm silicon is FinFET)",
-    ),
 }
 
 _UM = 1e-6

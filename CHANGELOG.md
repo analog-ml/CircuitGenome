@@ -3,6 +3,29 @@
 All notable changes to the Topology Synthesizer are documented here, most
 recent first.
 
+## 2026-07-05 (drop PTM 32/22/16 nm nodes)
+
+### Removed
+
+- **PTM 32/22/16 nm technology support**: these low-supply nodes
+  (0.9 / 0.8 / 0.7 V) never had a gm/Id LUT, so the sizer already refused
+  them with `UnsupportedTechError` — their headroom is too small to bias the
+  synthesized topologies. Deleted their `tech_ptm{32,22,16}.yaml` configs, the
+  `ptm_{32,22,16}nm_HP.pm` BSIM4 cards, the `examples/*/spec_ptm{32,22,16}.yaml`
+  specs and README rows, and the `"32"/"22"/"16"` entries in
+  `tools/extract_tech.py`.
+- **ptm45 is unaffected** — it keeps its gm/Id LUT and full gm/Id sizing path,
+  alongside `gf180mcu` and the card-less `generic` tech.
+
+### Unchanged (kept intentionally)
+
+- The `TechParams.spice_model` field and the `UnsupportedTechError` guard stay:
+  `spice_model` is still the ngspice model-card include used by ptm45's SPICE
+  verification (`spice/deck.py`), and the guard still protects any future
+  user-supplied `spice_model`-without-LUT tech from silently falling through to
+  the inaccurate Level-1 square-law sizer. Its test coverage was repointed from
+  the deleted ptm32 config to a synthetic LUT-less tech.
+
 ## 2026-07-04 (park inverter_based_input as unsupported — issue #113)
 
 ### Changed

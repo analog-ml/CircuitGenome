@@ -9,9 +9,6 @@ power only. Gain targets are modest (one-stage gain ≈ gm1·Rout1).
 |------|----------|-----|----------|
 | `spec_generic.yaml` | `generic` | 5.0 V | 40 dB |
 | `spec_ptm45.yaml` | `ptm45` | 1.0 V | 40 dB |
-| `spec_ptm32.yaml` | `ptm32` | 0.9 V | 35 dB |
-| `spec_ptm22.yaml` | `ptm22` | 0.8 V | 30 dB |
-| `spec_ptm16.yaml` | `ptm16` | 0.7 V | 25 dB (predictive node) |
 
 ```bash
 circuitgenome size circuits/one_stage_opamp/circuit_0001_flat.ckt \

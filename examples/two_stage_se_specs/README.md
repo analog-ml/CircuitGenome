@@ -8,9 +8,6 @@ be **feasible** for a two-stage single-ended op-amp. Pair each with its node via
 |------|----------|-----|-------|
 | `spec_generic.yaml` | `generic` | 5.0 V | ~0.25 µm illustrative defaults |
 | `spec_ptm45.yaml` | `ptm45` | 1.0 V | PTM 45 nm HP bulk |
-| `spec_ptm32.yaml` | `ptm32` | 0.9 V | PTM 32 nm HP bulk |
-| `spec_ptm22.yaml` | `ptm22` | 0.8 V | PTM 22 nm HP bulk |
-| `spec_ptm16.yaml` | `ptm16` | 0.7 V | PTM 16 nm — **predictive planar extrapolation** (real 16 nm is FinFET) |
 
 The PTM specs use lower supplies and more modest gain targets than the generic
 spec because the extracted effective Level-1 parameters have higher channel-length
