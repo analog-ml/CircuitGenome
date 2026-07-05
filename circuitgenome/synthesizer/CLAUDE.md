@@ -115,7 +115,7 @@ list is current.
   another `load` port (`out1`/`out2` on the 6 resistor/active/current-source
   loads, aliased to `in1`/`in2`) back onto its target's net -- restoring the
   single shared in/out node those variants' devices assume, while leaving the
-  6 cascode loads' distinct in/out nets intact.
+  8 cascode loads' distinct in/out nets intact.
 
 ## Polarity compatibility filter (`polarity_compatibility.py`)
 
@@ -216,7 +216,7 @@ this filter is the structural guard for any future rail-gated load branch.
 
 ## CMFB compatibility filter & pruning (`cmfb_compatibility.py`)
 
-Of the 12 `load` variants, only the 4 tagged `output_cardinality:
+Of the 14 `load` variants, only the 4 tagged `output_cardinality:
 "differential"` (the 2 differential-output folded-cascode loads and the 2
 `current_source_load_*`, whose branch devices are gated by `bias_cmfb` —
 issue #112) declare `bias_cmfb` as a real `role: input` consumer; the

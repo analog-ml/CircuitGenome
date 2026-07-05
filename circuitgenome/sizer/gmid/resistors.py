@@ -236,7 +236,13 @@ def _stack_node_v(node: str, consumer: Device, mosfets: list[Device],
         s = sizing.get(dev.ref) if dev else None
         if not (dev and s and s.vgs_v and s.vds_sat_v):
             return None
-        if is_signal_device(dev):
+        # The Vcm anchor is for an input-pair device riding the tail node; it
+        # only applies when the signal device's source is an internal node.
+        # A current-mirror's bottom device is gated by its self-biased mirror
+        # node (also a non-bias net, so is_signal_device misfires) but sources
+        # straight to a supply -- the wide-swing telescopic mirror (issue #129):
+        # fall through and terminate at that rail with its Vdsat floor.
+        if is_signal_device(dev) and dev.terminals.get("s") not in RAILS:
             return (vcm
                     - sign * (abs(s.vgs_v) - abs(s.vds_sat_v)
                               - _CASCODE_SAT_MARGIN_V)

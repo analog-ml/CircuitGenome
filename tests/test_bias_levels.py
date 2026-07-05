@@ -69,6 +69,23 @@ def test_cascode_vdd_leg_reaches_telescopic_anchor():
     assert rail == pytest.approx(target, abs=0.02)
 
 
+def test_wideswing_telescopic_bias2_leg_tracks_mirror_cascode():
+    """The wide-swing telescopic load's bias2 rail (issue #129) is a
+    cascode_gnd leg driving the NMOS mirror cascodes (mn3/mn4). Its level
+    diode's Vgs tracks the consumer cascode's planned Vgs (mirror-consistent
+    level), and the rail lands above that Vgs by a positive floor resistor
+    drop — i.e. at Vgs(cascode) plus the bottom mirror device's saturation
+    headroom, well short of the two-diode Vgs+Vgs the self-biased load spends."""
+    res = _size(load="telescopic_cascode_load_wideswing_pmos")
+    assert res.solver_status == "GMID"
+    diode = res.transistors["mn2_bias_gen"]
+    casc = res.transistors["mn3_load"]
+    assert diode.vgs_v == pytest.approx(casc.vgs_v, abs=0.05)
+    rail = abs(diode.vgs_v) + 15e-6 * res.resistors["r2_bias_gen"]
+    # A real floor above the cascode Vgs, but nowhere near a second full Vgs.
+    assert abs(casc.vgs_v) < rail < 2 * abs(casc.vgs_v)
+
+
 def test_pref_cascode_pins_mirror_below_master_vds():
     """The pref branch's ncasc level pins the mirror's drain (ncasc Vgs
     minus cascode Vgs) between the mirror's own Vdsat (saturated) and the

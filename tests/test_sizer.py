@@ -1023,6 +1023,17 @@ def test_telescopic_cascode_load_current_plan():
         assert ids[ref] == pytest.approx(10e-6)
 
 
+def test_wideswing_telescopic_cascode_load_current_plan():
+    """The wide-swing twin has the same no-folding-node structure: the whole
+    telescopic stack carries the pair current (issue #129)."""
+    ids = _ids_plan("two_stage_opamp_single_ended", {
+        "input_pair": "differential_pair_pmos",
+        "load": "telescopic_cascode_load_wideswing_pmos"})
+    for ref in ("mp1_load", "mp2_load",
+                "mn1_load", "mn2_load", "mn3_load", "mn4_load"):
+        assert ids[ref] == pytest.approx(10e-6)
+
+
 def test_simple_load_current_plan_unchanged():
     """Non-cascode loads keep the generic ibias/2-per-device rule."""
     ids = _ids_plan("two_stage_opamp_single_ended", {
@@ -1094,6 +1105,26 @@ def test_stage_interface_repairs_telescopic_cs():
              + result.transistors["mn2_load"].vds_sat_v)
     pin = abs(result.transistors["mn1_second_stage"].vgs_v)
     assert stack + 0.049 <= pin
+
+
+def test_wideswing_telescopic_window_clears_by_construction():
+    """The wide-swing twin (issue #129) drives the mirror cascode gates from a
+    bias rail, so its output-leg floor is 2*Vdsat (mn2 bottom + mn4 cascode),
+    not Vgs(diode)+Vdsat. The same PMOS-load + NMOS-CS pairing that needs the
+    issue #124 knife-edge repair on the self-biased load now clears the pin
+    with ~0.6 V of margin and no stack repair."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "telescopic_cascode_load_wideswing_pmos",
+        "second_stage": "common_source"})
+    assert result.solver_status == "GMID"
+    assert result.bias_feasible
+    assert not any("stage interface" in w for w in result.warnings)
+    floor = (result.transistors["mn2_load"].vds_sat_v
+             + result.transistors["mn4_load"].vds_sat_v)
+    pin = abs(result.transistors["mn1_second_stage"].vgs_v)
+    # Comfortable window, not the ~50 mV the self-biased repair scrapes out.
+    assert pin - floor >= 0.3
 
 
 def test_stage_interface_repairs_follower_pin():

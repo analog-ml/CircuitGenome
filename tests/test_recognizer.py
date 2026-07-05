@@ -55,12 +55,14 @@ def _get_modules():
 _ONE_STAGE_COMBOS = [
     # ── input_pair: differential_pair_pmos ──────────────────────────────────
     ("differential_pair_pmos",            "telescopic_cascode_load_pmos",                 "current_mirror_tail_pmos"),
+    ("differential_pair_pmos",            "telescopic_cascode_load_wideswing_pmos",       "current_mirror_tail_pmos"),
     ("differential_pair_pmos",            "resistor_load_gnd",                            "resistor_tail_vdd"),
     ("differential_pair_pmos",            "active_load_nmos",                             "cascode_current_mirror_tail_pmos"),
     # ── input_pair: differential_pair_nmos ──────────────────────────────────
     ("differential_pair_nmos",            "active_load_pmos",                             "current_mirror_tail_nmos"),
     ("differential_pair_nmos",            "resistor_load_vdd",                            "resistor_tail_gnd"),
     ("differential_pair_nmos",            "telescopic_cascode_load_nmos",                 "cascode_current_mirror_tail_nmos"),
+    ("differential_pair_nmos",            "telescopic_cascode_load_wideswing_nmos",       "cascode_current_mirror_tail_nmos"),
     # ── input_pair: degenerated variants ────────────────────────────────────
     ("differential_pair_nmos_degenerated","folded_cascode_load_nmos_input_single_output", "resistor_tail_gnd"),
     ("differential_pair_pmos_degenerated","folded_cascode_load_pmos_input_single_output", "resistor_tail_vdd"),

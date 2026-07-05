@@ -13,7 +13,7 @@
 # (fully_differential templates: net_loadout1/net_loadout2) and load.out/out2
 # (single-ended templates: the stage-output net) are the load's actual output
 # node(s), sensed by cmfb.in1/in2, second_stage*.in, and comp*.in. in1/in2 and
-# out1/out2/out are deliberately DISTINCT nets here: for the 6 cascode load
+# out1/out2/out are deliberately DISTINCT nets here: for the 8 cascode load
 # variants these are genuinely separate device terminals (e.g. a folded
 # cascode's source vs. drain); for the other 6 (resistor/active/
 # current-source) loads, out1/out2 declare alias_of: in1/in2 in
