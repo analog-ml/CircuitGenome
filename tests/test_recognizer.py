@@ -383,9 +383,11 @@ def test_round_trip_two_stage_fully_diff(
 # gain slots via connectivity scoring on distinct nets.
 
 _NMC_SE = "three_stage_buffered_nmc_single_ended"
+_NMC_SE_PLAIN = "three_stage_opamp_nmc_single_ended"
 _RNMC_SE_PLAIN = "three_stage_opamp_rnmc_single_ended"
 _RNMC_SE_BUF = "three_stage_buffered_rnmc_single_ended"
 _NMC_FD = "three_stage_buffered_nmc_fully_differential"
+_NMC_FD_PLAIN = "three_stage_opamp_nmc_fully_differential"
 _RNMC_FD_PLAIN = "three_stage_opamp_rnmc_fully_differential"
 _RNMC_FD_BUF = "three_stage_buffered_rnmc_fully_differential"
 
@@ -420,6 +422,17 @@ _THREE_STAGE_SE_COMBOS = [
      "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos", "miller_cap_with_nulling_resistor", "indirect_compensation"),
     (_NMC_SE, "differential_pair_pmos", "telescopic_cascode_load_pmos", "resistor_tail_vdd",
      "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos", "indirect_compensation", "miller_cap_with_nulling_resistor"),
+    # Plain NMC (noninverting_stage_* ss + CS ts; issue #139) -- the
+    # current-mirror non-inverting second stage supplies the +2 inversions
+    # comp1 needs (ss 2 + ts 1 = 3, odd), and comp2 wraps the inverting CS
+    # third alone. No include_unsupported: the non-inverting stage is a
+    # first-class enumerable variant. Both polarities; the recognizer must
+    # tell noninverting_stage_* apart from the CS third stage (and from the
+    # ota, whose mirror node differs):
+    (_NMC_SE_PLAIN, "differential_pair_pmos", "active_load_nmos", "current_mirror_tail_pmos",
+     "noninverting_stage_nmos", "common_source_nmos", None, "miller_cap", "miller_cap"),
+    (_NMC_SE_PLAIN, "differential_pair_nmos", "active_load_pmos", "current_mirror_tail_nmos",
+     "noninverting_stage_pmos", "common_source_pmos", None, "indirect_compensation", "miller_cap"),
 ]
 
 _THREE_STAGE_FD_COMBOS = [
@@ -455,6 +468,11 @@ _THREE_STAGE_FD_COMBOS = [
      "resistor_tail_vdd", "dda_cmfb",
      "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos",
      "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
+    # Plain NMC FD (noninverting_stage_* ss + CS ts; issue #139) -- first-class
+    # enumerable, no include_unsupported:
+    (_NMC_FD_PLAIN, "differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
+     "current_mirror_tail_pmos", "resistive_sense_cmfb",
+     "noninverting_stage_nmos", "common_source_nmos", None, "miller_cap", "miller_cap"),
 ]
 
 

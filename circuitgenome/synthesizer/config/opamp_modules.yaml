@@ -836,6 +836,67 @@ modules:
       - {ref: mn1, type: nmos, d: d1,  g: in,   s: gnd, b: gnd}
       - {ref: mn2, type: nmos, d: out, g: d1,   s: gnd, b: gnd}
 
+  # ─── NON-INVERTING AMPLIFICATION STAGES (issue #139) ──────────────────────
+  # A single-dominant-pole NON-INVERTING voltage-gain stage: a common-source
+  # input device drives a current-mirror active load, and the mirror supplies
+  # the second signal inversion (CS inverts, mirror inverts again -> overall
+  # non-inverting, WITH gain). Unlike differential_ota_second_stage (two
+  # cascaded CS stages, whose second inversion sits at a HIGH-impedance node
+  # d1 -> an in-band second pole the sizer cannot see), the mirror's inversion
+  # sits at its own DIODE-connected node (impedance ~ 1/gm -> pole ~ gm/C, far
+  # above GBW), so the stage behaves as a single-pole gain block and the
+  # existing 3-stage compensation model still applies. This is what real
+  # 3-stage NMC op-amps use to satisfy "non-inverting second stage + inverting
+  # output stage" (the CS third stage) so that comp1 (wrapping second+third,
+  # 2+1 = 3 inversions = odd) is negative feedback. The compensation parity
+  # filter therefore ACCEPTS these only inside an NMC 3-stage chain and rejects
+  # them as a 2-stage second stage (a lone Miller cap around 2 inversions is
+  # positive feedback) -- exactly the desired behavior.
+  #
+  # Device order matters for compatibility/compensation.stage_inversions: the
+  # forward mirror-output device (mp2/mn2, drain = out) is listed before the
+  # mirror diode (mp1/mn1, drain = its own gate node) so the gate->drain walk
+  # follows the signal to `out` rather than terminating on the diode. The walk
+  # also skips diode-connected devices, so ordering is belt-and-braces.
+
+  - name: noninverting_stage_nmos
+    category: amplification_stage
+    display_name: "Non-Inverting (NMOS-Input) Amplification Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # in -> mn1 (CS, inversion 1) sinks the input-branch current through the
+      # PMOS mirror diode mp1; mp2 mirrors that current back up into `out`
+      # (inversion 2 -> non-inverting). mn2 is the output current sink, gated
+      # by the bias rail, that sets the output-branch DC current (matched to
+      # the mirrored current by the sizer, like a plain CS stage's load).
+      - {ref: mn1, type: nmos, d: nmir, g: in,   s: gnd, b: gnd}
+      - {ref: mp2, type: pmos, d: out,  g: nmir, s: vdd, b: vdd}
+      - {ref: mp1, type: pmos, d: nmir, g: nmir, s: vdd, b: vdd}
+      - {ref: mn2, type: nmos, d: out,  g: bias, s: gnd, b: gnd}
+
+  - name: noninverting_stage_pmos
+    category: amplification_stage
+    display_name: "Non-Inverting (PMOS-Input) Amplification Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # Complement of noninverting_stage_nmos for NMOS input pairs: PMOS CS
+      # input device mp1 (source on vdd, gate a |Vgs| below vdd) drives an
+      # NMOS mirror (mn1 diode + mn2 output); mp2 is the output current source.
+      - {ref: mp1, type: pmos, d: pmir, g: in,   s: vdd, b: vdd}
+      - {ref: mn2, type: nmos, d: out,  g: pmir, s: gnd, b: gnd}
+      - {ref: mn1, type: nmos, d: pmir, g: pmir, s: gnd, b: gnd}
+      - {ref: mp2, type: pmos, d: out,  g: bias, s: vdd, b: vdd}
+
   # ─── OUTPUT STAGE ─────────────────────────────────────────────────────────
   # Source-follower buffers (gain ~ 1). Placed AFTER an amplification stage in
   # the *_buffered_* topologies to drive the load without adding gain; held in

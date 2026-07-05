@@ -73,9 +73,14 @@ def stage_inversions(variant: ModuleVariant) -> int | None:
 
     Each hop enters a MOSFET gate; leaving through the drain counts one
     inversion (common source), leaving through the source counts none
-    (follower). ``common_source_nmos``/``common_source_pmos`` -> 1,
+    (follower). A diode-connected device (``d == g == net``) is skipped at a
+    fork -- it terminates a branch (e.g. a current-mirror master) rather than
+    carrying the signal forward -- so the walk follows the mirror-output
+    device instead. ``common_source_nmos``/``common_source_pmos`` -> 1,
     ``common_drain_pmos``/``common_drain_nmos`` -> 0,
-    ``differential_ota_second_stage`` -> 2.
+    ``differential_ota_second_stage`` -> 2,
+    ``noninverting_stage_nmos``/``noninverting_stage_pmos`` -> 2
+    (CS inversion + current-mirror inversion).
     """
     net = "in"
     inversions = 0
@@ -88,7 +93,9 @@ def stage_inversions(variant: ModuleVariant) -> int | None:
             (
                 d
                 for d in variant.devices
-                if d.type in _MOS_TYPES and d.terminals.get("g") == net
+                if d.type in _MOS_TYPES
+                and d.terminals.get("g") == net
+                and d.terminals.get("d") != net
             ),
             None,
         )

@@ -20,7 +20,8 @@ SPICE netlists.
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
   category (input_pair, load, tail_current, cmfb, compensation,
   amplification_stage — the voltage-gain stages common_source_nmos/
-  common_source_pmos/differential_ota_second_stage — and output_stage — the
+  common_source_pmos/noninverting_stage_nmos/noninverting_stage_pmos/
+  differential_ota_second_stage — and output_stage — the
   source followers common_drain_pmos/common_drain_nmos). The bias_generation
   category has **no** variants here — the bias generator is constructed per
   combination (see below). Note: the `second_stage`/`third_stage`/
@@ -170,7 +171,9 @@ gain/GBW/PM cannot be measured (issue #114:
 `differential_ota_second_stage`, two cascaded common-source stages, PM
 measured 270–281°). Chain parity = the number of common-source inversions
 along the `in -> out` device path (`stage_inversions`: gate→drain hop
-inverts, a follower's gate→source hop doesn't); `is_compensation_compatible`
+inverts, a follower's gate→source hop doesn't; a diode-connected device is
+skipped at a fork, so the walk follows a current mirror's *output* device —
+issue #139); `is_compensation_compatible`
 rejects a combination when a compensation slot's wrapped chain has a
 **positive even** inversion count. Followers alone (zero inversions, zero
 gain — the Miller cap bootstraps to ~0, benign) are deliberately allowed: a
@@ -178,10 +181,14 @@ strict odd-parity rule would ban the issue #110 followers from every
 2-stage topology. The chain composes across slots via the topology's
 `in`/`out` nets, so in NMC 3-stage topologies `comp1` (wrapping the
 second+third stage cascade) rejects CS+CS composites — standard NMC
-requires a non-inverting second stage and an inverting output stage.
-Structural (no YAML tags); anything unclassifiable (a comp variant that
-doesn't couple `in`/`out`, a chain the walk can't follow) imposes no
-constraint.
+requires a non-inverting second stage and an inverting output stage. That
+non-inverting second stage is supplied by the `noninverting_stage_{nmos,pmos}`
+variants (CS input + current-mirror active load, `stage_inversions` = 2,
+issue #139): they make comp1's wrapped cascade odd (2 gm2 + 1 gm3), so the
+NMC templates enumerate again (they were empty when the only non-inverting
+option, the OTA, was parked). Structural (no YAML tags); anything
+unclassifiable (a comp variant that doesn't couple `in`/`out`, a chain the
+walk can't follow) imposes no constraint.
 
 ## Output-cardinality compatibility filter (`compatibility/output.py`)
 
@@ -354,8 +361,12 @@ round-trip tests). Currently parked:
   in 2-stage topologies every comp slot wraps it directly, so it stays
   unbuildable even with `include_unsupported`; in NMC 3-stage chains
   (ota + CS = 3 inversions) it builds, which is how the recognizer
-  round-trip tests keep covering its pattern (in the *buffered* NMC
-  topologies now — the plain NMC topologies enumerate zero, see below).
+  round-trip tests keep covering its pattern (via `include_unsupported` in
+  the *buffered* NMC topologies). The plain NMC topologies now enumerate on
+  their own via the `noninverting_stage_*` variants (issue #139, see below),
+  which are the feasible replacement for the ota's non-inverting role — same
+  parity, but their second inversion sits at a low-Z current-mirror node
+  (out-of-band pole) instead of the ota's in-band `d1`.
 
 The two source followers `common_drain_pmos` / `common_drain_nmos` (issue #125)
 are **no longer parked**: they moved out of the amplification pool into the
@@ -363,13 +374,20 @@ new `output_stage` category and enumerate — un-parked — in the
 `*_buffered_*` topologies, where a follower fills the `output_stage`/
 `output_stage_p`/`_n` slot after the amplification stage (the amp stage
 drives `net_ampout`, the follower drives the final output). A follower can no
-longer be a gain (`second_stage`/`third_stage`) stage. Consequence for the
-plain NMC 3-stage topologies: after issue #114's parity filter, comp1 wraps
-the second+third CS+CS cascade (non-inverting with gain, rejected), and the
-followers that used to satisfy that outer loop are no longer available as
-gain stages — so `three_stage_opamp_nmc_*` and `three_stage_buffered_nmc_*`
-both enumerate **zero** circuits (RNMC keeps its CS+CS combinations, and the
-buffered RNMC topologies add the follower `output_stage`).
+longer be a gain (`second_stage`/`third_stage`) stage. History for the
+plain NMC 3-stage topologies: issue #114's parity filter rejects comp1
+wrapping a second+third CS+CS cascade (non-inverting with gain), and the
+followers that once satisfied that outer loop are no longer gain stages, so
+for a while `three_stage_opamp_nmc_*` and `three_stage_buffered_nmc_*`
+enumerated **zero**. That is now fixed by the `noninverting_stage_{nmos,pmos}`
+amplification variants (issue #139): a CS input device + current-mirror
+active load, non-inverting with gain (`stage_inversions` = 2) but with a
+single dominant pole (the mirror's second inversion is at a low-Z diode
+node, out-of-band). Used as gm2 they make comp1's wrapped cascade odd
+(2 + 1), so all four NMC templates enumerate again (SE 1080, buffered SE
+2160, both FD non-empty; the non-inverting stage is filtered *out* of
+2-stage and RNMC slots, where a single comp wraps it directly → even →
+positive feedback, so those counts are unchanged).
 
 ## Bias-infeasible (DSE-only) variants
 
