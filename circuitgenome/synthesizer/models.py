@@ -79,6 +79,21 @@ class ModuleVariant:
                      working) but
                      :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`
                      skips it unless ``config={"include_unsupported": True}``.
+    :param bias_infeasible: ``None`` for variants whose bias/headroom is
+                     expected to close on typical (low-voltage) specs. A
+                     non-``None`` reason string marks a variant whose wiring
+                     is *functionally correct* but whose DC bias is
+                     infeasible under normal supply/Vcm headroom (e.g. the
+                     stacked-diode cascode tails, which need ``|Vgs|+Vdsat``
+                     of tail compliance — issue #111). Unlike ``unsupported``
+                     the circuit is fully buildable and would size into a
+                     complete netlist; it is simply predicted to fail the DC
+                     bias gate (the ``"bias_infeasible"`` designer outcome)
+                     on the default spec class.
+                     :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`
+                     skips it unless ``config={"include_infeasible": True}``,
+                     which design-space exploration sets to keep these
+                     correct-but-infeasible circuits as mutation seeds.
     """
     name: str
     category: str
@@ -88,6 +103,7 @@ class ModuleVariant:
     polarity: str | None = None
     output_cardinality: str | None = None
     unsupported: str | None = None
+    bias_infeasible: str | None = None
 
     def port_names(self) -> set[str]:
         """Return the set of all port names on this variant."""

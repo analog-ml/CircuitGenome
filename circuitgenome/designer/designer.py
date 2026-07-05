@@ -176,9 +176,12 @@ def _evaluate_candidate(
 
 
 def _candidates(topology: TopologyTemplate, modules: dict,
-                limit: int | None) -> Iterator[tuple[int, str, dict[str, str]]]:
+                limit: int | None,
+                include_infeasible: bool = False,
+                ) -> Iterator[tuple[int, str, dict[str, str]]]:
     """Yield ``(index, flat netlist text, variant names)`` per valid circuit."""
-    gen = enumerate_circuits(topology, modules)
+    gen = enumerate_circuits(
+        topology, modules, config={"include_infeasible": include_infeasible})
     for i, circuit in enumerate(islice(gen, limit), start=1):
         variants = {s: v.name for s, v in circuit.variant_map.items() if v is not None}
         yield i, to_flat_spice(circuit, name=f"circuit_{i:04d}"), variants
@@ -255,6 +258,7 @@ def design(
     tech: TechParams | str | Path = "gf180mcu",
     limit: int | None = None,
     workers: int = 1,
+    include_infeasible: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> DesignReport:
     """Synthesize, size and SPICE-verify circuits against ``spec``; export the
@@ -270,6 +274,11 @@ def design(
     :param limit: evaluate at most this many circuits per template
         (enumeration order); ``None`` = exhaustive.
     :param workers: parallel worker processes for size+simulate (1 = in-process).
+    :param include_infeasible: when ``True``, also evaluate variants tagged
+        ``bias_infeasible`` (functionally-correct wiring the default spec class
+        cannot bias, e.g. the stacked-diode cascode tails, issue #111). For
+        design-space exploration; these are expected to be rejected at the DC
+        bias gate (the ``"bias_infeasible"`` outcome).
     :param progress: optional line sink (e.g. ``print``) for progress output.
     :returns: the :class:`~.models.DesignReport` (also written as ``report.json``).
     :raises RuntimeError: when ngspice is not on PATH (acceptance is
@@ -311,7 +320,8 @@ def design(
         worker = partial(_evaluate_candidate, topology=topology, tech=tech, spec=spec)
         tdir = output_dir / topology.name
 
-        for outcome in _outcomes(_candidates(topology, modules, limit),
+        for outcome in _outcomes(_candidates(topology, modules, limit,
+                                             include_infeasible),
                                  worker, workers):
             stats.enumerated += 1
             if outcome.stage == "accepted":

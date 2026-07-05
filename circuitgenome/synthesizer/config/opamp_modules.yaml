@@ -661,6 +661,61 @@ modules:
       - {ref: mn2, type: nmos, d: internal_1, g: bias,       s: gnd,        b: gnd}
       - {ref: mn3, type: nmos, d: out,        g: bias_casc,  s: internal_1, b: gnd}
 
+  - name: stacked_cascode_current_mirror_tail_pmos
+    category: tail_current
+    polarity: pmos_input
+    display_name: "Stacked-Diode Cascode Current Mirror Tail (PMOS, for PMOS Input Pair)"
+    bias_infeasible: >-
+      Self-biased stacked-diode cascode: the output cascode's source is pinned
+      a full |Vgs| below vdd, so the tail node needs |Vgs|+Vdsat (~1.3 V at
+      gf180) of compliance vs the wide-swing 2*Vdsat (~0.35 V). Functionally
+      correct wiring, but the DC bias does not close on low-voltage specs
+      (issue #111) -- the wide-swing cascode_current_mirror_tail_pmos is the
+      feasible equivalent. Kept for design-space exploration
+      (config include_infeasible=True).
+    # Self-biased 2-stack PMOS cascode mirror: mp1/mp3 (reference leg, both
+    # diode-connected) generate the cascode-gate bias (internal_0) and the
+    # mirror-gate bias (bias); mp2/mp4 (output leg) mirror them onto "out",
+    # sourcing current from vdd into the tail node. No bias_casc port -- the
+    # cascode gate is self-generated, so only rail 7 ("bias") is consumed.
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mp1, type: pmos, d: internal_0, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp3, type: pmos, d: bias,       g: bias,       s: internal_0, b: vdd}
+      - {ref: mp2, type: pmos, d: internal_1, g: internal_0, s: vdd,        b: vdd}
+      - {ref: mp4, type: pmos, d: out,        g: bias,       s: internal_1, b: vdd}
+
+  - name: stacked_cascode_current_mirror_tail_nmos
+    category: tail_current
+    polarity: nmos_input
+    display_name: "Stacked-Diode Cascode Current Mirror Tail (NMOS, for NMOS Input Pair)"
+    bias_infeasible: >-
+      Mirror image of stacked_cascode_current_mirror_tail_pmos: the output
+      cascode's source is pinned a full Vgs above gnd, so the tail node needs
+      Vgs+Vdsat of compliance vs the wide-swing 2*Vdsat. Functionally correct
+      wiring, but the DC bias does not close on low-voltage specs (issue #111)
+      -- the wide-swing cascode_current_mirror_tail_nmos is the feasible
+      equivalent. Kept for design-space exploration
+      (config include_infeasible=True).
+    # Mirror image of stacked_cascode_current_mirror_tail_pmos: mn1/mn3
+    # (reference leg, diode-connected) generate the cascode-gate bias
+    # (internal_0) and the mirror-gate bias (bias); mn2/mn4 (output leg)
+    # mirror them, sinking the tail node ("out") to gnd. No bias_casc port.
+    ports:
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mn1, type: nmos, d: internal_0, g: internal_0, s: gnd,        b: gnd}
+      - {ref: mn3, type: nmos, d: bias,       g: bias,       s: internal_0, b: gnd}
+      - {ref: mn2, type: nmos, d: internal_1, g: internal_0, s: gnd,        b: gnd}
+      - {ref: mn4, type: nmos, d: out,        g: bias,       s: internal_1, b: gnd}
+
   - name: resistor_tail_vdd
     category: tail_current
     polarity: pmos_input

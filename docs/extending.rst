@@ -23,9 +23,13 @@ Required fields:
    * - ``name``
      - Unique snake_case identifier.
    * - ``category``
-     - One of the seven canonical categories: ``input_pair``, ``load``,
+     - One of the eight canonical categories: ``input_pair``, ``load``,
        ``tail_current``, ``bias_generation``, ``cmfb``, ``compensation``,
-       ``second_stage``.
+       ``amplification_stage`` (the voltage-gain stages that fill the
+       ``second_stage``/``third_stage`` slots), and ``output_stage`` (the
+       source followers that fill the ``output_stage`` slot in the buffered
+       topologies).  ``bias_generation`` has no authored variants — the bias
+       generator is constructed per combination (see :doc:`overview`).
    * - ``display_name``
      - Human-readable label shown in ``--list-modules``.
    * - ``ports``
@@ -33,6 +37,34 @@ Required fields:
        the canonical interface for the category (see :doc:`overview`).
    * - ``devices``
      - List of device objects (see below).
+
+Optional variant tags (all default to *unset*; see the :doc:`Overview
+</overview>` for the electrical rationale and the filters that consume them):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Field
+     - Description
+   * - ``polarity``
+     - ``"pmos_input"`` / ``"nmos_input"`` — the current-flow direction a
+       variant is compatible with (``input_pair``/``load``/``tail_current``).
+   * - ``output_cardinality``
+     - ``load``-only: ``"single"`` / ``"differential"`` — which topology
+       ``output_type`` the variant is usable with.
+   * - ``unsupported``
+     - Reason string that **parks** the variant: it stays loadable (recognizer,
+       visualizer) but ``enumerate_circuits`` drops it unless
+       ``config={"include_unsupported": True}``.  For unbuildable / mis-modeled
+       variants.
+   * - ``bias_infeasible``
+     - Reason string for a variant whose wiring is *functionally correct* but
+       whose DC bias does not close on the default (low-voltage) spec class
+       (e.g. the stacked-diode cascode tails, issue #111).  Dropped from
+       enumeration unless ``config={"include_infeasible": True}`` (CLI
+       ``--include-infeasible``).  Unlike ``unsupported``, the circuit builds
+       into a complete, valid netlist; it is kept for design-space exploration.
 
 Device fields:
 
@@ -159,9 +191,9 @@ Example — 3-stage op-amp with cascade (single-Miller-per-stage) compensation
        - {name: tail_current,  category: tail_current}
        - {name: bias_gen,      category: bias_generation}
        - {name: comp_1,        category: compensation}
-       - {name: second_stage,  category: second_stage}
+       - {name: second_stage,  category: amplification_stage}
        - {name: comp_2,        category: compensation}
-       - {name: third_stage,   category: second_stage}
+       - {name: third_stage,   category: amplification_stage}
      connections:
        - {slot: input_pair,   port: in1,  net: in1}
        - {slot: input_pair,   port: in2,  net: in2}

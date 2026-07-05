@@ -367,13 +367,47 @@ gain stages — so `three_stage_opamp_nmc_*` and `three_stage_buffered_nmc_*`
 both enumerate **zero** circuits (RNMC keeps its CS+CS combinations, and the
 buffered RNMC topologies add the follower `output_stage`).
 
+## Bias-infeasible (DSE-only) variants
+
+A separate, softer tag `bias_infeasible: <reason>` marks a variant whose
+wiring is *functionally correct* but whose DC bias does not close under the
+default (low-voltage) spec class's headroom. It uses the same drop-by-default
+machinery as `unsupported` but a distinct opt-in key:
+`config={"include_infeasible": True}` (CLI `--include-infeasible`, threaded
+through `designer.design(include_infeasible=...)`). The distinction is
+intent, not mechanism — an `unsupported` variant is unbuildable/mis-modeled
+(don't ship it); a `bias_infeasible` one builds into a complete, valid
+netlist and would size normally, it is just predicted to be rejected at the
+DC bias gate (the designer's `"bias_infeasible"` outcome). It is kept for
+**design-space exploration**, which wants the full set of correct wirings —
+including correct-but-infeasible ones — as mutation seeds. Currently tagged:
+
+- `stacked_cascode_current_mirror_tail_pmos` / `_nmos` (issue #111): the
+  classic self-biased stacked-diode cascode mirror. Its output cascode's
+  source is pinned a full `|Vgs|` from the rail, so the tail needs
+  `|Vgs|+Vdsat` (~1.3 V at gf180) of compliance vs the wide-swing
+  `cascode_current_mirror_tail_*`'s `2·Vdsat` (~0.35 V). It self-biases its
+  cascode gate from the reference stack, so it declares **no `bias_casc`
+  port** and consumes only rail 7 (a `current_source`/`current_sink`
+  interface — the rail-7 diode vote wins over the output cascode's gate vote
+  in `_device_votes`, so bias construction builds an `out7` leg and no `out8`
+  leg with zero classifier changes). The wide-swing
+  `cascode_current_mirror_tail_*` is the feasible equivalent that occupies
+  the same topological niche on low-voltage specs; the stacked pair is the
+  intended mutation *source* for a wide-swing *target* (issue #111
+  discussion — the long-term home for these is a mutation operator, not a
+  catalog entry). Recognizer patterns for the 4-device stacked shape live
+  alongside the 3-device wide-swing patterns in `opamp_patterns.yaml`.
+
 ## `enumerate_circuits` pipeline order
 
 1. `itertools.product` over per-slot candidate variants → `variant_map`
    (the `bias_generation` slot is excluded from the product — its variant
    is constructed in step 11; variants tagged `unsupported` are dropped
-   from the pool unless `config={"include_unsupported": True}`, see
-   "Unsupported (parked) variants" above).
+   from the pool unless `config={"include_unsupported": True}`, and variants
+   tagged `bias_infeasible` unless `config={"include_infeasible": True}`,
+   see "Unsupported (parked) variants" / "Bias-infeasible (DSE-only)
+   variants" above).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_second_stage_compatible(topology, variant_map)` — skip on
    stage-interface level mismatch (see "Stage-interface compatibility
