@@ -1,7 +1,8 @@
 # Opamp-specific SR pattern library.
 #
 # Patterns here either carry an opamp FBR category (input_pair, load,
-# tail_current, bias_generation, compensation, second_stage, cmfb) or
+# tail_current, bias_generation, compensation, amplification_stage,
+# output_stage, cmfb) or
 # reference opamp-specific children (e.g. cascoded_differential_pair_pmos
 # references differential_pair_pmos). Corresponds 1:1 with opamp_modules.yaml
 # variants for the MVP composite patterns.
@@ -709,10 +710,10 @@ patterns:
       in: c1.p
       out: r1.t2
 
-  # ─── SECOND STAGE variants ───────────────────────────────────────────────────
+  # ─── AMPLIFICATION STAGE variants ────────────────────────────────────────────
 
   - name: common_source
-    category: second_stage
+    category: amplification_stage
     circuit_block: gain_stage_2
     devices:
       - {ref: mn1, type: nmos}
@@ -726,7 +727,7 @@ patterns:
       out: mn1.d
 
   - name: common_source_pmos
-    category: second_stage
+    category: amplification_stage
     circuit_block: gain_stage_2
     devices:
       - {ref: mp1, type: pmos}
@@ -742,9 +743,11 @@ patterns:
       bias: mn1.g
       out: mp1.d
 
+  # ─── OUTPUT STAGE variants (source-follower buffers) ─────────────────────────
+
   - name: common_drain
-    category: second_stage
-    circuit_block: gain_stage_2
+    category: output_stage
+    circuit_block: output_stage_block
     devices:
       - {ref: mp1, type: pmos}
       - {ref: mp2, type: pmos}
@@ -762,8 +765,8 @@ patterns:
       out: mp1.s
 
   - name: common_drain_nmos
-    category: second_stage
-    circuit_block: gain_stage_2
+    category: output_stage
+    circuit_block: output_stage_block
     devices:
       - {ref: mn1, type: nmos}
       - {ref: mn2, type: nmos}
@@ -779,7 +782,7 @@ patterns:
       out: mn1.s
 
   - name: differential_ota_second_stage
-    category: second_stage
+    category: amplification_stage
     circuit_block: gain_stage_2
     devices:
       - {ref: mp1, type: pmos}

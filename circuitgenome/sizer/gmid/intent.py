@@ -170,6 +170,9 @@ _SIGNAL_BLOCK = {
     "second_stage_n": "gain_stage",
     "third_stage": "output_stage", "third_stage_p": "output_stage",
     "third_stage_n": "output_stage",
+    # Source-follower output-buffer slots (the *_buffered_* topologies).
+    "output_stage": "output_stage", "output_stage_p": "output_stage",
+    "output_stage_n": "output_stage",
 }
 _CS_BLOCK = {
     "load": "active_load",
@@ -180,6 +183,8 @@ _CS_BLOCK = {
     "second_stage_n": "stage_load",
     "third_stage": "stage_load", "third_stage_p": "stage_load",
     "third_stage_n": "stage_load",
+    "output_stage": "stage_load", "output_stage_p": "stage_load",
+    "output_stage_n": "stage_load",
 }
 
 

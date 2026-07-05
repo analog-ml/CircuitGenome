@@ -48,6 +48,14 @@
 #                       get a port and a leg.
 #   compensation:     in, out
 #   second_stage:     in, out, bias, vdd, gnd
+#                       (category: amplification_stage -- voltage-gain stages,
+#                       filled into the second_stage/third_stage slots)
+#   output_stage:     in, out, bias, vdd, gnd
+#                       Same canonical signature as the amplification stage, but
+#                       a follower buffer (gain ~ 1): in -> gate, out -> source,
+#                       bias -> current-source gate. Held separately so gain_db
+#                       counts only real gain stages and the follower stays
+#                       outside the Miller loop.
 #   cmfb:             in1, in2, vref, bias, out, vdd, gnd
 #                       - in1, in2  : differential sense inputs. In
 #                                     fully_differential topologies, wired to
@@ -716,11 +724,13 @@ modules:
       - {ref: c1, type: capacitor, p: in,  m: ind}
       - {ref: r1, type: resistor,  t1: ind, t2: out}
 
-  # ─── SECOND STAGE ─────────────────────────────────────────────────────────
+  # ─── AMPLIFICATION STAGE ──────────────────────────────────────────────────
+  # Voltage-gain stages (A > 1). Filled into the second_stage / third_stage
+  # topology slots. Followers (gain ~ 1) live in the output_stage category below.
 
   - name: common_source
-    category: second_stage
-    display_name: "Common-Source Second Stage"
+    category: amplification_stage
+    display_name: "Common-Source Amplification Stage"
     ports:
       - {name: in,   role: input}
       - {name: out,  role: output}
@@ -733,8 +743,8 @@ modules:
       - {ref: mp1, type: pmos, d: out,  g: bias,  s: vdd, b: vdd}
 
   - name: common_source_pmos
-    category: second_stage
-    display_name: "Common-Source (PMOS) Second Stage"
+    category: amplification_stage
+    display_name: "Common-Source (PMOS) Amplification Stage"
     ports:
       - {name: in,   role: input}
       - {name: out,  role: output}
@@ -748,59 +758,8 @@ modules:
       - {ref: mp1, type: pmos, d: out,  g: in,   s: vdd, b: vdd}
       - {ref: mn1, type: nmos, d: out,  g: bias,  s: gnd, b: gnd}
 
-  - name: common_drain
-    category: second_stage
-    display_name: "Common-Drain (PMOS Source Follower) Second Stage"
-    unsupported: >-
-      issue #125: a follower gain stage is A2 ~ 1, so the whole amp is a
-      one-gain-stage OTA + buffer (~30-40 dB) that no current spec (52-80
-      dB) can accept, and every compensation variant in the library is a
-      Miller-family cap that bootstraps to ~0 around the follower -- the
-      sizer's Cc-based GBW/PM/SR plan does not describe these candidates
-      (it also models the stage as gm2*Rout2, +56 dB optimistic). Parking
-      also empties the three_stage NMC pools (after issue #114 every
-      surviving NMC candidate contained a follower). Un-park when a
-      buffer-aware stage model (A2 ~ 1 gain, swing-through-Vgs, non-Miller
-      compensation strategy) exists -- see issues #125/#126
-    ports:
-      - {name: in,   role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: input}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
-    devices:
-      # PMOS source follower biased by a PMOS current source: out = in +
-      # |Vgs|, level-shifting a low (PMOS-pair) first-stage output up. The
-      # follower's drain sits on the LOW rail (issue #110: d=vdd operated
-      # the device source/drain-inverted, as an uncontrolled pull-up) and
-      # its bulk ties to the source (n-well device) so the realized |Vgs|
-      # carries no body effect.
-      - {ref: mp1, type: pmos, d: gnd, g: in,   s: out,  b: out}
-      - {ref: mp2, type: pmos, d: out, g: bias,  s: vdd,  b: vdd}
-
-  - name: common_drain_nmos
-    category: second_stage
-    display_name: "Common-Drain (NMOS Source Follower) Second Stage"
-    unsupported: >-
-      issue #125: same follower rationale as common_drain (A2 ~ 1,
-      bootstrapped Miller compensation, gm2*Rout2 gain model fiction),
-      plus body effect (bulk at gnd) lowers A2 further
-    ports:
-      - {name: in,   role: input}
-      - {name: out,  role: output}
-      - {name: bias, role: input}
-      - {name: vdd,  role: supply}
-      - {name: gnd,  role: supply}
-    devices:
-      # NMOS source follower biased by an NMOS current sink: out = in -
-      # Vgs, level-shifting a high (NMOS-pair) first-stage output down --
-      # issue #110's complement of common_drain. Bulk at gnd (p-substrate
-      # device), so the realized Vgs carries body effect.
-      - {ref: mn1, type: nmos, d: vdd, g: in,   s: out,  b: gnd}
-      - {ref: mn2, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}
-
   - name: differential_ota_second_stage
-    category: second_stage
+    category: amplification_stage
     display_name: "Differential OTA Second Stage"
     # Despite the name/comment history ("a simple folded-cascode OTA"), this
     # is two cascaded common-source stages (in -> mn1 -> d1 -> mn2 -> out).
@@ -821,6 +780,49 @@ modules:
       - {ref: mp2, type: pmos, d: out, g: bias, s: vdd, b: vdd}
       - {ref: mn1, type: nmos, d: d1,  g: in,   s: gnd, b: gnd}
       - {ref: mn2, type: nmos, d: out, g: d1,   s: gnd, b: gnd}
+
+  # ─── OUTPUT STAGE ─────────────────────────────────────────────────────────
+  # Source-follower buffers (gain ~ 1). Placed AFTER an amplification stage in
+  # the *_buffered_* topologies to drive the load without adding gain; held in
+  # their own category so the sizer's gain product counts only real gain stages
+  # and the Miller compensation stays wrapped around the amplification stage,
+  # not the follower (see issues #125/#126 for the parked history).
+
+  - name: common_drain
+    category: output_stage
+    display_name: "Common-Drain (PMOS Source Follower) Output Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # PMOS source follower biased by a PMOS current source: out = in +
+      # |Vgs|, level-shifting the amplification-stage output up. The
+      # follower's drain sits on the LOW rail (issue #110: d=vdd operated
+      # the device source/drain-inverted, as an uncontrolled pull-up) and
+      # its bulk ties to the source (n-well device) so the realized |Vgs|
+      # carries no body effect.
+      - {ref: mp1, type: pmos, d: gnd, g: in,   s: out,  b: out}
+      - {ref: mp2, type: pmos, d: out, g: bias,  s: vdd,  b: vdd}
+
+  - name: common_drain_nmos
+    category: output_stage
+    display_name: "Common-Drain (NMOS Source Follower) Output Stage"
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: bias, role: input}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # NMOS source follower biased by an NMOS current sink: out = in -
+      # Vgs, level-shifting the amplification-stage output down --
+      # issue #110's complement of common_drain. Bulk at gnd (p-substrate
+      # device), so the realized Vgs carries body effect.
+      - {ref: mn1, type: nmos, d: vdd, g: in,   s: out,  b: gnd}
+      - {ref: mn2, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}
 
   # ─── CMFB (COMMON-MODE FEEDBACK) ──────────────────────────────────────────
 

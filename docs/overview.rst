@@ -77,13 +77,18 @@ Module categories
    * - Compensation
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
-   * - Second stage
-     - Common-source (NMOS/PMOS); common-drain source follower (PMOS/NMOS,
-       parked as ``unsupported``, issue #125: A2 ≈ 1 leaves a one-gain-stage
-       amp and bootstraps Miller-family compensation to nothing);
-       differential OTA (parked as ``unsupported``, issue #114: actually two
-       cascaded common-source stages -- non-inverting, incompatible with
-       Miller-family compensation)
+   * - Amplification stage
+     - Common-source (NMOS/PMOS); differential OTA (parked as
+       ``unsupported``, issue #114: actually two cascaded common-source
+       stages -- non-inverting, incompatible with Miller-family
+       compensation). Fills the ``second_stage``/``third_stage`` (and
+       ``_p``/``_n``) topology slots.
+   * - Output stage
+     - Common-drain source follower (PMOS/NMOS). Fills the ``output_stage``
+       (and ``_p``/``_n``) slots of the ``*_buffered_*`` topologies only; a
+       follower is A2 ≈ 1 (a buffer, not a gain stage) and is excluded from
+       the gain product, so a buffered circuit's ``gain_db`` equals its
+       unbuffered sibling's.
 
 .. rubric:: Input pair
 
@@ -148,6 +153,37 @@ Topology templates
      - 3
      - Fully differential
      - Reversed Nested Miller (RNMC)
+   * - ``two_stage_buffered_single_ended``
+     - 2
+     - Single-ended
+     - — (+ follower ``output_stage``)
+   * - ``two_stage_buffered_fully_differential``
+     - 2
+     - Fully differential
+     - — (+ follower ``output_stage``)
+   * - ``three_stage_buffered_nmc_single_ended``
+     - 3
+     - Single-ended
+     - Nested Miller (NMC) (+ follower ``output_stage``)
+   * - ``three_stage_buffered_rnmc_single_ended``
+     - 3
+     - Single-ended
+     - Reversed Nested Miller (RNMC) (+ follower ``output_stage``)
+   * - ``three_stage_buffered_nmc_fully_differential``
+     - 3
+     - Fully differential
+     - Nested Miller (NMC) (+ follower ``output_stage``)
+   * - ``three_stage_buffered_rnmc_fully_differential``
+     - 3
+     - Fully differential
+     - Reversed Nested Miller (RNMC) (+ follower ``output_stage``)
+
+Each ``*_buffered_*`` template is the plain template with a source-follower
+``output_stage`` slot inserted after the amplification stage: the amplification
+stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
+there, while the follower drives the final output. The two buffered NMC
+templates enumerate **zero** circuits for the same parity reason as their
+plain siblings (``comp1`` wraps the second+third CS+CS cascade, issue #114).
 
 The 5th ``input_pair`` variant, ``inverter_based_input``, is parked with an
 ``unsupported:`` reason tag (issue #113): it is self-biased — its quiescent
@@ -162,16 +198,14 @@ despite its name it is two cascaded common-source stages, so its ``in`` →
 is positive feedback (a right-half-plane AC response whose gain/GBW/PM
 cannot be measured; see the "Compensation parity filter" below) — and its
 internal ``d1`` node is a second gain stage/pole that the sizer's
-single-gm2 stage model cannot see. The two source-follower ``second_stage``
-variants, ``common_drain`` and ``common_drain_nmos``, are parked the same
-way (issue #125): a follower's voltage gain is ≈ 1, so any amp using one as
-its output gain stage is really a one-gain-stage OTA plus buffer (~30–40 dB,
-below every current spec's 52–80 dB floor), and every ``compensation``
-variant in the library is a Miller-family capacitor that bootstraps to ~0
-around a follower — the sizer's Cc-based GBW/PM/SR plan (and its
-``gm2·Rout2`` gain model, +56 dB optimistic on these candidates) does not
-describe them. Un-park when a buffer-aware stage model exists (see issues
-#125/#126).
+single-gm2 stage model cannot see. The two source followers ``common_drain``
+and ``common_drain_nmos`` (issue #125) are **not** parked: they moved out of
+the amplification pool into the new ``output_stage`` category and enumerate
+in the ``*_buffered_*`` templates, where a follower fills the ``output_stage``
+(``_p``/``_n``) slot after the amplification stage. A follower is A2 ≈ 1 (a
+buffer, not a gain stage), so it is excluded from the gain product — a
+buffered circuit's ``gain_db`` equals its unbuffered sibling's — and it can no
+longer occupy a ``second_stage``/``third_stage`` gain slot.
 
 Of the remaining 4 × 12 × 6 = 288 possible ``input_pair`` / ``load`` /
 ``tail_current`` combinations, only 72 have compatible PMOS/NMOS polarities
@@ -195,10 +229,11 @@ on each bias rail (see "Demand-driven bias construction" below), so every
 core combination carries exactly one, structurally matched bias generator.
 
 The 1-stage template therefore produces **48 distinct circuits**. In the
-multi-stage templates, only 2 ``second_stage`` variants are enumerable
-(``common_source``, ``common_source_pmos``; the two followers are parked
-per issue #125 and ``differential_ota_second_stage`` per issue #114, see
-above), and the ``second_stage`` slot that senses the first stage's output
+multi-stage templates, only 2 ``amplification_stage`` variants are enumerable
+(``common_source``, ``common_source_pmos``; the two followers moved to the
+``output_stage`` category, issue #125, and ``differential_ota_second_stage``
+is parked per issue #114, see above), and the ``second_stage`` slot that
+senses the first stage's output
 keeps only the level-reachable one (the "Stage-interface compatibility
 filter" below): ``common_source`` for the 24 PMOS-pair combinations,
 ``common_source_pmos`` for the 24 NMOS-pair combinations. The 2-stage

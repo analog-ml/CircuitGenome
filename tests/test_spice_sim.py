@@ -175,14 +175,14 @@ def test_gnd_referenced_legs_bias_in_spice():
     handling for PMOS-referenced pins -- external netlists -- is covered by
     test_iref_direction_follows_reference_diode.)"""
     mods = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    topo = next(t for t in load_topologies() if t.name == "two_stage_buffered_single_ended")
+    # common_drain_nmos (a same-polarity follower) is the gnd-referenced-leg
+    # demander this test needs; it now lives in the output_stage slot of a
+    # buffered topology, biased off its own rail (net_bias6).
     want = {"input_pair": "differential_pair_nmos", "load": "active_load_pmos",
-            "tail_current": "current_mirror_tail_nmos", "second_stage": "common_drain_nmos",
-            "compensation": "miller_cap"}
-    # common_drain_nmos (a same-polarity follower, the gnd-referenced-leg
-    # demander this test needs) is parked per issue #125 — opt back in.
-    circ = next(c for c in enumerate_circuits(topo, mods,
-                                              config={"include_unsupported": True})
+            "tail_current": "current_mirror_tail_nmos", "second_stage": "common_source_pmos",
+            "output_stage": "common_drain_nmos", "compensation": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k).name == v for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
     parsed = parse(text)

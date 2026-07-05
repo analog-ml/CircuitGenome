@@ -19,8 +19,14 @@ SPICE netlists.
   `t1/t2` for resistors, `p/m` for capacitors — whatever the YAML uses).
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
   category (input_pair, load, tail_current, cmfb, compensation,
-  second_stage). The bias_generation category has **no** variants here —
-  the bias generator is constructed per combination (see below).
+  amplification_stage — the voltage-gain stages common_source/
+  common_source_pmos/differential_ota_second_stage — and output_stage — the
+  source followers common_drain/common_drain_nmos). The bias_generation
+  category has **no** variants here — the bias generator is constructed per
+  combination (see below). Note: the `second_stage`/`third_stage`/
+  `second_stage_p`/`_n`/`third_stage_p`/`_n` topology *slot* names carry
+  category `amplification_stage`; the new `output_stage`/`output_stage_p`/`_n`
+  slots (in the `*_buffered_*` topologies) carry category `output_stage`.
 - `config/bias_legs.yaml` — the typed bias-leg library (multi-reference
   core + one leg template per rail kind) consumed by `bias_construction.py`;
   loaded by `load_bias_legs` into a `BiasLegLibrary`.
@@ -344,19 +350,22 @@ round-trip tests). Currently parked:
   in 2-stage topologies every comp slot wraps it directly, so it stays
   unbuildable even with `include_unsupported`; in NMC 3-stage chains
   (ota + CS = 3 inversions) it builds, which is how the recognizer
-  round-trip tests keep covering its pattern.
-- `common_drain` / `common_drain_nmos` (issue #125): a follower gain
-  stage is A2 ≈ 1, so any amp using one as its output gain stage is a
-  one-gain-stage OTA + buffer (~30–40 dB) that no current spec (52–80 dB)
-  can accept; every compensation variant in the library is a Miller-family
-  cap, which bootstraps to ~0 around a follower, so the sizer's Cc-based
-  GBW/PM/SR plan (and its gm2·Rout2 gain model, +56 dB optimistic) does
-  not describe these candidates. Consequence: after issue #114's parity
-  filter, every surviving `three_stage_opamp_nmc_*` candidate contained a
-  follower, so the NMC pools now enumerate **zero** circuits (RNMC keeps
-  its follower-free combinations). Un-park when a buffer-aware stage
-  model exists (A2 ≈ 1, swing-through-Vgs, non-Miller compensation) —
-  see issues #125/#126.
+  round-trip tests keep covering its pattern (in the *buffered* NMC
+  topologies now — the plain NMC topologies enumerate zero, see below).
+
+The two source followers `common_drain` / `common_drain_nmos` (issue #125)
+are **no longer parked**: they moved out of the amplification pool into the
+new `output_stage` category and enumerate — un-parked — in the
+`*_buffered_*` topologies, where a follower fills the `output_stage`/
+`output_stage_p`/`_n` slot after the amplification stage (the amp stage
+drives `net_ampout`, the follower drives the final output). A follower can no
+longer be a gain (`second_stage`/`third_stage`) stage. Consequence for the
+plain NMC 3-stage topologies: after issue #114's parity filter, comp1 wraps
+the second+third CS+CS cascade (non-inverting with gain, rejected), and the
+followers that used to satisfy that outer loop are no longer available as
+gain stages — so `three_stage_opamp_nmc_*` and `three_stage_buffered_nmc_*`
+both enumerate **zero** circuits (RNMC keeps its CS+CS combinations, and the
+buffered RNMC topologies add the follower `output_stage`).
 
 ## `enumerate_circuits` pipeline order
 

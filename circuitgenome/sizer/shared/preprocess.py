@@ -131,7 +131,8 @@ def deduplicate_devices(
     """
     priority = ["input_pair", "load", "tail_current",
                 "second_stage", "second_stage_p", "second_stage_n",
-                "third_stage", "third_stage_p", "third_stage_n", "bias_gen"]
+                "third_stage", "third_stage_p", "third_stage_n",
+                "output_stage", "output_stage_p", "output_stage_n", "bias_gen"]
     ordered = sorted(
         slot_transistors.keys(),
         key=lambda s: priority.index(s) if s in priority else len(priority),
