@@ -15,9 +15,11 @@ and the VDS_sat upper-bound constraint
     √(2·IDS·L/(µCox·W)) ≤ VDS_sat_max
     ↔  2·IDS·L  ≤  µCox·VDS_sat_max²·W     [linear in W, L]
 
-are both linear once W and L are separate integer variables.  All
-floating-point coefficients are scaled by _SCALE = 10¹² before rounding
-to integers so that µA/V² and µA magnitudes map to small integer values.
+are both linear once W and L are separate integer variables.  The integer
+variables count grid steps (W_µm = W·width.step), so each side's step size
+is folded into its coefficient.  All floating-point coefficients are scaled
+by _SCALE = 10¹² before rounding to integers so that µA/V² and µA
+magnitudes map to small integer values.
 """
 from __future__ import annotations
 
@@ -31,11 +33,6 @@ from ..shared.models import MosfetParams, TechParams
 # With µCox ≈ 90e-6 A/V², IDS ≈ 5e-6 A:
 #   2·µCox·IDS·_SCALE = 2·90e-6·5e-6·1e12 = 900  (small integer ✓)
 _SCALE = 10**12
-
-# Integer step sizes for W and L are both 1 (in grid-step units).
-# Actual µm = integer_value × tech.width.step (or tech.length.step).
-# Since steps cancel in the W/L ratio constraints, the constraints are
-# independent of the step size.
 
 
 def _coeff(value: float) -> int:
@@ -86,6 +83,7 @@ def build_model(
         L[ref] = model.new_int_var(l_min_int, l_max_int, f"L_{ref}")
 
     # --- gm lower-bound constraints: 2·µCox·IDS·W ≥ gm_req²·L ---
+    # W/L in µm = (W_int·w_step)/(L_int·l_step), so each side carries its step.
     for ref, (device, _slot) in transistors.items():
         gm_req = gm_req_map.get(ref, 0.0)
         if gm_req <= 0.0:
@@ -94,8 +92,8 @@ def build_model(
         if ids_a == 0.0:
             continue
         params: MosfetParams = tech.nmos if device.type == "nmos" else tech.pmos
-        lhs = _coeff(2.0 * params.mu_cox * abs(ids_a))   # coefficient of W
-        rhs = _coeff(gm_req ** 2)                         # coefficient of L
+        lhs = _coeff(2.0 * params.mu_cox * abs(ids_a) * w_step)  # coefficient of W
+        rhs = _coeff(gm_req ** 2 * l_step)                        # coefficient of L
         if lhs > 0 and rhs > 0:
             model.add(lhs * W[ref] >= rhs * L[ref])
 
@@ -108,8 +106,8 @@ def build_model(
         if ids_a == 0.0:
             continue
         params = tech.nmos if device.type == "nmos" else tech.pmos
-        lhs = _coeff(2.0 * abs(ids_a))                   # coefficient of L
-        rhs = _coeff(params.mu_cox * vod_max ** 2)        # coefficient of W
+        lhs = _coeff(2.0 * abs(ids_a) * l_step)                  # coefficient of L
+        rhs = _coeff(params.mu_cox * vod_max ** 2 * w_step)       # coefficient of W
         if lhs > 0 and rhs > 0:
             model.add(lhs * L[ref] <= rhs * W[ref])
 
@@ -130,35 +128,17 @@ def build_model(
                 model.add(W[group[i].ref] == W[group[0].ref])
                 model.add(L[group[i].ref] == L[group[0].ref])
 
-    # --- Cross-slot symmetry: second_stage_p ↔ second_stage_n (FD only) ---
-    ss_p = slot_transistors.get("second_stage_p", [])
-    ss_n = slot_transistors.get("second_stage_n", [])
-    if ss_p and ss_n:
+    # --- Cross-slot symmetry: p ↔ n halves of FD gain stages ---
+    for p_slot, n_slot in (("second_stage_p", "second_stage_n"),
+                           ("third_stage_p", "third_stage_n")):
+        p_devs = slot_transistors.get(p_slot, [])
+        n_devs = slot_transistors.get(n_slot, [])
         for dtype in ("nmos", "pmos"):
-            p_group = [d for d in ss_p if d.type == dtype and d.ref in W]
-            n_group = [d for d in ss_n if d.type == dtype and d.ref in W]
+            p_group = [d for d in p_devs if d.type == dtype and d.ref in W]
+            n_group = [d for d in n_devs if d.type == dtype and d.ref in W]
             if p_group and n_group:
                 anchor = p_group[0].ref
-                for d in p_group[1:]:
-                    model.add(W[d.ref] == W[anchor])
-                    model.add(L[d.ref] == L[anchor])
-                for d in n_group:
-                    model.add(W[d.ref] == W[anchor])
-                    model.add(L[d.ref] == L[anchor])
-
-    # --- Cross-slot symmetry: third_stage_p ↔ third_stage_n (FD three-stage) ---
-    ts_p = slot_transistors.get("third_stage_p", [])
-    ts_n = slot_transistors.get("third_stage_n", [])
-    if ts_p and ts_n:
-        for dtype in ("nmos", "pmos"):
-            p_group = [d for d in ts_p if d.type == dtype and d.ref in W]
-            n_group = [d for d in ts_n if d.type == dtype and d.ref in W]
-            if p_group and n_group:
-                anchor = p_group[0].ref
-                for d in p_group[1:]:
-                    model.add(W[d.ref] == W[anchor])
-                    model.add(L[d.ref] == L[anchor])
-                for d in n_group:
+                for d in p_group[1:] + n_group:
                     model.add(W[d.ref] == W[anchor])
                     model.add(L[d.ref] == L[anchor])
 

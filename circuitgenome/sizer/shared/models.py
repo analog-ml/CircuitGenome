@@ -142,7 +142,7 @@ class SizingSpec:
 
 @dataclass
 class TransistorSizing:
-    """Sizing result for a single transistor.
+    r"""Sizing result for a single transistor.
 
     :param ref: Device reference in the netlist (e.g. ``"m1_input_pair"``).
     :param w_um: Gate width in µm.
