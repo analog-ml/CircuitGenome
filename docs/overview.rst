@@ -78,10 +78,13 @@ Module categories
      - Miller capacitor, Miller cap with nulling resistor, indirect
        compensation
    * - Amplification stage
-     - Common-source (NMOS/PMOS); differential OTA (parked as
-       ``unsupported``, issue #114: actually two cascaded common-source
-       stages -- non-inverting, incompatible with Miller-family
-       compensation). Fills the ``second_stage``/``third_stage`` (and
+     - Common-source (NMOS/PMOS); non-inverting current-mirror stage
+       (NMOS/PMOS input, issue #139: a CS input device driving a
+       current-mirror active load — non-inverting *with* a single dominant
+       pole, so it fills the NMC gm2 slot that needs a non-inverting stage);
+       differential OTA (parked as ``unsupported``, issue #114: actually two
+       cascaded common-source stages — non-inverting but with an in-band
+       second pole). Fills the ``second_stage``/``third_stage`` (and
        ``_p``/``_n``) topology slots.
    * - Output stage
      - Common-drain source follower (PMOS/NMOS). Fills the ``output_stage``
@@ -184,17 +187,16 @@ The table below is regenerated on every documentation build by running
 ``enumerate_circuits`` on each template with the **default** configuration
 (``unsupported`` and ``bias_infeasible`` variants excluded — see the tags
 discussed further down).  The prose that follows explains how each count
-arises; the two NMC templates enumerate zero circuits for the compensation
-parity reason described below.
+arises. (The NMC templates enumerated zero until the non-inverting
+current-mirror gm2 stage was added in issue #139; see the compensation
+parity discussion below.)
 
 .. topology-counts::
 
 Each ``*_buffered_*`` template is the plain template with a source-follower
 ``output_stage`` slot inserted after the amplification stage: the amplification
 stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
-there, while the follower drives the final output. The two buffered NMC
-templates enumerate **zero** circuits for the same parity reason as their
-plain siblings (``comp1`` wraps the second+third CS+CS cascade, issue #114).
+there, while the follower drives the final output.
 
 The 5th ``input_pair`` variant, ``inverter_based_input``, is parked with an
 ``unsupported:`` reason tag (issue #113): it is self-biased — its quiescent
@@ -210,7 +212,12 @@ is positive feedback (a right-half-plane AC response whose gain/GBW/PM
 cannot be measured; see the :ref:`compensation parity filter
 <compat-compensation>`) — and its
 internal ``d1`` node is a second gain stage/pole that the sizer's
-single-gm2 stage model cannot see. The two source followers ``common_drain``
+single-gm2 stage model cannot see. The non-inverting role that NMC needs for
+gm2 is instead filled by the *enumerable* ``noninverting_stage_{nmos,pmos}``
+variants (issue #139): also non-inverting with gain, but their second
+inversion is a current mirror whose pole sits at a low-Z diode node (out of
+band), so the single-gm2 model holds and the DC bias closes. The two source
+followers ``common_drain``
 and ``common_drain_nmos`` (issue #125) are **not** parked: they moved out of
 the amplification pool into the new ``output_stage`` category and enumerate
 in the ``*_buffered_*`` templates, where a follower fills the ``output_stage``
@@ -259,15 +266,22 @@ on each bias rail (see "Demand-driven bias construction" below), so every
 core combination carries exactly one, structurally matched bias generator.
 
 The 1-stage template therefore produces **48 distinct circuits**. In the
-multi-stage templates, only 2 ``amplification_stage`` variants are enumerable
-(``common_source``, ``common_source_pmos``; the two followers moved to the
-``output_stage`` category, issue #125, and ``differential_ota_second_stage``
-is parked per issue #114, see above), and the ``second_stage`` slot that
-senses the first stage's output
-keeps only the level-reachable one (the :ref:`stage-interface compatibility
-filter <compat-stage-interface>`): ``common_source`` for the 24 PMOS-pair
-combinations,
-``common_source_pmos`` for the 24 NMOS-pair combinations. The 2-stage
+multi-stage templates, 4 ``amplification_stage`` variants are enumerable —
+the two common-source stages (``common_source``, ``common_source_pmos``) and
+the two non-inverting current-mirror stages (``noninverting_stage_nmos``,
+``noninverting_stage_pmos``, added in issue #139); the two followers moved to
+the ``output_stage`` category (issue #125) and
+``differential_ota_second_stage`` is parked per issue #114, see above. The
+``second_stage`` slot that senses the first stage's output keeps only the
+level-reachable ones (the :ref:`stage-interface compatibility filter
+<compat-stage-interface>`): one CS + one non-inverting stage per pair
+polarity (``common_source``/``noninverting_stage_nmos`` for the 24 PMOS-pair
+combinations, ``common_source_pmos``/``noninverting_stage_pmos`` for the 24
+NMOS-pair combinations). In the 2-stage template the single ``compensation``
+slot wraps that second stage directly, so the :ref:`compensation parity
+filter <compat-compensation>` rejects the non-inverting stage (a
+positive-even inversion count is positive feedback around a Miller cap),
+leaving one CS stage per polarity. The 2-stage
 single-ended template thus produces **180 circuits**
 ((30 × 1 + 30 × 1) × 3 ``compensation``; the count grew from 144 when the
 two wide-swing telescopic loads were added, issue #129). The 2-stage
@@ -283,19 +297,22 @@ load/``cmfb`` combinations (see the :ref:`CMFB compatibility filter
 <compat-cmfb>`) -- 72
 × 1² × 9 ``compensation`` pairs = 648. Each 3-stage
 single-ended template adds two more ``second_stage`` slots (gm2, gm3 --
-only gm2 senses the first stage; gm3 keeps both enumerable variants) and
+only gm2 senses the first stage; gm3 keeps both CS variants) and
 two ``compensation`` slots (Cm1, Cm2) on top of the 1-stage base. In the
-NMC scheme Cm1 wraps the gm2+gm3 cascade, so the :ref:`compensation parity
-filter <compat-compensation>` rejects every CS×CS gm2/gm3 pairing (a non-inverting
-composite with gain) — with the followers parked those are the *only*
-pairings left, so the NMC single-ended template enumerates **0 circuits**
-(NMC structurally requires a non-inverting-without-gain stage inside the
-outer Miller loop, i.e. a follower — see the issue #125 un-park
-condition); in the RNMC scheme each capacitor wraps a single stage and
-both pairings survive: **1080 circuits** (60 × 2 × 9). Each 3-stage
-fully-differential template duplicates those four slots per output path
-(and keeps the single ``cmfb`` slot), producing **0 circuits** (NMC) and
-**23 328 circuits** (RNMC, 72 × (2 × 9)²).
+NMC scheme Cm1 wraps the gm2+gm3 cascade while Cm2 wraps gm3 alone: Cm2
+forces gm3 inverting (a CS stage), and Cm1 then requires gm2 to be
+non-inverting (the level-reachable ``noninverting_stage_*`` stage, so its
++2 inversions make the wrapped cascade odd) — the :ref:`compensation
+parity filter <compat-compensation>` admits exactly that nesting, so the
+NMC single-ended template enumerates **1080 circuits** (60 × 1 gm2 × 2 gm3
+× 9). Before the non-inverting stage existed (issue #139) no gm2 could
+satisfy Cm1 and the template enumerated 0. In the RNMC scheme each
+capacitor wraps a single stage, so the non-inverting stage is rejected in
+either slot and only the CS×CS pairings survive: **1080 circuits**
+(60 × 2 × 9). Each 3-stage fully-differential template duplicates those
+four slots per output path (and keeps the single ``cmfb`` slot), producing
+non-empty sets for both schemes: NMC and **23 328 circuits** (RNMC,
+72 × (2 × 9)²).
 
 Demand-driven bias construction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -364,10 +381,15 @@ when a real cmfb consumes it.
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The 3-stage templates reuse the existing ``second_stage`` modules for the
-second (gm2) and third (gm3) gain stages, and the existing ``compensation``
-modules for the two Miller capacitors Cm1/Cm2 — no new module variants are
-required.
+The 3-stage templates reuse the existing ``amplification_stage`` modules for
+the second (gm2) and third (gm3) gain stages, and the existing
+``compensation`` modules for the two Miller capacitors Cm1/Cm2. The NMC
+scheme additionally needs a **non-inverting gm2**, because Cm1 wraps the
+gm2+gm3 cascade and pole-splitting Miller feedback is negative only around
+an inverting chain — with an inverting gm3, gm2 must be non-inverting. That
+role is filled by the ``noninverting_stage_{nmos,pmos}`` variants (issue
+#139); before they existed, the NMC templates enumerated zero circuits (see
+the :ref:`compensation parity filter <compat-compensation>`).
 
 .. list-table::
    :header-rows: 1
@@ -615,7 +637,7 @@ categories:
        internal ``ind`` node + series resistor to ``out``). Connectivity scoring
        naturally disambiguates overlapping 1-device subsets without hooks.
    * - ``second_stage``
-     - 5
+     - 7
      - ``common_source`` (NMOS input + PMOS load, drains shorted to ``out``),
        ``common_source_pmos`` (the mirror image, PMOS input + NMOS sink;
        structurally identical to ``common_source`` with the ``in``/``bias``
@@ -628,7 +650,11 @@ categories:
        follower's source is the sink's drain, all bulks on gnd),
        ``differential_ota_second_stage`` (2 PMOS + 2 NMOS, cross-coupled via
        an internal ``d1`` node; parked as ``unsupported`` for synthesis,
-       issue #114 -- the pattern still serves external netlists).
+       issue #114 -- the pattern still serves external netlists),
+       ``noninverting_stage_nmos``/``noninverting_stage_pmos`` (2 PMOS + 2
+       NMOS non-inverting current-mirror gain stages, issue #139; the
+       diode-connected mirror master on the internal mirror node makes each
+       non-isomorphic to the OTA shape).
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search
@@ -786,13 +812,17 @@ The pattern library covers all 36 patterns spanning all seven topologies:
   combinations covering both ``cmfb`` variants, all ``compensation`` and
   ``second_stage`` pairings, and both differential input-pair polarities.
 - **three_stage_opamp_nmc_single_ended** and
-  **three_stage_opamp_rnmc_single_ended**: no new patterns needed. The
-  ``third_stage`` slot reuses the ``second_stage`` category (same five
-  pattern variants); ``comp1``/``comp2`` reuse the ``compensation`` category.
-  FBR's ``assigned_ids`` mechanism correctly disambiguates 2 same-category
-  ``second_stage`` slots and 2 same-category ``compensation`` slots via
-  connectivity scoring on the distinct intermediate nets
-  (``net_mid1``/``net_mid2``). 9 round-trip combos each.
+  **three_stage_opamp_rnmc_single_ended**: the plain NMC scheme adds 2 new
+  ``amplification_stage`` patterns — the non-inverting current-mirror stages
+  ``noninverting_stage_{nmos,pmos}`` (issue #139) that fill the NMC gm2 slot
+  — which the recognizer tells apart from the CS gm3 stage (and from
+  ``differential_ota_second_stage``, whose mirror node differs) by graph
+  structure. The ``third_stage`` slot otherwise reuses the
+  ``amplification_stage`` category; ``comp1``/``comp2`` reuse the
+  ``compensation`` category. FBR's ``assigned_ids`` mechanism correctly
+  disambiguates 2 same-category gain slots and 2 same-category
+  ``compensation`` slots via connectivity scoring on the distinct
+  intermediate nets (``net_mid1``/``net_mid2``).
 - **three_stage_opamp_nmc_fully_differential** and
   **three_stage_opamp_rnmc_fully_differential**: no new patterns needed.
   Each path (p/n) has independent ``second_stage``/``third_stage`` and

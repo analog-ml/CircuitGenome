@@ -371,8 +371,9 @@ def test_enumerate_circuits_excludes_polarity_mismatches():
 def test_second_stage_signal_device_types():
     """Each second_stage variant's signal device (the transistor whose gate
     is the `in` port) is detected structurally: NMOS for common_source_nmos,
-    common_drain_nmos, and differential_ota_second_stage, PMOS for
-    common_source_pmos and common_drain_pmos."""
+    common_drain_nmos, differential_ota_second_stage, and
+    noninverting_stage_nmos; PMOS for common_source_pmos, common_drain_pmos,
+    and noninverting_stage_pmos."""
     modules = load_modules()
     stages = modules["amplification_stage"] + modules["output_stage"]
     types = {v.name: signal_device_type(v) for v in stages}
@@ -382,6 +383,8 @@ def test_second_stage_signal_device_types():
         "common_drain_pmos": "pmos",
         "common_drain_nmos": "nmos",
         "differential_ota_second_stage": "nmos",
+        "noninverting_stage_nmos": "nmos",
+        "noninverting_stage_pmos": "pmos",
     }
 
 
@@ -399,6 +402,8 @@ def test_second_stage_required_pair_types():
         "common_drain_pmos": "pmos",
         "common_drain_nmos": "nmos",
         "differential_ota_second_stage": "pmos",
+        "noninverting_stage_nmos": "pmos",
+        "noninverting_stage_pmos": "nmos",
     }
 
 
@@ -518,7 +523,9 @@ def test_stage_inversions_per_variant():
     structurally: 1 for the common-source stages (one gate-to-drain hop),
     0 for the followers (gate-to-source hop), 2 for
     differential_ota_second_stage (two cascaded common-source hops through
-    its internal d1 node -- the non-inverting composite of issue #114)."""
+    its internal d1 node -- the non-inverting composite of issue #114) and
+    for the noninverting_stage_* variants (CS input hop + current-mirror
+    output hop; the diode-connected mirror master is skipped, issue #139)."""
     modules = load_modules()
     stages = modules["amplification_stage"] + modules["output_stage"]
     inversions = {v.name: stage_inversions(v) for v in stages}
@@ -528,6 +535,8 @@ def test_stage_inversions_per_variant():
         "common_drain_pmos": 0,
         "common_drain_nmos": 0,
         "differential_ota_second_stage": 2,
+        "noninverting_stage_nmos": 2,
+        "noninverting_stage_pmos": 2,
     }
 
 
@@ -1275,35 +1284,40 @@ def test_enumerate_three_stage_single_ended_count():
     and untapped-branch filters, with inverter_based_input parked as
     unsupported, issue #113; see test_enumerate_circuits_count -- the 60
     includes the two wide-swing telescopic loads, issue #129).
-    Only the second_stage slot senses the first stage, so it keeps the
-    level-reachable variant (1 of 2 enumerable per pair polarity --
-    differential_ota_second_stage is parked as unsupported, issue #114,
-    and the two followers per issue #125); the third_stage slot is
-    unconstrained by the stage-interface filter and keeps both enumerable
-    variants (see test_second_stage_filter_*).
 
-    The compensation parity filter (issue #114) then splits the schemes: in
-    NMC, comp1 wraps the second+third stage cascade, so every
-    CS-stage x CS-stage pairing (a non-inverting composite with gain) is
-    rejected -- with the followers parked those are the only pairings
-    left, so NMC enumerates zero circuits (standard NMC needs a
-    non-inverting-without-gain stage in the outer loop, i.e. a follower;
-    see the issue #125 un-park condition); in RNMC each compensation wraps
-    a single stage (never a positive even inversion count), so both
-    pairings survive. The bias generator is constructed, not enumerated,
-    so it contributes no factor:
-    NMC:  60 x 0 x 3 comp1 x 3 comp2 = 0;
-    RNMC: 60 x 2 x 3 comp1 x 3 comp2 = 1080."""
+    The enumerable amplification variants per pair polarity are one CS stage
+    (common_source_nmos or _pmos, level-reachable) and one non-inverting
+    stage (noninverting_stage_nmos or _pmos, issue #139); the second_stage
+    slot senses the first stage so the stage-interface filter keeps only the
+    matching-polarity pair (1 CS + 1 non-inverting = 2 candidates), while the
+    third_stage slot is unconstrained by that filter and keeps both CS
+    variants plus both non-inverting variants (see test_second_stage_filter_*).
+    differential_ota_second_stage stays parked (issue #114) and the followers
+    live in output_stage (issue #125), so neither is a gain-slot candidate.
+
+    The compensation parity filter (issues #114/#139) then splits the schemes:
+    - RNMC each compensation wraps a *single* stage, so a non-inverting stage
+      (2 inversions, positive-even) is rejected in either slot; only the
+      CS x CS pairings survive: 60 x 1 second x 2 third x 3 comp1 x 3 comp2
+      = 1080. (The non-inverting variants are enumerated then filtered out,
+      leaving the count unchanged from before issue #139.)
+    - NMC comp1 wraps the second+third cascade and comp2 wraps the third
+      alone: comp2 forces the third stage inverting (CS, 1 of the 2 CS
+      variants), and comp1 then forces the second stage non-inverting (the
+      1 level-reachable non-inverting stage), so 60 x 1 second x 2 third
+      x 3 comp1 x 3 comp2 = 1080. Before issue #139 no non-inverting gain
+      stage existed, so NMC enumerated zero.
+    The bias generator is constructed, not enumerated, so it adds no factor."""
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "three_stage_opamp_nmc_single_ended": 0,
+        "three_stage_opamp_nmc_single_ended": 1080,
         "three_stage_opamp_rnmc_single_ended": 1080,
     }
     for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
         circuits = list(enumerate_circuits(topo, modules))
-        assert len(circuits) == count
+        assert len(circuits) == count, name
 
 
 def test_enumerate_three_stage_fully_differential_nonempty():
@@ -1311,9 +1325,10 @@ def test_enumerate_three_stage_fully_differential_nonempty():
     per-path ss x ts x comp1 x comp2 on both paths -- 1 x 2 x 9 per path;
     see test_enumerate_circuits_fully_differential_count for the 72-combo
     split); just check the iterator yields a valid first circuit without
-    materializing the full set. FD NMC enumerates zero: with the followers
-    parked (issue #125) only CS x CS pairings remain, and the compensation
-    parity filter (issue #114) rejects them all."""
+    materializing the full set. FD NMC is now non-empty too: the
+    noninverting_stage_* variants (issue #139) supply the non-inverting
+    second stage that comp1 needs (comp1 wraps second+third, comp2 wraps the
+    inverting CS third), so the parity filter (issue #114) admits the chain."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies
@@ -1324,7 +1339,7 @@ def test_enumerate_three_stage_fully_differential_nonempty():
 
     topo = next(t for t in topologies
                 if t.name == "three_stage_opamp_nmc_fully_differential")
-    assert next(enumerate_circuits(topo, modules), None) is None
+    assert next(enumerate_circuits(topo, modules), None) is not None
 
 
 def test_enumerate_two_stage_buffered_count():
@@ -1352,16 +1367,16 @@ def test_enumerate_two_stage_buffered_count():
 
 def test_enumerate_three_stage_buffered_single_ended_count():
     """Buffered 3-stage single-ended: like the unbuffered siblings, NMC's
-    comp1 wraps the second+third CS+CS cascade (non-inverting with gain),
-    rejected by the compensation parity filter (issue #114), so buffered NMC
-    enumerates zero -- inserting a follower output_stage does not change that,
-    since followers can no longer occupy a gain slot. RNMC each compensation
-    wraps a single CS stage, so both amp slots survive; the follower
-    output_stage doubles the unbuffered 1080 to 2160."""
+    comp1 wraps the second+third cascade and comp2 the inverting CS third, so
+    the second stage must be non-inverting -- supplied by the
+    noninverting_stage_* variants (issue #139); the follower output_stage then
+    doubles the unbuffered 1080 to 2160. RNMC each compensation wraps a single
+    CS stage, so both amp slots survive and the follower likewise doubles the
+    unbuffered 1080 to 2160."""
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "three_stage_buffered_nmc_single_ended": 0,
+        "three_stage_buffered_nmc_single_ended": 2160,
         "three_stage_buffered_rnmc_single_ended": 2160,
     }
     for name, count in expected.items():
@@ -1372,9 +1387,10 @@ def test_enumerate_three_stage_buffered_single_ended_count():
 
 def test_enumerate_three_stage_buffered_fully_differential_nonempty():
     """Buffered FD RNMC yields a valid first circuit (the full set is huge, so
-    only next() is checked); buffered FD NMC enumerates zero for the same
-    parity reason as the SE case (comp1_p/comp1_n wrap the CS+CS cascade,
-    issue #114). Parity check with the buffered NMC SE == 0 assertion above."""
+    only next() is checked); buffered FD NMC is now also non-empty -- the
+    non-inverting second stage (noninverting_stage_*, issue #139) satisfies the
+    comp1_p/comp1_n parity requirement (comp wraps second+third), so the chain
+    is admitted. Mirror of the buffered NMC SE == 2160 assertion above."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies
@@ -1383,7 +1399,7 @@ def test_enumerate_three_stage_buffered_fully_differential_nonempty():
 
     topo = next(t for t in topologies
                 if t.name == "three_stage_buffered_nmc_fully_differential")
-    assert next(enumerate_circuits(topo, modules), None) is None
+    assert next(enumerate_circuits(topo, modules), None) is not None
 
 
 def test_synthesize_three_stage_single_ended_filters():
@@ -1395,9 +1411,15 @@ def test_synthesize_three_stage_single_ended_filters():
     nmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "nested_miller"})
     rnmc = synthesize({"stages": 3, "output_type": "single_ended", "compensation_scheme": "reversed_nested_miller"})
 
-    # NMC enumerates zero -- the parity filter (issue #114) rejects every
-    # CS x CS pairing, and the followers can no longer fill a gain slot.
-    assert len(nmc) == 0
+    # NMC now enumerates: the noninverting_stage_* variants (issue #139) supply
+    # the non-inverting second stage comp1 requires, so the config triple
+    # matches both the plain (1080) and buffered (2160) NMC single-ended
+    # topologies.
+    assert len(nmc) == 1080 + 2160
+    assert {c.topology for c in nmc} == {
+        "three_stage_opamp_nmc_single_ended",
+        "three_stage_buffered_nmc_single_ended",
+    }
 
     # The config triple now matches both the plain (1080) and buffered (2160)
     # RNMC single-ended topologies.

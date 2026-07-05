@@ -841,6 +841,53 @@ patterns:
       bias: mp1.g
       out: mp2.d
 
+  - name: noninverting_stage_nmos
+    category: amplification_stage
+    circuit_block: gain_stage_2
+    devices:
+      - {ref: mn1, type: nmos}
+      - {ref: mp1, type: pmos}
+      - {ref: mp2, type: pmos}
+      - {ref: mn2, type: nmos}
+    # Non-inverting gain stage (issue #139): NMOS CS input mn1 sinks the
+    # input-branch current through the PMOS mirror diode mp1; mp2 mirrors it
+    # into the output (second inversion), and mn2 is the output current sink.
+    # The mirror node (mn1.d == mp1.d == mp1.g == mp2.g: an NMOS drain, a
+    # diode-connected PMOS, and the second PMOS's gate) is what makes this
+    # non-isomorphic to differential_ota_second_stage, whose internal node
+    # instead gates an NMOS and whose two PMOS share a bias gate.
+    same_net:
+      - [mn1.d, mp1.d, mp1.g, mp2.g]   # mirror node (PMOS diode master)
+      - [mp2.d, mn2.d]                  # output
+      - [mp1.s, mp1.b, mp2.s, mp2.b]    # vdd
+      - [mn1.s, mn1.b, mn2.s, mn2.b]    # gnd
+    pins:
+      in: mn1.g
+      bias: mn2.g
+      out: mp2.d
+
+  - name: noninverting_stage_pmos
+    category: amplification_stage
+    circuit_block: gain_stage_2
+    devices:
+      - {ref: mp1, type: pmos}
+      - {ref: mn1, type: nmos}
+      - {ref: mn2, type: nmos}
+      - {ref: mp2, type: pmos}
+    # Complement of noninverting_stage_nmos: PMOS CS input mp1 sources the
+    # input-branch current through the NMOS mirror diode mn1; mn2 mirrors it
+    # into the output, and mp2 is the output current source. Mirror node is
+    # the NMOS-diode node (mp1.d == mn1.d == mn1.g == mn2.g).
+    same_net:
+      - [mp1.d, mn1.d, mn1.g, mn2.g]   # mirror node (NMOS diode master)
+      - [mn2.d, mp2.d]                  # output
+      - [mp1.s, mp1.b, mp2.s, mp2.b]    # vdd
+      - [mn1.s, mn1.b, mn2.s, mn2.b]    # gnd
+    pins:
+      in: mp1.g
+      bias: mp2.g
+      out: mn2.d
+
   # ─── CMFB variants ───────────────────────────────────────────────────────────
 
   - name: resistive_sense_cmfb
