@@ -178,6 +178,17 @@ Topology templates
      - Fully differential
      - Reversed Nested Miller (RNMC) (+ follower ``output_stage``)
 
+.. rubric:: Circuits generated per template
+
+The table below is regenerated on every documentation build by running
+``enumerate_circuits`` on each template with the **default** configuration
+(``unsupported`` and ``bias_infeasible`` variants excluded — see the tags
+discussed further down).  The prose that follows explains how each count
+arises; the two NMC templates enumerate zero circuits for the compensation
+parity reason described below.
+
+.. topology-counts::
+
 Each ``*_buffered_*`` template is the plain template with a source-follower
 ``output_stage`` slot inserted after the amplification stage: the amplification
 stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
