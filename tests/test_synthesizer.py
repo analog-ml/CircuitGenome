@@ -180,11 +180,14 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
 
 
 def test_tail_current_variant_names():
-    """The tail_current category exposes 6 variants: each implementation
-    (current mirror, cascode current mirror, resistor) comes in a PMOS/VDD-side
-    flavor (for PMOS input pairs, whose tail sources current down from vdd)
-    and an NMOS/GND-side flavor (for NMOS input pairs, whose tail sinks
-    current to gnd)."""
+    """The tail_current category exposes 8 variants: each implementation
+    (current mirror, wide-swing cascode current mirror, stacked-diode cascode
+    current mirror, resistor) comes in a PMOS/VDD-side flavor (for PMOS input
+    pairs, whose tail sources current down from vdd) and an NMOS/GND-side
+    flavor (for NMOS input pairs, whose tail sinks current to gnd). The two
+    stacked-diode cascode variants are tagged ``bias_infeasible`` (issue #111):
+    functionally-correct wiring the default spec class cannot bias, kept for
+    design-space exploration and dropped from default enumeration."""
     modules = load_modules()
     names = {v.name for v in modules["tail_current"]}
     assert names == {
@@ -192,8 +195,15 @@ def test_tail_current_variant_names():
         "current_mirror_tail_nmos",
         "cascode_current_mirror_tail_pmos",
         "cascode_current_mirror_tail_nmos",
+        "stacked_cascode_current_mirror_tail_pmos",
+        "stacked_cascode_current_mirror_tail_nmos",
         "resistor_tail_vdd",
         "resistor_tail_gnd",
+    }
+    infeasible = {v.name for v in modules["tail_current"] if v.bias_infeasible}
+    assert infeasible == {
+        "stacked_cascode_current_mirror_tail_pmos",
+        "stacked_cascode_current_mirror_tail_nmos",
     }
 
 
@@ -296,8 +306,8 @@ def test_polarity_tags_cover_input_pair_load_tail_current():
     assert load_polarities.count("nmos_input") == 7
 
     tail_polarities = [v.polarity for v in modules["tail_current"]]
-    assert tail_polarities.count("pmos_input") == 3
-    assert tail_polarities.count("nmos_input") == 3
+    assert tail_polarities.count("pmos_input") == 4
+    assert tail_polarities.count("nmos_input") == 4
 
 
 def test_is_combination_valid_denies_polarity_mismatches():
@@ -1064,9 +1074,12 @@ def test_enumerate_circuits_nonempty():
 
 def test_enumerate_circuits_count():
     """2-stage single-ended: inverter_based_input is parked as unsupported
-    (issue #113: no fixed-Vgs sizing path), so enumeration covers the 4
-    tail-consuming input pairs x 14 loads x 6 tails = 336
-    input_pair/load/tail_current combinations, of which 84 are
+    (issue #113: no fixed-Vgs sizing path), and the two stacked-diode cascode
+    tails are tagged bias_infeasible (issue #111: dropped from default
+    enumeration, kept only with include_infeasible for design-space
+    exploration), so enumeration covers the 4 tail-consuming input pairs x 14
+    loads x 6 (of 8) tails = 336 input_pair/load/tail_current combinations,
+    of which 84 are
     polarity-valid (see test_polarity_filter_*). Of those, 60 also have an
     output_cardinality compatible with single_ended (the 24 combos using a
     differential-output cascode load or a current_source_load_* are
@@ -1091,6 +1104,70 @@ def test_enumerate_circuits_count():
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
     assert len(circuits) == 180
+
+
+def _stacked_tail_names(circuits):
+    return {
+        c.variant_map["tail_current"].name
+        for c in circuits
+        if c.variant_map.get("tail_current") is not None
+        and c.variant_map["tail_current"].name.startswith("stacked_")
+    }
+
+
+def test_enumerate_circuits_drops_bias_infeasible_by_default():
+    """The stacked-diode cascode tails (bias_infeasible, issue #111) are
+    functionally-correct wiring but do not bias on low-voltage specs, so they
+    are dropped from default enumeration -- just like unsupported variants --
+    leaving the default two_stage_opamp_single_ended count unchanged."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    circuits = list(enumerate_circuits(topo, modules))
+    assert _stacked_tail_names(circuits) == set()
+    assert len(circuits) == 180
+
+
+def test_enumerate_circuits_include_infeasible_keeps_stacked_tails():
+    """config={"include_infeasible": True} keeps the stacked-diode cascode
+    tails for design-space exploration. They enumerate exactly where the
+    wide-swing cascode tails do (same polarity/output reachability), adding one
+    stacked-tail circuit per wide-swing cascode-tail circuit: the default 180
+    grows by the 60 cascode-tail combinations (30 PMOS + 30 NMOS) to 240."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    circuits = list(enumerate_circuits(
+        topo, modules, config={"include_infeasible": True}))
+    assert _stacked_tail_names(circuits) == {
+        "stacked_cascode_current_mirror_tail_pmos",
+        "stacked_cascode_current_mirror_tail_nmos",
+    }
+    assert len(circuits) == 240
+
+
+def test_stacked_cascode_tail_builds_valid_bias_without_rail8():
+    """The stacked-diode cascode tail self-biases its cascode gate from the
+    reference stack, so it declares no bias_casc port and consumes only rail 7
+    (a current interface). The constructed bias generator therefore builds an
+    out7 leg but no out8 leg, and the emitted netlist references net_bias7 but
+    not net_bias8 -- a complete, valid netlist whose only defect is headroom."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_single_ended")
+    circuit = next(
+        c for c in enumerate_circuits(
+            topo, modules, config={"include_infeasible": True})
+        if c.variant_map["tail_current"].name
+        == "stacked_cascode_current_mirror_tail_pmos")
+    bias = next(v for v in circuit.variant_map.values()
+                if v is not None and v.category == "bias_generation")
+    bias_ports = {p.name for p in bias.ports}
+    assert "out7" in bias_ports
+    assert "out8" not in bias_ports
+    netlist = to_flat_spice(circuit)
+    assert "net_bias7" in netlist
+    assert "net_bias8" not in netlist
 
 
 def test_enumerate_circuits_fully_differential_count():

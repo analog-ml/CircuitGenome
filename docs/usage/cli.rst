@@ -73,6 +73,10 @@ Generating circuits
    # Dry run — count without writing any files
    circuitgenome synthesize --stages 2 --dry-run
 
+   # Design-space exploration — also emit bias-infeasible (but functionally
+   # correct) wirings, e.g. the stacked-diode cascode tails
+   circuitgenome synthesize --stages 2 --include-infeasible --dry-run
+
 Sample output::
 
    Topology: two_stage_opamp_single_ended
@@ -218,6 +222,11 @@ Options reference
      - ``.``
    * - ``--dry-run``
      - Count circuits without writing files
+     - off
+   * - ``--include-infeasible``
+     - Also enumerate ``bias_infeasible`` variants — functionally-correct
+       wiring the default (low-voltage) spec class cannot bias (e.g. the
+       stacked-diode cascode tails, issue #111). For design-space exploration.
      - off
    * - ``--list-topologies``
      - Print topology names and exit

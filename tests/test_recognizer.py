@@ -115,6 +115,48 @@ def test_round_trip_one_stage_opamp(
         )
 
 
+# ─── stacked-diode cascode tail round-trip (design-space exploration) ───────
+#
+# The stacked-diode cascode tails (issue #111) are tagged bias_infeasible, so
+# the round-trip builder opts back in with include_infeasible. They are
+# functionally-correct wiring the recognizer must still identify (a DSE run or
+# an external stacked netlist), and each resolves to its own 4-device pattern
+# (distinct from the 3-device wide-swing cascode_current_mirror_tail_* shape).
+_INCLUDE_INFEASIBLE = {"include_infeasible": True}
+
+_STACKED_TAIL_COMBOS = [
+    ("differential_pair_pmos", "active_load_nmos", "stacked_cascode_current_mirror_tail_pmos"),
+    ("differential_pair_nmos", "active_load_pmos", "stacked_cascode_current_mirror_tail_nmos"),
+]
+
+
+@pytest.mark.parametrize("input_pair,load,tail_current", _STACKED_TAIL_COMBOS)
+def test_round_trip_stacked_cascode_tail(one_stage_fixtures, input_pair, load, tail_current):
+    modules, topology = one_stage_fixtures
+    simple_modules = {
+        "input_pair":      [v for v in modules["input_pair"]   if v.name == input_pair],
+        "load":            [v for v in modules["load"]         if v.name == load],
+        "tail_current":    [v for v in modules["tail_current"] if v.name == tail_current],
+        "cmfb":            modules["cmfb"],
+        "compensation":    modules["compensation"],
+        "amplification_stage": modules["amplification_stage"],
+        "output_stage":    modules["output_stage"],
+    }
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_INFEASIBLE))
+
+    sr_result = recognize(parse(to_flat_spice(circuit)))
+    assert sr_result.unrecognized_devices == [], (
+        f"unrecognized: {[d.ref for d in sr_result.unrecognized_devices]}"
+    )
+
+    fbr_result = assign_slots(sr_result, topology)
+    assigned = fbr_result.slot_assignments.get("tail_current")
+    assert assigned is not None, "tail_current slot missing"
+    assert assigned.pattern_name == tail_current, (
+        f"expected {tail_current!r}, got {assigned.pattern_name!r}"
+    )
+
+
 # ─── two_stage single-ended round-trip (plain + buffered) ───────────────────
 #
 # Each combo carries an amplification-stage variant and an optional follower.

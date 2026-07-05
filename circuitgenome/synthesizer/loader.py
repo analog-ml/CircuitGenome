@@ -70,6 +70,7 @@ def load_modules(path: str | Path | None = None) -> dict[str, list[ModuleVariant
             polarity=entry.get("polarity"),
             output_cardinality=entry.get("output_cardinality"),
             unsupported=entry.get("unsupported"),
+            bias_infeasible=entry.get("bias_infeasible"),
         )
         by_category.setdefault(variant.category, []).append(variant)
     return by_category

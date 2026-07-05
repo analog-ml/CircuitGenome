@@ -207,6 +207,22 @@ buffer, not a gain stage), so it is excluded from the gain product — a
 buffered circuit's ``gain_db`` equals its unbuffered sibling's — and it can no
 longer occupy a ``second_stage``/``third_stage`` gain slot.
 
+A softer tag, ``bias_infeasible:``, marks a variant whose wiring is
+*functionally correct* but whose DC bias does not close under the normal
+supply/Vcm headroom of the default (low-voltage) spec class — currently the
+two ``stacked_cascode_current_mirror_tail_*`` variants (issue #111). A
+stacked-diode cascode mirror pins its output cascode's source a full
+``|Vgs|`` from the rail, so the tail node needs ``|Vgs|+Vdsat`` (~1.3 V at
+gf180) of compliance versus the wide-swing ``cascode_current_mirror_tail_*``'s
+``2·Vdsat`` (~0.35 V). Unlike an ``unsupported`` variant it builds into a
+complete, valid netlist (it self-biases its cascode gate, so it consumes only
+rail 7 and needs no rail 8) and would size normally; it is simply predicted to
+be rejected at the DC bias gate. ``enumerate_circuits`` drops it by default and
+keeps it only with ``config={"include_infeasible": True}`` (CLI:
+``--include-infeasible``) — intended for design-space exploration, which wants
+the full set of functionally-correct wirings, including correct-but-infeasible
+circuits, as mutation seeds rather than acceptance candidates.
+
 Of the remaining 4 × 12 × 6 = 288 possible ``input_pair`` / ``load`` /
 ``tail_current`` combinations, only 72 have compatible PMOS/NMOS polarities
 (see "Polarity compatibility filter" below) — the rest are filtered out by

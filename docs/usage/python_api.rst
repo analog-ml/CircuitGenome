@@ -93,6 +93,40 @@ in memory at once:
    for i, circuit in enumerate(enumerate_circuits(topology, modules), start=1):
        (out_dir / f"circuit_{i:04d}.ckt").write_text(to_flat_spice(circuit))
 
+``enumerate_circuits`` also takes an optional ``config`` dict that opts parked
+variants back into the candidate pool:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Key
+     - Type
+     - Description
+   * - ``include_unsupported``
+     - bool
+     - Also enumerate ``unsupported`` variants (unbuildable / mis-modeled,
+       e.g. ``inverter_based_input``). Intended for recognizer round-trips.
+   * - ``include_infeasible``
+     - bool
+     - Also enumerate ``bias_infeasible`` variants — functionally-correct
+       wiring the default (low-voltage) spec class cannot bias (e.g. the
+       stacked-diode cascode tails, issue #111). Intended for design-space
+       exploration: the circuits build into complete, valid netlists but are
+       expected to be rejected at the DC bias gate. See the
+       :doc:`Overview </overview>` for the tag's semantics.
+
+.. code-block:: python
+
+   # Design-space exploration: keep the functionally-correct but
+   # bias-infeasible wirings (stacked-diode cascode tails, etc.)
+   dse = enumerate_circuits(topology, modules, config={"include_infeasible": True})
+   for circuit in dse:
+       ...
+
+(The high-level ``synthesize(config)`` helper only selects topologies; use
+``enumerate_circuits`` directly for these enumeration-pool options.)
+
 Using custom YAML definitions
 ------------------------------
 

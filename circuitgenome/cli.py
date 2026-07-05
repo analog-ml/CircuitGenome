@@ -32,6 +32,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                        help="Print available module variants and exit")
     synth.add_argument("--dry-run", action="store_true", dest="dry_run",
                        help="Print summary without writing files")
+    synth.add_argument("--include-infeasible", action="store_true",
+                       dest="include_infeasible",
+                       help="Also enumerate bias-infeasible variants "
+                            "(functionally-correct wiring the default spec "
+                            "class cannot bias, e.g. stacked-diode cascode "
+                            "tails). For design-space exploration.")
 
     sub.add_parser("visualize", help="Launch the topology visualizer (Streamlit web UI)")
 
@@ -75,6 +81,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              "(default: exhaustive)")
     design.add_argument("--workers", type=int, default=1,
                         help="Parallel worker processes (default: 1)")
+    design.add_argument("--include-infeasible", action="store_true",
+                        dest="include_infeasible",
+                        help="Also evaluate bias-infeasible variants "
+                             "(functionally-correct wiring the default spec "
+                             "class cannot bias, e.g. stacked-diode cascode "
+                             "tails). For design-space exploration; these are "
+                             "expected to be rejected at the DC bias gate.")
 
     return parser.parse_args(argv)
 
@@ -114,11 +127,12 @@ def _cmd_synthesize(args: argparse.Namespace) -> None:
     if not args.dry_run:
         args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    enum_config = {"include_infeasible": args.include_infeasible}
     total = 0
     for topology in filtered:
         print(f"\nTopology: {topology.name}")
         count = 0
-        for circuit in enumerate_circuits(topology, modules):
+        for circuit in enumerate_circuits(topology, modules, config=enum_config):
             count += 1
             total += 1
             short_name = f"circuit_{count:04d}"
@@ -434,6 +448,7 @@ def _cmd_design(args: argparse.Namespace) -> None:
     try:
         report = design(args.spec_file, args.output_dir, templates=templates,
                         tech=args.tech, limit=args.limit, workers=args.workers,
+                        include_infeasible=args.include_infeasible,
                         progress=print)
     except (RuntimeError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)

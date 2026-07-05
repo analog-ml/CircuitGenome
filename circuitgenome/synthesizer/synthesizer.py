@@ -201,6 +201,14 @@ def enumerate_circuits(
     ``differential_ota_second_stage``, issue #114), unless
     ``config={"include_unsupported": True}`` -- see the ``config`` parameter.
 
+    Variants tagged ``bias_infeasible:`` -- functionally-correct wiring whose
+    DC bias does not close on the default (low-voltage) spec class (currently
+    ``stacked_cascode_current_mirror_tail_pmos``/``_nmos``, issue #111) -- are
+    likewise dropped by default and kept only with
+    ``config={"include_infeasible": True}``. Unlike ``unsupported`` variants
+    these build into a complete, valid netlist; they are retained for
+    design-space exploration as correct-but-infeasible mutation seeds.
+
     Combinations that mix incompatible ``polarity`` tags (see
     :func:`~circuitgenome.synthesizer.polarity_compatibility.is_combination_valid`) are
     skipped -- these would leave a shared node with no DC current path.
@@ -288,16 +296,24 @@ def enumerate_circuits(
     :param topology: The wiring template that defines slots and net connections.
     :param modules: Module variant pool, keyed by category name.  Typically the
                     return value of :func:`~circuitgenome.synthesizer.loader.load_modules`.
-    :param config: Optional per-enumeration filter dictionary. Supported key:
+    :param config: Optional per-enumeration filter dictionary. Supported keys:
                    ``include_unsupported`` (bool, default ``False``) —
                    when ``True``, variants parked with an ``unsupported:``
                    reason tag (currently ``inverter_based_input``, issue
                    #113, and ``differential_ota_second_stage``, issue #114)
                    are enumerated anyway. Intended for round-trip tests and
                    future un-parking work, not for design runs.
+                   ``include_infeasible`` (bool, default ``False``) — when
+                   ``True``, variants tagged ``bias_infeasible:`` (currently
+                   the ``stacked_cascode_current_mirror_tail_*``, issue #111)
+                   are enumerated anyway. Intended for design-space
+                   exploration, which wants the full set of functionally-
+                   correct wirings including ones the default spec class
+                   cannot bias; not for acceptance-oriented design runs.
     :raises ValueError: If a required module category (other than
                         ``bias_generation``) has no available variants
-                        (after dropping ``unsupported``-tagged ones).
+                        (after dropping ``unsupported``/``bias_infeasible``-
+                        tagged ones).
 
     Example::
 
@@ -312,12 +328,15 @@ def enumerate_circuits(
             print(to_flat_spice(circuit))
     """
     include_unsupported = bool((config or {}).get("include_unsupported"))
+    include_infeasible = bool((config or {}).get("include_infeasible"))
     product_slots = [s for s in topology.slots if s.category != "bias_generation"]
     per_slot: list[list[ModuleVariant]] = []
     for slot in product_slots:
         candidates = modules.get(slot.category, [])
         if not include_unsupported:
             candidates = [v for v in candidates if v.unsupported is None]
+        if not include_infeasible:
+            candidates = [v for v in candidates if v.bias_infeasible is None]
         if not candidates:
             raise ValueError(f"No module variants found for category '{slot.category}'")
         per_slot.append(candidates)
