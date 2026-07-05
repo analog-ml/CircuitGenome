@@ -72,7 +72,7 @@ class ModuleVariant:
                      ``fully_differential`` topologies wire (issue #112).
                      ``None`` means the variant imposes no constraint and is
                      compatible with either output type. Used by
-                     :func:`~circuitgenome.synthesizer.output_compatibility.is_output_type_compatible`.
+                     :func:`~circuitgenome.synthesizer.compatibility.output.is_output_type_compatible`.
     :param unsupported: ``None`` for enumerable variants. A non-``None``
                      reason string parks the variant: it stays loadable
                      (recognizer patterns and hand-built variant maps keep

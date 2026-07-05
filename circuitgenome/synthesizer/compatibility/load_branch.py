@@ -18,7 +18,7 @@ feedback) to absorb the difference. This is the textbook reason plain
 current-source loads are only used with common-mode control.
 
 The check is *structural* (actual device terminal references, no YAML tags,
-same approach as :mod:`~circuitgenome.synthesizer.second_stage_compatibility`):
+same approach as :mod:`~circuitgenome.synthesizer.compatibility.second_stage`):
 the untapped branch node (port ``in1``) counts as DC-defined when the load
 contains
 
@@ -33,7 +33,7 @@ Loads whose devices never put a MOSFET drain on ``in1`` are not constrained
 ``fully_differential`` topologies tap both branches (``net_loadout1``/
 ``net_loadout2``) and are out of scope here -- there the common-mode
 definition is the CMFB loop's job (see
-:mod:`~circuitgenome.synthesizer.cmfb_compatibility`).
+:mod:`~circuitgenome.synthesizer.compatibility.cmfb`).
 
 To extend: nothing to tag -- a new ``load`` variant is classified by what its
 devices connect to ``in1``, and a new topology is covered by its
@@ -41,7 +41,7 @@ devices connect to ``in1``, and a new topology is covered by its
 the wiring convention documented in ``config/opamp_topologies.yaml``).
 """
 from __future__ import annotations
-from .models import ModuleVariant, TopologyTemplate
+from ..models import ModuleVariant, TopologyTemplate
 
 #: The load port wired to the untapped branch node in ``single_ended``
 #: topologies (``net_diff1``; ``out1`` aliases it on the non-cascode loads).

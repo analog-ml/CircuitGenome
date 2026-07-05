@@ -30,7 +30,7 @@ stages compose to the same positive-feedback structure (standard NMC
 requires a non-inverting second stage and an inverting output stage).
 
 The check is *structural* (actual device terminal references, no YAML
-tags, same approach as :mod:`~circuitgenome.synthesizer.second_stage_compatibility`):
+tags, same approach as :mod:`~circuitgenome.synthesizer.compatibility.second_stage`):
 a stage variant's inversion count is computed by walking gate-to-drain /
 gate-to-source hops from its ``in`` port, and chains are composed by
 following ``second_stage``-category slots' ``in``/``out`` nets between the
@@ -40,7 +40,7 @@ walk cannot follow, a stage with no device gating ``in``) imposes no
 constraint.
 """
 from __future__ import annotations
-from .models import ModuleVariant, TopologyTemplate
+from ..models import ModuleVariant, TopologyTemplate
 
 _MOS_TYPES = ("nmos", "pmos")
 

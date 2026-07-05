@@ -28,7 +28,7 @@ To extend: tag new or edited variants with ``polarity: pmos_input`` /
 here.
 """
 from __future__ import annotations
-from .models import ModuleVariant
+from ..models import ModuleVariant
 
 
 def is_combination_valid(variant_map: dict[str, ModuleVariant]) -> bool:

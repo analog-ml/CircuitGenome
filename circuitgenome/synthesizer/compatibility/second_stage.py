@@ -45,7 +45,7 @@ to a load output net (``load.out``/``out1``/``out2``, the canonical load
 interface).
 """
 from __future__ import annotations
-from .models import ModuleVariant, TopologyTemplate
+from ..models import ModuleVariant, TopologyTemplate
 
 #: The canonical ``load`` interface's output ports (see the header of
 #: ``config/opamp_topologies.yaml``): the nets they are wired to are the

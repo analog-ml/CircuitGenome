@@ -17,17 +17,15 @@ from __future__ import annotations
 import itertools
 from dataclasses import dataclass, field
 
-from circuitgenome.synthesizer.cmfb_compatibility import is_cmfb_compatible
-from circuitgenome.synthesizer.load_branch_compatibility import is_load_branch_compatible
-from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
-from circuitgenome.synthesizer.output_compatibility import is_output_type_compatible
-from circuitgenome.synthesizer.polarity_compatibility import is_combination_valid
-from circuitgenome.synthesizer.second_stage_compatibility import (
+from circuitgenome.synthesizer.compatibility import (
+    is_cmfb_compatible,
+    is_combination_valid,
+    is_load_branch_compatible,
+    is_output_type_compatible,
     is_second_stage_compatible,
-)
-from circuitgenome.synthesizer.tail_current_compatibility import (
     is_tail_current_compatible,
 )
+from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
 
 # Nets that connect to every slot and would otherwise dominate the graph with
 # edges unrelated to the topology's signal path.
