@@ -233,7 +233,7 @@ def assign_geometry_gmid(
     * **signal devices under a cascode first-stage load** — their ``V_GS`` is
       the stage-interface pin (:mod:`.stage_interface`), and moving it for
       swing breaks the knife-edge saturation window (measured: 18 accepted
-      folded-cascode + common_source candidates lost to a blanket floor).
+      folded-cascode + common_source_nmos candidates lost to a blanket floor).
       Those candidates' high loop gain keeps the swing bench tracking well
       past the Vdsat point, so the floor is not needed there.
 

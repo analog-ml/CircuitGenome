@@ -73,8 +73,8 @@ def stage_inversions(variant: ModuleVariant) -> int | None:
 
     Each hop enters a MOSFET gate; leaving through the drain counts one
     inversion (common source), leaving through the source counts none
-    (follower). ``common_source``/``common_source_pmos`` -> 1,
-    ``common_drain``/``common_drain_nmos`` -> 0,
+    (follower). ``common_source_nmos``/``common_source_pmos`` -> 1,
+    ``common_drain_pmos``/``common_drain_nmos`` -> 0,
     ``differential_ota_second_stage`` -> 2.
     """
     net = "in"

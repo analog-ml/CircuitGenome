@@ -40,7 +40,7 @@ _FD_LOAD = "folded_cascode_load_pmos_input_differential_output"
 _FD_BASE = {"input_pair": "differential_pair_pmos", "load": _FD_LOAD,
             "tail_current": "current_mirror_tail_pmos",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
-            "second_stage_p": "common_source", "second_stage_n": "common_source"}
+            "second_stage_p": "common_source_nmos", "second_stage_n": "common_source_nmos"}
 
 
 @pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb", "dda_cmfb"])
@@ -64,9 +64,9 @@ def test_fd_two_stage_gmid(cmfb):
     # inversions) and a follower output_stage. RNMC wraps single stages, so
     # CS+CS stays valid there (plain topology, no output stage).
     ("three_stage_buffered_nmc_single_ended", "folded_cascode_load_pmos_input_single_output",
-     "differential_ota_second_stage", "common_source", "common_drain"),
+     "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos"),
     ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output",
-     "common_source", "common_source", None),
+     "common_source_nmos", "common_source_nmos", None),
 ])
 def test_three_stage_se_gmid(topo, load, ss, ts, follower):
     # fc_pmos_single's bias1 is gnd-flavored, the tail and stages vdd-flavored

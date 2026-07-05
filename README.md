@@ -253,7 +253,7 @@ m2 out bias vdd vdd pmos
 c1 in out 1p
 .ends
 
-.subckt common_source in out bias vdd gnd
+.subckt common_source_nmos in out bias vdd gnd
 mn1 out in gnd gnd nmos
 mp1 out bias vdd vdd pmos
 .ends
@@ -270,7 +270,7 @@ Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
 Xload net_diff1 net_mid net_diff1 net_mid vdd! gnd! resistor_load_gnd
 Xtail_current net_tail net_bias7 vdd! gnd! current_mirror_tail_pmos
 Xcompensation net_mid out miller_cap
-Xsecond_stage net_mid out net_bias5 vdd! gnd! common_source
+Xsecond_stage net_mid out net_bias5 vdd! gnd! common_source_nmos
 Xbias_gen ibias net_bias5 net_bias7 vdd! gnd! constructed_bias
 .ends
 ```

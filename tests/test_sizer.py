@@ -257,7 +257,7 @@ def two_stage_fbr():
         "input_pair": "differential_pair_pmos",
         "load": "active_load_nmos",
         "tail_current": "current_mirror_tail_pmos",
-        "second_stage": "common_source",
+        "second_stage": "common_source_nmos",
         "compensation": "miller_cap",
     })
 
@@ -268,7 +268,7 @@ def two_stage_resistor_load_fbr():
         "input_pair": "differential_pair_pmos",
         "load": "resistor_load_gnd",
         "tail_current": "current_mirror_tail_pmos",
-        "second_stage": "common_source",
+        "second_stage": "common_source_nmos",
         "compensation": "miller_cap",
     })
 
@@ -474,8 +474,8 @@ def two_stage_fd_fbr():
         "cmfb":           "resistive_sense_cmfb",
         "comp_p":         "miller_cap",
         "comp_n":         "miller_cap",
-        "second_stage_p": "common_source",
-        "second_stage_n": "common_source",
+        "second_stage_p": "common_source_nmos",
+        "second_stage_n": "common_source_nmos",
     })
 
 
@@ -618,9 +618,9 @@ def three_stage_buffered_se_fbr():
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
-        "second_stage": "common_source",
-        "third_stage":  "common_source",
-        "output_stage": "common_drain",
+        "second_stage": "common_source_nmos",
+        "third_stage":  "common_source_nmos",
+        "output_stage": "common_drain_pmos",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
     })
@@ -632,8 +632,8 @@ def three_stage_rnmc_se_fbr():
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
-        "second_stage": "common_source",
-        "third_stage":  "common_source",
+        "second_stage": "common_source_nmos",
+        "third_stage":  "common_source_nmos",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
     })
@@ -648,12 +648,12 @@ def three_stage_buffered_fd_fbr():
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
         "cmfb":            "resistive_sense_cmfb",
-        "second_stage_p":  "common_source",
-        "second_stage_n":  "common_source",
-        "third_stage_p":   "common_source",
-        "third_stage_n":   "common_source",
-        "output_stage_p":  "common_drain",
-        "output_stage_n":  "common_drain",
+        "second_stage_p":  "common_source_nmos",
+        "second_stage_n":  "common_source_nmos",
+        "third_stage_p":   "common_source_nmos",
+        "third_stage_n":   "common_source_nmos",
+        "output_stage_p":  "common_drain_pmos",
+        "output_stage_n":  "common_drain_pmos",
         "comp1_p":         "miller_cap",
         "comp1_n":         "miller_cap",
         "comp2_p":         "miller_cap",
@@ -668,10 +668,10 @@ def three_stage_rnmc_fd_fbr():
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
         "cmfb":            "resistive_sense_cmfb",
-        "second_stage_p":  "common_source",
-        "second_stage_n":  "common_source",
-        "third_stage_p":   "common_source",
-        "third_stage_n":   "common_source",
+        "second_stage_p":  "common_source_nmos",
+        "second_stage_n":  "common_source_nmos",
+        "third_stage_p":   "common_source_nmos",
+        "third_stage_n":   "common_source_nmos",
         "comp1_p":         "miller_cap",
         "comp1_n":         "miller_cap",
         "comp2_p":         "miller_cap",
@@ -1095,7 +1095,7 @@ def test_stage_interface_repairs_telescopic_cs():
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
         "load": "telescopic_cascode_load_pmos",
-        "second_stage": "common_source"})
+        "second_stage": "common_source_nmos"})
     assert result.solver_status == "GMID"
     assert result.bias_feasible
     assert not any("stage interface" in w for w in result.warnings)
@@ -1116,7 +1116,7 @@ def test_wideswing_telescopic_window_clears_by_construction():
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
         "load": "telescopic_cascode_load_wideswing_pmos",
-        "second_stage": "common_source"})
+        "second_stage": "common_source_nmos"})
     assert result.solver_status == "GMID"
     assert result.bias_feasible
     assert not any("stage interface" in w for w in result.warnings)
@@ -1142,7 +1142,7 @@ def test_stage_interface_repairs_follower_pin():
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
         "load": "telescopic_cascode_load_pmos",
-        "second_stage": "common_drain"})
+        "second_stage": "common_drain_pmos"})
     assert result.bias_feasible
     assert not any("stage interface" in w for w in result.warnings)
     stack = (abs(result.transistors["mn3_load"].vgs_v)
@@ -1163,7 +1163,7 @@ def test_stage_interface_rejects_unclosable_gap():
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
         "load": "telescopic_cascode_load_pmos",
-        "second_stage": "common_drain"}, vdd=2.0)
+        "second_stage": "common_drain_pmos"}, vdd=2.0)
     assert not result.bias_feasible
     assert any("stage interface" in w for w in result.warnings)
 
@@ -1174,6 +1174,6 @@ def test_stage_interface_leaves_fitting_candidates_alone():
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
         "load": "folded_cascode_load_pmos_input_single_output",
-        "second_stage": "common_source"})
+        "second_stage": "common_source_nmos"})
     assert result.bias_feasible
     assert not any("stage interface" in w for w in result.warnings)

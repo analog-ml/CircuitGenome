@@ -16,7 +16,7 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 
 _TOPO = "two_stage_opamp_single_ended"
 _BASE = dict(load="active_load_nmos", tail_current="current_mirror_tail_pmos",
-             second_stage="common_source", compensation="miller_cap")
+             second_stage="common_source_nmos", compensation="miller_cap")
 
 
 def _spec(gain=40):

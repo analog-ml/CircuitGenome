@@ -19,9 +19,9 @@ SPICE netlists.
   `t1/t2` for resistors, `p/m` for capacitors — whatever the YAML uses).
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
   category (input_pair, load, tail_current, cmfb, compensation,
-  amplification_stage — the voltage-gain stages common_source/
+  amplification_stage — the voltage-gain stages common_source_nmos/
   common_source_pmos/differential_ota_second_stage — and output_stage — the
-  source followers common_drain/common_drain_nmos). The bias_generation
+  source followers common_drain_pmos/common_drain_nmos). The bias_generation
   category has **no** variants here — the bias generator is constructed per
   combination (see below). Note: the `second_stage`/`third_stage`/
   `second_stage_p`/`_n`/`third_stage_p`/`_n` topology *slot* names carry
@@ -353,7 +353,7 @@ round-trip tests). Currently parked:
   round-trip tests keep covering its pattern (in the *buffered* NMC
   topologies now — the plain NMC topologies enumerate zero, see below).
 
-The two source followers `common_drain` / `common_drain_nmos` (issue #125)
+The two source followers `common_drain_pmos` / `common_drain_nmos` (issue #125)
 are **no longer parked**: they moved out of the amplification pool into the
 new `output_stage` category and enumerate — un-parked — in the
 `*_buffered_*` topologies, where a follower fills the `output_stage`/

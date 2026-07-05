@@ -712,7 +712,7 @@ patterns:
 
   # ─── AMPLIFICATION STAGE variants ────────────────────────────────────────────
 
-  - name: common_source
+  - name: common_source_nmos
     category: amplification_stage
     circuit_block: gain_stage_2
     devices:
@@ -733,7 +733,7 @@ patterns:
       - {ref: mp1, type: pmos}
       - {ref: mn1, type: nmos}
     # Both drains share the output node. Structurally the mirror image of
-    # common_source -- the same device pair matches both patterns with the
+    # common_source_nmos -- the same device pair matches both patterns with the
     # in/bias pins swapped, and the FBR's connectivity scoring picks the one
     # whose in pin lands on the stage-input net.
     same_net:
@@ -745,7 +745,7 @@ patterns:
 
   # ─── OUTPUT STAGE variants (source-follower buffers) ─────────────────────────
 
-  - name: common_drain
+  - name: common_drain_pmos
     category: output_stage
     circuit_block: output_stage_block
     devices:

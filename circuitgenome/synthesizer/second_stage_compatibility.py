@@ -23,7 +23,7 @@ Which level the signal device needs follows from its *source terminal*:
 - **Source follower** (source on the output node): the gate sits one
   ``V_GS`` *beyond* the output, toward the device's back rail -- an NMOS
   follower's gate is high, a PMOS follower's gate is low. Suits the
-  *same*-polarity pair (issue #110: the mis-wired ``common_drain`` was the
+  *same*-polarity pair (issue #110: the mis-wired ``common_drain_pmos`` was the
   one datum that made a blanket opposite-type rule look right).
 
 The check is *structural* (actual device terminal references, no YAML tags,
