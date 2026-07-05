@@ -117,7 +117,7 @@ def is_compensation_compatible(
     """
     stage_by_in_net: dict[str, tuple[str, str]] = {}
     for slot in topology.slots:
-        if slot.category != "second_stage":
+        if slot.category != "amplification_stage":
             continue
         conns = topology.slot_connections(slot.name)
         if "in" in conns and "out" in conns:

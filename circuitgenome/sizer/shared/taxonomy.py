@@ -21,6 +21,11 @@ FULL_BIAS_SLOTS = frozenset({"tail_current", "bias_gen"})
 SECOND_STAGE_SLOTS = frozenset({"second_stage", "second_stage_p", "second_stage_n"})
 # All third-stage slot names (SE: "third_stage"; FD: "third_stage_p"/"third_stage_n").
 THIRD_STAGE_SLOTS = frozenset({"third_stage", "third_stage_p", "third_stage_n"})
+# Source-follower output-buffer slot names (the *_buffered_* topologies).
+# Deliberately NOT part of STAGE_SLOTS: a follower has gain ~ 1, so it must
+# stay invisible to the gain/PM/topology-mismatch machinery (its devices are
+# sized via their per-transistor intent, not counted in the gain product).
+OUTPUT_STAGE_SLOTS = frozenset({"output_stage", "output_stage_p", "output_stage_n"})
 # All gain-stage slot names (used by the topology-mismatch guard).
 STAGE_SLOTS = SECOND_STAGE_SLOTS | THIRD_STAGE_SLOTS
 

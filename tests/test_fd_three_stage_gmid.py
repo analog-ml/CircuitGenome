@@ -13,8 +13,9 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 def _size(topo_name, want, spec):
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == topo_name)
-    # include_unsupported: the canonical NMC shape needs a follower second
-    # stage, and the followers are parked per issue #125.
+    # include_unsupported: the buffered NMC shape needs the parked
+    # differential_ota_second_stage (issue #114) as its parity-legal second
+    # stage; other shapes tolerate the flag harmlessly.
     circ = next(c for c in enumerate_circuits(topo, mods,
                                               config={"include_unsupported": True})
                 if all(c.variant_map.get(k) and c.variant_map.get(k).name == v
@@ -54,23 +55,28 @@ def test_fd_two_stage_gmid(cmfb):
         assert cmfb_r and all(v > 1e5 for v in cmfb_r)
 
 
-@pytest.mark.parametrize("topo,load,ss,ts,extra", [
+@pytest.mark.parametrize("topo,load,ss,ts,follower", [
     # NMC's comp1 wraps the ss+ts cascade: CS+CS composes non-inverting and
-    # is rejected by the compensation parity filter (issue #114) -- use the
-    # canonical NMC shape (follower ss, CS output stage). RNMC wraps single
-    # stages, so CS+CS stays valid there.
-    ("three_stage_opamp_nmc_single_ended", "folded_cascode_load_pmos_input_single_output",
-     "common_drain", "common_source", {}),
+    # is rejected by the compensation parity filter (issue #114). The
+    # followers moved to the output_stage category (issue #125) and can no
+    # longer be a gain stage, so plain NMC enumerates zero -- use the buffered
+    # NMC topology with the parity-legal ota second stage (ota + CS = 3
+    # inversions) and a follower output_stage. RNMC wraps single stages, so
+    # CS+CS stays valid there (plain topology, no output stage).
+    ("three_stage_buffered_nmc_single_ended", "folded_cascode_load_pmos_input_single_output",
+     "differential_ota_second_stage", "common_source", "common_drain"),
     ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output",
-     "common_source", "common_source", {}),
+     "common_source", "common_source", None),
 ])
-def test_three_stage_se_gmid(topo, load, ss, ts, extra):
+def test_three_stage_se_gmid(topo, load, ss, ts, follower):
     # fc_pmos_single's bias1 is gnd-flavored, the tail and stages vdd-flavored
     # -- mixed, so only resistor_bias survives the flavor filter.
     want = {"input_pair": "differential_pair_pmos", "load": load,
             "tail_current": "current_mirror_tail_pmos",
             "second_stage": ss, "third_stage": ts,
-            "comp1": "miller_cap", "comp2": "miller_cap", **extra}
+            "comp1": "miller_cap", "comp2": "miller_cap"}
+    if follower:
+        want["output_stage"] = follower
     r = _size(topo, want, _TS_SPEC)
     assert r.solver_status == "GMID"
     assert r.transistors and r.cc_pf and r.cc2_pf  # three-stage inner cap set

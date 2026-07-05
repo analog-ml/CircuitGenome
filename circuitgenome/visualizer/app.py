@@ -33,7 +33,8 @@ CATEGORY_COLORS = {
     "bias_generation": "#bde0fe",
     "cmfb": "#cdb4db",
     "compensation": "#a8dadc",
-    "second_stage": "#90be6d",
+    "amplification_stage": "#90be6d",
+    "output_stage": "#43aa8b",
 }
 PRUNED_COLOR = "#d3d3d3"
 

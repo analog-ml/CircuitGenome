@@ -87,7 +87,7 @@ topologies:
       - {name: tail_current, category: tail_current}
       - {name: bias_gen,     category: bias_generation}
       - {name: compensation, category: compensation}
-      - {name: second_stage, category: second_stage}
+      - {name: second_stage, category: amplification_stage}
     connections:
       - {slot: input_pair,   port: in1,   net: in1}
       - {slot: input_pair,   port: in2,   net: in2}
@@ -135,8 +135,8 @@ topologies:
       - {name: cmfb,           category: cmfb}
       - {name: comp_p,         category: compensation}
       - {name: comp_n,         category: compensation}
-      - {name: second_stage_p, category: second_stage}
-      - {name: second_stage_n, category: second_stage}
+      - {name: second_stage_p, category: amplification_stage}
+      - {name: second_stage_n, category: amplification_stage}
     connections:
       - {slot: input_pair,      port: in1,   net: in1}
       - {slot: input_pair,      port: in2,   net: in2}
@@ -197,8 +197,8 @@ topologies:
       - {name: load,         category: load}
       - {name: tail_current, category: tail_current}
       - {name: bias_gen,     category: bias_generation}
-      - {name: second_stage, category: second_stage}
-      - {name: third_stage,  category: second_stage}
+      - {name: second_stage, category: amplification_stage}
+      - {name: third_stage,  category: amplification_stage}
       - {name: comp1,        category: compensation}
       - {name: comp2,        category: compensation}
     connections:
@@ -254,8 +254,8 @@ topologies:
       - {name: load,         category: load}
       - {name: tail_current, category: tail_current}
       - {name: bias_gen,     category: bias_generation}
-      - {name: second_stage, category: second_stage}
-      - {name: third_stage,  category: second_stage}
+      - {name: second_stage, category: amplification_stage}
+      - {name: third_stage,  category: amplification_stage}
       - {name: comp1,        category: compensation}
       - {name: comp2,        category: compensation}
     connections:
@@ -311,12 +311,12 @@ topologies:
       - {name: tail_current,   category: tail_current}
       - {name: bias_gen,       category: bias_generation}
       - {name: cmfb,           category: cmfb}
-      - {name: second_stage_p, category: second_stage}
-      - {name: third_stage_p,  category: second_stage}
+      - {name: second_stage_p, category: amplification_stage}
+      - {name: third_stage_p,  category: amplification_stage}
       - {name: comp1_p,        category: compensation}
       - {name: comp2_p,        category: compensation}
-      - {name: second_stage_n, category: second_stage}
-      - {name: third_stage_n,  category: second_stage}
+      - {name: second_stage_n, category: amplification_stage}
+      - {name: third_stage_n,  category: amplification_stage}
       - {name: comp1_n,        category: compensation}
       - {name: comp2_n,        category: compensation}
     connections:
@@ -388,12 +388,12 @@ topologies:
       - {name: tail_current,   category: tail_current}
       - {name: bias_gen,       category: bias_generation}
       - {name: cmfb,           category: cmfb}
-      - {name: second_stage_p, category: second_stage}
-      - {name: third_stage_p,  category: second_stage}
+      - {name: second_stage_p, category: amplification_stage}
+      - {name: third_stage_p,  category: amplification_stage}
       - {name: comp1_p,        category: compensation}
       - {name: comp2_p,        category: compensation}
-      - {name: second_stage_n, category: second_stage}
-      - {name: third_stage_n,  category: second_stage}
+      - {name: second_stage_n, category: amplification_stage}
+      - {name: third_stage_n,  category: amplification_stage}
       - {name: comp1_n,        category: compensation}
       - {name: comp2_n,        category: compensation}
     connections:
@@ -447,5 +447,421 @@ topologies:
       - {slot: third_stage_n,   port: bias,  net: net_bias6}
       - {slot: comp1_n,         port: in,    net: net_mid2_n}
       - {slot: comp1_n,         port: out,   net: outn}
+      - {slot: comp2_n,         port: in,    net: net_loadout1}
+      - {slot: comp2_n,         port: out,   net: net_mid2_n}
+
+  # ══ BUFFERED TOPOLOGIES ════════════════════════════════════════════════
+  # Same as the topologies above, but with a source-follower output_stage
+  # (gain ~ 1) inserted between the last amplification stage and the final
+  # output. The amplification stage now drives an internal node (net_ampout
+  # / net_ampout_p/n); the follower buffers that node to the output. Miller
+  # compensation is re-pointed to net_ampout so it stays wrapped around the
+  # amplification stage, NOT the follower (a Miller cap across a follower
+  # bootstraps to ~0). See issues #125/#126.
+
+  # ── 2-STAGE BUFFERED (single-ended output) ─────────────────────────────
+  - name: two_stage_buffered_single_ended
+    config:
+      output_type: single_ended
+      stages: 2
+    external_ports: [ibias, in1, in2, out, vdd!, gnd!]
+    slots:
+      - {name: input_pair,   category: input_pair}
+      - {name: load,         category: load}
+      - {name: tail_current, category: tail_current}
+      - {name: bias_gen,     category: bias_generation}
+      - {name: compensation, category: compensation}
+      - {name: second_stage, category: amplification_stage}
+      - {name: output_stage, category: output_stage}
+    connections:
+      - {slot: input_pair,   port: in1,   net: in1}
+      - {slot: input_pair,   port: in2,   net: in2}
+      - {slot: input_pair,   port: out1,  net: net_diff1}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
+      - {slot: input_pair,   port: tail,  net: net_tail}
+      - {slot: load,         port: in1,       net: net_diff1}
+      - {slot: load,         port: in2,       net: net_fold2}
+      - {slot: load,         port: out1,      net: net_diff1}
+      - {slot: load,         port: out2,      net: net_mid}
+      - {slot: load,         port: out,       net: net_mid}
+      - {slot: load,         port: bias1,     net: net_bias1}
+      - {slot: load,         port: bias2,     net: net_bias2}
+      - {slot: load,         port: bias3,     net: net_bias3}
+      - {slot: load,         port: bias_cmfb, net: net_bias4}
+      - {slot: tail_current, port: out,   net: net_tail}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
+      - {slot: bias_gen,     port: ibias, net: ibias}
+      - {slot: bias_gen,     port: out1,  net: net_bias1}
+      - {slot: bias_gen,     port: out2,  net: net_bias2}
+      - {slot: bias_gen,     port: out3,  net: net_bias3}
+      - {slot: bias_gen,     port: out4,  net: net_bias4}
+      - {slot: bias_gen,     port: out5,  net: net_bias5}
+      - {slot: bias_gen,     port: out6,  net: net_bias6}
+      - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
+      - {slot: second_stage, port: in,    net: net_mid}
+      - {slot: second_stage, port: out,   net: net_ampout}
+      - {slot: second_stage, port: bias,  net: net_bias5}
+      - {slot: output_stage, port: in,    net: net_ampout}
+      - {slot: output_stage, port: out,   net: out}
+      - {slot: output_stage, port: bias,  net: net_bias6}
+      - {slot: compensation, port: in,    net: net_mid}
+      - {slot: compensation, port: out,   net: net_ampout}
+
+  # ── 2-STAGE BUFFERED (fully differential output) ───────────────────────
+  - name: two_stage_buffered_fully_differential
+    config:
+      output_type: fully_differential
+      stages: 2
+    external_ports: [ibias, vcm_ref, in1, in2, outp, outn, vdd!, gnd!]
+    slots:
+      - {name: input_pair,     category: input_pair}
+      - {name: load,           category: load}
+      - {name: tail_current,   category: tail_current}
+      - {name: bias_gen,       category: bias_generation}
+      - {name: cmfb,           category: cmfb}
+      - {name: comp_p,         category: compensation}
+      - {name: comp_n,         category: compensation}
+      - {name: second_stage_p, category: amplification_stage}
+      - {name: second_stage_n, category: amplification_stage}
+      - {name: output_stage_p, category: output_stage}
+      - {name: output_stage_n, category: output_stage}
+    connections:
+      - {slot: input_pair,      port: in1,   net: in1}
+      - {slot: input_pair,      port: in2,   net: in2}
+      - {slot: input_pair,      port: out1,  net: net_diff1}
+      - {slot: input_pair,      port: out2,  net: net_diff2}
+      - {slot: input_pair,      port: tail,  net: net_tail}
+      - {slot: load,            port: in1,       net: net_diff1}
+      - {slot: load,            port: in2,       net: net_diff2}
+      - {slot: load,            port: out1,      net: net_loadout1}
+      - {slot: load,            port: out2,      net: net_loadout2}
+      - {slot: load,            port: bias1,     net: net_bias1}
+      - {slot: load,            port: bias2,     net: net_bias2}
+      - {slot: load,            port: bias3,     net: net_bias3}
+      - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
+      - {slot: tail_current,    port: out,   net: net_tail}
+      - {slot: tail_current,    port: bias,      net: net_bias7}
+      - {slot: tail_current,    port: bias_casc, net: net_bias8}
+      - {slot: bias_gen,        port: ibias, net: ibias}
+      - {slot: bias_gen,        port: out1,  net: net_bias1}
+      - {slot: bias_gen,        port: out2,  net: net_bias2}
+      - {slot: bias_gen,        port: out3,  net: net_bias3}
+      - {slot: bias_gen,        port: out4,  net: net_bias4}
+      - {slot: bias_gen,        port: out5,  net: net_bias5}
+      - {slot: bias_gen,        port: out6,  net: net_bias6}
+      - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: bias_gen,        port: out8,  net: net_bias8}
+      - {slot: cmfb,            port: in1,   net: net_loadout1}
+      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: vref,  net: vcm_ref}
+      - {slot: cmfb,            port: bias,  net: net_bias4}
+      - {slot: cmfb,            port: out,   net: net_cmfb_out}
+      # Positive output path
+      - {slot: second_stage_p,  port: in,    net: net_loadout2}
+      - {slot: second_stage_p,  port: out,   net: net_ampout_p}
+      - {slot: second_stage_p,  port: bias,  net: net_bias5}
+      - {slot: output_stage_p,  port: in,    net: net_ampout_p}
+      - {slot: output_stage_p,  port: out,   net: outp}
+      - {slot: output_stage_p,  port: bias,  net: net_bias6}
+      - {slot: comp_p,          port: in,    net: net_loadout2}
+      - {slot: comp_p,          port: out,   net: net_ampout_p}
+      # Negative output path
+      - {slot: second_stage_n,  port: in,    net: net_loadout1}
+      - {slot: second_stage_n,  port: out,   net: net_ampout_n}
+      - {slot: second_stage_n,  port: bias,  net: net_bias5}
+      - {slot: output_stage_n,  port: in,    net: net_ampout_n}
+      - {slot: output_stage_n,  port: out,   net: outn}
+      - {slot: output_stage_n,  port: bias,  net: net_bias6}
+      - {slot: comp_n,          port: in,    net: net_loadout1}
+      - {slot: comp_n,          port: out,   net: net_ampout_n}
+
+  # ── 3-STAGE BUFFERED, NESTED MILLER (single-ended) ─────────────────────
+  # Buffered NMC enumerates ZERO: comp1 wraps second+third (CS+CS = 2
+  # inversions = positive-even) and is rejected by the compensation parity
+  # filter, same as the unbuffered NMC. Kept for symmetry / round-trip.
+  - name: three_stage_buffered_nmc_single_ended
+    config:
+      output_type: single_ended
+      stages: 3
+      compensation_scheme: nested_miller
+    external_ports: [ibias, in1, in2, out, vdd!, gnd!]
+    slots:
+      - {name: input_pair,   category: input_pair}
+      - {name: load,         category: load}
+      - {name: tail_current, category: tail_current}
+      - {name: bias_gen,     category: bias_generation}
+      - {name: second_stage, category: amplification_stage}
+      - {name: third_stage,  category: amplification_stage}
+      - {name: output_stage, category: output_stage}
+      - {name: comp1,        category: compensation}
+      - {name: comp2,        category: compensation}
+    connections:
+      - {slot: input_pair,   port: in1,   net: in1}
+      - {slot: input_pair,   port: in2,   net: in2}
+      - {slot: input_pair,   port: out1,  net: net_diff1}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
+      - {slot: input_pair,   port: tail,  net: net_tail}
+      - {slot: load,         port: in1,       net: net_diff1}
+      - {slot: load,         port: in2,       net: net_fold2}
+      - {slot: load,         port: out1,      net: net_diff1}
+      - {slot: load,         port: out2,      net: net_mid1}
+      - {slot: load,         port: out,       net: net_mid1}
+      - {slot: load,         port: bias1,     net: net_bias1}
+      - {slot: load,         port: bias2,     net: net_bias2}
+      - {slot: load,         port: bias3,     net: net_bias3}
+      - {slot: load,         port: bias_cmfb, net: net_bias4}
+      - {slot: tail_current, port: out,   net: net_tail}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
+      - {slot: bias_gen,     port: ibias, net: ibias}
+      - {slot: bias_gen,     port: out1,  net: net_bias1}
+      - {slot: bias_gen,     port: out2,  net: net_bias2}
+      - {slot: bias_gen,     port: out3,  net: net_bias3}
+      - {slot: bias_gen,     port: out4,  net: net_bias4}
+      - {slot: bias_gen,     port: out5,  net: net_bias5}
+      - {slot: bias_gen,     port: out6,  net: net_bias6}
+      - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
+      - {slot: bias_gen,     port: out9,  net: net_bias9}
+      - {slot: second_stage, port: in,    net: net_mid1}
+      - {slot: second_stage, port: out,   net: net_mid2}
+      - {slot: second_stage, port: bias,  net: net_bias5}
+      - {slot: third_stage,  port: in,    net: net_mid2}
+      - {slot: third_stage,  port: out,   net: net_ampout}
+      - {slot: third_stage,  port: bias,  net: net_bias6}
+      - {slot: output_stage, port: in,    net: net_ampout}
+      - {slot: output_stage, port: out,   net: out}
+      - {slot: output_stage, port: bias,  net: net_bias9}
+      - {slot: comp1,        port: in,    net: net_mid1}
+      - {slot: comp1,        port: out,   net: net_ampout}
+      - {slot: comp2,        port: in,    net: net_mid2}
+      - {slot: comp2,        port: out,   net: net_ampout}
+
+  # ── 3-STAGE BUFFERED, REVERSED NESTED MILLER (single-ended) ────────────
+  - name: three_stage_buffered_rnmc_single_ended
+    config:
+      output_type: single_ended
+      stages: 3
+      compensation_scheme: reversed_nested_miller
+    external_ports: [ibias, in1, in2, out, vdd!, gnd!]
+    slots:
+      - {name: input_pair,   category: input_pair}
+      - {name: load,         category: load}
+      - {name: tail_current, category: tail_current}
+      - {name: bias_gen,     category: bias_generation}
+      - {name: second_stage, category: amplification_stage}
+      - {name: third_stage,  category: amplification_stage}
+      - {name: output_stage, category: output_stage}
+      - {name: comp1,        category: compensation}
+      - {name: comp2,        category: compensation}
+    connections:
+      - {slot: input_pair,   port: in1,   net: in1}
+      - {slot: input_pair,   port: in2,   net: in2}
+      - {slot: input_pair,   port: out1,  net: net_diff1}
+      - {slot: input_pair,   port: out2,  net: net_fold2}
+      - {slot: input_pair,   port: tail,  net: net_tail}
+      - {slot: load,         port: in1,       net: net_diff1}
+      - {slot: load,         port: in2,       net: net_fold2}
+      - {slot: load,         port: out1,      net: net_diff1}
+      - {slot: load,         port: out2,      net: net_mid1}
+      - {slot: load,         port: out,       net: net_mid1}
+      - {slot: load,         port: bias1,     net: net_bias1}
+      - {slot: load,         port: bias2,     net: net_bias2}
+      - {slot: load,         port: bias3,     net: net_bias3}
+      - {slot: load,         port: bias_cmfb, net: net_bias4}
+      - {slot: tail_current, port: out,   net: net_tail}
+      - {slot: tail_current, port: bias,      net: net_bias7}
+      - {slot: tail_current, port: bias_casc, net: net_bias8}
+      - {slot: bias_gen,     port: ibias, net: ibias}
+      - {slot: bias_gen,     port: out1,  net: net_bias1}
+      - {slot: bias_gen,     port: out2,  net: net_bias2}
+      - {slot: bias_gen,     port: out3,  net: net_bias3}
+      - {slot: bias_gen,     port: out4,  net: net_bias4}
+      - {slot: bias_gen,     port: out5,  net: net_bias5}
+      - {slot: bias_gen,     port: out6,  net: net_bias6}
+      - {slot: bias_gen,     port: out7,  net: net_bias7}
+      - {slot: bias_gen,     port: out8,  net: net_bias8}
+      - {slot: bias_gen,     port: out9,  net: net_bias9}
+      - {slot: second_stage, port: in,    net: net_mid1}
+      - {slot: second_stage, port: out,   net: net_mid2}
+      - {slot: second_stage, port: bias,  net: net_bias5}
+      - {slot: third_stage,  port: in,    net: net_mid2}
+      - {slot: third_stage,  port: out,   net: net_ampout}
+      - {slot: third_stage,  port: bias,  net: net_bias6}
+      - {slot: output_stage, port: in,    net: net_ampout}
+      - {slot: output_stage, port: out,   net: out}
+      - {slot: output_stage, port: bias,  net: net_bias9}
+      - {slot: comp1,        port: in,    net: net_mid2}
+      - {slot: comp1,        port: out,   net: net_ampout}
+      - {slot: comp2,        port: in,    net: net_mid1}
+      - {slot: comp2,        port: out,   net: net_mid2}
+
+  # ── 3-STAGE BUFFERED, NESTED MILLER (fully differential) ───────────────
+  - name: three_stage_buffered_nmc_fully_differential
+    config:
+      output_type: fully_differential
+      stages: 3
+      compensation_scheme: nested_miller
+    external_ports: [ibias, vcm_ref, in1, in2, outp, outn, vdd!, gnd!]
+    slots:
+      - {name: input_pair,     category: input_pair}
+      - {name: load,           category: load}
+      - {name: tail_current,   category: tail_current}
+      - {name: bias_gen,       category: bias_generation}
+      - {name: cmfb,           category: cmfb}
+      - {name: second_stage_p, category: amplification_stage}
+      - {name: third_stage_p,  category: amplification_stage}
+      - {name: output_stage_p, category: output_stage}
+      - {name: comp1_p,        category: compensation}
+      - {name: comp2_p,        category: compensation}
+      - {name: second_stage_n, category: amplification_stage}
+      - {name: third_stage_n,  category: amplification_stage}
+      - {name: output_stage_n, category: output_stage}
+      - {name: comp1_n,        category: compensation}
+      - {name: comp2_n,        category: compensation}
+    connections:
+      - {slot: input_pair,      port: in1,   net: in1}
+      - {slot: input_pair,      port: in2,   net: in2}
+      - {slot: input_pair,      port: out1,  net: net_diff1}
+      - {slot: input_pair,      port: out2,  net: net_diff2}
+      - {slot: input_pair,      port: tail,  net: net_tail}
+      - {slot: load,            port: in1,       net: net_diff1}
+      - {slot: load,            port: in2,       net: net_diff2}
+      - {slot: load,            port: out1,      net: net_loadout1}
+      - {slot: load,            port: out2,      net: net_loadout2}
+      - {slot: load,            port: bias1,     net: net_bias1}
+      - {slot: load,            port: bias2,     net: net_bias2}
+      - {slot: load,            port: bias3,     net: net_bias3}
+      - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
+      - {slot: tail_current,    port: out,   net: net_tail}
+      - {slot: tail_current,    port: bias,      net: net_bias7}
+      - {slot: tail_current,    port: bias_casc, net: net_bias8}
+      - {slot: bias_gen,        port: ibias, net: ibias}
+      - {slot: bias_gen,        port: out1,  net: net_bias1}
+      - {slot: bias_gen,        port: out2,  net: net_bias2}
+      - {slot: bias_gen,        port: out3,  net: net_bias3}
+      - {slot: bias_gen,        port: out4,  net: net_bias4}
+      - {slot: bias_gen,        port: out5,  net: net_bias5}
+      - {slot: bias_gen,        port: out6,  net: net_bias6}
+      - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: bias_gen,        port: out8,  net: net_bias8}
+      - {slot: bias_gen,        port: out9,  net: net_bias9}
+      - {slot: cmfb,            port: in1,   net: net_loadout1}
+      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: vref,  net: vcm_ref}
+      - {slot: cmfb,            port: bias,  net: net_bias4}
+      - {slot: cmfb,            port: out,   net: net_cmfb_out}
+      # Positive output path
+      - {slot: second_stage_p,  port: in,    net: net_loadout2}
+      - {slot: second_stage_p,  port: out,   net: net_mid2_p}
+      - {slot: second_stage_p,  port: bias,  net: net_bias5}
+      - {slot: third_stage_p,   port: in,    net: net_mid2_p}
+      - {slot: third_stage_p,   port: out,   net: net_ampout_p}
+      - {slot: third_stage_p,   port: bias,  net: net_bias6}
+      - {slot: output_stage_p,  port: in,    net: net_ampout_p}
+      - {slot: output_stage_p,  port: out,   net: outp}
+      - {slot: output_stage_p,  port: bias,  net: net_bias9}
+      - {slot: comp1_p,         port: in,    net: net_loadout2}
+      - {slot: comp1_p,         port: out,   net: net_ampout_p}
+      - {slot: comp2_p,         port: in,    net: net_mid2_p}
+      - {slot: comp2_p,         port: out,   net: net_ampout_p}
+      # Negative output path
+      - {slot: second_stage_n,  port: in,    net: net_loadout1}
+      - {slot: second_stage_n,  port: out,   net: net_mid2_n}
+      - {slot: second_stage_n,  port: bias,  net: net_bias5}
+      - {slot: third_stage_n,   port: in,    net: net_mid2_n}
+      - {slot: third_stage_n,   port: out,   net: net_ampout_n}
+      - {slot: third_stage_n,   port: bias,  net: net_bias6}
+      - {slot: output_stage_n,  port: in,    net: net_ampout_n}
+      - {slot: output_stage_n,  port: out,   net: outn}
+      - {slot: output_stage_n,  port: bias,  net: net_bias9}
+      - {slot: comp1_n,         port: in,    net: net_loadout1}
+      - {slot: comp1_n,         port: out,   net: net_ampout_n}
+      - {slot: comp2_n,         port: in,    net: net_mid2_n}
+      - {slot: comp2_n,         port: out,   net: net_ampout_n}
+
+  # ── 3-STAGE BUFFERED, REVERSED NESTED MILLER (fully differential) ──────
+  - name: three_stage_buffered_rnmc_fully_differential
+    config:
+      output_type: fully_differential
+      stages: 3
+      compensation_scheme: reversed_nested_miller
+    external_ports: [ibias, vcm_ref, in1, in2, outp, outn, vdd!, gnd!]
+    slots:
+      - {name: input_pair,     category: input_pair}
+      - {name: load,           category: load}
+      - {name: tail_current,   category: tail_current}
+      - {name: bias_gen,       category: bias_generation}
+      - {name: cmfb,           category: cmfb}
+      - {name: second_stage_p, category: amplification_stage}
+      - {name: third_stage_p,  category: amplification_stage}
+      - {name: output_stage_p, category: output_stage}
+      - {name: comp1_p,        category: compensation}
+      - {name: comp2_p,        category: compensation}
+      - {name: second_stage_n, category: amplification_stage}
+      - {name: third_stage_n,  category: amplification_stage}
+      - {name: output_stage_n, category: output_stage}
+      - {name: comp1_n,        category: compensation}
+      - {name: comp2_n,        category: compensation}
+    connections:
+      - {slot: input_pair,      port: in1,   net: in1}
+      - {slot: input_pair,      port: in2,   net: in2}
+      - {slot: input_pair,      port: out1,  net: net_diff1}
+      - {slot: input_pair,      port: out2,  net: net_diff2}
+      - {slot: input_pair,      port: tail,  net: net_tail}
+      - {slot: load,            port: in1,       net: net_diff1}
+      - {slot: load,            port: in2,       net: net_diff2}
+      - {slot: load,            port: out1,      net: net_loadout1}
+      - {slot: load,            port: out2,      net: net_loadout2}
+      - {slot: load,            port: bias1,     net: net_bias1}
+      - {slot: load,            port: bias2,     net: net_bias2}
+      - {slot: load,            port: bias3,     net: net_bias3}
+      - {slot: load,            port: bias_cmfb, net: net_cmfb_out}
+      - {slot: tail_current,    port: out,   net: net_tail}
+      - {slot: tail_current,    port: bias,      net: net_bias7}
+      - {slot: tail_current,    port: bias_casc, net: net_bias8}
+      - {slot: bias_gen,        port: ibias, net: ibias}
+      - {slot: bias_gen,        port: out1,  net: net_bias1}
+      - {slot: bias_gen,        port: out2,  net: net_bias2}
+      - {slot: bias_gen,        port: out3,  net: net_bias3}
+      - {slot: bias_gen,        port: out4,  net: net_bias4}
+      - {slot: bias_gen,        port: out5,  net: net_bias5}
+      - {slot: bias_gen,        port: out6,  net: net_bias6}
+      - {slot: bias_gen,        port: out7,  net: net_bias7}
+      - {slot: bias_gen,        port: out8,  net: net_bias8}
+      - {slot: bias_gen,        port: out9,  net: net_bias9}
+      - {slot: cmfb,            port: in1,   net: net_loadout1}
+      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: vref,  net: vcm_ref}
+      - {slot: cmfb,            port: bias,  net: net_bias4}
+      - {slot: cmfb,            port: out,   net: net_cmfb_out}
+      # Positive output path
+      - {slot: second_stage_p,  port: in,    net: net_loadout2}
+      - {slot: second_stage_p,  port: out,   net: net_mid2_p}
+      - {slot: second_stage_p,  port: bias,  net: net_bias5}
+      - {slot: third_stage_p,   port: in,    net: net_mid2_p}
+      - {slot: third_stage_p,   port: out,   net: net_ampout_p}
+      - {slot: third_stage_p,   port: bias,  net: net_bias6}
+      - {slot: output_stage_p,  port: in,    net: net_ampout_p}
+      - {slot: output_stage_p,  port: out,   net: outp}
+      - {slot: output_stage_p,  port: bias,  net: net_bias9}
+      - {slot: comp1_p,         port: in,    net: net_mid2_p}
+      - {slot: comp1_p,         port: out,   net: net_ampout_p}
+      - {slot: comp2_p,         port: in,    net: net_loadout2}
+      - {slot: comp2_p,         port: out,   net: net_mid2_p}
+      # Negative output path
+      - {slot: second_stage_n,  port: in,    net: net_loadout1}
+      - {slot: second_stage_n,  port: out,   net: net_mid2_n}
+      - {slot: second_stage_n,  port: bias,  net: net_bias5}
+      - {slot: third_stage_n,   port: in,    net: net_mid2_n}
+      - {slot: third_stage_n,   port: out,   net: net_ampout_n}
+      - {slot: third_stage_n,   port: bias,  net: net_bias6}
+      - {slot: output_stage_n,  port: in,    net: net_ampout_n}
+      - {slot: output_stage_n,  port: out,   net: outn}
+      - {slot: output_stage_n,  port: bias,  net: net_bias9}
+      - {slot: comp1_n,         port: in,    net: net_mid2_n}
+      - {slot: comp1_n,         port: out,   net: net_ampout_n}
       - {slot: comp2_n,         port: in,    net: net_loadout1}
       - {slot: comp2_n,         port: out,   net: net_mid2_n}

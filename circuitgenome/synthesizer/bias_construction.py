@@ -55,7 +55,7 @@ from __future__ import annotations
 
 from .models import BiasLegLibrary, Device, ModuleVariant, PortDef, TopologyTemplate
 
-_BIAS_NET_INDEX = {f"net_bias{i}": i for i in range(1, 9)}
+_BIAS_NET_INDEX = {f"net_bias{i}": i for i in range(1, 10)}
 _SUPPLIES = ("vdd", "gnd")
 
 #: Rail kinds whose legs mirror from the PMOS-side reference gate. Present

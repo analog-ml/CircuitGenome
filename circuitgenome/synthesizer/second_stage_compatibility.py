@@ -116,7 +116,7 @@ def is_second_stage_compatible(
         if port in _LOAD_OUTPUT_PORTS
     }
     for slot in topology.slots:
-        if slot.category != "second_stage":
+        if slot.category != "amplification_stage":
             continue
         if topology.slot_connections(slot.name).get("in") not in load_output_nets:
             continue  # e.g. third_stage: senses a wide-swing CS output

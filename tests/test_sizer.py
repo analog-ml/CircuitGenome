@@ -34,9 +34,8 @@ def _tech():
 
 def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = None,
                   include_unsupported: bool = False):
-    # include_unsupported opts parked variants back into the pool — needed by
-    # the NMC fixtures, whose canonical shape (follower second stage, issue
-    # #114) uses the followers parked per issue #125.
+    # include_unsupported opts parked variants (inverter_based_input #113,
+    # differential_ota_second_stage #114) back into the pool.
     modules = load_modules()
     topologies = load_topologies()
     topology = next(t for t in topologies if t.name == topology_name)
@@ -607,22 +606,24 @@ _THREE_STAGE_SPEC = dict(
 
 
 @pytest.fixture(scope="module")
-def three_stage_nmc_se_fbr():
-    # NMC's comp1 wraps the second+third stage cascade: two common-source
-    # stages compose non-inverting and are rejected by the compensation
-    # parity filter (issue #114), so this uses the canonical NMC shape --
-    # non-inverting follower second stage, inverting CS output stage. The
-    # followers are parked per issue #125, so the sizer coverage here rides
-    # on the include_unsupported opt-in.
-    return _fbr("three_stage_opamp_nmc_single_ended", {
+def three_stage_buffered_se_fbr():
+    # Three gain stages (input + two common-source) plus a source-follower
+    # output buffer in the output_stage slot. The old NMC follower-second-stage
+    # shape was removed: followers are now output_stage buffers (not gain
+    # stages), and buffered NMC is still CS+CS parity-rejected, so buffered
+    # RNMC is the enumerable three-stage-with-buffer topology. Exercises the
+    # three-stage sizing path with a follower present (follower reads the
+    # wide-swing amp output net_ampout, not a load window).
+    return _fbr("three_stage_buffered_rnmc_single_ended", {
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
-        "second_stage": "common_drain",
+        "second_stage": "common_source",
         "third_stage":  "common_source",
+        "output_stage": "common_drain",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
-    }, include_unsupported=True)
+    })
 
 
 @pytest.fixture(scope="module")
@@ -639,24 +640,25 @@ def three_stage_rnmc_se_fbr():
 
 
 @pytest.fixture(scope="module")
-def three_stage_nmc_fd_fbr():
-    # Follower second stage + CS output stage per path -- see
-    # three_stage_nmc_se_fbr (compensation parity filter, issue #114;
-    # followers parked per issue #125, hence include_unsupported).
-    return _fbr("three_stage_opamp_nmc_fully_differential", {
+def three_stage_buffered_fd_fbr():
+    # FD counterpart of three_stage_buffered_se_fbr: two CS gain stages per
+    # path plus a follower output buffer per path (output_stage_p/n).
+    return _fbr("three_stage_buffered_rnmc_fully_differential", {
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
         "cmfb":            "resistive_sense_cmfb",
-        "second_stage_p":  "common_drain",
-        "second_stage_n":  "common_drain",
+        "second_stage_p":  "common_source",
+        "second_stage_n":  "common_source",
         "third_stage_p":   "common_source",
         "third_stage_n":   "common_source",
+        "output_stage_p":  "common_drain",
+        "output_stage_n":  "common_drain",
         "comp1_p":         "miller_cap",
         "comp1_n":         "miller_cap",
         "comp2_p":         "miller_cap",
         "comp2_n":         "miller_cap",
-    }, include_unsupported=True)
+    })
 
 
 @pytest.fixture(scope="module")
@@ -679,9 +681,9 @@ def three_stage_rnmc_fd_fbr():
 
 # --- SE NMC ---
 
-def test_size_three_stage_se_basic(three_stage_nmc_se_fbr):
+def test_size_three_stage_se_basic(three_stage_buffered_se_fbr):
     """Three-stage NMC SE: solver returns OPTIMAL/FEASIBLE; both caps present."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
@@ -694,9 +696,9 @@ def test_size_three_stage_se_basic(three_stage_nmc_se_fbr):
         assert tech.length.min <= s.l_um <= tech.length.max, f"{ref}: L out of bounds"
 
 
-def test_three_stage_se_cc2_ratio(three_stage_nmc_se_fbr):
+def test_three_stage_se_cc2_ratio(three_stage_buffered_se_fbr):
     """cc2_pf must equal cc_pf / 4 (Cc2 = Cc1/4 heuristic)."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
@@ -705,9 +707,9 @@ def test_three_stage_se_cc2_ratio(three_stage_nmc_se_fbr):
     assert result.cc2_pf == pytest.approx(result.cc_pf / 4.0, rel=1e-9)
 
 
-def test_three_stage_se_specs_met(three_stage_nmc_se_fbr):
+def test_three_stage_se_specs_met(three_stage_buffered_se_fbr):
     """Three-stage NMC SE: gain, GBW, PM, and SR all meet spec."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     tech = _tech()
     spec = SizingSpec(**_THREE_STAGE_SPEC)
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -722,9 +724,9 @@ def test_three_stage_se_specs_met(three_stage_nmc_se_fbr):
         assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
 
 
-def test_three_stage_se_power(three_stage_nmc_se_fbr):
+def test_three_stage_se_power(three_stage_buffered_se_fbr):
     """Power accounts for tail + second stage + third stage."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_se_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     tech = _tech()
     spec = SizingSpec(**_THREE_STAGE_SPEC)
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -750,9 +752,9 @@ def test_size_three_stage_rnmc_se_basic(three_stage_rnmc_se_fbr):
 
 # --- FD NMC ---
 
-def test_size_three_stage_fd_basic(three_stage_nmc_fd_fbr):
+def test_size_three_stage_fd_basic(three_stage_buffered_fd_fbr):
     """Three-stage NMC FD: OPTIMAL/FEASIBLE; both caps present."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
@@ -762,9 +764,9 @@ def test_size_three_stage_fd_basic(three_stage_nmc_fd_fbr):
     assert result.cc2_pf is not None and result.cc2_pf > 0
 
 
-def test_three_stage_fd_second_stage_symmetry(three_stage_nmc_fd_fbr):
+def test_three_stage_fd_second_stage_symmetry(three_stage_buffered_fd_fbr):
     """second_stage_p and second_stage_n must have equal W and L."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
@@ -779,9 +781,9 @@ def test_three_stage_fd_second_stage_symmetry(three_stage_nmc_fd_fbr):
             assert p_devs[base].l_um == n_devs[base].l_um, f"{base}: L mismatch"
 
 
-def test_three_stage_fd_third_stage_symmetry(three_stage_nmc_fd_fbr):
+def test_three_stage_fd_third_stage_symmetry(three_stage_buffered_fd_fbr):
     """third_stage_p and third_stage_n must have equal W and L."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
@@ -798,9 +800,9 @@ def test_three_stage_fd_third_stage_symmetry(three_stage_nmc_fd_fbr):
         assert p_devs[base].l_um == n_devs[base].l_um, f"{base}: L mismatch"
 
 
-def test_three_stage_fd_power(three_stage_nmc_fd_fbr):
+def test_three_stage_fd_power(three_stage_buffered_fd_fbr):
     """FD three-stage power accounts for 2×second + 2×third stage currents."""
-    parsed, sr_result, fbr_result, topology = three_stage_nmc_fd_fbr
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
     tech = _tech()
     spec = SizingSpec(**_THREE_STAGE_SPEC)
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -836,9 +838,7 @@ def _fbr_pmos_cs_second_stage(topology_name: str):
 
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == topology_name)
-    # NMC circuits require a follower stage (parked, issue #125) — opt in.
-    for circuit in enumerate_circuits(topology, modules,
-                                      config={"include_unsupported": True}):
+    for circuit in enumerate_circuits(topology, modules):
         parsed = parse(to_flat_spice(circuit))
         sr_result = recognize(parsed)
         fbr_result = assign_slots(sr_result, topology)
@@ -859,7 +859,7 @@ def test_three_stage_pmos_cs_metrics_present():
     PMOS-CS stage yielded gm2=gm3=0 and silently dropped these three metrics.
     """
     parsed, sr_result, fbr_result, topology = _fbr_pmos_cs_second_stage(
-        "three_stage_opamp_nmc_single_ended"
+        "three_stage_opamp_rnmc_single_ended"
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(),
                           SizingSpec(**_THREE_STAGE_SPEC))
@@ -1127,6 +1127,13 @@ def test_wideswing_telescopic_window_clears_by_construction():
     assert pin - floor >= 0.3
 
 
+@pytest.mark.skip(reason=(
+    "Follower-as-second-stage no longer enumerates: followers moved to the "
+    "output_stage category (buffered topologies) where they read the "
+    "wide-swing amplification-stage output (net_ampout), not the first-stage "
+    "telescopic mirror window. The stage_interface follower-pin repair this "
+    "test exercised is therefore vestigial for the second_stage path; revisit "
+    "if an output_stage interface check is added."))
 def test_stage_interface_repairs_follower_pin():
     """Telescopic PMOS load + PMOS follower: the follower's pin level
     (Vout − |Vgs|) starts far below the mirror stack; repair moves the
@@ -1145,6 +1152,10 @@ def test_stage_interface_repairs_follower_pin():
     assert stack + 0.049 <= pin
 
 
+@pytest.mark.skip(reason=(
+    "Follower-as-second-stage no longer enumerates (followers are now "
+    "output_stage buffers reading the wide-swing net_ampout, not the "
+    "telescopic mirror window) — see test_stage_interface_repairs_follower_pin."))
 def test_stage_interface_rejects_unclosable_gap():
     """At a 2.0 V supply the PMOS follower cannot pin the node above the
     telescopic mirror stack at any LUT point: honest plan-time reject with an
