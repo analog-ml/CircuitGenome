@@ -120,130 +120,6 @@ in with ``config={"include_unsupported": True}`` or
    ``third_stage``, rail 7 for ``tail_current``).  See
    `Demand-driven bias construction`_ below.
 
-Enumeration and compatibility
------------------------------
-
-Each ``*_buffered_*`` template is the plain template with a source-follower
-``output_stage`` slot inserted after the amplification stage: the amplification
-stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
-there, while the follower drives the final output.
-
-The 5th ``input_pair`` variant, ``inverter_based_input``, is parked with an
-``unsupported:`` reason tag (issue #113): it is self-biased — its quiescent
-current is set by W/L at the gate voltage the wiring pins to Vcm, not by
-``spec.ibias`` — and the gm/Id sizer has no fixed-Vgs sizing path for it, so
-``enumerate_circuits`` drops it from the candidate pool (pass
-``config={"include_unsupported": True}`` to enumerate it anyway, e.g. for
-recognizer round-trips). The 5th ``second_stage`` variant,
-``differential_ota_second_stage``, is parked the same way (issue #114):
-despite its name it is two cascaded common-source stages, so its ``in`` →
-``out`` composite is *non-inverting* — Miller-family compensation around it
-is positive feedback (a right-half-plane AC response whose gain/GBW/PM
-cannot be measured; see the :ref:`compensation parity filter
-<compat-compensation>`) — and its
-internal ``d1`` node is a second gain stage/pole that the sizer's
-single-gm2 stage model cannot see. The non-inverting role that NMC needs for
-gm2 is instead filled by the *enumerable* ``noninverting_stage_{nmos,pmos}``
-variants (issue #139): also non-inverting with gain, but their second
-inversion is a current mirror whose pole sits at a low-Z diode node (out of
-band), so the single-gm2 model holds and the DC bias closes. The two source
-followers ``common_drain``
-and ``common_drain_nmos`` (issue #125) are **not** parked: they moved out of
-the amplification pool into the new ``output_stage`` category and enumerate
-in the ``*_buffered_*`` templates, where a follower fills the ``output_stage``
-(``_p``/``_n``) slot after the amplification stage. A follower is A2 ≈ 1 (a
-buffer, not a gain stage), so it is excluded from the gain product — a
-buffered circuit's ``gain_db`` equals its unbuffered sibling's — and it can no
-longer occupy a ``second_stage``/``third_stage`` gain slot.
-
-A softer tag, ``bias_infeasible:``, marks a variant whose wiring is
-*functionally correct* but whose DC bias does not close under the normal
-supply/Vcm headroom of the default (low-voltage) spec class — currently the
-two ``stacked_cascode_current_mirror_tail_*`` variants (issue #111). A
-stacked-diode cascode mirror pins its output cascode's source a full
-``|Vgs|`` from the rail, so the tail node needs ``|Vgs|+Vdsat`` (~1.3 V at
-gf180) of compliance versus the wide-swing ``cascode_current_mirror_tail_*``'s
-``2·Vdsat`` (~0.35 V). Unlike an ``unsupported`` variant it builds into a
-complete, valid netlist (it self-biases its cascode gate, so it consumes only
-rail 7 and needs no rail 8) and would size normally; it is simply predicted to
-be rejected at the DC bias gate. ``enumerate_circuits`` drops it by default and
-keeps it only with ``config={"include_infeasible": True}`` (CLI:
-``--include-infeasible``) — intended for design-space exploration, which wants
-the full set of functionally-correct wirings, including correct-but-infeasible
-circuits, as mutation seeds rather than acceptance candidates.
-
-Of the remaining 4 × 14 × 6 = 336 possible ``input_pair`` / ``load`` /
-``tail_current`` combinations, only 84 have compatible PMOS/NMOS polarities
-(see the :ref:`polarity compatibility filter <compat-polarity>`) — the rest
-are filtered out by ``enumerate_circuits``. Of those 84, the
-:ref:`output-cardinality compatibility filter <compat-output-cardinality>`
-further splits them by which
-output type the ``load`` supports: **60** are valid for single-ended
-templates (excluding the 12 combinations using a differential-output cascode
-load and the 12 using a ``current_source_load_*``, whose CMFB-driven gates
-need a fully-differential template; issue #112) and **48** are valid for
-fully-differential templates (excluding the 36 combinations using a
-single-output cascode or telescopic-cascode load). The
-:ref:`untapped-load-branch compatibility filter <compat-load-branch>`
-independently guards the same
-``current_source_load_*`` exclusion structurally: a load may not leave the
-single-ended templates' untapped branch node high-impedance (no defined
-operating point; issue #112).
-
-The ``bias_generation`` slot contributes no enumeration factor at all: its
-variant is *constructed* per combination from what the other slots consume
-on each bias rail (see "Demand-driven bias construction" below), so every
-core combination carries exactly one, structurally matched bias generator.
-
-The 1-stage template therefore produces **60 distinct circuits**. In the
-multi-stage templates, 4 ``amplification_stage`` variants are enumerable —
-the two common-source stages (``common_source``, ``common_source_pmos``) and
-the two non-inverting current-mirror stages (``noninverting_stage_nmos``,
-``noninverting_stage_pmos``, added in issue #139); the two followers moved to
-the ``output_stage`` category (issue #125) and
-``differential_ota_second_stage`` is parked per issue #114, see above. The
-``second_stage`` slot that senses the first stage's output keeps only the
-level-reachable ones (the :ref:`stage-interface compatibility filter
-<compat-stage-interface>`): one CS + one non-inverting stage per pair
-polarity (``common_source``/``noninverting_stage_nmos`` for the 24 PMOS-pair
-combinations, ``common_source_pmos``/``noninverting_stage_pmos`` for the 24
-NMOS-pair combinations). In the 2-stage template the single ``compensation``
-slot wraps that second stage directly, so the :ref:`compensation parity
-filter <compat-compensation>` rejects the non-inverting stage (a
-positive-even inversion count is positive feedback around a Miller cap),
-leaving one CS stage per polarity. The 2-stage
-single-ended template thus produces **180 circuits**
-((30 × 1 + 30 × 1) × 3 ``compensation``; the count grew from 144 when the
-two wide-swing telescopic loads were added, issue #129). The 2-stage
-fully-differential template, which has two ``compensation`` slots, two
-``second_stage`` slots (one per output path, both sensing the first
-stage), and one ``cmfb`` slot, produces **648 circuits**: of the 48
-fully-differential-compatible ``input_pair``/``load``/``tail_current``
-combinations, the 24 using a ``"differential"``-cardinality load (the two
-differential-output cascode loads and the two ``current_source_load_*``)
-keep both ``cmfb`` variants (24 × 2 = 48); the other 24 collapse ``cmfb``
-to a single canonical variant (24 × 1 = 24) -- 48 + 24 = 72 effective
-load/``cmfb`` combinations (see the :ref:`CMFB compatibility filter
-<compat-cmfb>`) -- 72
-× 1² × 9 ``compensation`` pairs = 648. Each 3-stage
-single-ended template adds two more ``second_stage`` slots (gm2, gm3 --
-only gm2 senses the first stage; gm3 keeps both CS variants) and
-two ``compensation`` slots (Cm1, Cm2) on top of the 1-stage base. In the
-NMC scheme Cm1 wraps the gm2+gm3 cascade while Cm2 wraps gm3 alone: Cm2
-forces gm3 inverting (a CS stage), and Cm1 then requires gm2 to be
-non-inverting (the level-reachable ``noninverting_stage_*`` stage, so its
-+2 inversions make the wrapped cascade odd) — the :ref:`compensation
-parity filter <compat-compensation>` admits exactly that nesting, so the
-NMC single-ended template enumerates **1080 circuits** (60 × 1 gm2 × 2 gm3
-× 9). Before the non-inverting stage existed (issue #139) no gm2 could
-satisfy Cm1 and the template enumerated 0. In the RNMC scheme each
-capacitor wraps a single stage, so the non-inverting stage is rejected in
-either slot and only the CS×CS pairings survive: **1080 circuits**
-(60 × 2 × 9). Each 3-stage fully-differential template duplicates those
-four slots per output path (and keeps the single ``cmfb`` slot), producing
-non-empty sets for both schemes: NMC and **23 328 circuits** (RNMC,
-72 × (2 × 9)²).
-
 Demand-driven bias construction
 --------------------------------
 
@@ -433,6 +309,148 @@ instances.  Shared variants are defined only once.
    Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
    ...
    .ends
+
+Enumeration and compatibility
+-----------------------------
+
+Each ``*_buffered_*`` template is the plain template with a source-follower
+``output_stage`` slot inserted after the amplification stage: the amplification
+stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
+there, while the follower drives the final output.
+
+The 5th ``input_pair`` variant, ``inverter_based_input``, is parked with an
+``unsupported:`` reason tag (issue #113): it is self-biased — its quiescent
+current is set by W/L at the gate voltage the wiring pins to Vcm, not by
+``spec.ibias`` — and the gm/Id sizer has no fixed-Vgs sizing path for it, so
+``enumerate_circuits`` drops it from the candidate pool (pass
+``config={"include_unsupported": True}`` to enumerate it anyway, e.g. for
+recognizer round-trips). The 5th ``second_stage`` variant,
+``differential_ota_second_stage``, is parked the same way (issue #114):
+despite its name it is two cascaded common-source stages, so its ``in`` →
+``out`` composite is *non-inverting* — Miller-family compensation around it
+is positive feedback (a right-half-plane AC response whose gain/GBW/PM
+cannot be measured; see the :ref:`compensation parity filter
+<compat-compensation>`) — and its
+internal ``d1`` node is a second gain stage/pole that the sizer's
+single-gm2 stage model cannot see. The non-inverting role that NMC needs for
+gm2 is instead filled by the *enumerable* ``noninverting_stage_{nmos,pmos}``
+variants (issue #139): also non-inverting with gain, but their second
+inversion is a current mirror whose pole sits at a low-Z diode node (out of
+band), so the single-gm2 model holds and the DC bias closes. The two source
+followers ``common_drain``
+and ``common_drain_nmos`` (issue #125) are **not** parked: they moved out of
+the amplification pool into the new ``output_stage`` category and enumerate
+in the ``*_buffered_*`` templates, where a follower fills the ``output_stage``
+(``_p``/``_n``) slot after the amplification stage. A follower is A2 ≈ 1 (a
+buffer, not a gain stage), so it is excluded from the gain product — a
+buffered circuit's ``gain_db`` equals its unbuffered sibling's — and it can no
+longer occupy a ``second_stage``/``third_stage`` gain slot.
+
+A softer tag, ``bias_infeasible:``, marks a variant whose wiring is
+*functionally correct* but whose DC bias does not close under the normal
+supply/Vcm headroom of the default (low-voltage) spec class — currently the
+two ``stacked_cascode_current_mirror_tail_*`` variants (issue #111). A
+stacked-diode cascode mirror pins its output cascode's source a full
+``|Vgs|`` from the rail, so the tail node needs ``|Vgs|+Vdsat`` (~1.3 V at
+gf180) of compliance versus the wide-swing ``cascode_current_mirror_tail_*``'s
+``2·Vdsat`` (~0.35 V). Unlike an ``unsupported`` variant it builds into a
+complete, valid netlist (it self-biases its cascode gate, so it consumes only
+rail 7 and needs no rail 8) and would size normally; it is simply predicted to
+be rejected at the DC bias gate. ``enumerate_circuits`` drops it by default and
+keeps it only with ``config={"include_infeasible": True}`` (CLI:
+``--include-infeasible``) — intended for design-space exploration, which wants
+the full set of functionally-correct wirings, including correct-but-infeasible
+circuits, as mutation seeds rather than acceptance candidates.
+
+Number of Combination Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The core first stage is one ``input_pair`` × ``load`` × ``tail_current``
+combination.  Successive compatibility filters (marked with symbols and
+explained below the tables) narrow the raw combinations to the structurally
+valid ones:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 58 18 24
+
+   * - Combinations
+     - Count
+     - Filter
+   * - 4 ``input_pair`` × 14 ``load`` × 6 ``tail_current`` (raw)
+     - 336
+     - —
+   * - compatible PMOS/NMOS polarities
+     - 84
+     - †
+   * - valid for single-ended templates
+     - 60
+     - ‡
+   * - valid for fully-differential templates
+     - 48
+     - ‡
+
+The ``bias_generation`` slot adds no factor — it is constructed per combination
+(see `Demand-driven bias construction`_ above), so every core combination
+carries exactly one matched bias generator.  Each template's circuit count then
+follows from the extra slots it adds:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 46 34 20
+
+   * - Template
+     - Factors
+     - Circuits
+   * - ``one_stage_opamp``
+     - 60 core
+     - 60
+   * - ``two_stage_opamp_single_ended``
+     - 60 × 1 ``second_stage`` § × 3 ``compensation`` ‖
+     - 180
+   * - ``two_stage_opamp_fully_differential``
+     - 72 ``load``/``cmfb`` ¶ × 9 ``compensation``-pairs
+     - 648
+   * - ``three_stage_opamp_nmc_single_ended``
+     - 60 × 1 gm2 × 2 gm3 × 9 ‖
+     - 1,080
+   * - ``three_stage_opamp_rnmc_single_ended``
+     - 60 × 2 × 9
+     - 1,080
+   * - ``three_stage_opamp_{nmc,rnmc}_fully_differential``
+     - 72 × (2 × 9)²
+     - 23,328
+
+**Compatibility filters** (section-local symbols):
+
+| **†** :ref:`Polarity <compat-polarity>` — drops slot combinations that mix
+  PMOS- and NMOS-tagged variants.
+| **‡** :ref:`Output-cardinality <compat-output-cardinality>` — single-ended
+  templates exclude the 24 differential-only loads (12 differential-output
+  cascode + 12 ``current_source_load_*``); fully-differential templates exclude
+  the 36 single-output cascode / telescopic loads. The
+  :ref:`untapped-load-branch filter <compat-load-branch>` structurally
+  co-guards the ``current_source_load_*`` exclusion (issue #112).
+| **§** :ref:`Stage-interface <compat-stage-interface>` — the ``second_stage``
+  keeps only the level-reachable variants: one CS + one non-inverting stage per
+  input-pair polarity.
+| **¶** :ref:`CMFB <compat-cmfb>` — of the 48 fully-differential combinations,
+  the 24 with a ``"differential"``-cardinality load keep both CMFB variants
+  (24 × 2) while the other 24 collapse to one (24 × 1), giving 72 effective
+  ``load``/``cmfb`` combinations.
+| **‖** :ref:`Compensation parity <compat-compensation>` — in the 2-stage
+  template the single ``compensation`` slot wraps the second stage directly, so
+  the non-inverting stage is rejected (positive feedback), leaving one CS stage
+  per polarity. The 3-stage NMC scheme's nested ``Cm1`` instead *requires* a
+  non-inverting gm2, supplied by the ``noninverting_stage_*`` variants (issue
+  #139); before they existed the NMC templates enumerated zero.
+
+.. note::
+
+   ``60`` = 30 PMOS-pair + 30 NMOS-pair combinations.  The ``*_buffered_*``
+   templates multiply these base counts by their source-follower
+   ``output_stage`` slot; the full per-template table (all 13 templates) is in
+   the :doc:`Overview <../overview>`.
 
 Analysis
 --------
