@@ -138,17 +138,17 @@ keeps it only with ``config={"include_infeasible": True}`` (CLI:
 the full set of functionally-correct wirings, including correct-but-infeasible
 circuits, as mutation seeds rather than acceptance candidates.
 
-Of the remaining 4 × 12 × 6 = 288 possible ``input_pair`` / ``load`` /
-``tail_current`` combinations, only 72 have compatible PMOS/NMOS polarities
+Of the remaining 4 × 14 × 6 = 336 possible ``input_pair`` / ``load`` /
+``tail_current`` combinations, only 84 have compatible PMOS/NMOS polarities
 (see the :ref:`polarity compatibility filter <compat-polarity>`) — the rest
-are filtered out by ``enumerate_circuits``. Of those 72, the
+are filtered out by ``enumerate_circuits``. Of those 84, the
 :ref:`output-cardinality compatibility filter <compat-output-cardinality>`
 further splits them by which
-output type the ``load`` supports: **48** are valid for single-ended
+output type the ``load`` supports: **60** are valid for single-ended
 templates (excluding the 12 combinations using a differential-output cascode
 load and the 12 using a ``current_source_load_*``, whose CMFB-driven gates
 need a fully-differential template; issue #112) and **48** are valid for
-fully-differential templates (excluding the 24 combinations using a
+fully-differential templates (excluding the 36 combinations using a
 single-output cascode or telescopic-cascode load). The
 :ref:`untapped-load-branch compatibility filter <compat-load-branch>`
 independently guards the same

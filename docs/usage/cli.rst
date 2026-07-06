@@ -91,15 +91,21 @@ Generating circuits
    # correct) wirings, e.g. the stacked-diode cascode tails
    circuitgenome synthesize --stages 2 --include-infeasible --dry-run
 
-Sample output::
+Sample output (``--stages 2 --dry-run``)::
 
    Topology: two_stage_opamp_single_ended
-     Generated 1890 circuits
+     Generated 180 circuits
 
    Topology: two_stage_opamp_fully_differential
-     Generated 17010 circuits
+     Generated 648 circuits
 
-   Total: 18900 circuits (dry run — no files written)
+   Topology: two_stage_opamp_buffered_single_ended
+     Generated 360 circuits
+
+   Topology: two_stage_opamp_buffered_fully_differential
+     Generated 2592 circuits
+
+   Total: 3780 circuits (dry run — no files written)
 
 Output filenames follow the pattern ``circuit_NNNN_flat.ckt`` /
 ``circuit_NNNN_hier.ckt``, numbered sequentially within each topology.
