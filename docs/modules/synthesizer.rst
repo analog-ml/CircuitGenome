@@ -33,58 +33,92 @@ Entry points
 Module categories
 -----------------
 
+.. role:: strike
+
+Counts are shown as ``active + parked`` (the ``+ parked`` term is omitted where
+there are none); parked variants are struck through and carry a symbol
+explained below the table.
+
 .. list-table::
    :header-rows: 1
-   :widths: 25 75
+   :widths: 30 70
 
    * - Category
      - Variants
-   * - Input pair
-     - PMOS differential pair, NMOS differential pair, PMOS with source
-       degeneration, NMOS with source degeneration, inverter-based (parked
-       as ``unsupported``, issue #113: no fixed-Vgs sizing path yet)
-   * - Load
-     - Resistor (VDD-side / GND-side), PMOS active (current mirror), NMOS
-       active (current mirror), PMOS/NMOS current source, folded cascode
-       (PMOS/NMOS-input, single-output & differential-output), telescopic
-       cascode (PMOS/NMOS, self-biased & wide-swing/Sooch — issue #129)
-   * - Tail current
-     - Current mirror (PMOS/NMOS), cascode current mirror (PMOS/NMOS),
-       resistor (VDD-side / GND-side)
-   * - Bias generation
-     - No enumerated variants: constructed per combination from consumer
-       demands (see "Demand-driven bias construction" below) -- an NMOS
-       master reference on ``ibias`` plus one typed leg per consumed rail
-       (rails 1-4 for ``load``, rail 5 for ``second_stage``, rail 6 for
-       ``third_stage``, rail 7 for ``tail_current``)
-   * - CMFB
-     - Resistive-sense 5T OTA, differential-difference amplifier (DDA) --
-       senses the load's first-stage differential outputs
-       (``net_diff1``/``net_diff2``) against an external ``vcm_ref`` and
-       drives the ``bias_cmfb`` input of the differential-output cascode
-       loads and the ``current_source_load_*`` variants.
-       Present only when ``load``'s ``output_cardinality`` is
-       ``"differential"``; otherwise pruned to an empty placeholder (see
-       the :ref:`CMFB compatibility filter <compat-cmfb>`) and ``vcm_ref``
-       is left unconnected.
-   * - Compensation
-     - Miller capacitor, Miller cap with nulling resistor, indirect
-       compensation
-   * - Amplification stage
-     - Common-source (NMOS/PMOS); non-inverting current-mirror stage
-       (NMOS/PMOS input, issue #139: a CS input device driving a
-       current-mirror active load — non-inverting *with* a single dominant
-       pole, so it fills the NMC gm2 slot that needs a non-inverting stage);
-       differential OTA (parked as ``unsupported``, issue #114: actually two
-       cascaded common-source stages — non-inverting but with an in-band
-       second pole). Fills the ``second_stage``/``third_stage`` (and
-       ``_p``/``_n``) topology slots.
-   * - Output stage
-     - Common-drain source follower (PMOS/NMOS). Fills the ``output_stage``
-       (and ``_p``/``_n``) slots of the ``*_buffered_*`` topologies only; a
-       follower is A2 ≈ 1 (a buffer, not a gain stage) and is excluded from
-       the gain product, so a buffered circuit's ``gain_db`` equals its
-       unbuffered sibling's.
+   * - Input pair (4 + 1)
+     - | PMOS differential pair
+       | NMOS differential pair
+       | PMOS with source degeneration
+       | NMOS with source degeneration
+       | :strike:`Inverter-based` †
+   * - Load (14)
+     - | Resistor (VDD-side)
+       | Resistor (GND-side)
+       | PMOS active (current mirror)
+       | NMOS active (current mirror)
+       | PMOS current source
+       | NMOS current source
+       | Folded cascode, NMOS-input, single-output
+       | Folded cascode, PMOS-input, single-output
+       | Folded cascode, NMOS-input, differential-output
+       | Folded cascode, PMOS-input, differential-output
+       | Telescopic cascode (PMOS), self-biased
+       | Telescopic cascode (NMOS), self-biased
+       | Telescopic cascode (PMOS), wide-swing / Sooch
+       | Telescopic cascode (NMOS), wide-swing / Sooch
+   * - Tail current (6 + 2)
+     - | Current mirror (PMOS)
+       | Current mirror (NMOS)
+       | Cascode current mirror (PMOS)
+       | Cascode current mirror (NMOS)
+       | Resistor (VDD-side)
+       | Resistor (GND-side)
+       | :strike:`Stacked-diode cascode mirror (PMOS)` ‡
+       | :strike:`Stacked-diode cascode mirror (NMOS)` ‡
+   * - CMFB (2)
+     - | Resistive-sense 5T OTA
+       | Differential-difference amplifier (DDA)
+   * - Compensation (3)
+     - | Miller capacitor
+       | Miller cap with nulling resistor
+       | Indirect compensation
+   * - Amplification stage (4 + 1)
+     - | Common-source (NMOS)
+       | Common-source (PMOS)
+       | Non-inverting current-mirror (NMOS-input)
+       | Non-inverting current-mirror (PMOS-input)
+       | :strike:`Differential OTA` §
+   * - Output stage (2)
+     - | Common-drain follower (PMOS)
+       | Common-drain follower (NMOS)
+
+Parked variants are excluded from the default enumeration but can be opted back
+in with ``config={"include_unsupported": True}`` or
+``config={"include_infeasible": True}`` (CLI ``--include-infeasible``):
+
+| **†** ``inverter_based_input`` — ``unsupported`` (issue #113): self-biased, so
+  its quiescent current is set by W/L at the wiring-pinned gate voltage, not by
+  ``spec.ibias``, and the gm/Id sizer has no fixed-Vgs path for it.
+| **‡** ``stacked_cascode_current_mirror_tail_{pmos,nmos}`` — ``bias_infeasible``
+  (issue #111): the output cascode's source sits a full ``|Vgs|`` from the rail,
+  needing ``|Vgs|+Vdsat`` (~1.3 V at gf180) of tail compliance the default
+  low-voltage spec class cannot provide. The wiring is valid; only the DC bias
+  fails.
+| **§** ``differential_ota_second_stage`` — ``unsupported`` (issue #114): despite
+  the name it is two cascaded common-source stages, so its ``in`` → ``out``
+  composite is non-inverting (Miller compensation around it is positive
+  feedback), and its internal node is a second in-band pole the single-gm2
+  sizer cannot model.
+
+.. admonition:: Bias generation — constructed, not enumerated
+   :class: important
+
+   The ``bias_generation`` slot carries **no enumerated variants**: it is
+   *constructed* per combination from what the other slots consume on each bias
+   rail — an NMOS master reference on ``ibias`` plus one typed leg per consumed
+   rail (rails 1–4 for ``load``, rail 5 for ``second_stage``, rail 6 for
+   ``third_stage``, rail 7 for ``tail_current``).  See
+   `Demand-driven bias construction`_ below.
 
 Enumeration and compatibility
 -----------------------------
