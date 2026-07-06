@@ -79,7 +79,7 @@ def size_gmid(
     extra_r = {**extra_r, **level_r}
 
     # Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.
-    metrics, margins = evaluate_circuit(
+    metrics, margins, eval_notes = evaluate_circuit(
         view, currents, plan, sizing, modifiers, spec, tech)
 
     return SizingResult(
@@ -90,7 +90,7 @@ def size_gmid(
         solver_status="GMID",
         cc2_pf=plan.cc2_pf,
         warnings=(view.warnings + plan.warnings + geom_warnings + dc_warnings
-                  + si_warnings),
+                  + si_warnings + eval_notes),
         resistors={**currents.load_resistors, **extra_r},
         bias_feasible=bias_feasible,
         transistor_intents=plan.tintents,

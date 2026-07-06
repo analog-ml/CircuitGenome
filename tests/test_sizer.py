@@ -1163,3 +1163,40 @@ def test_stage_interface_leaves_fitting_candidates_alone():
         "second_stage": "common_source_nmos"})
     assert result.bias_feasible
     assert not any("stage interface" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
+# Resistor-load DC-headroom gate (issue #148)
+# ---------------------------------------------------------------------------
+
+def test_resistor_load_gates_gain_when_interstage_cannot_bias():
+    """A fixed rail-referenced resistor load holds the first-stage output at
+    I·R from its rail; when that misses the driven common-source stage's |Vgs|
+    by more than the stage's Vdsat, the open-loop output rails, so the analytical
+    gain (and the GBW/PM/CMRR/PSRR that derive from it) must be reported as
+    unmeasurable — not an optimistic gm·Rout (issue #148)."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "resistor_load_gnd",
+        "second_stage": "common_source_nmos"})
+    assert result.solver_status == "GMID"
+    # Gain-derived metrics dropped; large-signal metrics that still hold stay.
+    for k in ("gain_db", "gbw_hz", "phase_margin_deg", "cmrr_db", "psrr_db"):
+        assert k not in result.metrics
+    assert "power_w" in result.metrics
+    assert "slew_rate_vps" in result.metrics
+    assert any("issue #148" in w for w in result.warnings)
+
+
+def test_resistor_load_keeps_gain_when_interstage_biases():
+    """The consistent twin: I·R lands within the driven stage's Vdsat of its
+    |Vgs|, so the operating point is valid and the gain is still reported — only
+    the corner-fragility advisory (a fixed resistor cannot track Vth) is added."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_nmos",
+        "load": "resistor_load_vdd",
+        "second_stage": "common_source_pmos"})
+    assert result.solver_status == "GMID"
+    assert result.metrics.get("gain_db") is not None
+    assert not any("issue #148" in w for w in result.warnings)
+    assert any("corner-fragile" in w for w in result.warnings)
