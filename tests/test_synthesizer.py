@@ -1061,12 +1061,12 @@ def test_load_topologies():
     assert "three_stage_opamp_rnmc_single_ended" in names
     assert "three_stage_opamp_nmc_fully_differential" in names
     assert "three_stage_opamp_rnmc_fully_differential" in names
-    assert "two_stage_buffered_single_ended" in names
-    assert "two_stage_buffered_fully_differential" in names
-    assert "three_stage_buffered_nmc_single_ended" in names
-    assert "three_stage_buffered_rnmc_single_ended" in names
-    assert "three_stage_buffered_nmc_fully_differential" in names
-    assert "three_stage_buffered_rnmc_fully_differential" in names
+    assert "two_stage_opamp_buffered_single_ended" in names
+    assert "two_stage_opamp_buffered_fully_differential" in names
+    assert "three_stage_opamp_nmc_buffered_single_ended" in names
+    assert "three_stage_opamp_rnmc_buffered_single_ended" in names
+    assert "three_stage_opamp_nmc_buffered_fully_differential" in names
+    assert "three_stage_opamp_rnmc_buffered_fully_differential" in names
 
 
 def test_enumerate_circuits_nonempty():
@@ -1342,7 +1342,7 @@ def test_enumerate_three_stage_fully_differential_nonempty():
     assert next(enumerate_circuits(topo, modules), None) is not None
 
 
-def test_enumerate_two_stage_buffered_count():
+def test_enumerate_two_stage_opamp_buffered_count():
     """The buffered 2-stage topologies insert a follower output_stage slot
     after the amplification stage (issue #125's un-parked followers, now in
     the output_stage category). Each buffered circuit's amplification stage
@@ -1356,8 +1356,8 @@ def test_enumerate_two_stage_buffered_count():
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "two_stage_buffered_single_ended": 360,
-        "two_stage_buffered_fully_differential": 2592,
+        "two_stage_opamp_buffered_single_ended": 360,
+        "two_stage_opamp_buffered_fully_differential": 2592,
     }
     for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
@@ -1376,8 +1376,8 @@ def test_enumerate_three_stage_buffered_single_ended_count():
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "three_stage_buffered_nmc_single_ended": 2160,
-        "three_stage_buffered_rnmc_single_ended": 2160,
+        "three_stage_opamp_nmc_buffered_single_ended": 2160,
+        "three_stage_opamp_rnmc_buffered_single_ended": 2160,
     }
     for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
@@ -1394,11 +1394,11 @@ def test_enumerate_three_stage_buffered_fully_differential_nonempty():
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies
-                if t.name == "three_stage_buffered_rnmc_fully_differential")
+                if t.name == "three_stage_opamp_rnmc_buffered_fully_differential")
     assert next(enumerate_circuits(topo, modules), None) is not None
 
     topo = next(t for t in topologies
-                if t.name == "three_stage_buffered_nmc_fully_differential")
+                if t.name == "three_stage_opamp_nmc_buffered_fully_differential")
     assert next(enumerate_circuits(topo, modules), None) is not None
 
 
@@ -1418,7 +1418,7 @@ def test_synthesize_three_stage_single_ended_filters():
     assert len(nmc) == 1080 + 2160
     assert {c.topology for c in nmc} == {
         "three_stage_opamp_nmc_single_ended",
-        "three_stage_buffered_nmc_single_ended",
+        "three_stage_opamp_nmc_buffered_single_ended",
     }
 
     # The config triple now matches both the plain (1080) and buffered (2160)
@@ -1426,7 +1426,7 @@ def test_synthesize_three_stage_single_ended_filters():
     assert len(rnmc) == 1080 + 2160
     assert {c.topology for c in rnmc} == {
         "three_stage_opamp_rnmc_single_ended",
-        "three_stage_buffered_rnmc_single_ended",
+        "three_stage_opamp_rnmc_buffered_single_ended",
     }
 
     # The exact-topology filter still isolates just the plain topology.
@@ -1435,7 +1435,7 @@ def test_synthesize_three_stage_single_ended_filters():
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in plain)
 
 
-def test_three_stage_buffered_rnmc_flat_spice_structure():
+def test_three_stage_opamp_rnmc_buffered_flat_spice_structure():
     # The follower moved to the output_stage category (issue #125), so it can
     # no longer be a gain (second/third) stage; the 3-stage buffered RNMC
     # topology inserts it in the output_stage slot after the amplification
@@ -1445,7 +1445,7 @@ def test_three_stage_buffered_rnmc_flat_spice_structure():
     # #114 -- which is why the buffered NMC topology enumerates zero).
     modules = load_modules()
     topologies = load_topologies()
-    topo = next(t for t in topologies if t.name == "three_stage_buffered_rnmc_single_ended")
+    topo = next(t for t in topologies if t.name == "three_stage_opamp_rnmc_buffered_single_ended")
 
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
@@ -1475,13 +1475,13 @@ def test_three_stage_buffered_rnmc_flat_spice_structure():
     assert any(l.split()[0].endswith("_output_stage") for l in lines)
 
 
-def test_three_stage_buffered_rnmc_hierarchical_spice():
+def test_three_stage_opamp_rnmc_buffered_hierarchical_spice():
     # The follower (common_drain_nmos) moved to the output_stage category
     # (issue #125), so this hierarchical-serialization structure check now
     # exercises it in the buffered RNMC topology's output_stage slot.
     modules = load_modules()
     topologies = load_topologies()
-    topo = next(t for t in topologies if t.name == "three_stage_buffered_rnmc_single_ended")
+    topo = next(t for t in topologies if t.name == "three_stage_opamp_rnmc_buffered_single_ended")
 
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
@@ -1629,10 +1629,10 @@ def test_required_rail_kinds_second_stage_rail_5(stage_name, expected):
 )
 def test_required_rail_kinds_output_stage_rail_6(stage_name, expected):
     """The source followers moved to the output_stage category (issue #125);
-    two_stage_buffered_single_ended's output_stage slot taps its own dedicated
+    two_stage_opamp_buffered_single_ended's output_stage slot taps its own dedicated
     rail 6, and the kind follows the supply its bias gate's source sits on."""
     modules = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "two_stage_buffered_single_ended")
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_buffered_single_ended")
     # A same-polarity follower needs a same-polarity CS amp stage (issue #109
     # level rule): PMOS pair -> common_source_nmos + common_drain_pmos, NMOS pair ->
     # common_source_pmos + common_drain_nmos.
@@ -2216,7 +2216,7 @@ def test_enumerate_circuits_resistor_tail_gnd_needs_no_bias_rail():
 
 
 def test_enumerate_circuits_third_stage_uses_rail_6():
-    """In three_stage_buffered_rnmc_single_ended, a simple load and resistor
+    """In three_stage_opamp_rnmc_buffered_single_ended, a simple load and resistor
     tail need no bias rails, but second_stage, third_stage, and the follower
     output_stage each tap their own dedicated rail (5, 6, and 9 respectively).
     Each RNMC compensation wraps a single CS stage, so common_source_nmos in both
@@ -2224,7 +2224,7 @@ def test_enumerate_circuits_third_stage_uses_rail_6():
     cascade -- issue #114 -- making its buffered topology enumerate zero).
     The follower moved to the output_stage category (issue #125)."""
     modules = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "three_stage_buffered_rnmc_single_ended")
+    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_rnmc_buffered_single_ended")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
@@ -2308,7 +2308,7 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     common_source_pmos (rails 5, 6: gate_gnd), and the follower moved to the
     output_stage category (issue #125): common_drain_nmos on rail 9."""
     modules = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "three_stage_buffered_rnmc_fully_differential")
+    topo = next(t for t in load_topologies() if t.name == "three_stage_opamp_rnmc_buffered_fully_differential")
     simple_modules = {
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],

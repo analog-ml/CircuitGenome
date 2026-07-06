@@ -378,7 +378,7 @@ longer be a gain (`second_stage`/`third_stage`) stage. History for the
 plain NMC 3-stage topologies: issue #114's parity filter rejects comp1
 wrapping a second+third CS+CS cascade (non-inverting with gain), and the
 followers that once satisfied that outer loop are no longer gain stages, so
-for a while `three_stage_opamp_nmc_*` and `three_stage_buffered_nmc_*`
+for a while `three_stage_opamp_nmc_*` and `three_stage_opamp_nmc_buffered_*`
 enumerated **zero**. That is now fixed by the `noninverting_stage_{nmos,pmos}`
 amplification variants (issue #139): a CS input device + current-mirror
 active load, non-inverting with gain (`stage_inversions` = 2) but with a

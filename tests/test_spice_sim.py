@@ -175,7 +175,7 @@ def test_gnd_referenced_legs_bias_in_spice():
     handling for PMOS-referenced pins -- external netlists -- is covered by
     test_iref_direction_follows_reference_diode.)"""
     mods = load_modules()
-    topo = next(t for t in load_topologies() if t.name == "two_stage_buffered_single_ended")
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_buffered_single_ended")
     # common_drain_nmos (a same-polarity follower) is the gnd-referenced-leg
     # demander this test needs; it now lives in the output_stage slot of a
     # buffered topology, biased off its own rail (net_bias6).

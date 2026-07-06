@@ -460,7 +460,7 @@ topologies:
   # bootstraps to ~0). See issues #125/#126.
 
   # ── 2-STAGE BUFFERED (single-ended output) ─────────────────────────────
-  - name: two_stage_buffered_single_ended
+  - name: two_stage_opamp_buffered_single_ended
     config:
       output_type: single_ended
       stages: 2
@@ -510,7 +510,7 @@ topologies:
       - {slot: compensation, port: out,   net: net_ampout}
 
   # ── 2-STAGE BUFFERED (fully differential output) ───────────────────────
-  - name: two_stage_buffered_fully_differential
+  - name: two_stage_opamp_buffered_fully_differential
     config:
       output_type: fully_differential
       stages: 2
@@ -581,7 +581,7 @@ topologies:
   # Buffered NMC enumerates ZERO: comp1 wraps second+third (CS+CS = 2
   # inversions = positive-even) and is rejected by the compensation parity
   # filter, same as the unbuffered NMC. Kept for symmetry / round-trip.
-  - name: three_stage_buffered_nmc_single_ended
+  - name: three_stage_opamp_nmc_buffered_single_ended
     config:
       output_type: single_ended
       stages: 3
@@ -640,7 +640,7 @@ topologies:
       - {slot: comp2,        port: out,   net: net_ampout}
 
   # ── 3-STAGE BUFFERED, REVERSED NESTED MILLER (single-ended) ────────────
-  - name: three_stage_buffered_rnmc_single_ended
+  - name: three_stage_opamp_rnmc_buffered_single_ended
     config:
       output_type: single_ended
       stages: 3
@@ -699,7 +699,7 @@ topologies:
       - {slot: comp2,        port: out,   net: net_mid2}
 
   # ── 3-STAGE BUFFERED, NESTED MILLER (fully differential) ───────────────
-  - name: three_stage_buffered_nmc_fully_differential
+  - name: three_stage_opamp_nmc_buffered_fully_differential
     config:
       output_type: fully_differential
       stages: 3
@@ -783,7 +783,7 @@ topologies:
       - {slot: comp2_n,         port: out,   net: net_ampout_n}
 
   # ── 3-STAGE BUFFERED, REVERSED NESTED MILLER (fully differential) ──────
-  - name: three_stage_buffered_rnmc_fully_differential
+  - name: three_stage_opamp_rnmc_buffered_fully_differential
     config:
       output_type: fully_differential
       stages: 3
