@@ -531,51 +531,21 @@ NMC/RNMC variants (single-ended and fully differential):
 Supported performance specs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``SizingSpec`` dataclass accepts:
+The sizer solves against these DC performance targets, each a bound the sized
+circuit must satisfy:
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 15 55
+- Open-loop DC gain (minimum)
+- Gain–bandwidth product, GBW (minimum)
+- Phase margin (minimum)
+- Slew rate (minimum)
+- CMRR (minimum)
+- Quiescent power (maximum)
+- Output swing (minimum / maximum)
 
-   * - Field
-     - Unit
-     - Description
-   * - ``vdd`` / ``vss``
-     - V
-     - Supply rails
-   * - ``ibias``
-     - A
-     - Tail bias current (each input device carries ``ibias/2``)
-   * - ``cl``
-     - F
-     - Output load capacitance
-   * - ``second_stage_current_ratio``
-     - —
-     - ``iDS_2 = ratio × ibias`` (default 2.0)
-   * - ``third_stage_current_ratio``
-     - —
-     - ``iDS_3 = ratio × ibias`` (three-stage only; default 5.0)
-   * - ``gain_min_db``
-     - dB
-     - Minimum open-loop DC voltage gain
-   * - ``gbw_min_hz``
-     - Hz
-     - Minimum unity-gain bandwidth
-   * - ``phase_margin_min_deg``
-     - °
-     - Minimum phase margin (dominant-pole model)
-   * - ``slew_rate_min_vps``
-     - V/s
-     - Minimum slew rate (``ibias / Cc``)
-   * - ``cmrr_min_db``
-     - dB
-     - Minimum common-mode rejection ratio
-   * - ``power_max_w``
-     - W
-     - Maximum quiescent power
-   * - ``output_swing_max_v`` / ``output_swing_min_v``
-     - V
-     - Output voltage swing limits
+Alongside these targets you also give the sizer an operating point — supply
+rails, tail bias current, and load capacitance.  See the
+:doc:`Sizer (SZ) module page <modules/sizer>` for the complete input
+specification.
 
 Using it
 ~~~~~~~~

@@ -31,6 +31,57 @@ Entry points
   :func:`~circuitgenome.sizer.shared.loader.load_spec` — load a technology
   config or a performance spec.
 
+Performance specification
+-------------------------
+
+:class:`~circuitgenome.sizer.shared.models.SizingSpec` bundles the **operating
+point** (supply, bias, load, per-stage current ratios) with the **performance
+targets** the sizer solves against:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Field
+     - Unit
+     - Description
+   * - ``vdd`` / ``vss``
+     - V
+     - Supply rails
+   * - ``ibias``
+     - A
+     - Tail bias current (each input device carries ``ibias/2``)
+   * - ``cl``
+     - F
+     - Output load capacitance
+   * - ``second_stage_current_ratio``
+     - —
+     - ``iDS_2 = ratio × ibias`` (default 2.0)
+   * - ``third_stage_current_ratio``
+     - —
+     - ``iDS_3 = ratio × ibias`` (three-stage only; default 5.0)
+   * - ``gain_min_db``
+     - dB
+     - Minimum open-loop DC voltage gain
+   * - ``gbw_min_hz``
+     - Hz
+     - Minimum unity-gain bandwidth
+   * - ``phase_margin_min_deg``
+     - °
+     - Minimum phase margin (dominant-pole model)
+   * - ``slew_rate_min_vps``
+     - V/s
+     - Minimum slew rate (``ibias / Cc``)
+   * - ``cmrr_min_db``
+     - dB
+     - Minimum common-mode rejection ratio
+   * - ``power_max_w``
+     - W
+     - Maximum quiescent power
+   * - ``output_swing_max_v`` / ``output_swing_min_v``
+     - V
+     - Output voltage swing limits
+
 Sizing algorithm
 ----------------
 
