@@ -11,87 +11,38 @@ combination of block implementations, the tool can quickly generate thousands
 of structurally distinct op-amp netlists for dataset generation, automated
 design exploration, or topology studies.
 
+The documentation is organised by **module**.  Each module has a landing page
+that introduces the module, points to its analysis/theory, and links its API
+reference — start there and drill down as needed.
+
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Getting Started
 
    installation
    overview
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: User Guide
 
    usage/cli
    usage/python_api
-   extending
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Theory
+   :maxdepth: 1
+   :caption: Modules
 
-   theory/sizing_flow
-   theory/gmid_sizing_flow
-   theory/compatibility_filters
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference - Synthesizer
-
-   api/synthesizer
-   api/models
-   api/loader
-   api/netlist
-   api/compatibility/index
-   api/bias_construction
-   api/net_aliasing
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference - Subcircuit & Functional Block Recognizer
-
-   api/recognizer/models
-   api/recognizer/netlist_parser
-   api/recognizer/subcircuit_recognizer
-   api/recognizer/functional_block_recognizer
-   api/recognizer/hooks
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference - Sizer
-
-   api/sizer/sizer
-   api/sizer/shared/models
-   api/sizer/shared/loader
-   api/sizer/shared/device_model
-   api/sizer/shared/equations
-   api/sizer/shared/gmid_lut
-   api/sizer/shared/spice_sim
-   api/sizer/shared/taxonomy
-   api/sizer/shared/preprocess
-   api/sizer/shared/metrics
-   api/sizer/analytical/level1
-   api/sizer/analytical/constraints
-   api/sizer/gmid/gmid_sizer
-   api/sizer/gmid/analyze
-   api/sizer/gmid/blocks
-   api/sizer/gmid/plan
-   api/sizer/gmid/intent
-   api/sizer/gmid/geometry
-   api/sizer/gmid/bias
-   api/sizer/gmid/resistors
-   api/sizer/gmid/bias_levels
-   api/sizer/gmid/evaluate
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference - Designer
-
-   api/designer/designer
-   api/designer/models
+   modules/synthesizer
+   modules/subcircuit_recognizer
+   modules/functional_block_recognizer
+   modules/sizer
+   modules/designer
+   modules/visualizer
 
 .. toctree::
    :maxdepth: 1
    :caption: About
 
+   extending
    references
