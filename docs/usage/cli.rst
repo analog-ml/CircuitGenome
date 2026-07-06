@@ -14,6 +14,20 @@ Circuit generation goes through the ``circuitgenome synthesize`` subcommand;
    ``python3 -m circuitgenome.cli synthesize ...`` or see
    :doc:`../installation` for the PATH fix.
 
+Quick start
+-----------
+
+.. code-block:: bash
+
+   # Generate every valid 2-stage single-ended op-amp as flat SPICE into ./circuits/
+   circuitgenome synthesize --stages 2 --output-type single_ended --output-dir ./circuits/
+
+   # Count first, without writing any files
+   circuitgenome synthesize --stages 2 --dry-run
+
+The subsections below cover the full option set, plus recognizing, sizing, and
+visualizing circuits.
+
 Listing available resources
 ---------------------------
 

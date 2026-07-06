@@ -29,10 +29,16 @@ def _count_per_template():
     enumeration config (``unsupported`` / ``bias_infeasible`` variants excluded).
     """
     modules = load_modules()
-    return [
+    rows = [
         (t.name, sum(1 for _ in enumerate_circuits(t, modules)))
         for t in load_topologies()
     ]
+    # Group the rows by stage count (one_* , two_* , three_*) so all two-stage
+    # templates sit together and all three-stage templates sit together; a
+    # stable sort keeps the original relative order within each group.
+    stage_rank = {"one": 1, "two": 2, "three": 3}
+    rows.sort(key=lambda r: stage_rank.get(r[0].split("_")[0], 99))
+    return rows
 
 
 def _render(rows):

@@ -1,6 +1,24 @@
 Python API
 ==========
 
+Quick start
+-----------
+
+The quickest way to synthesize op-amps is
+:func:`~circuitgenome.synthesizer.synthesizer.synthesize`:
+
+.. code-block:: python
+
+   from circuitgenome import synthesize
+   from circuitgenome.synthesizer import to_flat_spice
+
+   # Enumerate every valid 2-stage single-ended op-amp
+   circuits = synthesize({"stages": 2, "output_type": "single_ended"})
+   print(len(circuits), "circuits")
+
+   # Emit the first circuit as flat SPICE
+   print(to_flat_spice(circuits[0]))
+
 High-level API
 --------------
 
@@ -15,7 +33,7 @@ It loads the built-in YAML configs, applies your filters, and returns a list of
 
    # All 2-stage single-ended circuits
    circuits = synthesize({"stages": 2, "output_type": "single_ended"})
-   print(f"{len(circuits)} circuits")  # 1890
+   print(f"{len(circuits)} circuits")  # 540
 
    # Serialize the first circuit
    print(to_flat_spice(circuits[0], name="my_ota"))

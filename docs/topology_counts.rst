@@ -14,6 +14,10 @@
      - 180
    * - ``two_stage_opamp_fully_differential``
      - 648
+   * - ``two_stage_opamp_buffered_single_ended``
+     - 360
+   * - ``two_stage_opamp_buffered_fully_differential``
+     - 2,592
    * - ``three_stage_opamp_nmc_single_ended``
      - 1,080
    * - ``three_stage_opamp_rnmc_single_ended``
@@ -22,10 +26,6 @@
      - 23,328
    * - ``three_stage_opamp_rnmc_fully_differential``
      - 23,328
-   * - ``two_stage_opamp_buffered_single_ended``
-     - 360
-   * - ``two_stage_opamp_buffered_fully_differential``
-     - 2,592
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 2,160
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
