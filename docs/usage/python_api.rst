@@ -207,8 +207,10 @@ It supports all seven topology templates via a 3-layer pipeline:
        for category, candidates in categories.items():
            print(f"[{circuit_block}] {category}: {candidates[0].name}")
 
-See :doc:`../overview` for the recognizer's 3-layer pipeline, pattern schema,
-and topology-free disambiguation algorithm.
+See the :doc:`Subcircuit Recognizer (SR) <../modules/subcircuit_recognizer>`
+and :doc:`Functional Block Recognizer (FBR) <../modules/functional_block_recognizer>`
+module pages for the pattern schema, hooks, and the topology-free
+disambiguation algorithm.
 
 Sizer (SZ)
 ----------
