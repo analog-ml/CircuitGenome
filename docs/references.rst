@@ -25,4 +25,10 @@ The design of CircuitGenome draws on the following publications:
    Design (ICCD)*, 2019. The basis for the constraint-programming (CP-SAT)
    formulation used by the Sizer (SZ).
 
+5. **New Generation of Predictive Technology Model for Sub-45nm Design
+   Exploration** — W. Zhao and Y. Cao. *International Symposium on Quality
+   Electronic Design (ISQED)*, 2006. The ASU Predictive Technology Model
+   (https://ptm.asu.edu) — the source of the planar-bulk BSIM4 cards used by
+   the ``tech_ptm45`` sizing configuration.
+
 Full PDFs are available in the ``docs/papers/`` directory of the repository.

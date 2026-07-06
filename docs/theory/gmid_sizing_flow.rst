@@ -31,9 +31,10 @@ Scope and routing
 * ``tech.gmid_lut`` present (``ptm45``, GF180MCU) → **this** gm/Id pipeline.
 * card-less ``generic`` (no LUT, no SPICE card) → the Level-1 analytical sizer
   (:doc:`sizing_flow`).
-* a PTM/SPICE-model node **without** a LUT (``ptm32``/``ptm22``/``ptm16``) →
-  ``UnsupportedTechError`` — the Level-1 square law is not valid there, and the
-  gm/Id path needs a table the tech does not provide.
+* a PTM/SPICE-model node **without** a LUT (e.g. a newly added node whose LUT
+  has not been characterized yet) → ``UnsupportedTechError`` — the Level-1
+  square law is not valid there, and the gm/Id path needs a table the tech does
+  not provide.
 
 The analytical metrics this pipeline computes are a fast, deterministic
 sizing-quality signal; for PTM / foundry techs the CLI reports **ngspice-measured**
