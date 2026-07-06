@@ -162,7 +162,7 @@ def test_round_trip_stacked_cascode_tail(one_stage_fixtures, input_pair, load, t
 # Each combo carries an amplification-stage variant and an optional follower.
 # The two source followers (common_drain_pmos/common_drain_nmos) moved to the
 # output_stage category (issue #125) and can no longer be a gain stage, so
-# every follower row targets two_stage_buffered_single_ended with the follower
+# every follower row targets two_stage_opamp_buffered_single_ended with the follower
 # in its output_stage slot and a level-matched common-source amp stage in the
 # second_stage slot; the follower-free rows keep the plain
 # two_stage_opamp_single_ended topology.
@@ -206,7 +206,7 @@ _TWO_STAGE_COMBOS = [
 def two_stage_fixtures():
     modules = load_modules()
     plain = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
-    buffered = next(t for t in load_topologies() if t.name == "two_stage_buffered_single_ended")
+    buffered = next(t for t in load_topologies() if t.name == "two_stage_opamp_buffered_single_ended")
     return modules, plain, buffered
 
 
@@ -280,7 +280,7 @@ def test_round_trip_two_stage_opamp(
 # current_mirror_tail_nmos pairings hit the historical B1 mis-recognition)
 # are exactly the ones the per-leg construction and per-leg recognition now
 # handle first-class.
-# The follower rows (follower set) target two_stage_buffered_fully_differential
+# The follower rows (follower set) target two_stage_opamp_buffered_fully_differential
 # with the follower in both output_stage_p/n slots and a level-matched CS amp
 # in both second_stage_p/n slots; the follower-free rows keep the plain
 # topology. The stage-interface filter forces both output paths onto the same
@@ -311,7 +311,7 @@ _TWO_STAGE_FULLY_DIFF_COMBOS = [
 def two_stage_fully_diff_fixtures():
     modules = load_modules()
     plain = next(t for t in load_topologies() if t.name == "two_stage_opamp_fully_differential")
-    buffered = next(t for t in load_topologies() if t.name == "two_stage_buffered_fully_differential")
+    buffered = next(t for t in load_topologies() if t.name == "two_stage_opamp_buffered_fully_differential")
     return modules, plain, buffered
 
 
@@ -382,14 +382,14 @@ def test_round_trip_two_stage_fully_diff(
 # The FBR assigned_ids mechanism (from #31) correctly handles the same-category
 # gain slots via connectivity scoring on distinct nets.
 
-_NMC_SE = "three_stage_buffered_nmc_single_ended"
+_NMC_SE = "three_stage_opamp_nmc_buffered_single_ended"
 _NMC_SE_PLAIN = "three_stage_opamp_nmc_single_ended"
 _RNMC_SE_PLAIN = "three_stage_opamp_rnmc_single_ended"
-_RNMC_SE_BUF = "three_stage_buffered_rnmc_single_ended"
-_NMC_FD = "three_stage_buffered_nmc_fully_differential"
+_RNMC_SE_BUF = "three_stage_opamp_rnmc_buffered_single_ended"
+_NMC_FD = "three_stage_opamp_nmc_buffered_fully_differential"
 _NMC_FD_PLAIN = "three_stage_opamp_nmc_fully_differential"
 _RNMC_FD_PLAIN = "three_stage_opamp_rnmc_fully_differential"
-_RNMC_FD_BUF = "three_stage_buffered_rnmc_fully_differential"
+_RNMC_FD_BUF = "three_stage_opamp_rnmc_buffered_fully_differential"
 
 _THREE_STAGE_SE_COMBOS = [
     # (topology, input_pair, load, tail_current, ss, ts, follower, comp1, comp2)

@@ -63,7 +63,7 @@ def test_fd_two_stage_gmid(cmfb):
     # NMC topology with the parity-legal ota second stage (ota + CS = 3
     # inversions) and a follower output_stage. RNMC wraps single stages, so
     # CS+CS stays valid there (plain topology, no output stage).
-    ("three_stage_buffered_nmc_single_ended", "folded_cascode_load_pmos_input_single_output",
+    ("three_stage_opamp_nmc_buffered_single_ended", "folded_cascode_load_pmos_input_single_output",
      "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos"),
     ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output",
      "common_source_nmos", "common_source_nmos", None),

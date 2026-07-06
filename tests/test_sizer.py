@@ -614,7 +614,7 @@ def three_stage_buffered_se_fbr():
     # RNMC is the enumerable three-stage-with-buffer topology. Exercises the
     # three-stage sizing path with a follower present (follower reads the
     # wide-swing amp output net_ampout, not a load window).
-    return _fbr("three_stage_buffered_rnmc_single_ended", {
+    return _fbr("three_stage_opamp_rnmc_buffered_single_ended", {
         "input_pair":   "differential_pair_pmos",
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
@@ -643,7 +643,7 @@ def three_stage_rnmc_se_fbr():
 def three_stage_buffered_fd_fbr():
     # FD counterpart of three_stage_buffered_se_fbr: two CS gain stages per
     # path plus a follower output buffer per path (output_stage_p/n).
-    return _fbr("three_stage_buffered_rnmc_fully_differential", {
+    return _fbr("three_stage_opamp_rnmc_buffered_fully_differential", {
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",

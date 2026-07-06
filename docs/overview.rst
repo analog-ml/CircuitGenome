@@ -156,27 +156,27 @@ Topology templates
      - 3
      - Fully differential
      - Reversed Nested Miller (RNMC)
-   * - ``two_stage_buffered_single_ended``
+   * - ``two_stage_opamp_buffered_single_ended``
      - 2
      - Single-ended
      - — (+ follower ``output_stage``)
-   * - ``two_stage_buffered_fully_differential``
+   * - ``two_stage_opamp_buffered_fully_differential``
      - 2
      - Fully differential
      - — (+ follower ``output_stage``)
-   * - ``three_stage_buffered_nmc_single_ended``
+   * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 3
      - Single-ended
      - Nested Miller (NMC) (+ follower ``output_stage``)
-   * - ``three_stage_buffered_rnmc_single_ended``
+   * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 3
      - Single-ended
      - Reversed Nested Miller (RNMC) (+ follower ``output_stage``)
-   * - ``three_stage_buffered_nmc_fully_differential``
+   * - ``three_stage_opamp_nmc_buffered_fully_differential``
      - 3
      - Fully differential
      - Nested Miller (NMC) (+ follower ``output_stage``)
-   * - ``three_stage_buffered_rnmc_fully_differential``
+   * - ``three_stage_opamp_rnmc_buffered_fully_differential``
      - 3
      - Fully differential
      - Reversed Nested Miller (RNMC) (+ follower ``output_stage``)
