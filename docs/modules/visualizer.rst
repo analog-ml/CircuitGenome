@@ -1,7 +1,7 @@
-Visualizer (VIS)
-================
+Visualizer
+==========
 
-The **Visualizer** is a `Streamlit <https://streamlit.io>`_ UI for exploring
+The **Visualizer (VIS)** is a `Streamlit <https://streamlit.io>`_ UI for exploring
 CircuitGenome topologies as block diagrams.  It runs via ``circuitgenome
 visualize`` (requires the ``viz`` extra: ``pip install circuitgenome[viz]``) and
 offers two tabs:

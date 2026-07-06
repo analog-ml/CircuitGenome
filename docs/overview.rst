@@ -156,8 +156,8 @@ module page <modules/synthesizer>`.
 
 .. include:: topology_counts.rst
 
-Using it
-~~~~~~~~
+How to use it
+~~~~~~~~~~~~~
 
 Generate circuits from the command line with ``circuitgenome synthesize`` or
 from Python with :func:`~circuitgenome.synthesizer.synthesizer.synthesize` and
@@ -171,8 +171,12 @@ Subcircuit & Functional Block Recognizer (SR / FBR)
 ---------------------------------------------------
 
 The recognizer is the structural inverse of the synthesizer: given a flat SPICE
-netlist, it recovers the modular building blocks that produced it.  It is
-organized as a 3-layer pipeline:
+netlist, it recovers the modular building blocks that produced it.
+
+What it does
+~~~~~~~~~~~~
+
+It is organized as a 3-layer pipeline:
 
 1. **Netlist parsing (Layer 0)** — reads the flat SPICE text back into a
    structured netlist of devices, external ports, and internal nets.
@@ -188,8 +192,8 @@ organized as a 3-layer pipeline:
 Together, SR and FBR support round-trip recognition of all seven topology
 templates the synthesizer produces.
 
-Using it
-~~~~~~~~
+How to use it
+~~~~~~~~~~~~~
 
 Recognize a netlist from the command line with ``circuitgenome recognize`` or
 from Python.  See :doc:`usage/cli` and :doc:`usage/python_api` for worked
@@ -239,8 +243,8 @@ rails, tail bias current, and load capacitance.  See the
 :doc:`Sizer (SZ) module page <modules/sizer>` for the complete input
 specification.
 
-Using it
-~~~~~~~~
+How to use it
+~~~~~~~~~~~~~
 
 Size a circuit from the command line with ``circuitgenome size`` or from
 Python.  See :doc:`usage/cli` and :doc:`usage/python_api` for worked examples,
@@ -272,8 +276,8 @@ What it does
 - **Ranked results** — returns per-template statistics and the best design
   points, with the sized netlists written out for further simulation.
 
-Using it
-~~~~~~~~
+How to use it
+~~~~~~~~~~~~~
 
 Run the full flow from the command line with ``circuitgenome design``.  See the
 :doc:`Designer module page <modules/designer>` for the Python API and the
@@ -306,8 +310,8 @@ Two tabs
    The Topology Explorer tab: pick a topology and module variants in the
    sidebar, and the block diagram updates live.
 
-Using it
-~~~~~~~~
+How to use it
+~~~~~~~~~~~~~
 
 Launch the Visualizer from the command line — see :doc:`usage/cli` for how to
 run it and the ``viz`` extra it needs.

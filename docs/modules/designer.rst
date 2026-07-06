@@ -1,7 +1,7 @@
-Designer (DES)
-==============
+Designer
+========
 
-The **Designer** is the spec-driven top layer that chains the three lower
+The **Designer (DES)** is the spec-driven top layer that chains the three lower
 modules end to end.  :func:`~circuitgenome.designer.designer.design` enumerates
 every valid circuit for the chosen template(s) with the
 :doc:`synthesizer <synthesizer>`, sizes each with the :doc:`gm/Id sizer <sizer>`,

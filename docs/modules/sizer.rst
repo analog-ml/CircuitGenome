@@ -1,7 +1,7 @@
-Sizer (SZ)
-==========
+Sizer
+=====
 
-The **Sizer** takes an FBR slot assignment plus a performance specification and
+The **Sizer (SZ)** takes an FBR slot assignment plus a performance specification and
 returns minimum transistor W/L values for every device in the circuit.  It
 supports all seven op-amp topology templates (one-stage, two-stage
 single-ended/fully-differential, and the four three-stage NMC/RNMC variants) and

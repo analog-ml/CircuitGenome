@@ -1,7 +1,7 @@
-Subcircuit Recognizer (SR)
-==========================
+Subcircuit Recognizer
+=====================
 
-The **Subcircuit Recognizer** is the first structural half of the recognizer
+The **Subcircuit Recognizer (SR)** is the first structural half of the recognizer
 pipeline — the inverse of the synthesizer.  Given a flat SPICE netlist, it
 recovers the building blocks that produced it in two layers:
 

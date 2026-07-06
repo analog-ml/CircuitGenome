@@ -1,7 +1,7 @@
-Functional Block Recognizer (FBR)
-=================================
+Functional Block Recognizer
+===========================
 
-The **Functional Block Recognizer** is the second half of the recognizer
+The **Functional Block Recognizer (FBR)** is the second half of the recognizer
 pipeline (Layer 2).  It takes the — possibly overlapping — candidates reported
 by the :doc:`Subcircuit Recognizer <subcircuit_recognizer>` and assigns each
 recognized structure to its functional role, resolving ambiguity by

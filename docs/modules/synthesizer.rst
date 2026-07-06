@@ -1,7 +1,7 @@
-Topology Synthesizer (SYN)
-==========================
+Topology Synthesizer
+====================
 
-The **Topology Synthesizer** constructs op-amp circuits from modular functional
+The **Topology Synthesizer (SYN)** constructs op-amp circuits from modular functional
 building blocks and emits SPICE netlists.  It models an op-amp as a composition
 of **module slots** (input pair, load, tail current, bias, compensation,
 amplification/output stage); each slot is filled by a concrete **module
