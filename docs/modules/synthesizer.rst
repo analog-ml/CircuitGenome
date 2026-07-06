@@ -316,51 +316,56 @@ Enumeration and compatibility
 Each ``*_buffered_*`` template is the plain template with a source-follower
 ``output_stage`` slot inserted after the amplification stage: the amplification
 stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
-there, while the follower drives the final output.
+there, while the follower drives the final output.  The two followers
+(``common_drain``, ``common_drain_nmos``, issue #125) live in the
+``output_stage`` category; a follower is A2 ≈ 1 (a buffer, not a gain stage), so
+it is excluded from the gain product — a buffered circuit's ``gain_db`` equals
+its unbuffered sibling's.
 
-The 5th ``input_pair`` variant, ``inverter_based_input``, is parked with an
-``unsupported:`` reason tag (issue #113): it is self-biased — its quiescent
-current is set by W/L at the gate voltage the wiring pins to Vcm, not by
-``spec.ibias`` — and the gm/Id sizer has no fixed-Vgs sizing path for it, so
-``enumerate_circuits`` drops it from the candidate pool (pass
-``config={"include_unsupported": True}`` to enumerate it anyway, e.g. for
-recognizer round-trips). The ``amplification_stage`` variant
-``differential_ota_second_stage`` is parked the same way (issue #114):
-despite its name it is two cascaded common-source stages, so its ``in`` →
-``out`` composite is *non-inverting* — Miller-family compensation around it
-is positive feedback (a right-half-plane AC response whose gain/GBW/PM
-cannot be measured; see the :ref:`compensation parity filter
-<compat-compensation>`) — and its
-internal ``d1`` node is a second gain stage/pole that the sizer's
-single-gm2 stage model cannot see. The non-inverting role that NMC needs for
-gm2 is instead filled by the *enumerable* ``noninverting_stage_{nmos,pmos}``
-variants (issue #139): also non-inverting with gain, but their second
-inversion is a current mirror whose pole sits at a low-Z diode node (out of
-band), so the single-gm2 model holds and the DC bias closes. The two source
-followers ``common_drain``
-and ``common_drain_nmos`` (issue #125) are **not** parked: they moved out of
-the amplification pool into the new ``output_stage`` category and enumerate
-in the ``*_buffered_*`` templates, where a follower fills the ``output_stage``
-(``_p``/``_n``) slot after the amplification stage. A follower is A2 ≈ 1 (a
-buffer, not a gain stage), so it is excluded from the gain product — a
-buffered circuit's ``gain_db`` equals its unbuffered sibling's — and it can no
-longer occupy a ``second_stage``/``third_stage`` gain slot.
+``enumerate_circuits`` aims to emit only circuits worth sizing — ones that both
+**build into a valid netlist** and can **plausibly close their DC bias**.  A few
+variants are structurally valid but fail one of those; rather than delete them
+(the recognizer and design-space exploration still want them) they stay in the
+library under a **reason tag** that keeps them out of the default pool but can
+be opted back in:
 
-A softer tag, ``bias_infeasible:``, marks a variant whose wiring is
-*functionally correct* but whose DC bias does not close under the normal
-supply/Vcm headroom of the default (low-voltage) spec class — currently the
-two ``stacked_cascode_current_mirror_tail_*`` variants (issue #111). A
-stacked-diode cascode mirror pins its output cascode's source a full
-``|Vgs|`` from the rail, so the tail node needs ``|Vgs|+Vdsat`` (~1.3 V at
-gf180) of compliance versus the wide-swing ``cascode_current_mirror_tail_*``'s
-``2·Vdsat`` (~0.35 V). Unlike an ``unsupported`` variant it builds into a
-complete, valid netlist (it self-biases its cascode gate, so it consumes only
-rail 7 and needs no rail 8) and would size normally; it is simply predicted to
-be rejected at the DC bias gate. ``enumerate_circuits`` drops it by default and
-keeps it only with ``config={"include_infeasible": True}`` (CLI:
-``--include-infeasible``) — intended for design-space exploration, which wants
-the full set of functionally-correct wirings, including correct-but-infeasible
-circuits, as mutation seeds rather than acceptance candidates.
+.. list-table::
+   :header-rows: 1
+   :widths: 22 48 30
+
+   * - Tag
+     - Marks a variant that…
+     - Opt back in with
+   * - ``unsupported``
+     - builds, but the sizer has no valid path for it (self-biased or
+       mis-modeled)
+     - ``config={"include_unsupported": True}``
+   * - ``bias_infeasible``
+     - is functionally correct, but its DC bias will not close under the default
+       low-voltage spec class
+     - ``config={"include_infeasible": True}`` (CLI ``--include-infeasible``)
+
+**Inverter-based input pair** (``inverter_based_input``, ``unsupported``, issue
+#113) — self-biased: its quiescent current is set by W/L at the Vcm-pinned gate
+voltage, not by ``spec.ibias``, and the gm/Id sizer has no fixed-Vgs path for
+it.
+
+**Differential-OTA second stage** (``differential_ota_second_stage``,
+``unsupported``, issue #114) — despite its name it is two cascaded common-source
+stages, so its ``in`` → ``out`` composite is *non-inverting*: Miller-family
+compensation around it is positive feedback (a right-half-plane response whose
+gain/GBW/PM cannot be measured), and its internal ``d1`` node is a second
+in-band pole the sizer's single-gm2 model cannot see.  The non-inverting gm2
+role that NMC needs is filled instead by the enumerable
+``noninverting_stage_{nmos,pmos}`` (issue #139; see the ‖ filter below).
+
+**Stacked-diode cascode tails** (``stacked_cascode_current_mirror_tail_*``,
+``bias_infeasible``, issue #111) — the output cascode's source sits a full
+``|Vgs|`` from the rail, so the tail needs ``|Vgs|+Vdsat`` (~1.3 V at gf180) of
+compliance versus the wide-swing ``cascode_current_mirror_tail_*``'s
+``2·Vdsat`` (~0.35 V).  The netlist is valid and sizes normally — it is simply
+predicted to fail the DC bias gate, which is exactly the correct-but-infeasible
+mutation seed design-space exploration wants.
 
 Number of Combination Analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
