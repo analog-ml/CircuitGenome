@@ -396,8 +396,10 @@ carries exactly one matched bias generator.  Fully-differential templates
 additionally carry a **CMFB** slot: the ¶ filter expands their 48 core
 combinations to **72** effective ``load``/``cmfb`` combinations (the 24 with a
 differential-cardinality load keep both CMFB variants, the other 24 keep one);
-single-ended templates have no CMFB.  Each template's circuit count then follows
-from the extra slots it adds:
+single-ended templates have no CMFB.  A fully-differential template also
+duplicates its amplification and compensation slots — one per output path — so
+those per-path factors are squared.  Each template's circuit count then follows
+from the slots it adds:
 
 .. list-table::
    :header-rows: 1
@@ -413,16 +415,16 @@ from the extra slots it adds:
      - 60 × 1 ``amplification_stage`` § × 3 ``compensation`` ‖
      - 180
    * - ``two_stage_opamp_fully_differential``
-     - 48 → 72 ``load``/``cmfb`` ¶ × 9 ``compensation``-pairs
+     - 48 → 72 ``load``/``cmfb`` ¶ × (1 ``amplification_stage`` § × 3 ``compensation`` ‖)²
      - 648
    * - ``three_stage_opamp_nmc_single_ended``
-     - 60 × 1 gm2 × 2 gm3 × 9 ‖
+     - 60 × 1 gm2 § × 2 gm3 × 9 ``compensation`` ‖
      - 1,080
    * - ``three_stage_opamp_rnmc_single_ended``
-     - 60 × 2 × 9
+     - 60 × 1 gm2 § × 2 gm3 × 9 ``compensation`` ‖
      - 1,080
    * - ``three_stage_opamp_{nmc,rnmc}_fully_differential``
-     - 48 → 72 ``load``/``cmfb`` ¶ × (2 × 9)²
+     - 48 → 72 ``load``/``cmfb`` ¶ × (1 gm2 § × 2 gm3 × 9 ``compensation`` ‖)²
      - 23,328
 
 **Compatibility filters** (section-local symbols):
