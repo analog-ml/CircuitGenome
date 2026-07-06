@@ -272,7 +272,7 @@ internal device structure is invisible to the template.
        and ``vcm_ref`` is left unconnected
    * - ``compensation``
      - ``in``, ``out``
-   * - ``second_stage``
+   * - ``amplification_stage``
      - ``in``, ``out``, ``bias``, ``vdd``, ``gnd``
 
 Supply ports (``vdd``, ``gnd``) are automatically connected to the global
@@ -324,8 +324,8 @@ current is set by W/L at the gate voltage the wiring pins to Vcm, not by
 ``spec.ibias`` — and the gm/Id sizer has no fixed-Vgs sizing path for it, so
 ``enumerate_circuits`` drops it from the candidate pool (pass
 ``config={"include_unsupported": True}`` to enumerate it anyway, e.g. for
-recognizer round-trips). The 5th ``second_stage`` variant,
-``differential_ota_second_stage``, is parked the same way (issue #114):
+recognizer round-trips). The ``amplification_stage`` variant
+``differential_ota_second_stage`` is parked the same way (issue #114):
 despite its name it is two cascaded common-source stages, so its ``in`` →
 ``out`` composite is *non-inverting* — Miller-family compensation around it
 is positive feedback (a right-half-plane AC response whose gain/GBW/PM
@@ -410,7 +410,7 @@ from the extra slots it adds:
      - 60 core
      - 60
    * - ``two_stage_opamp_single_ended``
-     - 60 × 1 ``second_stage`` § × 3 ``compensation`` ‖
+     - 60 × 1 ``amplification_stage`` § × 3 ``compensation`` ‖
      - 180
    * - ``two_stage_opamp_fully_differential``
      - 48 → 72 ``load``/``cmfb`` ¶ × 9 ``compensation``-pairs
@@ -435,9 +435,10 @@ from the extra slots it adds:
   the 36 single-output cascode / telescopic loads. The
   :ref:`untapped-load-branch filter <compat-load-branch>` structurally
   co-guards the ``current_source_load_*`` exclusion (issue #112).
-| **§** :ref:`Stage-interface <compat-stage-interface>` — the ``second_stage``
-  keeps only the level-reachable variants: one CS + one non-inverting stage per
-  input-pair polarity.
+| **§** :ref:`Stage-interface <compat-stage-interface>` — the first-stage-sensing
+  gain slot (gm2) is limited to the level-reachable ``amplification_stage``
+  variants: one CS + one non-inverting stage per input-pair polarity. (The gm3
+  slot in a 3-stage template keeps both CS variants.)
 | **¶** :ref:`CMFB <compat-cmfb>` — of the 48 fully-differential combinations,
   the 24 with a ``"differential"``-cardinality load keep both CMFB variants
   (24 × 2) while the other 24 collapse to one (24 × 1), giving 72 effective
@@ -451,10 +452,21 @@ from the extra slots it adds:
 
 .. note::
 
-   ``60`` = 30 PMOS-pair + 30 NMOS-pair combinations.  The ``*_buffered_*``
-   templates multiply these base counts by their source-follower
-   ``output_stage`` slot; the full per-template table (all 13 templates) is in
-   the :doc:`Overview <../overview>`.
+   ``60`` = 30 PMOS-pair + 30 NMOS-pair combinations.
+
+   Each ``*_buffered_*`` template inserts a source-follower ``output_stage``
+   slot, multiplying the base count by its follower variants — **×2** for
+   single-ended (one follower slot) and **×4** for fully-differential (one per
+   output path, 2²).  Both compensation schemes stay identical, exactly as in
+   the base templates:
+
+   | ``two_stage_opamp_buffered_single_ended`` = 180 × 2 = **360**
+   | ``two_stage_opamp_buffered_fully_differential`` = 648 × 4 = **2,592**
+   | ``three_stage_opamp_{nmc,rnmc}_buffered_single_ended`` = 1,080 × 2 = **2,160**
+   | ``three_stage_opamp_{nmc,rnmc}_buffered_fully_differential`` = 23,328 × 4 = **93,312**
+
+   The full per-template table (all 13 templates) is in the
+   :doc:`Overview <../overview>`.
 
 Analysis
 --------
