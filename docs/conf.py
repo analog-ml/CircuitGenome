@@ -30,5 +30,6 @@ html_theme_options = {
     "source_branch": "main",
     "source_directory": "docs/",
 }
-html_static_path = ["images"]
+html_static_path = ["_static", "images"]
+html_css_files = ["custom.css"]
 html_title = "CircuitGenome"

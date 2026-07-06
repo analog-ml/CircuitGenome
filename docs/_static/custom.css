@@ -1,0 +1,5 @@
+/* The logo image already contains the "CircuitGenome" wordmark, so hide the
+   sidebar brand text to avoid showing the name twice. */
+.sidebar-brand-text {
+    display: none;
+}
