@@ -70,9 +70,8 @@ and reuse its name, so a successful match's
 :attr:`~circuitgenome.recognizer.models.RecognizedStructure.name` is directly
 comparable to a
 :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
-entry's variant name. The library covers every reachable ``one_stage_opamp``
-and ``two_stage_opamp_single_ended`` variant -- 36 patterns across seven
-categories:
+entry's variant name. The library covers every module variant across the
+templates the synthesizer produces -- 43 patterns across eight categories:
 
 .. list-table::
    :header-rows: 1
@@ -98,10 +97,12 @@ categories:
        (``folded_cascode_load_{nmos,pmos}_input_differential_output``, 8 devices
        each) used exclusively by ``two_stage_opamp_fully_differential``.
    * - ``tail_current``
-     - 6
+     - 8
      - Current mirror (PMOS / NMOS, 2 devices each), cascode current mirror
-       (PMOS / NMOS, 4 devices each), resistor (VDD-side / GND-side, each using
-       a hook to reject resistors whose supply terminal isn't the global rail).
+       (PMOS / NMOS, 4 devices each), stacked-diode cascode current mirror
+       (PMOS / NMOS, parked as ``bias_infeasible`` — issue #111 — but kept for
+       round-trips), resistor (VDD-side / GND-side, each using a hook to reject
+       resistors whose supply terminal isn't the global rail).
    * - ``bias_generation``
      - 4
      - ``constructed_bias`` (the synthesizer's constructed multi-reference
@@ -127,18 +128,14 @@ categories:
        an internal ``cn`` node), ``indirect_compensation`` (capacitor to an
        internal ``ind`` node + series resistor to ``out``). Connectivity scoring
        naturally disambiguates overlapping 1-device subsets without hooks.
-   * - ``second_stage``
-     - 7
+   * - ``amplification_stage``
+     - 5
      - ``common_source`` (NMOS input + PMOS load, drains shorted to ``out``),
        ``common_source_pmos`` (the mirror image, PMOS input + NMOS sink;
        structurally identical to ``common_source`` with the ``in``/``bias``
        gate roles swapped, so both patterns match the same device pair and
        FBR's connectivity scoring picks the one whose ``in`` pin lands on
-       the stage-input net), ``common_drain`` (PMOS source follower + PMOS
-       current source; the follower's source/bulk tie and the source's
-       bulk-on-vdd keep it disjoint from the CS and OTA shapes),
-       ``common_drain_nmos`` (NMOS source follower + NMOS sink; the
-       follower's source is the sink's drain, all bulks on gnd),
+       the stage-input net),
        ``differential_ota_second_stage`` (2 PMOS + 2 NMOS, cross-coupled via
        an internal ``d1`` node; parked as ``unsupported`` for synthesis,
        issue #114 -- the pattern still serves external netlists),
@@ -146,6 +143,14 @@ categories:
        NMOS non-inverting current-mirror gain stages, issue #139; the
        diode-connected mirror master on the internal mirror node makes each
        non-isomorphic to the OTA shape).
+   * - ``output_stage``
+     - 2
+     - ``common_drain`` (PMOS source follower + PMOS current source; the
+       follower's source/bulk tie and the source's bulk-on-vdd keep it
+       disjoint from the CS and OTA shapes), ``common_drain_nmos`` (NMOS
+       source follower + NMOS sink; the follower's source is the sink's drain,
+       all bulks on gnd). Fills the ``output_stage`` slot of the
+       ``*_buffered_*`` topologies.
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search
@@ -194,45 +199,44 @@ SR pattern coverage
 The pattern library spans every topology the synthesizer produces, broken down
 below by where each pattern is introduced:
 
-- **one_stage_opamp**: 24 patterns (5 ``input_pair`` × 10 ``load`` × 6 real
-  ``tail_current`` × 3 ``bias_generation``). The round-trip test is
-  parametrized over 11 representative combinations covering every variant.
-- **two_stage_opamp_single_ended**: adds 8 new patterns (3 ``compensation`` +
-  5 ``second_stage``). The round-trip test adds 11 further combinations
-  covering all 5 ``second_stage`` variants against every stage-interface-
-  compatible ``input_pair`` polarity, all 3 ``compensation`` variants, and
-  all 5 ``input_pair`` variants.
-- **two_stage_opamp_fully_differential**: adds 4 new patterns — 2
-  differential-output ``load`` variants
-  (``folded_cascode_load_{nmos,pmos}_input_differential_output``) and 2
-  ``cmfb`` variants (``resistive_sense_cmfb``, ``dda_cmfb``). FBR's
-  ``assign_slots`` was also fixed to exclude already-assigned candidates when
-  processing same-category slot pairs (``comp_p``/``comp_n`` and
-  ``second_stage_p``/``second_stage_n``). The round-trip test adds 11 further
-  combinations covering both ``cmfb`` variants, all ``compensation`` and
-  ``second_stage`` pairings, and both differential input-pair polarities.
+- **one_stage_opamp** — 27 patterns: 5 ``input_pair``, 10 single-ended
+  ``load``, 8 ``tail_current`` (6 default + 2 parked stacked-cascode), and 4
+  ``bias_generation``. The round-trip test is parametrized over 11
+  representative combinations covering every variant.
+- **two_stage_opamp_single_ended** — adds 6 patterns: 3 ``compensation`` and 3
+  ``amplification_stage`` (``common_source``, ``common_source_pmos``, and the
+  parked ``differential_ota_second_stage``). The round-trip test adds 11
+  combinations covering the ``amplification_stage`` and ``compensation``
+  variants against every stage-interface-compatible ``input_pair`` polarity.
+- **two_stage_opamp_fully_differential** — adds 6 patterns: 4 differential
+  ``load`` variants (the two
+  ``folded_cascode_load_{nmos,pmos}_input_differential_output`` and the two
+  ``current_source_load_{pmos,nmos}``) and 2 ``cmfb`` variants
+  (``resistive_sense_cmfb``, ``dda_cmfb``). FBR's ``assign_slots`` excludes
+  already-assigned candidates when processing same-category slot pairs
+  (``comp_p``/``comp_n``, ``second_stage_p``/``second_stage_n``). The
+  round-trip test adds 13 combinations covering both ``cmfb`` variants and
+  both differential input-pair polarities.
 - **three_stage_opamp_nmc_single_ended** and
-  **three_stage_opamp_rnmc_single_ended**: the plain NMC scheme adds 2 new
-  ``amplification_stage`` patterns — the non-inverting current-mirror stages
-  ``noninverting_stage_{nmos,pmos}`` (issue #139) that fill the NMC gm2 slot
-  — which the recognizer tells apart from the CS gm3 stage (and from
-  ``differential_ota_second_stage``, whose mirror node differs) by graph
-  structure. The ``third_stage`` slot otherwise reuses the
-  ``amplification_stage`` category; ``comp1``/``comp2`` reuse the
-  ``compensation`` category. FBR's ``assigned_ids`` mechanism correctly
-  disambiguates 2 same-category gain slots and 2 same-category
-  ``compensation`` slots via connectivity scoring on the distinct
-  intermediate nets (``net_mid1``/``net_mid2``).
+  **three_stage_opamp_rnmc_single_ended** — add 2 ``amplification_stage``
+  patterns: the non-inverting current-mirror stages
+  ``noninverting_stage_{nmos,pmos}`` (issue #139) that fill the NMC gm2 slot,
+  told apart from the CS gm3 stage (and from ``differential_ota_second_stage``,
+  whose mirror node differs) by graph structure. FBR's ``assigned_ids``
+  mechanism disambiguates the two same-category gain slots and two
+  same-category ``compensation`` slots via connectivity scoring on the
+  distinct intermediate nets (``net_mid1``/``net_mid2``). 10 round-trip combos.
 - **three_stage_opamp_nmc_fully_differential** and
-  **three_stage_opamp_rnmc_fully_differential**: no new patterns needed.
-  Each path (p/n) has independent ``second_stage``/``third_stage`` and
-  ``comp1``/``comp2`` slots — 4 slots per category. FBR correctly assigns
-  all 4 same-category ``compensation`` slots and all 4 same-category
-  ``second_stage`` slots via connectivity scoring on per-path distinct nets
+  **three_stage_opamp_rnmc_fully_differential** — no new patterns; each output
+  path (p/n) has independent ``amplification_stage``/``compensation`` slots (4
+  per category) that FBR assigns by connectivity scoring on per-path nets
   (``net_loadout1``/``net_loadout2``, ``net_mid2_p``/``net_mid2_n``,
-  ``outp``/``outn``). 11 round-trip combos each.
+  ``outp``/``outn``). 8 round-trip combos.
+- **``*_buffered_*`` templates** — add 2 ``output_stage`` patterns, the source
+  followers ``common_drain``/``common_drain_nmos`` (issue #125) that fill the
+  follower slot after the amplification stage.
 
-All 73 test combos assert ``unrecognized_devices == []`` and full
+All 55 round-trip test combos assert ``unrecognized_devices == []`` and full
 ``variant_map`` recovery. Combos are chosen so every variant appears in at
 least one and every selected combo is structurally unambiguous for the SR/FBR
 pipeline. Known structural ambiguities -- ``resistor_bias`` paired with
