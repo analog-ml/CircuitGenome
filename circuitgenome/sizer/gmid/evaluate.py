@@ -37,6 +37,26 @@ def _cascode_rout1(view: CircuitView, model: GmIdModel,
     return node_rout(out_net, all_mos, model, sizing, stop)
 
 
+def _cascode_gd_tail(view: CircuitView, model: GmIdModel,
+                     sizing: dict[str, TransistorSizing]) -> float | None:
+    """Cascode-aware tail output conductance, or ``None`` when the tail is not a
+    cascode current source (the single-device estimate is then already right).
+
+    Mirrors :func:`_cascode_rout1` for the CMRR path: ``node_rout`` at the tail
+    node walks the cascode stack down to the rail, so the ~``gm·ro`` boost that a
+    cascode tail gives (invisible to the single-device ``gds``) reaches CMRR.
+    """
+    blocks = view.blocks
+    if not blocks.has_cascode_tail():
+        return None
+    tail_net = blocks.tail_net()
+    if not tail_net:
+        return None
+    all_mos = [device for device, _slot in view.all_transistors.values()]
+    r = node_rout(tail_net, all_mos, model, sizing, frozenset())
+    return 1.0 / r if r and r != float("inf") else None
+
+
 def evaluate_circuit(
     view: CircuitView,
     currents: CurrentPlan,
@@ -47,12 +67,17 @@ def evaluate_circuit(
     tech: TechParams,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Return ``(metrics, margins)`` for the solved sizing."""
+    # Cascode tail conductance (CMRR) wins over the resistor-tail modifier when
+    # present; the two tail kinds are mutually exclusive.
+    gd_tail_override = _cascode_gd_tail(view, plan.model, sizing)
+    if gd_tail_override is None:
+        gd_tail_override = modifiers.gd_tail_override
     return _evaluate_metrics(
         sizing, view.slot_transistors, plan.cc_pf, tech, spec, plan.model,
         cc2_pf=plan.cc2_pf,
         gd_load_r=currents.gd_load_r,
         rout1_override=_cascode_rout1(view, plan.model, sizing),
         gm1_factor=modifiers.gm1_factor,
-        gd_tail_override=modifiers.gd_tail_override,
+        gd_tail_override=gd_tail_override,
         gd_out_extra=modifiers.gd_out_extra,
     )
