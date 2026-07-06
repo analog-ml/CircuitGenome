@@ -170,6 +170,16 @@ class OpAmpBlocks:
         ld = self.load
         return bool(ld and ld.load_kind == LoadKind.CASCODE)
 
+    def has_cascode_tail(self) -> bool:
+        """True if the tail current source is a cascode (series-stacked) stack.
+
+        The tail slot is never run through :func:`classify_load` (only the load
+        slot is), so this relies on :attr:`Block.is_cascode`'s structural
+        ``_has_cascode`` fallback rather than ``load_kind``.
+        """
+        tail = self.tail
+        return bool(tail and tail.is_cascode)
+
     def first_stage_out_net(self) -> str | None:
         """First-stage output node = the next stage's signal-device gate.
 

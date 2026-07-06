@@ -54,3 +54,21 @@ def test_fully_differential_factor():
     b = build_blocks({"input_pair": [], "second_stage_p": [], "second_stage_n": []}, {})
     assert b.is_fully_differential and b.n_stages == 2
     assert b.first_stage_gain_factor() == 1.0
+
+
+def test_has_cascode_tail():
+    ip = [D("mi1", "nmos", g="in1", d="o1", s="t"),
+          D("mi2", "nmos", g="in2", d="o2", s="t")]
+    # Plain single-device tail: the tail slot is never classified, so this must
+    # be detected structurally, not via load_kind (issue #145).
+    plain = build_blocks(
+        {"input_pair": ip, "tail_current": [D("mt", "nmos", g="net_bias1", d="t", s="0")]}, {})
+    assert not plain.has_cascode_tail()
+    # Cascode tail: top device stacked on the bottom device's drain.
+    casc = build_blocks(
+        {"input_pair": ip,
+         "tail_current": [D("mt_top", "nmos", g="net_bias2", d="t", s="tc"),
+                          D("mt_bot", "nmos", g="net_bias1", d="tc", s="0")]}, {})
+    assert casc.has_cascode_tail()
+    # No tail slot at all → not a cascode tail (resistor-tail / degenerate case).
+    assert not build_blocks({"input_pair": ip}, {}).has_cascode_tail()
