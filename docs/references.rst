@@ -23,6 +23,6 @@ The design of CircuitGenome draws on the following publications:
 4. **Constraint-Programmed Initial Sizing of Analog Operational Amplifiers** —
    I. Abel, M. Neuner, and H. Graeb. *IEEE International Conference on Computer
    Design (ICCD)*, 2019. The basis for the constraint-programming (CP-SAT)
-   formulation used by the Initial Sizer.
+   formulation used by the Sizer (SZ).
 
 Full PDFs are available in the ``docs/papers/`` directory of the repository.

@@ -357,7 +357,7 @@ the metrics are the Level-1 analytical estimates.
 built-in config: ``generic`` (default); ``ptm45``/``ptm32``/``ptm22``/``ptm16``
 (ASU Predictive Technology Model planar-bulk nodes; ``ptm16`` is a predictive
 extrapolation — real 16 nm is FinFET); or ``gf180mcu`` (GlobalFoundries GF180MCU
-180 nm open PDK, 3.3 V core).  See *Initial Sizer → Technology configurations* in
+180 nm open PDK, 3.3 V core).  See *Sizer (SZ) → Technology configurations* in
 the :doc:`Overview </overview>` for details and how to add a node with
 ``tools/extract_tech.py``.
 

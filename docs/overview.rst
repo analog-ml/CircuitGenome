@@ -1,18 +1,26 @@
 Overview
 ========
 
-CircuitGenome is structured around four modules, each addressing a different
+CircuitGenome is structured around several modules, each addressing a different
 direction of the analog circuit design problem:
 
-- **Topology Synthesizer** — constructs op-amp circuits from modular building
-  blocks and emits SPICE netlists.
-- **Subcircuit Recognizer** — identifies structural subcircuits (differential
-  pairs, cascode mirrors, etc.) in a flat SPICE netlist.
-- **Functional Block Recognizer** — identifies the functional role of each
-  part of a flat SPICE netlist (input stage, load, bias generation, etc.).
-- **Initial Sizer** — computes minimum transistor W/L values that satisfy DC
-  performance specifications (gain, GBW, phase margin, slew rate, CMRR) using
-  an OR-Tools CP-SAT integer-programming solver.
+- :ref:`Topology Synthesizer (SYN) <overview-synthesizer>` — constructs op-amp
+  circuits from modular building blocks and emits SPICE netlists.
+- :ref:`Subcircuit Recognizer (SR) <overview-recognizer>` — identifies
+  structural subcircuits (differential pairs, cascode mirrors, etc.) in a flat
+  SPICE netlist.
+- :ref:`Functional Block Recognizer (FBR) <overview-recognizer>` — identifies
+  the functional role of each part of a flat SPICE netlist (input stage, load,
+  bias generation, etc.).
+- :ref:`Sizer (SZ) <overview-sizer>` — computes transistor W/L values that
+  satisfy DC performance specifications (gain, GBW, phase margin, slew rate,
+  CMRR), via either an analytical CP-SAT solver or a gm/Id lookup pipeline.
+- :doc:`Designer <modules/designer>` — chains synthesis, sizing, and
+  verification end to end to return designs that meet a target spec.
+- :doc:`Visualizer <modules/visualizer>` — an interactive Streamlit UI for
+  browsing topologies and module variants as block diagrams.
+
+.. _overview-synthesizer:
 
 Topology Synthesizer
 --------------------
@@ -156,6 +164,8 @@ from Python with :func:`~circuitgenome.synthesizer.synthesizer.synthesize` and
 :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`.  See
 :doc:`usage/cli` and :doc:`usage/python_api` for worked examples.
 
+
+.. _overview-recognizer:
 
 Subcircuit & Functional Block Recognizer
 -----------------------------------------
@@ -497,12 +507,16 @@ two variants structurally identical) -- are avoided by careful combo selection
 rather than additional code. Primitive/multi-level pattern composition and topology identification from an
 arbitrary netlist are deferred to later milestones.
 
-Initial Sizer
--------------
+.. _overview-sizer:
+
+Sizer (SZ)
+----------
 
 The sizer takes the FBR result (slot assignments) plus a performance
-specification and returns minimum W/L values for every transistor in the
-circuit.  It supports all seven op-amp topology templates — one-stage,
+specification and returns W/L values for every transistor in the circuit.  It
+has two sizing paths — an **analytical** Level-1 CP-SAT solver and a **gm/Id**
+lookup pipeline, selected by technology (see *Sizing algorithm* below).  It
+supports all seven op-amp topology templates — one-stage,
 two-stage (single-ended and fully differential), and the four three-stage
 NMC/RNMC variants (single-ended and fully differential):
 

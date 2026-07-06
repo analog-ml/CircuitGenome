@@ -210,8 +210,8 @@ It supports all seven topology templates via a 3-layer pipeline:
 See :doc:`../overview` for the recognizer's 3-layer pipeline, pattern schema,
 and topology-free disambiguation algorithm.
 
-Initial Sizer
--------------
+Sizer (SZ)
+----------
 
 The sizer takes the FBR result (from :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
 plus a :class:`~circuitgenome.sizer.shared.models.SizingSpec` and returns minimum
