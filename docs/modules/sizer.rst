@@ -3,10 +3,8 @@ Sizer
 
 The **Sizer (SZ)** takes an FBR slot assignment plus a performance specification and
 returns minimum transistor W/L values for every device in the circuit.  It
-supports all seven op-amp topology templates (one-stage, two-stage
-single-ended/fully-differential, and the four three-stage NMC/RNMC variants) and
-targets DC specs — gain, GBW, phase margin, slew rate, CMRR, power, and output
-swing.
+supports every op-amp topology template the synthesizer produces and targets DC
+specs — gain, GBW, phase margin, slew rate, CMRR, power, and output swing.
 
 The sizer has two paths, selected by technology:
 
@@ -88,9 +86,9 @@ Sizing algorithm
 .. note::
 
    The requirement-derivation order below is shown for the **two-stage** case
-   as an illustration. The complete derivation for all seven topologies —
-   including the three-stage inner-pole and :math:`g_{m3}` steps — is covered
-   in :doc:`../theory/sizing_flow`.
+   as an illustration. The complete derivation for every topology the
+   synthesizer produces — including the three-stage inner-pole and
+   :math:`g_{m3}` steps — is covered in :doc:`../theory/sizing_flow`.
 
 The sizer has two paths, selected by technology.  The **card-less ``generic``
 tech** uses a Level-1 MOSFET model where ``gm = √(2·µCox·(W/L)·IDS)`` and

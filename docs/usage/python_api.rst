@@ -168,7 +168,8 @@ Recognizer
 
 :mod:`circuitgenome.recognizer` recovers a circuit's ``variant_map`` from its
 flat SPICE netlist — the structural inverse of ``synthesize`` + ``to_flat_spice``.
-It supports all seven topology templates via a 3-layer pipeline:
+It supports every topology template the synthesizer produces, via a 3-layer
+pipeline:
 
 **Topology mode** — requires a known topology, recovers the exact ``variant_map``:
 

@@ -19,9 +19,7 @@ with a concrete numerical walkthrough using the values from
 Scope and circuit topology
 --------------------------
 
-The sizer targets all seven op-amp topology templates supported by CircuitGenome:
-one-stage, two-stage (single-ended and fully-differential), and three-stage
-NMC/RNMC (single-ended and fully-differential).
+The sizer targets every op-amp topology template the synthesizer produces.
 
 This page documents the **Level-1 (Shichman-Hodges)** analytical flow — square-law
 drain current in saturation, constant channel-length modulation coefficient λ, no

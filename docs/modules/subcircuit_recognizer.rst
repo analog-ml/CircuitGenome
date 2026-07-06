@@ -191,7 +191,8 @@ coverage, this should be empty.
 SR pattern coverage
 --------------------
 
-The pattern library covers all 36 patterns spanning all seven topologies:
+The pattern library spans every topology the synthesizer produces, broken down
+below by where each pattern is introduced:
 
 - **one_stage_opamp**: 24 patterns (5 ``input_pair`` × 10 ``load`` × 6 real
   ``tail_current`` × 3 ``bias_generation``). The round-trip test is

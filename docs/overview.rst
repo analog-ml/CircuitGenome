@@ -1,7 +1,7 @@
 Overview
 ========
 
-CircuitGenome is structured around several modules, each addressing a different
+CircuitGenome is structured around six modules, each addressing a different
 direction of the analog circuit design problem:
 
 - :ref:`Topology Synthesizer (SYN) <overview-synthesizer>` — constructs op-amp
@@ -20,6 +20,10 @@ direction of the analog circuit design problem:
 - :ref:`Visualizer (VIS) <overview-visualizer>` — an interactive Streamlit UI
   for browsing topologies and module variants as block diagrams.
 
+Together they form a forward flow — synthesize → size, chained end to end by the
+Designer — alongside the inverse Recognizer that recovers a netlist's structure,
+with the Visualizer for interactive exploration.
+
 .. _overview-synthesizer:
 
 Topology Synthesizer (SYN)
@@ -29,11 +33,6 @@ The synthesizer models an op-amp as a composition of **module slots**.  Each
 slot is filled by one **module variant** — a concrete circuit implementation
 of a functional category.  The synthesizer iterates over all valid
 combinations and wires them together according to a **topology template**.
-
-For the full component catalogue with every variant, the enumeration and
-compatibility analysis, the demand-driven bias construction, the modular
-interface contract, and the SPICE output formats, see the
-:doc:`Topology Synthesizer module page <modules/synthesizer>`.
 
 Main components
 ~~~~~~~~~~~~~~~
@@ -160,9 +159,12 @@ How to use it
 ~~~~~~~~~~~~~
 
 Generate circuits from the command line with ``circuitgenome synthesize`` or
-from Python with :func:`~circuitgenome.synthesizer.synthesizer.synthesize` and
-:func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`.  See
-:doc:`usage/cli` and :doc:`usage/python_api` for worked examples.
+from Python.  See :doc:`usage/cli` and :doc:`usage/python_api` for worked
+examples, and the
+:doc:`Topology Synthesizer module page <modules/synthesizer>` for the full
+component catalogue, the enumeration and compatibility analysis, the
+demand-driven bias construction, the modular interface contract, and the SPICE
+output formats.
 
 
 .. _overview-recognizer:
@@ -189,8 +191,8 @@ It is organized as a 3-layer pipeline:
    (recovering the exact set of module variants) or topology-free (grouping the
    structures by functional block for a netlist of unknown origin).
 
-Together, SR and FBR support round-trip recognition of all seven topology
-templates the synthesizer produces.
+Together, SR and FBR support round-trip recognition of every topology template
+the synthesizer produces.
 
 How to use it
 ~~~~~~~~~~~~~
@@ -211,18 +213,8 @@ Sizer (SZ)
 The sizer takes the FBR result (slot assignments) plus a performance
 specification and returns W/L values for every transistor in the circuit.  It
 has two sizing paths — an **analytical** Level-1 CP-SAT solver and a **gm/Id**
-lookup pipeline, selected by technology.  It
-supports all seven op-amp topology templates — one-stage,
-two-stage (single-ended and fully differential), and the four three-stage
-NMC/RNMC variants (single-ended and fully differential):
-
-- ``one_stage_opamp``
-- ``two_stage_opamp_single_ended``
-- ``two_stage_opamp_fully_differential``
-- ``three_stage_opamp_nmc_single_ended``
-- ``three_stage_opamp_rnmc_single_ended``
-- ``three_stage_opamp_nmc_fully_differential``
-- ``three_stage_opamp_rnmc_fully_differential``
+lookup pipeline, selected by technology — and supports every op-amp topology
+template the synthesizer produces.
 
 Supported performance specs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

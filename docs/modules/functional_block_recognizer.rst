@@ -18,8 +18,8 @@ connectivity scoring.  It runs in two modes:
   ``category`` using external-port adjacency as the disambiguation signal, for
   recognition of arbitrary netlists with unknown net names.
 
-Together, SR + FBR support round-trip recognition of all seven topology
-templates the synthesizer produces.
+Together, SR + FBR support round-trip recognition of every topology template
+the synthesizer produces.
 
 Entry points
 ------------
