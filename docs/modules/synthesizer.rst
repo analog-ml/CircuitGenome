@@ -392,8 +392,12 @@ valid ones:
 
 The ``bias_generation`` slot adds no factor — it is constructed per combination
 (see `Demand-driven bias construction`_ above), so every core combination
-carries exactly one matched bias generator.  Each template's circuit count then
-follows from the extra slots it adds:
+carries exactly one matched bias generator.  Fully-differential templates
+additionally carry a **CMFB** slot: the ¶ filter expands their 48 core
+combinations to **72** effective ``load``/``cmfb`` combinations (the 24 with a
+differential-cardinality load keep both CMFB variants, the other 24 keep one);
+single-ended templates have no CMFB.  Each template's circuit count then follows
+from the extra slots it adds:
 
 .. list-table::
    :header-rows: 1
@@ -409,7 +413,7 @@ follows from the extra slots it adds:
      - 60 × 1 ``second_stage`` § × 3 ``compensation`` ‖
      - 180
    * - ``two_stage_opamp_fully_differential``
-     - 72 ``load``/``cmfb`` ¶ × 9 ``compensation``-pairs
+     - 48 → 72 ``load``/``cmfb`` ¶ × 9 ``compensation``-pairs
      - 648
    * - ``three_stage_opamp_nmc_single_ended``
      - 60 × 1 gm2 × 2 gm3 × 9 ‖
@@ -418,7 +422,7 @@ follows from the extra slots it adds:
      - 60 × 2 × 9
      - 1,080
    * - ``three_stage_opamp_{nmc,rnmc}_fully_differential``
-     - 72 × (2 × 9)²
+     - 48 → 72 ``load``/``cmfb`` ¶ × (2 × 9)²
      - 23,328
 
 **Compatibility filters** (section-local symbols):
