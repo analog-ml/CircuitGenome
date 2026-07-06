@@ -1,0 +1,21 @@
+# GF180MCU difficulty ladder — 1/5: EASY
+# Technology: gf180mcu (GlobalFoundries 180 nm, 3.3 V core, gm/Id LUT sizer)
+# Loose targets — almost any biased two-stage design passes. Binding constraint: none.
+# Reference frontier (two_stage_opamp_single_ended, --limit 60): ~60/60 accepted.
+#
+# Usage:
+#   circuitgenome design --topology two_stage_opamp_single_ended \
+#     --spec examples/gf180_difficulty_specs/spec_01_easy.yaml --tech gf180mcu -o out/
+
+vdd: 3.3            # V — 3.3 V core supply
+vss: 0.0           # V — ground
+ibias: 20.0e-6     # A — input bias current
+cl: 5.0e-12        # F — output load capacitance
+
+gain_min_db: 50           # dB — modest DC gain
+gbw_min_hz: 1.0e+6        # Hz — 1 MHz
+phase_margin_min_deg: 55  # °
+slew_rate_min_vps: 2.0e+5 # V/s
+power_max_w: 2.5e-3       # W — roomy power budget
+output_swing_max_v: 3.05  # V — 0.25 V headroom from VDD
+output_swing_min_v: 0.25  # V — 0.25 V headroom from VSS

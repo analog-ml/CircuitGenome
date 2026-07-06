@@ -1,0 +1,22 @@
+# GF180MCU difficulty ladder — 5/5: STRETCH
+# Technology: gf180mcu (GlobalFoundries 180 nm, 3.3 V core, gm/Id LUT sizer)
+# Near the feasible frontier: high gain, high GBW, and a tight power cap simultaneously.
+# Only a handful of designs satisfy all three at once. Binding constraints: gain + GBW + power.
+# Reference frontier (two_stage_opamp_single_ended, --limit 60): ~3/60 accepted (still feasible).
+#
+# Usage:
+#   circuitgenome design --topology two_stage_opamp_single_ended \
+#     --spec examples/gf180_difficulty_specs/spec_05_stretch.yaml --tech gf180mcu -o out/
+
+vdd: 3.3
+vss: 0.0
+ibias: 20.0e-6
+cl: 5.0e-12
+
+gain_min_db: 104          # dB — near the two-stage gf180 gain ceiling (~121 dB best)
+gbw_min_hz: 8.0e+6        # Hz — 8 MHz, close to the ~11.5 MHz best
+phase_margin_min_deg: 74  # °
+slew_rate_min_vps: 1.0e+6 # V/s
+power_max_w: 0.65e-3      # W — tight; fights the high-gain/high-GBW requirement
+output_swing_max_v: 2.9   # V — 0.4 V headroom
+output_swing_min_v: 0.4   # V
