@@ -1,29 +1,17 @@
 Python API
 ==========
 
-Quick start
------------
+The public API mirrors the modules in the :doc:`Overview <../overview>`.  The
+sections below cover each module's entry points; a full pipeline chains them —
+synthesize a circuit, recover its structure with the recognizer, size it, or run
+the whole flow at once with the designer.
 
-The quickest way to synthesize op-amps is
-:func:`~circuitgenome.synthesizer.synthesizer.synthesize`:
+Topology Synthesizer (SYN)
+--------------------------
 
-.. code-block:: python
-
-   from circuitgenome import synthesize
-   from circuitgenome.synthesizer import to_flat_spice
-
-   # Enumerate every valid 2-stage single-ended op-amp
-   circuits = synthesize({"stages": 2, "output_type": "single_ended"})
-   print(len(circuits), "circuits")
-
-   # Emit the first circuit as flat SPICE
-   print(to_flat_spice(circuits[0]))
-
-High-level API
---------------
-
-The simplest entry point is :func:`~circuitgenome.synthesizer.synthesizer.synthesize`.
-It loads the built-in YAML configs, applies your filters, and returns a list of
+The simplest entry point is
+:func:`~circuitgenome.synthesizer.synthesizer.synthesize`.  It loads the
+built-in YAML configs, applies your filters, and returns a list of
 :class:`~circuitgenome.synthesizer.models.SynthesizedCircuit` objects.
 
 .. code-block:: python
@@ -31,7 +19,7 @@ It loads the built-in YAML configs, applies your filters, and returns a list of
    from circuitgenome import synthesize
    from circuitgenome.synthesizer import to_flat_spice, to_hierarchical_spice
 
-   # All 2-stage single-ended circuits
+   # Every valid 2-stage single-ended op-amp
    circuits = synthesize({"stages": 2, "output_type": "single_ended"})
    print(f"{len(circuits)} circuits")  # 540
 
@@ -71,7 +59,7 @@ Supported filter keys for ``synthesize(config)``:
    })
 
 Inspecting a circuit
---------------------
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -88,7 +76,7 @@ Inspecting a circuit
        print(ref, device.type, device.terminals)
 
 Streaming with ``enumerate_circuits``
---------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For large enumerations, use the iterator API to avoid building the full list
 in memory at once:
@@ -132,7 +120,8 @@ variants back into the candidate pool:
        stacked-diode cascode tails, issue #111). Intended for design-space
        exploration: the circuits build into complete, valid netlists but are
        expected to be rejected at the DC bias gate. See the
-       :doc:`Overview </overview>` for the tag's semantics.
+       :doc:`Topology Synthesizer module page <../modules/synthesizer>` for the
+       tag's semantics.
 
 .. code-block:: python
 
@@ -146,7 +135,7 @@ variants back into the candidate pool:
 ``enumerate_circuits`` directly for these enumeration-pool options.)
 
 Using custom YAML definitions
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Pass explicit file paths to load your own module or topology definitions:
 
@@ -163,8 +152,8 @@ Pass explicit file paths to load your own module or topology definitions:
 
 See :doc:`../extending` for the YAML schema.
 
-Recognizer
-----------
+Subcircuit & Functional Block Recognizer (SR / FBR)
+---------------------------------------------------
 
 :mod:`circuitgenome.recognizer` recovers a circuit's ``variant_map`` from its
 flat SPICE netlist — the structural inverse of ``synthesize`` + ``to_flat_spice``.
@@ -325,5 +314,43 @@ A :func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics` value is ``None
 when ngspice cannot extract that metric (gain/GBW/PM/slew/power are measured;
 CMRR/PSRR/output-swing are not).
 
-See :doc:`../overview` for the sizer's constraint derivation order and
-CP-SAT linearisation details.
+See the :doc:`Sizer (SZ) module page <../modules/sizer>` for the sizer's
+constraint-derivation order and CP-SAT linearisation details.
+
+Designer (DES)
+--------------
+
+:func:`~circuitgenome.designer.designer.design` runs the whole flow — synthesize
+→ size → SPICE-verify → export — against a target spec and returns a
+:class:`~circuitgenome.designer.models.DesignReport` of the designs that meet it.
+It needs a technology with a gm/Id LUT (default ``gf180mcu``), so ngspice must be
+on ``PATH``.
+
+.. code-block:: python
+
+   from circuitgenome.designer import design
+
+   report = design(
+       "examples/two_stage_se_specs/spec_gf180.yaml",  # SizingSpec or YAML path
+       "designs/",                                     # output directory
+       templates=["two_stage_opamp_single_ended"],     # None → every template
+       limit=100,                                      # circuits per template
+       workers=4,                                      # parallel processes
+       progress=print,                                 # optional progress callback
+   )
+
+   print(len(report.solutions), "designs meet the spec")
+   for name, stats in report.stats.items():
+       print(f"  {name}: {stats.accepted}/{stats.enumerated} accepted")
+
+Each accepted design's sized netlist is written under ``output_dir`` and
+described by a :class:`~circuitgenome.designer.models.DesignSolution` in
+``report.solutions``; ``report.best_points`` maps each ranking criterion to its
+winning solution.
+
+Visualizer (VIS)
+----------------
+
+The Visualizer is an interactive Streamlit UI, not a library API.  Launch it
+with ``circuitgenome visualize`` (see :doc:`cli`); to build circuits
+programmatically, use the Topology Synthesizer API above.
