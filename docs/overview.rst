@@ -15,15 +15,15 @@ direction of the analog circuit design problem:
 - :ref:`Sizer (SZ) <overview-sizer>` — computes transistor W/L values that
   satisfy DC performance specifications (gain, GBW, phase margin, slew rate,
   CMRR), via either an analytical CP-SAT solver or a gm/Id lookup pipeline.
-- :ref:`Designer <overview-designer>` — chains synthesis, sizing, and
+- :ref:`Designer (DES) <overview-designer>` — chains synthesis, sizing, and
   verification end to end to return designs that meet a target spec.
-- :ref:`Visualizer <overview-visualizer>` — an interactive Streamlit UI for
-  browsing topologies and module variants as block diagrams.
+- :ref:`Visualizer (VIS) <overview-visualizer>` — an interactive Streamlit UI
+  for browsing topologies and module variants as block diagrams.
 
 .. _overview-synthesizer:
 
-Topology Synthesizer
---------------------
+Topology Synthesizer (SYN)
+--------------------------
 
 The synthesizer models an op-amp as a composition of **module slots**.  Each
 slot is filled by one **module variant** — a concrete circuit implementation
@@ -167,8 +167,8 @@ from Python with :func:`~circuitgenome.synthesizer.synthesizer.synthesize` and
 
 .. _overview-recognizer:
 
-Subcircuit & Functional Block Recognizer
------------------------------------------
+Subcircuit & Functional Block Recognizer (SR / FBR)
+---------------------------------------------------
 
 The recognizer is the structural inverse of the synthesizer: given a flat SPICE
 netlist, it recovers the modular building blocks that produced it.  It is
@@ -249,8 +249,8 @@ technology configurations, and SPICE verification.
 
 .. _overview-designer:
 
-Designer
---------
+Designer (DES)
+--------------
 
 The Designer is the spec-driven top layer: it chains the three lower modules
 end to end.  Given a target performance specification, it enumerates every valid
@@ -281,8 +281,8 @@ report structure.
 
 .. _overview-visualizer:
 
-Visualizer
-----------
+Visualizer (VIS)
+----------------
 
 The Visualizer is an interactive Streamlit web UI for exploring the topology
 space by hand.  It renders any topology and module-variant combination as a

@@ -1,5 +1,5 @@
-Visualizer
-==========
+Visualizer (VIS)
+================
 
 The **Visualizer** is a `Streamlit <https://streamlit.io>`_ UI for exploring
 CircuitGenome topologies as block diagrams.  It runs via ``circuitgenome

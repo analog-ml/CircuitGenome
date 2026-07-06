@@ -1,5 +1,5 @@
-Designer
-========
+Designer (DES)
+==============
 
 The **Designer** is the spec-driven top layer that chains the three lower
 modules end to end.  :func:`~circuitgenome.designer.designer.design` enumerates
