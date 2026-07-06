@@ -1,0 +1,21 @@
+# GF180MCU difficulty ladder — 3/5: HARD
+# Technology: gf180mcu (GlobalFoundries 180 nm, 3.3 V core, gm/Id LUT sizer)
+# High DC gain — only cascoded / high-rout stages qualify. Binding constraint: gain.
+# Reference frontier (two_stage_opamp_single_ended, --limit 60): ~27/60 accepted.
+#
+# Usage:
+#   circuitgenome design --topology two_stage_opamp_single_ended \
+#     --spec examples/gf180_difficulty_specs/spec_03_hard.yaml --tech gf180mcu -o out/
+
+vdd: 3.3
+vss: 0.0
+ibias: 20.0e-6
+cl: 5.0e-12
+
+gain_min_db: 92           # dB — demands a cascode / high-gain first stage
+gbw_min_hz: 5.0e+6        # Hz — 5 MHz
+phase_margin_min_deg: 66  # °
+slew_rate_min_vps: 6.0e+5 # V/s
+power_max_w: 0.9e-3       # W — loose enough that gain is the sole binder
+output_swing_max_v: 2.95  # V — 0.35 V headroom
+output_swing_min_v: 0.35  # V
