@@ -170,44 +170,30 @@ from Python with :func:`~circuitgenome.synthesizer.synthesizer.synthesize` and
 Subcircuit & Functional Block Recognizer
 -----------------------------------------
 
-The recognizer (:mod:`circuitgenome.recognizer`) is the structural inverse of
-the synthesizer: given a flat SPICE netlist produced by
-:func:`~circuitgenome.synthesizer.netlist.to_flat_spice`, it recovers the
-:attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map` that
-produced it. It is organized as a 3-layer pipeline:
+The recognizer is the structural inverse of the synthesizer: given a flat SPICE
+netlist, it recovers the modular building blocks that produced it.  It is
+organized as a 3-layer pipeline:
 
-1. **Layer 0 -- netlist parsing**
-   (:func:`~circuitgenome.recognizer.netlist_parser.parse`) turns the flat
-   SPICE text back into a
-   :class:`~circuitgenome.recognizer.models.ParsedNetlist` -- a list of
-   :class:`~circuitgenome.synthesizer.models.Device` plus the external port
-   and internal net names.
-2. **Layer 1 -- Subcircuit Recognizer (SR)**
-   (:func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize`) matches
-   a library of structural patterns (differential pairs, current mirrors,
-   ...) against the parsed devices, producing a
-   :class:`~circuitgenome.recognizer.models.SubcircuitRecognitionResult`.
-3. **Layer 2 -- Functional Block Recognizer (FBR)**
-   (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`
-   or :func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`)
-   assigns each recognized structure to a functional role. With a topology
-   template, structures are assigned to named slots (``input_pair``, ``load``,
-   ...) recovering the ``variant_map`` shape. Without one, structures are
-   grouped by ``circuit_block`` (``gain_stage_1``, ``gain_stage_2``, ``bias``,
-   ``compensation``, ``cmfb``) and ``category`` for topology-free recognition.
+1. **Netlist parsing (Layer 0)** — reads the flat SPICE text back into a
+   structured netlist of devices, external ports, and internal nets.
+2. **Subcircuit Recognizer (SR, Layer 1)** — matches a library of structural
+   patterns (differential pairs, current mirrors, cascode loads, bias legs)
+   against the parsed devices and reports every matching candidate, leaving the
+   disambiguation to the next layer.
+3. **Functional Block Recognizer (FBR, Layer 2)** — assigns each recognized
+   structure to its functional role, either against a known topology template
+   (recovering the exact set of module variants) or topology-free (grouping the
+   structures by functional block for a netlist of unknown origin).
 
-The recognizer supports round-trip recognition of all seven topology templates
-synthesized by :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`,
-verified across 73 test combinations covering every pattern variant.
+Together, SR and FBR support round-trip recognition of all seven topology
+templates the synthesizer produces.
 
 Using it
 ~~~~~~~~
 
 Recognize a netlist from the command line with ``circuitgenome recognize`` or
-from Python with :func:`~circuitgenome.recognizer.netlist_parser.parse`,
-:func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize`, and
-:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`.
-See :doc:`usage/cli` and :doc:`usage/python_api` for worked examples, and the
+from Python.  See :doc:`usage/cli` and :doc:`usage/python_api` for worked
+examples, and the
 :doc:`Subcircuit Recognizer (SR) <modules/subcircuit_recognizer>` and
 :doc:`Functional Block Recognizer (FBR) <modules/functional_block_recognizer>`
 module pages for the netlist parser, pattern library, hooks, and the
@@ -256,10 +242,9 @@ specification.
 Using it
 ~~~~~~~~
 
-Size a circuit from the command line with ``circuitgenome size`` or from Python
-with :func:`~circuitgenome.sizer.sizer.size_circuit`.  See :doc:`usage/cli` and
-:doc:`usage/python_api` for worked examples, and the
-:doc:`Sizer (SZ) module page <modules/sizer>` for the sizing algorithm,
+Size a circuit from the command line with ``circuitgenome size`` or from
+Python.  See :doc:`usage/cli` and :doc:`usage/python_api` for worked examples,
+and the :doc:`Sizer (SZ) module page <modules/sizer>` for the sizing algorithm,
 technology configurations, and SPICE verification.
 
 .. _overview-designer:
@@ -268,23 +253,51 @@ Designer
 --------
 
 The Designer is the spec-driven top layer: it chains the three lower modules
-end to end — enumerate every valid circuit for the chosen template(s) with the
-synthesizer, size each with the sizer, keep the ones whose ngspice-measured
-metrics meet the target spec, and export the survivors as sized SPICE netlists.
-:func:`~circuitgenome.designer.designer.design` returns a
-:class:`~circuitgenome.designer.models.DesignReport` with per-template
-statistics and the best design points.  See the
-:doc:`Designer module page <modules/designer>` for details.
+end to end.  Given a target performance specification, it enumerates every valid
+circuit for the chosen template(s), sizes each one, keeps only those whose
+SPICE-measured metrics meet the spec, and exports the survivors as sized
+netlists — turning a one-line specification into a set of ready-to-simulate
+op-amp designs.
+
+What it does
+~~~~~~~~~~~~
+
+- **End-to-end search** — runs the full synthesize → size → SPICE-verify →
+  export flow for every candidate, so you start from a spec rather than a
+  hand-written netlist.
+- **Spec-driven acceptance** — keeps only the designs whose SPICE-measured
+  metrics satisfy the target, and records why each rejected candidate failed.
+- **Multi-template** — searches across one or several topology templates in a
+  single run, in parallel.
+- **Ranked results** — returns per-template statistics and the best design
+  points, with the sized netlists written out for further simulation.
+
+Using it
+~~~~~~~~
+
+Run the full flow from the command line with ``circuitgenome design``.  See the
+:doc:`Designer module page <modules/designer>` for the Python API and the
+report structure.
 
 .. _overview-visualizer:
 
 Visualizer
 ----------
 
-``circuitgenome visualize`` launches a Streamlit web UI for browsing topologies
-and module variants: pick a topology, swap each slot's module variant, and see
-the resulting block diagram (and SPICE netlist, for valid combinations) update
-live.  It requires the ``viz`` extra (``pip install circuitgenome[viz]``).
+The Visualizer is an interactive Streamlit web UI for exploring the topology
+space by hand.  It renders any topology and module-variant combination as a
+block diagram — and, for valid combinations, the assembled SPICE netlist — so
+you can see how the modular building blocks fit together without writing any
+code.
+
+Two tabs
+~~~~~~~~
+
+- **Topology Explorer** — pick a topology and swap each slot's module variant;
+  the block diagram and netlist update live.  Invalid combinations show why the
+  synthesizer rejected them.
+- **Module Browser** — lists every module variant by category, with its ports
+  and device count.
 
 .. figure:: /images/topology_visualizer.png
    :alt: Topology Explorer screenshot
@@ -293,5 +306,8 @@ live.  It requires the ``viz`` extra (``pip install circuitgenome[viz]``).
    The Topology Explorer tab: pick a topology and module variants in the
    sidebar, and the block diagram updates live.
 
-See the :doc:`Visualizer module page <modules/visualizer>` for the two tabs
-(Topology Explorer and Module Browser).
+Using it
+~~~~~~~~
+
+Launch the Visualizer from the command line — see :doc:`usage/cli` for how to
+run it and the ``viz`` extra it needs.
