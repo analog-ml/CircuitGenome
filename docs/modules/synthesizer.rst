@@ -211,8 +211,7 @@ scheme additionally needs a **non-inverting gm2**, because Cm1 wraps the
 gm2+gm3 cascade and pole-splitting Miller feedback is negative only around
 an inverting chain — with an inverting gm3, gm2 must be non-inverting. That
 role is filled by the ``noninverting_stage_{nmos,pmos}`` variants (issue
-#139); before they existed, the NMC templates enumerated zero circuits (see
-the :ref:`compensation parity filter <compat-compensation>`).
+#139).
 
 .. list-table::
    :header-rows: 1
@@ -221,14 +220,16 @@ the :ref:`compensation parity filter <compat-compensation>`).
    * - Scheme
      - Cm1 / Cm2 connections
    * - Nested Miller (NMC)
-     - Cm1 spans gm2+gm3 (gm1's output → final output, the outer loop);
-       Cm2 spans gm3 only (gm2's output → final output, the inner loop).
-       Both capacitors return to the final output node.
+     - - Cm1 spans gm2+gm3 — gm1's output → final output (the outer loop).
+       - Cm2 spans gm3 only — gm2's output → final output (the inner loop).
+       - Both capacitors return to the final output node.
    * - Reversed Nested Miller (RNMC)
-     - Cm1 spans gm3 only (gm2's output → final output); Cm2 spans gm2 only
-       (gm1's output → gm2's output) instead of returning to the final
-       output. This reduces loading on the output node, which is useful
-       when gm3 is a low-gain buffer stage.
+     - - Cm1 spans gm3 only — gm2's output → final output.
+       - Cm2 spans gm2 only — gm1's output → gm2's output, instead of
+         returning to the final output.
+
+       Reduces loading on the output node — useful when gm3 is a low-gain
+       buffer stage.
 
 Modular interface contract
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -244,53 +245,73 @@ internal device structure is invisible to the template.
    * - Category
      - Canonical ports
    * - ``input_pair``
-     - ``in1``, ``in2``, ``out1``, ``out2``, ``tail``, ``vdd``, ``gnd``
+     - - ``in1`` / ``in2`` — differential signal inputs.
+       - ``out1`` / ``out2`` — differential drain outputs (drive the load's
+         folding nodes).
+       - ``tail`` — shared source node, sunk by ``tail_current``.
+       - ``vdd`` / ``gnd`` — supply rails.
    * - ``load``
-     - ``in1``, ``in2`` (folding nodes, driven by ``input_pair.out1`` /
-       ``out2``), ``out1``, ``out2`` (differential output nodes — wired to
-       dedicated ``net_loadout1``/``net_loadout2`` nets in
-       ``fully_differential`` topologies for distinct cascode-output devices,
-       or merged back onto ``in1``/``in2`` via ``alias_of`` for simple
-       resistor/active/current-source loads), ``out`` *(mandatory only for
-       single-output cascode loads, wired to the stage's single output node
-       in ``single_ended`` topologies; optional/unused otherwise)*,
-       ``bias1``, ``bias2``, ``bias3``, ``bias_cmfb`` *(optional bias inputs;
-       each variant declares only as many as it needs)*, ``vdd``, ``gnd``.
+     - - ``in1`` / ``in2`` — folding nodes, driven by
+         ``input_pair.out1``/``out2``.
+       - ``out1`` / ``out2`` — differential output nodes; wired to dedicated
+         ``net_loadout1``/``net_loadout2`` in ``fully_differential`` topologies
+         (distinct cascode-output devices), or merged back onto ``in1``/``in2``
+         via ``alias_of`` for simple resistor/active/current-source loads.
+       - ``out`` — single output node; mandatory only for single-output
+         cascode loads (wired to the stage's single output node in
+         ``single_ended`` topologies), optional/unused otherwise.
+       - ``bias1`` / ``bias2`` / ``bias3`` / ``bias_cmfb`` — optional bias
+         inputs; each variant declares only as many as it needs.
+       - ``vdd`` / ``gnd`` — supply rails.
+
        Whichever of ``out``/``out1``/``out2`` is mandatory is declared via
        ``output_cardinality: "single" | "differential" | None``, checked
        against the topology's ``output_type`` by the output-cardinality
-       compatibility filter
+       compatibility filter.
    * - ``tail_current``
-     - ``out``, ``bias`` *(current-mirror / cascode-current-mirror variants
-       wire this to the dedicated ``net_bias7`` rail; resistor-tail variants
-       declare it ``optional`` and leave it unconnected)*, ``bias_casc``
-       *(cascode-current-mirror variants only: the wide-swing cascode-gate
-       level, wired to ``net_bias8``)*, ``vdd``, ``gnd``
+     - - ``out`` — tail node, sources/sinks the input pair's tail current.
+       - ``bias`` — mirror bias; current-mirror / cascode-current-mirror
+         variants wire it to ``net_bias7``, resistor-tail variants declare it
+         ``optional`` and leave it unconnected.
+       - ``bias_casc`` — wide-swing cascode-gate level (cascode-current-mirror
+         variants only), wired to ``net_bias8``.
+       - ``vdd`` / ``gnd`` — supply rails.
    * - ``bias_generation``
-     - ``ibias``, ``out1``..``out8`` -- consumed rails only (``out1``-``out4``
-       feed ``load``'s ``bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5``
-       feeds ``second_stage.bias``, ``out6`` feeds ``third_stage.bias``,
-       ``out7`` feeds ``tail_current.bias``, ``out8`` feeds
-       ``tail_current.bias_casc``), ``vdd``, ``gnd``. The variant
-       is constructed per combination by
+     - - ``ibias`` — external master reference current.
+       - ``out1``..``out8`` — bias rails, consumed rails only: ``out1``-``out4``
+         feed ``load``'s ``bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5``
+         feeds ``second_stage.bias``, ``out6`` feeds ``third_stage.bias``,
+         ``out7`` feeds ``tail_current.bias``, ``out8`` feeds
+         ``tail_current.bias_casc``.
+       - ``vdd`` / ``gnd`` — supply rails.
+
+       The variant is constructed per combination by
        :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`,
-       with one typed leg per consumed rail
+       with one typed leg per consumed rail.
    * - ``cmfb``
-     - ``in1``, ``in2`` (differential sense inputs, wired to
-       ``net_loadout1``/``net_loadout2`` -- the ``load``'s cascode-output
-       nodes), ``vref`` (common-mode reference, wired to the external
-       ``vcm_ref`` port), ``bias`` (tail-current bias, reuses ``net_bias4``
-       from ``bias_generation.out4``), ``out`` (drives ``load.bias_cmfb`` via
-       ``net_cmfb_out``), ``vdd``, ``gnd``. Two variants:
-       ``resistive_sense_cmfb`` (resistive averager + 5T OTA) and
-       ``dda_cmfb`` (differential-difference amplifier). Present only when
+     - - ``in1`` / ``in2`` — differential sense inputs, wired to
+         ``net_loadout1``/``net_loadout2`` (the ``load``'s cascode-output
+         nodes).
+       - ``vref`` — common-mode reference, wired to the external ``vcm_ref``
+         port.
+       - ``bias`` — tail-current bias, reuses ``net_bias4`` from
+         ``bias_generation.out4``.
+       - ``out`` — drives ``load.bias_cmfb`` via ``net_cmfb_out``.
+       - ``vdd`` / ``gnd`` — supply rails.
+
+       Two variants: ``resistive_sense_cmfb`` (resistive averager + 5T OTA)
+       and ``dda_cmfb`` (differential-difference amplifier). Present only when
        ``load``'s ``output_cardinality`` is ``"differential"`` (see "CMFB
        compatibility filter" above); otherwise pruned to an empty placeholder
-       and ``vcm_ref`` is left unconnected
+       and ``vcm_ref`` is left unconnected.
    * - ``compensation``
-     - ``in``, ``out``
+     - - ``in`` — stage-input side of the Miller capacitor.
+       - ``out`` — stage-output side of the Miller capacitor.
    * - ``amplification_stage``
-     - ``in``, ``out``, ``bias``, ``vdd``, ``gnd``
+     - - ``in`` — stage input (gate of the signal device).
+       - ``out`` — stage output.
+       - ``bias`` — bias rail for the stage's current source.
+       - ``vdd`` / ``gnd`` — supply rails.
 
 Supply ports (``vdd``, ``gnd``) are automatically connected to the global
 rails ``vdd!`` / ``gnd!`` unless explicitly overridden in the topology
