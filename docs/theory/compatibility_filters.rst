@@ -6,11 +6,14 @@ Cartesian product of every slot's candidate variants. Most of those
 combinations are not circuits worth emitting: some assemble into an
 electrically **non-functional** netlist (a node with no DC path, a stage that
 cannot be biased), and others are exact **duplicates** that differ only in a
-variant this combination never references — for example, a self-biased
-``inverter_based_input`` pair ignores its ``tail`` port, so all six
-``tail_current`` variants would produce the identical netlist. A set of small,
-pure-function *compatibility filters* rejects those combinations before they
-are assembled, one slot-level rule per filter.
+variant this combination never references. A set of small, pure-function
+*compatibility filters* rejects those combinations before they are assembled,
+one slot-level rule per filter.
+
+.. admonition:: Example
+
+   A self-biased ``inverter_based_input`` pair ignores its ``tail`` port, so
+   all six ``tail_current`` variants would produce the identical netlist.
 
 This page explains the electrical *why* behind each filter and links its API.
 Each filter section links its module inline, and the `Per-module API
@@ -28,15 +31,20 @@ nothing else changes.
 **Filter + prune pairs** handle a subtler case: a slot whose variant choice is
 *irrelevant* for the rest of the combination (its output drives nothing, or
 its port is never referenced). Enumerating all of that slot's variants would
-produce N identical circuits — for example, a ``load`` that does not consume
-``bias_cmfb`` leaves the ``cmfb`` slot driving nothing, so the
-``resistive_sense_cmfb`` and ``dda_cmfb`` choices would emit the same circuit.
-The ``is_*_compatible`` filter collapses the choice to a single canonical
-variant, and the paired ``prune_*`` transform then empties that variant's ports
-and devices so it contributes no dead devices and stops "needing" its bias rail
+produce N identical circuits. The ``is_*_compatible`` filter collapses the
+choice to a single canonical variant, and the paired ``prune_*`` transform then
+empties that variant's ports and devices so it contributes no dead devices and
+stops "needing" its bias rail
 (see :func:`~circuitgenome.synthesizer.bias_construction.required_rail_kinds`).
 The :ref:`CMFB <compat-cmfb>` and :ref:`tail-current <compat-tail-current>`
 filters are the two filter + prune pairs.
+
+.. admonition:: Example
+
+   A ``load`` that does not consume ``bias_cmfb`` leaves the ``cmfb`` slot
+   driving nothing, so the ``resistive_sense_cmfb`` and ``dda_cmfb`` choices
+   would emit the same circuit — the filter keeps the canonical one and the
+   prune empties it.
 
 Two kinds of check
 ------------------
@@ -300,10 +308,14 @@ For an ``input_pair`` that doesn't reference ``tail``, only the canonical
 circuits. That canonical variant is then pruned to an empty placeholder (no
 ports, no devices), so it contributes no devices to the assembled circuit,
 ``net_tail`` is no longer floating, and ``tail_current.bias`` is no longer
-counted as a needed bias rail. For example, ``inverter_based_input`` yields a
-single circuit per ``load`` instead of six identical ones: whichever
-``tail_current`` was chosen, the prune leaves the same tail-less netlist
+counted as a needed bias rail
 (:mod:`~circuitgenome.synthesizer.compatibility.tail_current`).
+
+.. admonition:: Example
+
+   ``inverter_based_input`` yields a single circuit per ``load`` instead of
+   six identical ones: whichever ``tail_current`` was chosen, the prune leaves
+   the same tail-less netlist.
 
 ----
 
