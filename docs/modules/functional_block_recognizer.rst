@@ -83,8 +83,18 @@ Topology-free mode
 
 Without a template, FBR knows neither the circuit's net names nor which structure
 fills which role — it has only SR's candidates, each tagged with a
-``circuit_block`` (``gain_stage_1``, ``gain_stage_2``, ``bias``, ...) and a
-``category`` (``input_pair``, ``load``, ...).
+``circuit_block`` and a ``category``. ``category`` says *what kind* of block a
+structure is (``input_pair``, ``load``, ...); ``circuit_block`` says *which part
+of the op-amp* it belongs to — the first stage (``gain_stage_1``), a later gain
+stage (``gain_stage_2``), the bias network (``bias``), compensation
+(``compensation``), CMFB (``cmfb``), or the output buffer
+(``output_stage_block``). Both tags are authored statically on the SR pattern in
+``opamp_patterns.yaml`` (the input-pair/load/tail patterns carry
+``gain_stage_1``, the second-stage patterns ``gain_stage_2``) and copied onto
+every match, so they are available with no template. Stage numbers beyond the
+YAML tags — ``gain_stage_3`` and up — aren't authored; Pass 3 below derives them
+by splitting a block that holds several stages.
+
 :func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`
 buckets the candidates ``circuit_block`` → ``category`` and ranks the candidates
 in each category so the first one is the best guess. The ranking signal is

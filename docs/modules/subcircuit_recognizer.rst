@@ -69,6 +69,11 @@ list of small template graphs. Each pattern declares:
 - ``pins`` -- named nets exported by the pattern, e.g. ``in1: m1.g``.
 - ``tech_type_from`` -- which template device's matched type (``"n"``/``"p"``)
   becomes the recognized structure's ``tech_type``.
+- ``circuit_block`` -- a coarse functional-role label one level above
+  ``category`` (``gain_stage_1``, ``gain_stage_2``, ``bias``, ``compensation``,
+  ``cmfb``, ``output_stage_block``), used by the topology-free
+  :doc:`FBR <functional_block_recognizer>` pass to group structures by where
+  they sit in the op-amp.
 - an optional ``hook`` -- a ``"module:function"`` extra-check for constraints
   too awkward to express declaratively.
 
