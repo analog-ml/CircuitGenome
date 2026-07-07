@@ -9,11 +9,6 @@ linearisation, and the post-sizing performance metric evaluation —
 with a concrete numerical walkthrough using the values from
 ``examples/two_stage_se_specs/spec_generic.yaml``.
 
-.. contents:: On this page
-   :depth: 2
-   :local:
-   :backlinks: none
-
 ----
 
 Scope and circuit topology

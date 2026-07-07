@@ -1,5 +1,5 @@
-Compatibility Filters — Rationale and Analysis
-==============================================
+Compatibility Filters
+=====================
 
 :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits` forms the
 Cartesian product of every slot's candidate variants. Most of those
@@ -10,14 +10,14 @@ variant whose devices this combination never references. A set of small,
 pure-function *compatibility filters* rejects those combinations before they
 are assembled, one slot-level rule per filter.
 
-This page explains the electrical *why* behind each filter and how it narrows
-the enumeration. For the function signatures and module-by-module API, see
-:doc:`../api/compatibility/index`.
+This page explains the electrical *why* behind each filter and links its API.
+Import the filters from the ``compatibility`` subpackage — the per-module split
+is an internal detail::
 
-.. contents:: On this page
-   :depth: 2
-   :local:
-   :backlinks: none
+    from circuitgenome.synthesizer.compatibility import is_cmfb_compatible, prune_cmfb
+
+Each filter section below links its module inline, and the
+`Per-module API reference`_ section collects the ``automodule`` docs.
 
 ----
 
@@ -335,3 +335,23 @@ counted as a needed bias rail. To extend: wire a new or edited ``input_pair``
 variant's tail-side device terminal(s) to ``tail`` to make it a genuine
 ``tail_current`` consumer -- no code changes needed
 (:mod:`~circuitgenome.synthesizer.compatibility.tail_current`).
+
+----
+
+Per-module API reference
+------------------------
+
+Signatures and members for each filter module. The electrical rationale is in
+the sections above; these pages are the API surface (import from the
+``compatibility`` subpackage, not the individual modules).
+
+.. toctree::
+   :maxdepth: 1
+
+   ../api/compatibility/polarity
+   ../api/compatibility/second_stage
+   ../api/compatibility/compensation
+   ../api/compatibility/output
+   ../api/compatibility/load_branch
+   ../api/compatibility/cmfb
+   ../api/compatibility/tail_current

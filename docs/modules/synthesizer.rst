@@ -597,6 +597,5 @@ API reference
    ../api/models
    ../api/loader
    ../api/netlist
-   ../api/compatibility/index
    ../api/bias_construction
    ../api/net_aliasing

@@ -16,11 +16,6 @@ It walks the pipeline end to end as **five phases**, each with a runnable
 snippet and its observed output, then explains the **role vs functional
 building block** distinction that drives the per-device gm/Id choice.
 
-.. contents:: On this page
-   :depth: 2
-   :local:
-   :backlinks: none
-
 ----
 
 Scope and routing
