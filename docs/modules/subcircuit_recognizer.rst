@@ -25,7 +25,7 @@ the **circuit-specific** interpretation, assigning each block its functional
 role and resolving the overlaps; that semantic layer is op-amp-only in this
 version.  Keeping the structural layer separate lets it be reused for other
 circuit families as they are added.  Constraints that resist a declarative
-pattern are handled by *hooks*.
+pattern are handled by `hooks <Hooks_>`_.
 
 Entry points
 ------------
@@ -249,8 +249,14 @@ SR pattern coverage
 --------------------
 
 The pattern library spans every topology the synthesizer produces. The table
-lists where each pattern is introduced and the round-trip combos that exercise
-it:
+below has two columns worth spelling out:
+
+- **New patterns** — the patterns a template is the *first* to require. Counts
+  are incremental (each row adds to the rows above it), so they sum to the
+  full library.
+- **Round-trip combos** — parametrized test cases that synthesize a circuit,
+  flatten it to SPICE, run it back through SR + FBR, and assert the original
+  ``variant_map`` is recovered exactly.
 
 .. list-table::
    :header-rows: 1
@@ -283,16 +289,21 @@ it:
 
 That is 43 patterns and 53 template combos; with 2 opt-in stacked-diode
 cascode-tail round-trips (``include_infeasible``) it totals **55**. All 55
-assert ``unrecognized_devices == []`` and full
-``variant_map`` recovery. Combos are chosen so every variant appears in at
-least one and every selected combo is structurally unambiguous for the SR/FBR
-pipeline. Known structural ambiguities -- ``resistor_bias`` paired with
-``current_mirror_tail_{nmos,pmos}`` (the tail's diode-connected reference
-transistor spuriously satisfies the ``magic_battery_bias`` NMOS leg template)
-and any ``magic_battery_bias`` or ``resistor_bias`` combination where
-bias-rail pruning reduces the ``bias_generation`` slot to 0 legs (making the
-two variants structurally identical) -- are avoided by careful combo selection
-rather than additional code. Primitive/multi-level pattern composition and topology identification from an
+assert ``unrecognized_devices == []`` and full ``variant_map`` recovery.
+
+**Combos are chosen to be unambiguous.** Every variant appears in at least one,
+and each selected combo is structurally unambiguous for the SR/FBR pipeline, so
+the two known structural ambiguities are sidestepped by combo selection rather
+than extra code:
+
+- ``resistor_bias`` paired with ``current_mirror_tail_{nmos,pmos}`` — the
+  tail's diode-connected reference transistor spuriously satisfies the
+  ``magic_battery_bias`` NMOS leg template.
+- any ``magic_battery_bias`` or ``resistor_bias`` combination where bias-rail
+  pruning reduces the ``bias_generation`` slot to 0 legs, making the two
+  variants structurally identical.
+
+Primitive/multi-level pattern composition and topology identification from an
 arbitrary netlist are deferred to later milestones.
 
 API reference
