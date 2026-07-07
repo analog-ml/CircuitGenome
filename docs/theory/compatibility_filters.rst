@@ -242,26 +242,30 @@ gate, which only ``fully_differential`` topologies provide (issue #112)
 Untapped-load-branch compatibility filter
 -----------------------------------------
 
-Every ``single_ended`` topology taps only one of the first stage's two
-branch nodes (``load.out``/``out2`` → the stage-output net); the other
-(``load.in1``/``out1``, ``net_diff1``) is untapped — nothing outside the
-first stage senses or drives it, so its DC voltage must be defined by the
-load itself. ``current_source_load_*`` put a plain current source on that
-branch (both gates on a single shared node, no diode connection), leaving
-the node high-impedance between two series current sources — the load
-device on one side, the input-pair half plus tail on the other. No sizing
-can absorb the inevitable current mismatch, and one device always leaves
-saturation (issue #112). ``enumerate_circuits`` skips these combinations in
-``single_ended`` topologies. The check is structural (no YAML tags): the
-``in1`` node counts as DC-defined when the load has a diode-connected
-MOSFET on it (``active_load_*``), a resistor touching it
-(``resistor_load_*``), or a MOSFET source terminal on it (the cascode
-loads' folding/cascode devices). ``fully_differential`` topologies tap both
-branches and are not constrained — the common-mode definition there is the
-CMFB loop's job. With the current module library the filter prunes nothing
-on its own (``current_source_load_*`` are already excluded from
-single-ended templates by their ``output_cardinality`` tag); it is the
-structural guard for any future rail-gated load branch
+In a ``single_ended`` topology only one of the first stage's two branch nodes
+is tapped (``load.out``/``out2`` → the stage-output net); the other
+(``load.in1``/``out1``, ``net_diff1``) is untapped — nothing outside the first
+stage senses or drives it, so its DC voltage must be defined by the load
+itself. ``current_source_load_*`` put a plain current source on that branch
+(both gates on a single shared node, no diode connection), leaving the node
+high-impedance between two series current sources — the load device on one
+side, the input-pair half plus tail on the other. No sizing can absorb the
+inevitable current mismatch, and one device always leaves saturation
+(issue #112), so ``enumerate_circuits`` skips these combinations.
+
+The check is structural (no YAML tags): the ``in1`` node counts as DC-defined
+when the load puts a diode-connected MOSFET on it (``active_load_*``), a
+resistor touching it (``resistor_load_*``), or a MOSFET source terminal on it
+(the cascode loads' folding/cascode devices). Only the bare rail-referenced
+current source fails all three.
+
+``fully_differential`` topologies tap both branches, so this filter does not
+constrain them — defining the output common mode there is the CMFB loop's job.
+
+With the current module library the filter prunes nothing on its own:
+``current_source_load_*`` are already excluded from single-ended templates by
+their ``output_cardinality`` tag, so it stands as the structural guard for any
+future rail-gated load branch
 (:mod:`~circuitgenome.synthesizer.compatibility.load_branch`).
 
 .. _compat-cmfb:
