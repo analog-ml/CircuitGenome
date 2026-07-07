@@ -334,7 +334,7 @@ the sections above; these pages are the API surface (import from the
    :maxdepth: 1
 
    ../api/compatibility/polarity
-   ../api/compatibility/second_stage
+   ../api/compatibility/stage_interface
    ../api/compatibility/compensation
    ../api/compatibility/output
    ../api/compatibility/load_branch

@@ -1,5 +1,5 @@
-Second-Stage Compatibility
-==========================
+Stage-Interface Compatibility
+=============================
 
 .. automodule:: circuitgenome.synthesizer.compatibility.second_stage
    :members:
