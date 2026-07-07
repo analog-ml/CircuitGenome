@@ -32,10 +32,13 @@ Entry points
 Functional block recognition (Layer 2)
 ---------------------------------------
 
-FBR operates in two modes depending on whether a topology template is available:
+FBR operates in two modes depending on whether a topology template is available.
 
-**Topology mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`):
-takes SR's output plus a
+Topology mode
+~~~~~~~~~~~~~~
+
+:func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots` takes
+SR's output plus a
 :class:`~circuitgenome.synthesizer.models.TopologyTemplate` and assigns each
 :class:`~circuitgenome.synthesizer.models.Slot` in ``topology.slots`` to its
 best-matching SR candidate:
@@ -50,76 +53,103 @@ best-matching SR candidate:
 3. Assign the highest-scoring candidate.
 
 Connectivity scoring runs even for categories with only one slot, since SR may
-report multiple overlapping candidates per category (as the Subcircuit Recognizer does) regardless of
-how many slots need that category. The output,
+report multiple overlapping candidates per category regardless of how many slots
+need that category. The output,
 :class:`~circuitgenome.recognizer.models.FunctionalBlockRecognitionResult`, is
 shaped like ``variant_map`` (``{slot_name: SlotAssignment}``), plus any
-unassigned candidate structures and ``unrecognized_devices`` passed through
-from SR.
+unassigned candidate structures and ``unrecognized_devices`` passed through from
+SR:
 
-**Topology-free mode** (:func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`):
-works on any netlist with arbitrary net names without a topology template.
-Each opamp pattern carries a ``circuit_block`` annotation (``gain_stage_1``,
-``gain_stage_2``, ``bias``, ``compensation``, ``cmfb``) alongside its
-``category`` (``input_pair``, ``load``, ...). The ``gain_stage_N`` prefix is
-distinct from category names like ``second_stage``, so the two fields never
-clash. The function groups SR structures by ``circuit_block`` then
-``category``, ranking candidates within each category by external-port
-adjacency (count of pins that connect directly to a subcircuit external port)
-as a topology-free disambiguation signal. The output,
-:class:`~circuitgenome.recognizer.models.CategoryGroupResult`, gives a
-``circuit_block → category → [candidates]`` mapping where the first candidate
-per category is the best topology-free guess.
+.. code-block:: python
 
-The topology-free algorithm runs three passes:
+   FunctionalBlockRecognitionResult(
+       slot_assignments={
+           "input_pair":   SlotAssignment("input_pair",   "differential_pair_pmos",   ip_struct),
+           "load":         SlotAssignment("load",         "active_load_nmos",         load_struct),
+           "tail_current": SlotAssignment("tail_current", "current_mirror_tail_pmos", tail_struct),
+           "bias_gen":     SlotAssignment("bias_gen",     "constructed_bias",         bias_struct),
+       },
+       unassigned_structures=[...],   # overlapping SR candidates that lost the scoring
+       unrecognized_devices=[],       # empty on a clean round trip
+   )
 
-**Pass 1 — Filter (single-category gain_stage_* blocks only)**
+Each ``SlotAssignment`` carries the slot name, the winning pattern's name (equal
+to the synthesized variant's name on a correct round trip), and the
+:class:`~circuitgenome.recognizer.models.RecognizedStructure` itself (the
+``*_struct`` placeholders above).
 
-Removes three classes of spurious candidates in ``gain_stage_2``, ``gain_stage_3``,
-etc. (blocks with exactly one category, i.e. ``second_stage`` slots):
+Topology-free mode
+~~~~~~~~~~~~~~~~~~~
 
-- **Class A** — ``in`` pin on an external port: bias-reference nmos re-matched
-  with gate on ``ibias``.
-- **Class B** — ``bias`` pin on an external port: pmos leg of a bias mirror
-  re-matched with gate on ``ibias``.
-- **Class C** — any nmos device whose source is not ``gnd!``: cascode load
-  devices (source tied to an intermediate folding node) that survive the
-  pin-level checks.
+Without a template, FBR knows neither the circuit's net names nor which structure
+fills which role — it has only SR's candidates, each tagged with a
+``circuit_block`` (``gain_stage_1``, ``gain_stage_2``, ``bias``, ...) and a
+``category`` (``input_pair``, ``load``, ...).
+:func:`~circuitgenome.recognizer.functional_block_recognizer.group_by_category`
+buckets the candidates ``circuit_block`` → ``category`` and ranks the candidates
+in each category so the first one is the best guess. The ranking signal is
+**external-port adjacency** — how many of a structure's pins connect directly to
+a subcircuit external port — which works because real functional blocks touch the
+circuit's I/O and bias ports in predictable ways.
 
-**Pass 2 — Multi-category ranking (gain_stage_1)**
+That raw signal misranks a few cases, so three passes correct it before the
+result is returned.
 
-``gain_stage_1`` holds three categories simultaneously (``input_pair``,
-``load``, ``tail_current``), and the simple external-port score heuristic is
-inverted for all three: bias-generation devices score higher than the real
-functional devices because they connect to ``ibias`` (external bias port) and
-supply rails. Pass 2 corrects this in dependency order:
+**Pass 1 — filter out spurious gain-stage matches.** SR's patterns overlap, so a
+bias transistor or an input-pair device can be re-matched by a gain-stage
+pattern. FBR drops any ``gain_stage_*`` candidate whose ``in`` or ``bias`` pin
+lands on an external port — a real gain stage takes its input from an internal
+net (the previous stage's output), not from ``ibias`` or a signal input. In
+single-category gain-stage blocks it additionally drops any candidate containing
+an NMOS whose source isn't ``gnd!``, which marks a cascode intermediate device
+rather than a rail-to-rail stage.
 
-1. *input_pair* — re-sorted by the count of **distinct** external ports among
-   ``{in1, in2}`` as the primary key. The real differential pair has both signal
-   inputs on distinct external ports (score 2); bias mirror pairs have
-   ``in1 = in2 = ibias`` (score 1); spurious second/third-stage device pairs have
-   ``in1``, ``in2`` on internal nets (score 0).
+.. admonition:: Example
 
-2. *load* — candidates with ``in1``, ``in2``, or ``bias1`` on external ports are
-   dropped (spurious bias-gen matches). Among survivors, those whose ``in1``/
-   ``in2`` match the top ``input_pair`` candidate's ``out1``/``out2`` are
-   promoted via **signal-chain following**. The real load always receives its
-   differential inputs from the input pair's drain nodes.
+   A bias-reference NMOS is re-matched by the ``common_source`` pattern with its
+   gate (the ``in`` pin) on the external ``ibias`` port. A real gain stage's
+   ``in`` is an internal net, so the candidate is dropped.
 
-3. *tail_current* — candidates whose ``out`` connects to an external port are
-   dropped (spurious matches driving the circuit output instead of the internal
-   tail node). Among survivors, those whose ``out`` matches the top
-   ``input_pair`` candidate's ``tail`` pin are promoted via signal-chain
-   following.
+**Pass 2 — rank the multi-category block (gain_stage_1).** ``gain_stage_1`` holds
+three categories at once — ``input_pair``, ``load``, ``tail_current`` — and here
+the raw external-port score is *inverted*: bias devices gate on ``ibias`` and sit
+on the supply rails, so they outscore the real functional devices. FBR corrects
+this in dependency order:
 
-**Pass 3 — Split (single-category gain_stage_* blocks)**
+1. **input_pair** — ranked by the number of *distinct* external ports its
+   ``in1``/``in2`` touch. The true pair has both signal inputs on two distinct
+   ports (score 2); a bias mirror has ``in1 = in2 = ibias`` (score 1); a spurious
+   stage pair has them on internal nets (score 0).
+2. **load** — candidates with ``in1``, ``in2``, or ``bias1`` on an external port
+   are dropped; among the rest, FBR prefers those whose ``in1``/``in2`` match the
+   winning input pair's ``out1``/``out2`` (following the signal chain).
+3. **tail_current** — candidates whose ``out`` is an external port are dropped;
+   among the rest, FBR prefers the one whose ``out`` matches the input pair's
+   ``tail`` net.
 
-``gain_stage_*`` blocks with exactly one remaining category and more than one
-candidate are split into consecutive ``gain_stage_N`` groups ordered by ascending
-external-port adjacency. This enables disambiguation of a three-stage opamp's
-second and third gain stages: the intermediate stage (``out`` on an internal net)
-stays in ``gain_stage_2``; the final stage (``out`` connecting to the external
-output port) is promoted to ``gain_stage_3``.
+.. admonition:: Example
+
+   A bias mirror pair (both gates on ``ibias``) scores 1, while the true
+   differential pair (``in1``/``in2`` on two distinct signal ports) scores 2 — so
+   ranking by distinct external ports lifts the real pair above the bias mirror.
+
+**Pass 3 — split a block that holds several stages.** A multi-stage op-amp lands
+its gain stages in one single-category block. FBR splits a ``gain_stage_*`` block
+that still has more than one candidate into consecutive ``gain_stage_N`` groups
+ordered by ascending external-port adjacency, so the stage driving the external
+output ends up in the highest-numbered group.
+
+.. admonition:: Example
+
+   A three-stage op-amp's ``gain_stage_2`` holds two ``common_source``
+   candidates. The one whose ``out`` is an internal net stays ``gain_stage_2``;
+   the one whose ``out`` reaches the external output port is promoted to
+   ``gain_stage_3``.
+
+The output,
+:class:`~circuitgenome.recognizer.models.CategoryGroupResult`, is the
+``circuit_block → category → [candidates]`` mapping, best guess first in each
+category.
 
 API reference
 -------------
