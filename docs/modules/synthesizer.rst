@@ -130,7 +130,9 @@ each module's canonical ports to global nets.  ``enumerate_circuits`` fills
 every slot with each compatible variant of its category and stamps the *same*
 connection list onto all of them, so one template over *N* variant
 combinations yields *N* circuits with identical net structure.  The 13
-templates live in ``config/opamp_topologies.yaml``.
+templates live in ``config/opamp_topologies.yaml``.  The :doc:`Overview
+<../overview>` lists every supported template name with its per-template
+circuit count.
 
 Signal-flow wiring
 ~~~~~~~~~~~~~~~~~~~
@@ -302,7 +304,7 @@ internal device structure is invisible to the template.
        Two variants: ``resistive_sense_cmfb`` (resistive averager + 5T OTA)
        and ``dda_cmfb`` (differential-difference amplifier). Present only when
        ``load``'s ``output_cardinality`` is ``"differential"`` (see "CMFB
-       compatibility filter" above); otherwise pruned to an empty placeholder
+       compatibility filter" below); otherwise pruned to an empty placeholder
        and ``vcm_ref`` is left unconnected.
    * - ``compensation``
      - - ``in`` — stage-input side of the Miller capacitor.
@@ -340,101 +342,6 @@ stages, RNMC compensation, output buffer, differential output*.  The one
 exception is ``one_stage_opamp``: with a single stage there is no compensation
 and no buffer, and it is inherently single-ended, so it drops the trailing
 ``<output>`` token entirely.
-
-Demand-driven bias construction
---------------------------------
-
-The bias generator is not an enumerated module: ``enumerate_circuits``
-*constructs* it per combination from what the other slots actually consume
-on each of the eight bias rails (``out1``..``out4`` feed
-``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
-``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, ``out7`` feeds
-``tail_current.bias``, ``out8`` feeds ``tail_current.bias_casc``; each
-role's rail is independent, so the roles never share a bias voltage and can
-be sized independently).
-
-Each consumed rail is classified structurally (no YAML tags) into a *kind*:
-
-- ``gate_vdd`` / ``gate_gnd`` -- a consumer MOSFET gate whose source sits on
-  a supply needs a voltage one ``V_GS`` from that supply. The leg is an
-  ``ibias``-derived mirror ending in a diode-connected device on the rail,
-  which doubles as the mirror *master* of its consumers -- the sizer sets
-  consumer currents by W/L ratio instead of matching voltages.
-- ``current_source`` / ``current_sink`` -- the consumer brings its own
-  reference diode (the current-mirror tails' mirror diode): the rail is a
-  *current* interface and the leg is a bare
-  mirror with no diode of its own. A bias-side diode here would either sit
-  in parallel with the tail's reference (splitting the current) or fight it
-  (issue #99's measured rail-7 contention) -- both are now unconstructable.
-- ``cascode_gnd`` / ``cascode_vdd`` -- a cascode gate (consumer source on an
-  internal node) needs its ``V_GS`` plus the saturation floor of the stack
-  toward its back supply. The leg is a mirror into a diode-connected device
-  riding a small floor resistor (``out = V_GS + I × R`` from that supply):
-  the diode covers the large, Vth-dependent ``V_GS`` part -- tracking the
-  consumer over process and temperature -- and the resistor covers only the
-  small Vdsat floor; both are sized per rail by the sizer from the consumer
-  stack (issue #99's parked cascode class).
-- ``tunable`` -- no structurally implied level (conflicting demands on a
-  shared rail): a mirror into a resistor, ``out = I_leg × R``, per-rail
-  tunable by the sizer.
-
-The constructed variant (name ``constructed_bias``) always carries an NMOS
-master reference on the ``ibias`` pin; a ``pref`` branch deriving the
-PMOS-side mirror reference is emitted only when some leg needs it. The pref
-branch is *cascoded*: a wide-swing ``ncasc`` level (PMOS mirror into a
-narrow diode) pins the branch mirror's Vds near the master's instead of at
-``vdd - |V_GSP|`` -- closing most of the extra-mirror-hop λ error that
-issue #103's A/B measured against the retired ``magic_battery_bias``. Only
-consumed rails get a port and a leg -- unconsumed rails simply don't exist.
-The leg templates live in ``config/bias_legs.yaml``; the demand analysis and
-assembly in :mod:`circuitgenome.synthesizer.bias_construction`.
-
-Because every rail gets exactly the leg its consumer requires, the
-structurally unbiasable flavor mismatches that issue #99 measured (and that
-previously had to be filtered out) can no longer be expressed, and
-mixed-flavor consumer sets -- e.g. every real-cmfb fully-differential
-circuit, whose rail 4 is gnd-referenced while rails 1/5 are vdd-referenced
--- get correct per-rail legs instead of being routed to an all-resistor
-generator.
-
-In ``fully_differential`` topologies, the ``cmfb`` slot's ``bias`` port is
-wired to ``out4`` (``net_bias4``), but (per the :ref:`CMFB compatibility
-filter <compat-cmfb>`) ``cmfb`` is pruned to an empty placeholder unless
-``load``'s
-``output_cardinality`` is ``"differential"`` -- construction runs after that
-prune, so placeholder slots demand nothing and rail 4 gets a leg exactly
-when a real cmfb consumes it.
-
-SPICE output formats
---------------------
-
-**Flat** — every device inlined in one ``.subckt`` block.  Maximally
-portable.
-
-.. code-block:: spice
-
-   .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
-   m1_input_pair net_diff1 in1 net_tail net_tail pmos
-   m2_input_pair net_mid in2 net_tail net_tail pmos
-   r1_load vdd! net_diff1 1k
-   r2_load vdd! net_mid 1k
-   ...
-   .ends
-
-**Hierarchical** — one ``.subckt`` per module variant, top-level uses ``X``
-instances.  Shared variants are defined only once.
-
-.. code-block:: spice
-
-   .subckt differential_pair_pmos in1 in2 out1 out2 tail vdd gnd
-   m1 out1 in1 tail tail pmos
-   m2 out2 in2 tail tail pmos
-   .ends
-
-   .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
-   Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
-   ...
-   .ends
 
 Enumeration and compatibility
 -----------------------------
@@ -518,7 +425,7 @@ valid ones:
      - ‡
 
 The ``bias_generation`` slot adds no factor — it is constructed per combination
-(see `Demand-driven bias construction`_ above), so every core combination
+(see `Demand-driven bias construction`_ below), so every core combination
 carries exactly one matched bias generator.  Fully-differential templates
 additionally carry a **CMFB** slot: the ¶ filter expands their 48 core
 combinations to **72** effective ``load``/``cmfb`` combinations (the 24 with a
@@ -595,6 +502,110 @@ from the slots it adds:
 
    The full per-template table (all 13 templates) is in the
    :doc:`Overview <../overview>`.
+
+Demand-driven bias construction
+--------------------------------
+
+The bias generator is not an enumerated module: ``enumerate_circuits``
+*constructs* it per combination from what the other slots actually consume
+on each of the eight bias rails (``out1``..``out4`` feed
+``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
+``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, ``out7`` feeds
+``tail_current.bias``, ``out8`` feeds ``tail_current.bias_casc``; each
+role's rail is independent, so the roles never share a bias voltage and can
+be sized independently).
+
+Rail kinds
+~~~~~~~~~~
+
+Each consumed rail is classified structurally (no YAML tags) into a *kind*:
+
+- ``gate_vdd`` / ``gate_gnd`` -- a consumer MOSFET gate whose source sits on
+  a supply needs a voltage one ``V_GS`` from that supply. The leg is an
+  ``ibias``-derived mirror ending in a diode-connected device on the rail,
+  which doubles as the mirror *master* of its consumers -- the sizer sets
+  consumer currents by W/L ratio instead of matching voltages.
+- ``current_source`` / ``current_sink`` -- the consumer brings its own
+  reference diode (the current-mirror tails' mirror diode): the rail is a
+  *current* interface and the leg is a bare
+  mirror with no diode of its own. A bias-side diode here would either sit
+  in parallel with the tail's reference (splitting the current) or fight it
+  (issue #99's measured rail-7 contention) -- both are now unconstructable.
+- ``cascode_gnd`` / ``cascode_vdd`` -- a cascode gate (consumer source on an
+  internal node) needs its ``V_GS`` plus the saturation floor of the stack
+  toward its back supply. The leg is a mirror into a diode-connected device
+  riding a small floor resistor (``out = V_GS + I × R`` from that supply):
+  the diode covers the large, Vth-dependent ``V_GS`` part -- tracking the
+  consumer over process and temperature -- and the resistor covers only the
+  small Vdsat floor; both are sized per rail by the sizer from the consumer
+  stack (issue #99's parked cascode class).
+- ``tunable`` -- no structurally implied level (conflicting demands on a
+  shared rail): a mirror into a resistor, ``out = I_leg × R``, per-rail
+  tunable by the sizer.
+
+Assembling the generator
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The constructed variant (name ``constructed_bias``) always carries an NMOS
+master reference on the ``ibias`` pin; a ``pref`` branch deriving the
+PMOS-side mirror reference is emitted only when some leg needs it. The pref
+branch is *cascoded*: a wide-swing ``ncasc`` level (PMOS mirror into a
+narrow diode) pins the branch mirror's Vds near the master's instead of at
+``vdd - |V_GSP|`` -- closing most of the extra-mirror-hop λ error that
+issue #103's A/B measured against the retired ``magic_battery_bias``. Only
+consumed rails get a port and a leg -- unconsumed rails simply don't exist.
+The leg templates live in ``config/bias_legs.yaml``; the demand analysis and
+assembly in :mod:`circuitgenome.synthesizer.bias_construction`.
+
+What it rules out
+~~~~~~~~~~~~~~~~~~
+
+Because every rail gets exactly the leg its consumer requires, the
+structurally unbiasable flavor mismatches that issue #99 measured (and that
+previously had to be filtered out) can no longer be expressed, and
+mixed-flavor consumer sets -- e.g. every real-cmfb fully-differential
+circuit, whose rail 4 is gnd-referenced while rails 1/5 are vdd-referenced
+-- get correct per-rail legs instead of being routed to an all-resistor
+generator.
+
+In ``fully_differential`` topologies, the ``cmfb`` slot's ``bias`` port is
+wired to ``out4`` (``net_bias4``), but (per the :ref:`CMFB compatibility
+filter <compat-cmfb>`) ``cmfb`` is pruned to an empty placeholder unless
+``load``'s
+``output_cardinality`` is ``"differential"`` -- construction runs after that
+prune, so placeholder slots demand nothing and rail 4 gets a leg exactly
+when a real cmfb consumes it.
+
+SPICE output formats
+--------------------
+
+**Flat** — every device inlined in one ``.subckt`` block.  Maximally
+portable.
+
+.. code-block:: spice
+
+   .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
+   m1_input_pair net_diff1 in1 net_tail net_tail pmos
+   m2_input_pair net_mid in2 net_tail net_tail pmos
+   r1_load vdd! net_diff1 1k
+   r2_load vdd! net_mid 1k
+   ...
+   .ends
+
+**Hierarchical** — one ``.subckt`` per module variant, top-level uses ``X``
+instances.  Shared variants are defined only once.
+
+.. code-block:: spice
+
+   .subckt differential_pair_pmos in1 in2 out1 out2 tail vdd gnd
+   m1 out1 in1 tail tail pmos
+   m2 out2 in2 tail tail pmos
+   .ends
+
+   .subckt circuit_0001 ibias in1 in2 out vdd! gnd!
+   Xinput_pair in1 in2 net_diff1 net_mid net_tail vdd! gnd! differential_pair_pmos
+   ...
+   .ends
 
 Analysis
 --------
