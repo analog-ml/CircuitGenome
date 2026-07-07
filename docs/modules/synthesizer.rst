@@ -14,10 +14,10 @@ exploration, or topology studies.
 
 The :doc:`../overview` gives the higher-level tour — the module summary, the
 category figures, and the supported-template list with per-template circuit
-counts.  This page holds the full detail: the complete variant catalogue, the
-enumeration and compatibility analysis, the demand-driven bias construction,
-the three-stage compensation schemes, the modular interface contract, and the
-SPICE output formats.
+counts.  This page holds the full detail: the complete variant catalogue, how
+the topology templates wire those modules into circuits, the demand-driven bias
+construction, the enumeration and compatibility analysis, and the SPICE output
+formats.
 
 Entry points
 ------------
@@ -120,72 +120,89 @@ in with ``config={"include_unsupported": True}`` or
    ``third_stage``, rail 7 for ``tail_current``).  See
    `Demand-driven bias construction`_ below.
 
-Demand-driven bias construction
---------------------------------
+Topology templates
+------------------
 
-The bias generator is not an enumerated module: ``enumerate_circuits``
-*constructs* it per combination from what the other slots actually consume
-on each of the eight bias rails (``out1``..``out4`` feed
-``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
-``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, ``out7`` feeds
-``tail_current.bias``, ``out8`` feeds ``tail_current.bias_casc``; each
-role's rail is independent, so the roles never share a bias voltage and can
-be sized independently).
+A **topology template** is a wiring blueprint.  It declares the **slots** a
+circuit needs — each slot bound to a module *category* under a local *slot
+name* — plus a list of **connections**: ``{slot, port, net}`` rules that attach
+each module's canonical ports to global nets.  ``enumerate_circuits`` fills
+every slot with each compatible variant of its category and stamps the *same*
+connection list onto all of them, so one template over *N* variant
+combinations yields *N* circuits with identical net structure.  The 13
+templates live in ``config/opamp_topologies.yaml``.
 
-Each consumed rail is classified structurally (no YAML tags) into a *kind*:
+Signal-flow wiring
+~~~~~~~~~~~~~~~~~~~
 
-- ``gate_vdd`` / ``gate_gnd`` -- a consumer MOSFET gate whose source sits on
-  a supply needs a voltage one ``V_GS`` from that supply. The leg is an
-  ``ibias``-derived mirror ending in a diode-connected device on the rail,
-  which doubles as the mirror *master* of its consumers -- the sizer sets
-  consumer currents by W/L ratio instead of matching voltages.
-- ``current_source`` / ``current_sink`` -- the consumer brings its own
-  reference diode (the current-mirror tails' mirror diode): the rail is a
-  *current* interface and the leg is a bare
-  mirror with no diode of its own. A bias-side diode here would either sit
-  in parallel with the tail's reference (splitting the current) or fight it
-  (issue #99's measured rail-7 contention) -- both are now unconstructable.
-- ``cascode_gnd`` / ``cascode_vdd`` -- a cascode gate (consumer source on an
-  internal node) needs its ``V_GS`` plus the saturation floor of the stack
-  toward its back supply. The leg is a mirror into a diode-connected device
-  riding a small floor resistor (``out = V_GS + I × R`` from that supply):
-  the diode covers the large, Vth-dependent ``V_GS`` part -- tracking the
-  consumer over process and temperature -- and the resistor covers only the
-  small Vdsat floor; both are sized per rail by the sizer from the consumer
-  stack (issue #99's parked cascode class).
-- ``tunable`` -- no structurally implied level (conflicting demands on a
-  shared rail): a mirror into a resistor, ``out = I_leg × R``, per-rail
-  tunable by the sizer.
+Every template threads the same trunk from the differential input to the
+output; the bias network and (for differential-output loads) the CMFB loop
+hang off it as side structures:
 
-The constructed variant (name ``constructed_bias``) always carries an NMOS
-master reference on the ``ibias`` pin; a ``pref`` branch deriving the
-PMOS-side mirror reference is emitted only when some leg needs it. The pref
-branch is *cascoded*: a wide-swing ``ncasc`` level (PMOS mirror into a
-narrow diode) pins the branch mirror's Vds near the master's instead of at
-``vdd - |V_GSP|`` -- closing most of the extra-mirror-hop λ error that
-issue #103's A/B measured against the retired ``magic_battery_bias``. Only
-consumed rails get a port and a leg -- unconsumed rails simply don't exist.
-The leg templates live in ``config/bias_legs.yaml``; the demand analysis and
-assembly in :mod:`circuitgenome.synthesizer.bias_construction`.
+.. code-block:: text
 
-Because every rail gets exactly the leg its consumer requires, the
-structurally unbiasable flavor mismatches that issue #99 measured (and that
-previously had to be filtered out) can no longer be expressed, and
-mixed-flavor consumer sets -- e.g. every real-cmfb fully-differential
-circuit, whose rail 4 is gnd-referenced while rails 1/5 are vdd-referenced
--- get correct per-rail legs instead of being routed to an all-resistor
-generator.
+   in1/in2 ─▶ input_pair ─▶ load ─▶ [amplification_stage] ─▶ [output_stage] ─▶ out
+                  │            │             │                      │
+              net_tail   net_loadout*    net_ampout           (final output)
+                  │
+             tail_current
 
-In ``fully_differential`` topologies, the ``cmfb`` slot's ``bias`` port is
-wired to ``out4`` (``net_bias4``), but (per the :ref:`CMFB compatibility
-filter <compat-cmfb>`) ``cmfb`` is pruned to an empty placeholder unless
-``load``'s
-``output_cardinality`` is ``"differential"`` -- construction runs after that
-prune, so placeholder slots demand nothing and rail 4 gets a leg exactly
-when a real cmfb consumes it.
+   bias_generation ─▶ net_bias1..8   (feeds load / stages / tail)
+   cmfb ─▶ load.bias_cmfb            (differential-output loads only)
+
+- The **input_pair** converts the differential input into a current, sunk by
+  the **tail_current** source on ``net_tail``.
+- The **load** turns that current back into a voltage on the first-stage
+  output node(s) — a single node in single-ended templates,
+  ``net_loadout1``/``net_loadout2`` in fully-differential ones.
+- Gain stages follow as needed: a two-stage template adds one
+  **amplification_stage** (gm2); a three-stage template adds a second (gm3).
+- **compensation** capacitors wrap the gain stage(s) for Miller pole-splitting
+  (the nesting differs per scheme — see `Three-stage compensation schemes`_).
+- **bias_generation** is the one slot *not* wired variant-by-variant: it is
+  constructed per combination and drives the ``net_bias*`` rails (see
+  `Demand-driven bias construction`_).
+- **cmfb** senses the differential output and drives ``load.bias_cmfb``, present
+  only when the load is a differential-output cascode.
+
+Two families of template share this trunk: **plain** and **buffered**.
+
+Plain templates
+~~~~~~~~~~~~~~~~
+
+The plain templates take the trunk as far as the gain path goes and tap the
+output directly off the last gain stage:
+
+- ``one_stage_opamp`` — input_pair + load + tail only; the load's output node
+  *is* the output.
+- ``two_stage_opamp_{single_ended,fully_differential}`` — add one gm2
+  amplification stage and a Miller compensation capacitor.
+- ``three_stage_opamp_{nmc,rnmc}_{single_ended,fully_differential}`` — add
+  gm2 + gm3 and two compensation capacitors (nested per scheme).
+
+Fully-differential templates duplicate the per-path slots (``comp_p``/
+``comp_n``, ``second_stage_p``/``_n``) and add the ``cmfb`` slot.
+
+Buffered templates
+~~~~~~~~~~~~~~~~~~~
+
+A **buffered** template is a plain template with a source-follower
+**output_stage** slot inserted after the last gain stage (issue #125, PR #134).
+The gain stage now drives an internal node ``net_ampout`` instead of the
+output, the follower drives the final output, and the Miller compensation is
+re-pointed to ``net_ampout`` so it still wraps the *gain* stage, not the
+follower.
+
+The design choice worth calling out: a source follower is a **unity-gain
+buffer** (A ≈ 1), added for output drive strength and low output impedance, not
+for gain.  The sizer's stage taxonomy deliberately keeps ``output_stage`` slots
+out of the gain product, so a buffered circuit reports the **same** ``gain_db``
+as its unbuffered sibling — buffering changes what the output can drive, not the
+small-signal gain figure.  The six buffered templates enumerate alongside their
+plain counterparts and reuse every compatibility filter unchanged.
 
 Three-stage compensation schemes
----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The 3-stage templates reuse the existing ``amplification_stage`` modules for
 the second (gm2) and third (gm3) gain stages, and the existing
@@ -214,7 +231,7 @@ the :ref:`compensation parity filter <compat-compensation>`).
        when gm3 is a low-gain buffer stage.
 
 Modular interface contract
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each module category defines a **canonical port signature** shared by all its
 variants.  The topology template wires ports to global nets by name; the
@@ -279,6 +296,94 @@ Supply ports (``vdd``, ``gnd``) are automatically connected to the global
 rails ``vdd!`` / ``gnd!`` unless explicitly overridden in the topology
 template.
 
+Naming convention
+~~~~~~~~~~~~~~~~~~
+
+Every template name follows one grammar (PR #143):
+
+.. code-block:: text
+
+   <stages>_stage_opamp[_<comp>][_buffered]_<output>
+
+- ``<stages>`` — ``one`` / ``two`` / ``three``, the number of gain stages.
+- ``_stage_opamp`` — the literal token every template carries.
+- ``<comp>`` — compensation scheme, present only on 3-stage templates:
+  ``nmc`` (nested Miller) or ``rnmc`` (reversed nested Miller).
+- ``_buffered`` — present iff the template has a source-follower
+  ``output_stage`` (see `Buffered templates`_).
+- ``<output>`` — the terminal token, ``single_ended`` or
+  ``fully_differential``.
+
+So ``three_stage_opamp_rnmc_buffered_fully_differential`` reads as *3 gain
+stages, RNMC compensation, output buffer, differential output*.  The one
+exception is ``one_stage_opamp``: with a single stage there is no compensation
+and no buffer, and it is inherently single-ended, so it drops the trailing
+``<output>`` token entirely.
+
+Demand-driven bias construction
+--------------------------------
+
+The bias generator is not an enumerated module: ``enumerate_circuits``
+*constructs* it per combination from what the other slots actually consume
+on each of the eight bias rails (``out1``..``out4`` feed
+``load.bias1``/``bias2``/``bias3``/``bias_cmfb``, ``out5`` feeds
+``second_stage*.bias``, ``out6`` feeds ``third_stage*.bias``, ``out7`` feeds
+``tail_current.bias``, ``out8`` feeds ``tail_current.bias_casc``; each
+role's rail is independent, so the roles never share a bias voltage and can
+be sized independently).
+
+Each consumed rail is classified structurally (no YAML tags) into a *kind*:
+
+- ``gate_vdd`` / ``gate_gnd`` -- a consumer MOSFET gate whose source sits on
+  a supply needs a voltage one ``V_GS`` from that supply. The leg is an
+  ``ibias``-derived mirror ending in a diode-connected device on the rail,
+  which doubles as the mirror *master* of its consumers -- the sizer sets
+  consumer currents by W/L ratio instead of matching voltages.
+- ``current_source`` / ``current_sink`` -- the consumer brings its own
+  reference diode (the current-mirror tails' mirror diode): the rail is a
+  *current* interface and the leg is a bare
+  mirror with no diode of its own. A bias-side diode here would either sit
+  in parallel with the tail's reference (splitting the current) or fight it
+  (issue #99's measured rail-7 contention) -- both are now unconstructable.
+- ``cascode_gnd`` / ``cascode_vdd`` -- a cascode gate (consumer source on an
+  internal node) needs its ``V_GS`` plus the saturation floor of the stack
+  toward its back supply. The leg is a mirror into a diode-connected device
+  riding a small floor resistor (``out = V_GS + I × R`` from that supply):
+  the diode covers the large, Vth-dependent ``V_GS`` part -- tracking the
+  consumer over process and temperature -- and the resistor covers only the
+  small Vdsat floor; both are sized per rail by the sizer from the consumer
+  stack (issue #99's parked cascode class).
+- ``tunable`` -- no structurally implied level (conflicting demands on a
+  shared rail): a mirror into a resistor, ``out = I_leg × R``, per-rail
+  tunable by the sizer.
+
+The constructed variant (name ``constructed_bias``) always carries an NMOS
+master reference on the ``ibias`` pin; a ``pref`` branch deriving the
+PMOS-side mirror reference is emitted only when some leg needs it. The pref
+branch is *cascoded*: a wide-swing ``ncasc`` level (PMOS mirror into a
+narrow diode) pins the branch mirror's Vds near the master's instead of at
+``vdd - |V_GSP|`` -- closing most of the extra-mirror-hop λ error that
+issue #103's A/B measured against the retired ``magic_battery_bias``. Only
+consumed rails get a port and a leg -- unconsumed rails simply don't exist.
+The leg templates live in ``config/bias_legs.yaml``; the demand analysis and
+assembly in :mod:`circuitgenome.synthesizer.bias_construction`.
+
+Because every rail gets exactly the leg its consumer requires, the
+structurally unbiasable flavor mismatches that issue #99 measured (and that
+previously had to be filtered out) can no longer be expressed, and
+mixed-flavor consumer sets -- e.g. every real-cmfb fully-differential
+circuit, whose rail 4 is gnd-referenced while rails 1/5 are vdd-referenced
+-- get correct per-rail legs instead of being routed to an all-resistor
+generator.
+
+In ``fully_differential`` topologies, the ``cmfb`` slot's ``bias`` port is
+wired to ``out4`` (``net_bias4``), but (per the :ref:`CMFB compatibility
+filter <compat-cmfb>`) ``cmfb`` is pruned to an empty placeholder unless
+``load``'s
+``output_cardinality`` is ``"differential"`` -- construction runs after that
+prune, so placeholder slots demand nothing and rail 4 gets a leg exactly
+when a real cmfb consumes it.
+
 SPICE output formats
 --------------------
 
@@ -313,14 +418,10 @@ instances.  Shared variants are defined only once.
 Enumeration and compatibility
 -----------------------------
 
-Each ``*_buffered_*`` template is the plain template with a source-follower
-``output_stage`` slot inserted after the amplification stage: the amplification
-stage now drives ``net_ampout`` (``_p``/``_n``) and compensation re-points
-there, while the follower drives the final output.  The two followers
-(``common_drain``, ``common_drain_nmos``, issue #125) live in the
-``output_stage`` category; a follower is A2 ≈ 1 (a buffer, not a gain stage), so
-it is excluded from the gain product — a buffered circuit's ``gain_db`` equals
-its unbuffered sibling's.
+The ``*_buffered_*`` templates add a source-follower ``output_stage`` after the
+amplification stage (`Buffered templates`_ above); they run through every filter
+below unchanged, so their combination counts follow directly from the plain
+templates' (see the note at the end of this section).
 
 ``enumerate_circuits`` aims to emit only circuits worth sizing — ones that both
 **build into a valid netlist** and can **plausibly close their DC bias**.  A few
@@ -461,11 +562,10 @@ from the slots it adds:
 
    ``60`` = 30 PMOS-pair + 30 NMOS-pair combinations.
 
-   Each ``*_buffered_*`` template inserts a source-follower ``output_stage``
-   slot, multiplying the base count by its follower variants — **×2** for
-   single-ended (one follower slot) and **×4** for fully-differential (one per
-   output path, 2²).  Both compensation schemes stay identical, exactly as in
-   the base templates:
+   A `Buffered templates`_ variant's follower ``output_stage`` slot multiplies
+   the base count by its follower variants — **×2** for single-ended (one
+   follower slot) and **×4** for fully-differential (one per output path, 2²).
+   Both compensation schemes stay identical, exactly as in the base templates:
 
    | ``two_stage_opamp_buffered_single_ended`` = 180 × 2 = **360**
    | ``two_stage_opamp_buffered_fully_differential`` = 648 × 4 = **2,592**
