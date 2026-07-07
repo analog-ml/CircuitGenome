@@ -100,9 +100,7 @@ templates the synthesizer produces -- 43 patterns across eight categories:
        - current-source (PMOS / NMOS).
        - single-output folded cascode (NMOS-input / PMOS-input, 8 devices each).
        - telescopic cascode (PMOS / NMOS, 6 devices each), self-biased and
-         wide-swing/Sooch flavours — the latter drive the mirror cascode gates
-         from a ``bias2`` level rail, dropping the output floor from
-         ``Vgs+Vdsat`` to ``2*Vdsat`` (issue #129).
+         wide-swing/Sooch flavours.
        - differential-output folded cascode
          (``folded_cascode_load_{nmos,pmos}_input_differential_output``, 8
          devices each), used only by ``two_stage_opamp_fully_differential``.
@@ -159,8 +157,7 @@ templates the synthesizer produces -- 43 patterns across eight categories:
          an internal ``d1`` node; parked ``unsupported`` for synthesis
          (issue #114), the pattern still serves external netlists.
        - ``noninverting_stage_{nmos,pmos}`` — 2 PMOS + 2 NMOS non-inverting
-         current-mirror gain stages (issue #139); the diode-connected mirror
-         master makes each non-isomorphic to the OTA shape.
+         current-mirror gain stages.
    * - ``output_stage``
      - 2
      - - ``common_drain`` — PMOS source follower + PMOS current source (the
@@ -226,7 +223,9 @@ netlist produced from a known ``SynthesizedCircuit`` with full pattern
 coverage, this should be empty.
 
 That diode-connected-NMOS overlap surfaces as two structures that both claim
-the same device (fields abbreviated for illustration):
+the same device (fields abbreviated for illustration; ``devices`` is really a
+list of :class:`~circuitgenome.synthesizer.models.Device` objects, shown here as
+their refs ``m5``/``m6``):
 
 .. code-block:: python
 
@@ -251,19 +250,20 @@ SR pattern coverage
 The pattern library spans every topology the synthesizer produces. The table
 below has two columns worth spelling out:
 
-- **New patterns** — the patterns a template is the *first* to require. Counts
-  are incremental (each row adds to the rows above it), so they sum to the
-  full library.
-- **Round-trip combos** — parametrized test cases that synthesize a circuit,
-  flatten it to SPICE, run it back through SR + FBR, and assert the original
-  ``variant_map`` is recovered exactly.
+- **Patterns introduced** — the SR patterns this template is the first to need.
+  Reading down the table the library builds up, and the counts total all 43, so
+  the table doubles as a coverage checklist (every pattern is introduced by some
+  template).
+- **Round-trip combos** — the number of parametrized test cases that synthesize
+  a circuit, flatten it to SPICE, run it back through SR + FBR, and assert the
+  original ``variant_map`` is recovered exactly.
 
 .. list-table::
    :header-rows: 1
    :widths: 40 40 20
 
    * - Template
-     - New patterns
+     - Patterns introduced
      - Round-trip combos
    * - ``one_stage_opamp``
      - 27 — 5 ``input_pair``, 10 single-ended ``load``, 8 ``tail_current``
@@ -287,21 +287,11 @@ below has two columns worth spelling out:
        (issue #125)
      - within the 2-/3-stage rows
 
-That is 43 patterns and 53 template combos; with 2 opt-in stacked-diode
-cascode-tail round-trips (``include_infeasible``) it totals **55**. All 55
-assert ``unrecognized_devices == []`` and full ``variant_map`` recovery.
-
-**Combos are chosen to be unambiguous.** Every variant appears in at least one,
-and each selected combo is structurally unambiguous for the SR/FBR pipeline, so
-the two known structural ambiguities are sidestepped by combo selection rather
-than extra code:
-
-- ``resistor_bias`` paired with ``current_mirror_tail_{nmos,pmos}`` — the
-  tail's diode-connected reference transistor spuriously satisfies the
-  ``magic_battery_bias`` NMOS leg template.
-- any ``magic_battery_bias`` or ``resistor_bias`` combination where bias-rail
-  pruning reduces the ``bias_generation`` slot to 0 legs, making the two
-  variants structurally identical.
+The table's 53 combos plus 2 opt-in stacked-diode cascode-tail round-trips
+(``include_infeasible``) total **55**, all asserting
+``unrecognized_devices == []`` and full ``variant_map`` recovery. Combos are
+hand-picked to cover every variant and to avoid a few known bias-pattern
+ambiguities that would otherwise need extra disambiguation code.
 
 Primitive/multi-level pattern composition and topology identification from an
 arbitrary netlist are deferred to later milestones.
