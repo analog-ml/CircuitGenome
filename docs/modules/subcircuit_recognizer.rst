@@ -247,16 +247,20 @@ their refs ``m5``/``m6``):
 SR pattern coverage
 --------------------
 
-The pattern library spans every topology the synthesizer produces. The table
-below has two columns worth spelling out:
+Coverage is **measured** against the synthesizer, not asserted by inspection.
+Every module variant the synthesizer can emit has a matching SR pattern, and the
+synthesizer emits circuits per topology template — so the template is the natural
+unit for checking coverage: for each one, **round-trip test cases** synthesize
+representative circuits, flatten them to SPICE, and run them back through SR +
+FBR, asserting the original ``variant_map`` is recovered with no unrecognized
+devices. The table breaks the library down by template — the patterns each first
+introduces, and the round-trip combos that exercise it:
 
 - **Patterns introduced** — the SR patterns this template is the first to need.
-  Reading down the table the library builds up, and the counts total all 43, so
-  the table doubles as a coverage checklist (every pattern is introduced by some
-  template).
-- **Round-trip combos** — the number of parametrized test cases that synthesize
-  a circuit, flatten it to SPICE, run it back through SR + FBR, and assert the
-  original ``variant_map`` is recovered exactly.
+  The counts total all 43, so the column doubles as a coverage checklist (every
+  pattern is introduced by some template).
+- **Round-trip combos** — the number of round-trip test cases targeting that
+  template.
 
 .. list-table::
    :header-rows: 1
