@@ -1,15 +1,17 @@
 CircuitGenome
 =============
 
-A Python toolkit for **analog circuit topology synthesis and recognition**,
-focused on op-amp design.
+A Python toolkit for **analog circuit topology synthesis and recognition** —
+built for design-space exploration, dataset generation, and analog-design
+research.
 
 Why CircuitGenome
 -----------------
 
 CircuitGenome began as a Python re-implementation of
-`ACST <https://github.com/inga000/acst>`_ — the C++ analog structural synthesis
-tool from the Abel–Graeb group (see :doc:`references`) — with three goals:
+`ACST <https://github.com/inga000/acst>`_ — the C++ analog structural-synthesis
+tool from I. Abel et al. at the Chair of Electronic Design Automation, Technical
+University of Munich (TUM) (see :doc:`references`) — with three goals:
 
 - **Work, test, and integrate in Python.**  A pure-Python toolkit is far easier
   to script, unit-test, and wire into machine-learning and design-exploration

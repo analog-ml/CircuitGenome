@@ -34,7 +34,8 @@ The design of CircuitGenome draws on the following publications:
 Software
 --------
 
-- **ACST — Analog Circuit Synthesis Tool** — I. Abel et al.
+- **ACST — Analog Circuit Synthesis Tool** — I. Abel et al., Chair of Electronic
+  Design Automation, Technical University of Munich (TUM).
   https://github.com/inga000/acst.  The C++ structural-synthesis tool that
   implements the FUBOCO functional-block-composition methodology (references 2–4
   above); CircuitGenome began as a Python re-implementation of its approach.
