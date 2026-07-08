@@ -1,6 +1,9 @@
 Sizer
 =====
 
+Overview
+--------
+
 The **Sizer (SZ)** takes an FBR slot assignment plus a performance specification and
 returns minimum transistor W/L values for every device in the circuit.  It
 supports every op-amp topology template the synthesizer produces and targets DC
@@ -8,17 +11,16 @@ specs — gain, GBW, phase margin, slew rate, CMRR, power, and output swing.
 
 The sizer has two paths, selected by technology:
 
-- The card-less ``generic`` tech uses a **Level-1 square-law model**, which
-  linearises the ``gm`` constraints into an integer program solved with
-  **OR-Tools CP-SAT**.
-- PTM nodes and foundry PDKs (e.g. GF180MCU) use the **gm/Id pipeline**, which
+- The card-less ``generic`` tech uses the **analytical Level-1 sizer**: a
+  square-law device model whose ``gm`` constraints linearise into an integer
+  program solved with **OR-Tools CP-SAT**.
+- PTM nodes and foundry PDKs (e.g. GF180MCU) use the **gm/Id sizer**, which
   chooses geometry deterministically from a SPICE-characterised gm/Id lookup
   table, capturing moderate/weak-inversion and short-channel behaviour the
   square law misses.
 
-Sized designs are verified with **ngspice** — measured directly for real device
-models, and cross-checked against the analytical formulas for the ``generic``
-tech.
+Both paths are described below and derived in full on their theory pages.  Every
+sized design is then checked in **ngspice** (see `SPICE verification`_).
 
 Entry points
 ------------
@@ -80,65 +82,39 @@ targets** the sizer solves against:
      - V
      - Output voltage swing limits
 
-Sizing algorithm
+Analytical Sizer
 ----------------
 
-.. note::
+The card-less ``generic`` tech sizes with a **Level-1 (Shichman-Hodges)
+square-law model**.  Because each device's ``IDS`` is fixed by KCL and the bias
+current before any geometry is chosen, the nonlinear ``gm ≥ gm_req`` constraint
+linearises to ``2·µCox·IDS·W ≥ gm_req²·L`` — a linear constraint over the
+discrete W/L grid, solved for minimum gate area with **OR-Tools CP-SAT**.  The
+required transconductances are derived in a fixed CMRR → SR → GBW → gain → PM
+order so the specs stay mutually consistent after the integer grid rounds values
+up.
 
-   The requirement-derivation order below is shown for the **two-stage** case
-   as an illustration. The complete derivation for every topology the
-   synthesizer produces — including the three-stage inner-pole and
-   :math:`g_{m3}` steps — is covered in :doc:`../theory/sizing_flow`.
+See :doc:`../theory/sizing_flow` for the full derivation, the CP-SAT integer
+linearisation, the CMRR/GBW/SR compatibility limits, and a worked numerical
+example.
 
-The sizer has two paths, selected by technology.  The **card-less ``generic``
-tech** uses a Level-1 MOSFET model where ``gm = √(2·µCox·(W/L)·IDS)`` and
-``gd = λ·|IDS|``.  Because ``IDS`` is topology-determined by KCL and the bias
-current, the ``gm ≥ gm_req`` constraint linearises to
-``2·µCox·IDS·W ≥ gm_req²·L``, a linear integer constraint once W and L are
-discrete grid variables — solved with CP-SAT.
+gm/Id Sizer
+-----------
 
-**PTM nodes use the gm/Id pipeline instead**: geometry is chosen deterministically
-from a SPICE-characterised gm/Id lookup table (no CP-SAT search), which captures
-moderate/weak inversion and short-channel behaviour the square law misses.  A
-PTM/SPICE-model node without a gm/Id LUT raises ``UnsupportedTechError``.  The
-requirement-derivation order below is shared by both paths.
+PTM nodes and foundry PDKs size through the **gm/Id pipeline** instead.  With
+``IDS`` fixed by KCL and a ``gm/Id`` target chosen per device, a
+SPICE-characterised lookup table turns ``IDS/W`` straight into ``W`` — geometry
+is *computed* in a single deterministic forward pass rather than searched, so it
+captures the moderate/weak-inversion and short-channel behaviour the square law
+misses.  A PTM/SPICE-model node without a gm/Id LUT raises
+``UnsupportedTechError``.
 
-The required transconductances are derived in a fixed order to ensure mutual
-consistency after the integer grid rounds values up:
+See :doc:`../theory/gmid_sizing_flow` for the five-phase pipeline, the role vs
+functional-building-block device tagging that drives the per-device ``gm/Id``
+choice, and runnable per-phase snippets.
 
-1. **CMRR** — sets ``gm1`` lower bound from the tail's output conductance
-   (independent of ``Cc``; computed first so the bound propagates correctly).
-2. **SR → Cc** — ``Cc ≥ ibias / SR_min`` (initial upper bound on ``Cc``).
-3. **GBW + gm1 → Cc** — ``Cc ≥ gm1 / (2π · GBW_min)``; ``Cc`` may grow if
-   CMRR pushes ``gm1`` up.
-4. **Gain → gm2** — open-loop gain ``A0 = gm1·Rout1·gm2·Rout2``; gain drives
-   ``gm2`` (not ``gm1``) to keep ``gm1`` small and preserve the SR bound.
-5. **PM (worst-case gm1) → gm2** — the integer grid ceiling-rounds ``W1`` up,
-   increasing the actual ``gm1``; ``gm2`` is computed from the ceiling-rounded
-   value so the phase margin holds on the discrete grid.
-
-CP-SAT integer solver
----------------------
-
-W and L for each transistor are integer variables (in units of the
-technology grid step).  The solver minimises total gate width (proxy for
-power and area) subject to the linearised ``gm`` and ``VDS_sat`` constraints,
-plus symmetry constraints (matched pairs within ``input_pair``, ``load``, and
-``tail_current`` slots).  The branching heuristic prioritises ``bias_gen``
-transistors first, then all others.
-
-Spec compatibility notes
-------------------------
-
-The three specs ``CMRR``, ``GBW``, and ``SR`` share the same variables
-(``ibias``, ``Cc``, ``gm1``) and can be **mutually exclusive** for small bias
-currents.  Specifically, ``CMRR_min + GBW_min`` together fix ``Cc ≥ gm1_cmrr /
-(2π · GBW_min)``; if that ``Cc`` exceeds ``ibias / SR_min``, the slew-rate
-spec cannot be met.  In that case the solver returns ``INFEASIBLE``.  The
-recommended approach is to specify at most two of the three, or relax ``ibias``.
-
-Technology configurations
----------------------------
+Supported technologies
+----------------------
 
 The sizer reads its device parameters from a technology YAML, selected with
 ``circuitgenome size --tech <file>`` (default: the built-in
@@ -154,7 +130,8 @@ The sizer reads its device parameters from a technology YAML, selected with
      - Notes
    * - ``tech_generic``
      - ~0.25 µm
-     - Illustrative defaults; the built-in fallback.
+     - Illustrative defaults; the built-in fallback.  Sizes with the analytical
+       Level-1 path.
    * - ``tech_ptm45``
      - 45 nm
      - Planar-bulk BSIM4 from the ASU Predictive Technology Model (see
@@ -178,10 +155,14 @@ citation.
 SPICE verification
 ------------------
 
-ngspice runs in two roles, using the model from the tech: a BSIM4 ``.pm`` card for
-the PTM nodes (``spice_model``), a foundry corner library for a PDK
-(``spice_lib`` → ``.lib "<file>" <corner>``, e.g. GF180MCU), or a synthesised
-Level-1 ``.model`` from ``mu_cox``/``vth``/``lam`` for ``generic``:
+Analytical and gm/Id sizing are both **model-based, first-order estimates**, so
+every sized design is checked in **ngspice** before it is trusted: to confirm it
+actually establishes its DC bias point, and to measure the real metrics on the
+device model rather than reading them back from the sizing formulas.  ngspice
+runs in two roles, using the model from the tech: a BSIM4 ``.pm`` card for the
+PTM nodes (``spice_model``), a foundry corner library for a PDK (``spice_lib`` →
+``.lib "<file>" <corner>``, e.g. GF180MCU), or a synthesised Level-1 ``.model``
+from ``mu_cox``/``vth``/``lam`` for ``generic``:
 
 * **PTM and foundry PDKs (default report).**  For a node with a real device model,
   ``circuitgenome size`` reports ngspice-**measured** metrics directly (BSIM4),
@@ -205,20 +186,69 @@ on-chip CMFB operating point), the single-ended-only swing/slew benches on FD
 circuits, and any non-converging measurement are reported as ``n/a`` rather than
 as wrong numbers.
 
-Analysis
---------
+Example output
+--------------
+
+A two-stage single-ended op-amp sized on the ``generic`` tech::
+
+    circuitgenome size circuit_0001_flat.ckt \
+        --topology two_stage_opamp_single_ended \
+        --spec examples/two_stage_se_specs/spec_generic.yaml
+
+.. code-block:: text
+
+   Netlist: circuit_0001_flat.ckt  |  Topology: two_stage_opamp_single_ended
+   Tech: generic_parameterized
+
+   Solver: OPTIMAL
+   ⚠ second-stage gm requirement exceeds the weak-inversion ceiling — increase second_stage_current_ratio/ibias or relax gain.
+
+   Transistor sizing:
+     m1_input_pair                   W=9.000µm  L=1.000µm  IDS=5.00µA  VGS=-0.611V  VDS_sat=0.111V
+     m2_input_pair                   W=9.000µm  L=1.000µm  IDS=5.00µA  VGS=-0.611V  VDS_sat=0.111V
+     m1_tail_current                 W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=-0.971V  VDS_sat=0.471V
+     m2_tail_current                 W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=-0.971V  VDS_sat=0.471V
+     mn1_second_stage                W=29.000µm  L=1.000µm  IDS=25.00µA  VGS=0.580V  VDS_sat=0.080V
+     mp1_second_stage                W=5.000µm  L=1.000µm  IDS=25.00µA  VGS=-0.833V  VDS_sat=0.333V
+     mnref_bias_gen                  W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=0.772V  VDS_sat=0.272V
+     mn5_bias_gen                    W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=0.772V  VDS_sat=0.272V
+     mp5_bias_gen                    W=2.000µm  L=1.000µm  IDS=10.00µA  VGS=-0.833V  VDS_sat=0.333V
+     mn7_bias_gen                    W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=0.772V  VDS_sat=0.272V
+     Cc = 2.9pF
+     r1_load                         R=130.00kΩ
+     r2_load                         R=130.00kΩ
+
+   Feasibility: MARGINAL — biases, but does not meet spec (see ⚠ above)
+
+   Performance metrics:
+     Open-loop gain         63.94 dB          [spec ≥ 80.00 dB]               margin -16.06 dB  ✗
+     GBW                    2.51 MHz          [spec ≥ 2.50 MHz]               margin +0.01 MHz  ✓
+     Phase margin           63.25 °           [spec ≥ 60.00 °]                margin +3.25 °  ✓
+     Slew rate              3.50 V/µs         [spec ≥ 3.50 V/µs]              margin +0.00 V/µs  ✓
+     Quiescent power        0.43 mW           [spec ≤ 1.00 mW]                margin +0.57 mW  ✓
+     Output swing max       4.67 V            [spec ≥ 4.60 V]                 margin +0.07 V  ✓
+     Output swing min       0.08 V            [spec ≤ 0.40 V]                 margin +0.32 V  ✓
+     CMRR                   39.08 dB
+     PSRR+                  53.98 dB
+
+The verdict and per-metric margin columns make the trade-off explicit: this
+device biases and meets every spec except open-loop gain, which the second stage
+cannot reach without a higher ``second_stage_current_ratio`` — exactly what the
+weak-inversion warning flags.
+
+Further reading
+---------------
 
 .. toctree::
    :maxdepth: 1
+   :caption: Theory
 
    ../theory/sizing_flow
    ../theory/gmid_sizing_flow
 
-API reference
--------------
-
 .. toctree::
    :maxdepth: 1
+   :caption: Shared API
 
    ../api/sizer/sizer
    ../api/sizer/shared/models
@@ -230,15 +260,25 @@ API reference
    ../api/sizer/shared/taxonomy
    ../api/sizer/shared/preprocess
    ../api/sizer/shared/metrics
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Analytical Sizer
+
    ../api/sizer/analytical/level1
    ../api/sizer/analytical/constraints
+
+.. toctree::
+   :maxdepth: 1
+   :caption: gm/Id Sizer
+
    ../api/sizer/gmid/gmid_sizer
    ../api/sizer/gmid/analyze
-   ../api/sizer/gmid/blocks
    ../api/sizer/gmid/plan
+   ../api/sizer/gmid/bias
+   ../api/sizer/gmid/evaluate
+   ../api/sizer/gmid/blocks
    ../api/sizer/gmid/intent
    ../api/sizer/gmid/geometry
-   ../api/sizer/gmid/bias
    ../api/sizer/gmid/resistors
    ../api/sizer/gmid/bias_levels
-   ../api/sizer/gmid/evaluate

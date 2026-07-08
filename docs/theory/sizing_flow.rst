@@ -1,5 +1,7 @@
-Sizing Flow — Equations and Derivation
-=======================================
+Analytical Sizing Flow
+======================
+
+*Level-1 square-law equations and their step-by-step derivation.*
 
 This page documents the complete analytical flow used by
 :func:`~circuitgenome.sizer.sizer.size_circuit` to size a two-stage

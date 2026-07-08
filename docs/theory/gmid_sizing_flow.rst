@@ -1,5 +1,7 @@
-gm/Id Sizing Workflow — Procedural Pipeline (PTM / Foundry PDK)
-===============================================================
+gm/Id Sizing Flow
+=================
+
+*Deterministic procedural pipeline for PTM nodes and foundry PDKs.*
 
 This page documents the **block-based gm/Id sizing pipeline**
 (:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid`), the path
