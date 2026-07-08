@@ -2,7 +2,6 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))
-sys.path.insert(0, os.path.abspath("_ext"))
 
 project = "CircuitGenome"
 author = "CircuitGenome Contributors"
@@ -14,7 +13,6 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
-    "topology_counts",
 ]
 
 autodoc_member_order = "bysource"
@@ -24,27 +22,14 @@ napoleon_numpy_docstring = False
 
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
-html_theme = "alabaster"
+html_theme = "furo"
 html_theme_options = {
-    "logo": "logo_transparent.png",
-    "description": "Analog circuit topology synthesis and recognition",
-    "github_user": "analog-ml",
-    "github_repo": "CircuitGenome",
-    "github_button": True,
-    "github_type": "star",
-    "fixed_sidebar": True,
-    "sidebar_width": "240px",
-    "body_max_width": "960px",
-    "font_size": "15px",
-    "code_font_size": "0.85em",
-}
-html_sidebars = {
-    "**": [
-        "about.html",
-        "navigation.html",
-        "relations.html",
-        "searchbox.html",
-    ]
+    "light_logo": "logo_transparent.png",
+    "dark_logo": "logo_transparent.png",
+    "source_repository": "https://github.com/analog-ml/CircuitGenome",
+    "source_branch": "main",
+    "source_directory": "docs/",
 }
 html_static_path = ["_static", "images"]
+html_css_files = ["custom.css"]
 html_title = "CircuitGenome"

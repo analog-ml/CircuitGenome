@@ -1,4 +1,4 @@
-Gm/Id LUT
+gm/Id LUT
 =========
 
 .. automodule:: circuitgenome.sizer.shared.gmid_lut

@@ -23,6 +23,21 @@ The design of CircuitGenome draws on the following publications:
 4. **Constraint-Programmed Initial Sizing of Analog Operational Amplifiers** —
    I. Abel, M. Neuner, and H. Graeb. *IEEE International Conference on Computer
    Design (ICCD)*, 2019. The basis for the constraint-programming (CP-SAT)
-   formulation used by the Initial Sizer.
+   formulation used by the Sizer (SZ).
+
+5. **New Generation of Predictive Technology Model for Sub-45nm Design
+   Exploration** — W. Zhao and Y. Cao. *International Symposium on Quality
+   Electronic Design (ISQED)*, 2006. The ASU Predictive Technology Model
+   (https://ptm.asu.edu) — the source of the planar-bulk BSIM4 cards used by
+   the ``tech_ptm45`` sizing configuration.
+
+Software
+--------
+
+- **ACST — Analog Circuit Synthesis Tool** — I. Abel et al., Chair of Electronic
+  Design Automation, Technical University of Munich (TUM).
+  https://github.com/inga000/acst.  The C++ structural-synthesis tool that
+  implements the FUBOCO functional-block-composition methodology (references 2–4
+  above); CircuitGenome began as a Python re-implementation of its approach.
 
 Full PDFs are available in the ``docs/papers/`` directory of the repository.

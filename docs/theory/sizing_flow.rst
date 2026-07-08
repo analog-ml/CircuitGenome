@@ -1,5 +1,7 @@
-Sizing Flow — Equations and Derivation
-=======================================
+Analytical Sizing Flow
+======================
+
+*Level-1 square-law equations and their step-by-step derivation.*
 
 This page documents the complete analytical flow used by
 :func:`~circuitgenome.sizer.sizer.size_circuit` to size a two-stage
@@ -9,19 +11,12 @@ linearisation, and the post-sizing performance metric evaluation —
 with a concrete numerical walkthrough using the values from
 ``examples/two_stage_se_specs/spec_generic.yaml``.
 
-.. contents:: On this page
-   :depth: 2
-   :local:
-   :backlinks: none
-
 ----
 
 Scope and circuit topology
 --------------------------
 
-The sizer targets all seven op-amp topology templates supported by CircuitGenome:
-one-stage, two-stage (single-ended and fully-differential), and three-stage
-NMC/RNMC (single-ended and fully-differential).
+The sizer targets every op-amp topology template the synthesizer produces.
 
 This page documents the **Level-1 (Shichman-Hodges)** analytical flow — square-law
 drain current in saturation, constant channel-length modulation coefficient λ, no

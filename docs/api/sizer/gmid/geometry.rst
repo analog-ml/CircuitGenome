@@ -1,5 +1,5 @@
-Gm/Id Geometry
-==============
+gm/Id — Geometry
+================
 
 .. automodule:: circuitgenome.sizer.gmid.geometry
    :members:

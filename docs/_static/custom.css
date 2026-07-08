@@ -1,0 +1,12 @@
+/* The logo image already contains the "CircuitGenome" wordmark, so hide the
+   sidebar brand text to avoid showing the name twice. */
+.sidebar-brand-text {
+    display: none;
+}
+
+/* `:strike:` role — parked module variants are listed but struck through and
+   muted, so the reader sees them without mistaking them for active ones. */
+.strike {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
