@@ -42,13 +42,22 @@ tech ``ptm45``, a 1.0 V spec):
    from circuitgenome.sizer.shared.models import SizingSpec
 
    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
-   circ = next(enumerate_circuits(topo, load_modules()))
+   # a mirror-loaded variant (index 15) that biases cleanly at 1.0 V — see the note below
+   circ = list(enumerate_circuits(topo, load_modules()))[15]
    parsed = parse(to_flat_spice(circ))
    fbr = assign_slots(recognize(parsed), topo)
    tech = load_tech("ptm45")
    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
                      second_stage_current_ratio=2.5, gain_min_db=55, gbw_min_hz=1e6,
                      phase_margin_min_deg=60, slew_rate_min_vps=0.65e6)
+
+.. note::
+
+   ``enumerate_circuits`` yields every structural variant of the topology; the
+   walkthrough uses index 15 — a **current-mirror-loaded** two-stage that biases
+   soundly at this 1.0 V spec — so every phase below is one coherent, feasible run.
+   Other variants (resistor-loaded first stages, cascode tails) can fail the
+   Phase 4b bias check; see the failure call-out there.
 
 ----
 
@@ -233,15 +242,16 @@ topology-mismatch warning when a gain-stage slot holds no signal transistor.
 
 .. code-block:: text
 
-   {'input_pair': ['m1_input_pair','m2_input_pair'], 'tail_current': ['m1_tail_current','m2_tail_current'],
-    'bias_gen': ['mn1_bias_gen','mn6_bias_gen','mp5_bias_gen','mn8_bias_gen','m1_tail_current'],
+   {'input_pair': ['m1_input_pair','m2_input_pair'], 'load': ['m1_load','m2_load'],
+    'bias_gen': ['mnref_bias_gen','mn5_bias_gen','mp5_bias_gen'],
     'second_stage': ['mn1_second_stage','mp1_second_stage']}
-   LoadKind.RESISTOR  2  False
+   LoadKind.MIRROR  2  False
    []
    {'m1_input_pair': ('pmos','input_pair'), 'm2_input_pair': ('pmos','input_pair'),
-    'm1_tail_current': ('pmos','tail_current'), 'm2_tail_current': ('pmos','tail_current'),
+    'm1_load': ('nmos','load'), 'm2_load': ('nmos','load'),
     'mn1_second_stage': ('nmos','second_stage'), 'mp1_second_stage': ('pmos','second_stage'),
-    'mn1_bias_gen': ('nmos','bias_gen'), ... }   # 10 unique devices
+    'mnref_bias_gen': ('nmos','bias_gen'), 'mn5_bias_gen': ('nmos','bias_gen'),
+    'mp5_bias_gen': ('pmos','bias_gen')}   # 9 unique devices
 
 .. note::
 
@@ -272,11 +282,15 @@ gm/Id straight into geometry.
 
 .. code-block:: text
 
-   {'m1_input_pair': 7.5, 'm2_input_pair': 7.5, 'm1_tail_current': 15.0, 'm2_tail_current': 15.0,
-    'mn1_second_stage': 37.5, 'mp1_second_stage': 37.5, 'mn1_bias_gen': 15.0, ...}
-   {'r1_load': 69866.7, 'r2_load': 69866.7}  1.431e-05
+   {'m1_input_pair': 7.5, 'm2_input_pair': 7.5, 'm1_load': 7.5, 'm2_load': 7.5,
+    'mn1_second_stage': 37.5, 'mp1_second_stage': 37.5, 'mnref_bias_gen': 15.0,
+    'mn5_bias_gen': 15.0, 'mp5_bias_gen': 15.0}
+   {}  0.0
 
-(ibias 15 µA → tail 15, each input-pair half 7.5, second stage 15×2.5 = 37.5.)
+(ibias 15 µA splits 7.5 per input-pair half; the second stage carries 15 × 2.5 =
+37.5; the bias devices carry 15.  This mirror-loaded variant has no rail-referenced
+load resistors, so ``load_resistors`` is empty — its tail is a resistor, sized in
+Phase 4c.)
 
 Phase 3 — Plan: requirements + per-device intent
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -310,19 +324,18 @@ Phase 3 — Plan: requirements + per-device intent
    plan = plan_devices(view, currents, spec, tech, intent)
    print({r: round(g*1e6, 1) for r, g in plan.gm_req_map.items()}, plan.cc_pf, plan.cc2_pf)
    print(plan.warnings)
-   for r in ["m1_input_pair","mn1_second_stage","mp1_second_stage","m1_tail_current","mn1_bias_gen"]:
+   for r in ["m1_input_pair","mn1_second_stage","mp1_second_stage","mnref_bias_gen"]:
        ti = plan.tintents[r]
        print(f"{r:18s} block={ti.block:14s} role={ti.role:14s} gm_id={ti.gm_id} l_mult={ti.l_mult}")
 
 .. code-block:: text
 
-   {'m1_input_pair': 125.7, 'm2_input_pair': 125.7, 'mn1_second_stage': 900.0, 'mp1_second_stage': 0.0}  10.0  None
+   {'m1_input_pair': 3.1, 'm2_input_pair': 3.1, 'mn1_second_stage': 900.0, 'mp1_second_stage': 0.0}  0.5  None
    ['second-stage gm requirement exceeds the weak-inversion ceiling — increase second_stage_current_ratio/ibias or relax gain.']
    m1_input_pair      block=input_stage    role=signal         gm_id=None l_mult=2.0
    mn1_second_stage   block=gain_stage     role=signal         gm_id=None l_mult=2.0
    mp1_second_stage   block=stage_load     role=current_source gm_id=10.0 l_mult=4.0
-   m1_tail_current    block=tail_current   role=current_source gm_id=10.0 l_mult=4.0
-   mn1_bias_gen       block=bias_generator role=current_source gm_id=10.0 l_mult=4.0
+   mnref_bias_gen     block=bias_generator role=current_source gm_id=10.0 l_mult=4.0
 
 Phase 4a — Size: assign geometry (LUT → W/L, symmetry, mirror ratios)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -338,19 +351,23 @@ ratio × the diode reference's W.  Returns
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
-   sizing, geom_warn = assign_geometry_gmid(
+   sizing, geom_warn, geom_feasible = assign_geometry_gmid(
        plan.model, view.all_transistors, view.slot_transistors,
-       currents.ids_map, plan.tintents, plan.gm_req_map, tech)
+       currents.ids_map, plan.tintents, plan.gm_req_map, tech, vod_max_map=plan.vod_max_map)
    for r, s in sizing.items():
        print("%-18s W=%.2f L=%.3f Vgs=%.3f Vdsat=%.3f" % (r, s.w_um, s.l_um, s.vgs_v, s.vds_sat_v))
 
 .. code-block:: text
 
-   m1_input_pair      W=0.80 L=0.090 Vgs=-0.541 Vdsat=0.102
-   m1_tail_current    W=0.95 L=0.180 Vgs=-0.655 Vdsat=0.180
+   m1_input_pair      W=0.10 L=0.090 Vgs=-0.733 Vdsat=0.243
+   m2_input_pair      W=0.10 L=0.090 Vgs=-0.733 Vdsat=0.243
+   m1_load            W=0.10 L=0.090 Vgs=0.581 Vdsat=0.131
+   m2_load            W=0.10 L=0.090 Vgs=0.581 Vdsat=0.131
    mn1_second_stage   W=97.30 L=0.090 Vgs=0.298 Vdsat=0.044
    mp1_second_stage   W=2.40 L=0.180 Vgs=-0.654 Vdsat=0.179
-   mn1_bias_gen       W=0.35 L=0.180 Vgs=0.607 Vdsat=0.152   ...
+   mnref_bias_gen     W=0.35 L=0.180 Vgs=0.607 Vdsat=0.152
+   mn5_bias_gen       W=0.35 L=0.180 Vgs=0.607 Vdsat=0.152
+   mp5_bias_gen       W=0.95 L=0.180 Vgs=-0.655 Vdsat=0.180
 
 Phase 4b — Size: DC bias feasibility (headroom + cascode budget)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -373,11 +390,29 @@ verdict — the input sizing is never mutated.
 
 .. code-block:: text
 
-   False  ['tail current source has insufficient saturation headroom (-41 mV available vs 180 mV
-           Vdsat at Vcm=0.50 V) — the input-pair bias current will fall short; ...']
+   True  []
 
-Expected here: a PMOS tail at 1.0 V mid-rail is headroom-starved (the issue
-#74/#76 advisory).  Raising ``vdd`` (e.g. to 1.8 V) clears it.
+For this mirror-loaded variant the tail biases with headroom to spare, so Phase 4b
+returns ``True`` with no warning and the sizing passes through unchanged (the "tail
+already fit" row below).
+
+.. admonition:: What a failure looks like
+   :class: caution
+
+   Not every variant is so lucky.  A **cascode tail** at this 1.0 V spec is
+   headroom-starved — running the same phase on such a variant returns
+   ``bias_feasible = False``:
+
+   .. code-block:: text
+
+      False  ['cascode tail current source cannot bias: needs 237 mV of stacked Vdsat
+              but only 65 mV is available at Vcm=0.50 V — the input-pair current will
+              collapse (use a non-cascode tail, lower the input common-mode, or raise
+              the supply).']
+
+   The repair could not fit the tail, so the design is rejected and the metrics must
+   not be trusted (see the interpretation below).  Raising ``vdd`` (e.g. to 1.8 V),
+   lowering the input common-mode, or flipping the input polarity clears it.
 
 **Interpreting the verdict.**  Phase 4b *repairs first and warns only on failure*,
 so the presence or absence of a warning maps to three outcomes:
@@ -442,14 +477,15 @@ returning their small-signal effects as a
    from circuitgenome.sizer.gmid.resistors import size_resistors
    extra_r, modifiers = size_resistors(
        view.blocks, view.slot_resistors, currents.ids_map, sizing,
-       plan.model, spec, tech, intent)
+       plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf)
    resistors = {**currents.load_resistors, **extra_r}
    print(extra_r, modifiers)
 
 .. code-block:: text
 
-   {}  MetricModifiers(gm1_factor=1.0, gd_tail_override=None, gd_out_extra=0.0)
-   # this variant has no degeneration / resistor-tail / CMFB
+   {'r1_tail_current': 15513.891903032769} MetricModifiers(gm1_factor=1.0, gd_tail_override=6.44583581122228e-05, gd_out_extra=0.0)
+   # this variant has a resistor tail (r1_tail_current); its conductance sets
+   # gd_tail_override — the tail gds used for CMRR — but no degeneration or CMFB
 
 Phase 5 — Evaluate: analytical metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -464,13 +500,19 @@ and it applies the Phase-4c :class:`~circuitgenome.sizer.gmid.resistors.MetricMo
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.evaluate import evaluate_circuit
-   metrics, margins = evaluate_circuit(view, currents, plan, sizing, modifiers, spec, tech)
+   metrics, margins, notes = evaluate_circuit(view, currents, plan, sizing, modifiers, spec, tech)
    print({k: round(v, 2) for k, v in metrics.items()})
 
 .. code-block:: text
 
-   {'gain_db': 47.03, 'gbw_hz': 993689.98, 'phase_margin_deg': 89.21, 'slew_rate_vps': 1500000.0,
-    'power_w': 0.0, 'cmrr_db': 34.26, 'psrr_db': 49.47}
+   {'gain_db': 60.55, 'gbw_hz': 15957948.23, 'phase_margin_deg': 77.44, 'slew_rate_vps': 30000000.0,
+    'power_w': 0.0, 'cmrr_db': -8.2, 'psrr_db': 49.47}
+
+Gain (60.6 dB) and phase margin (77.4°) clear the spec's 55 dB / 60° targets.  The
+poor ``cmrr_db`` traces straight back to Phase 4c: the resistor tail's finite
+conductance (``gd_tail_override``) is a leaky current source, which the CMRR term
+penalises heavily — a concrete example of a Phase-4c modifier shaping a Phase-5
+metric.
 
 Putting it together
 ~~~~~~~~~~~~~~~~~~~~
@@ -491,7 +533,12 @@ never assemble it by hand — the whole pipeline is one call:
 
 .. code-block:: text
 
-   GMID  False  10  2
+   GMID  True  9  1
+
+``bias_feasible`` is ``True`` and the design clears its gain and phase-margin
+targets.  The single remaining warning is the Phase-3 weak-inversion *ceiling
+advisory* (the second stage's required gm sits above the efficient inversion
+region) — not a bias failure, and the gain spec is met regardless.
 
 ----
 
