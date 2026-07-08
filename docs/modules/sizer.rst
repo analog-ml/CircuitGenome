@@ -240,45 +240,9 @@ Further reading
 ---------------
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Theory
+   :maxdepth: 2
 
-   ../theory/sizing_flow
-   ../theory/gmid_sizing_flow
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Shared API
-
-   ../api/sizer/sizer
-   ../api/sizer/shared/models
-   ../api/sizer/shared/loader
-   ../api/sizer/shared/device_model
-   ../api/sizer/shared/equations
-   ../api/sizer/shared/gmid_lut
-   ../api/sizer/shared/spice_sim
-   ../api/sizer/shared/taxonomy
-   ../api/sizer/shared/preprocess
-   ../api/sizer/shared/metrics
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Analytical Sizer
-
-   ../api/sizer/analytical/level1
-   ../api/sizer/analytical/constraints
-
-.. toctree::
-   :maxdepth: 1
-   :caption: gm/Id Sizer
-
-   ../api/sizer/gmid/gmid_sizer
-   ../api/sizer/gmid/analyze
-   ../api/sizer/gmid/plan
-   ../api/sizer/gmid/bias
-   ../api/sizer/gmid/evaluate
-   ../api/sizer/gmid/blocks
-   ../api/sizer/gmid/intent
-   ../api/sizer/gmid/geometry
-   ../api/sizer/gmid/resistors
-   ../api/sizer/gmid/bias_levels
+   ../api/sizer/theory
+   ../api/sizer/shared
+   ../api/sizer/analytical
+   ../api/sizer/gmid
