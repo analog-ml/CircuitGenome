@@ -33,5 +33,3 @@ html_theme_options = {
 html_static_path = ["_static", "images"]
 html_css_files = ["custom.css"]
 html_title = "CircuitGenome"
-
-autodoc_preserve_defaults = True
