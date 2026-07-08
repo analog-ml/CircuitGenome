@@ -1,0 +1,6 @@
+include LICENSE README.md CHANGELOG.md
+
+recursive-include circuitgenome/synthesizer/config *.yaml
+recursive-include circuitgenome/recognizer/config *.yaml
+recursive-include circuitgenome/sizer/shared/config *.yaml *.npz *.pm
+recursive-include circuitgenome/sizer/shared/pdk *.ngspice *.rst
