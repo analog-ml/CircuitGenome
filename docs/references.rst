@@ -31,4 +31,12 @@ The design of CircuitGenome draws on the following publications:
    (https://ptm.asu.edu) — the source of the planar-bulk BSIM4 cards used by
    the ``tech_ptm45`` sizing configuration.
 
+Software
+--------
+
+- **ACST — Analog Circuit Synthesis Tool** — I. Abel et al.
+  https://github.com/inga000/acst.  The C++ structural-synthesis tool that
+  implements the FUBOCO functional-block-composition methodology (references 2–4
+  above); CircuitGenome began as a Python re-implementation of its approach.
+
 Full PDFs are available in the ``docs/papers/`` directory of the repository.
