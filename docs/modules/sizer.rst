@@ -106,8 +106,7 @@ PTM nodes and foundry PDKs size through the **gm/Id pipeline** instead.  With
 SPICE-characterised lookup table turns ``IDS/W`` straight into ``W`` — geometry
 is *computed* in a single deterministic forward pass rather than searched, so it
 captures the moderate/weak-inversion and short-channel behaviour the square law
-misses.  A PTM/SPICE-model node without a gm/Id LUT raises
-``UnsupportedTechError``.
+misses.
 
 See :doc:`../theory/gmid_sizing_flow` for the five-phase pipeline, the role vs
 functional-building-block device tagging that drives the per-device ``gm/Id``
@@ -151,6 +150,18 @@ need a different device model and are not covered.  Add another PTM node — or
 regenerate an existing one's LUT — with ``tools/extract_tech.py`` (requires
 ngspice); see :doc:`../references` for the ASU Predictive Technology Model
 citation.
+
+Path selection
+--------------
+
+:func:`~circuitgenome.sizer.sizer.size_circuit` picks the path from the
+technology:
+
+- ``tech.gmid_lut`` present (``ptm45``, GF180MCU) → the **gm/Id sizer**.
+- card-less ``generic`` (no LUT) → the **analytical Level-1 sizer**.
+- a PTM/SPICE-model node **without** a characterised LUT → ``UnsupportedTechError``:
+  the square law is not valid there, and the gm/Id path needs a table the tech
+  does not provide.
 
 SPICE verification
 ------------------

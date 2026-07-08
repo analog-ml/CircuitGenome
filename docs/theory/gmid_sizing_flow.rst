@@ -20,23 +20,14 @@ building block** distinction that drives the per-device gm/Id choice.
 
 ----
 
-Scope and routing
------------------
+Bootstrap
+---------
 
-:func:`~circuitgenome.sizer.sizer.size_circuit` dispatches on the technology:
-
-* ``tech.gmid_lut`` present (``ptm45``, GF180MCU) → **this** gm/Id pipeline.
-* card-less ``generic`` (no LUT, no SPICE card) → the Level-1 analytical sizer
-  (:doc:`sizing_flow`).
-* a PTM/SPICE-model node **without** a LUT (e.g. a newly added node whose LUT
-  has not been characterized yet) → ``UnsupportedTechError`` — the Level-1
-  square law is not valid there, and the gm/Id path needs a table the tech does
-  not provide.
-
-The analytical metrics this pipeline computes are a fast, deterministic
+The metrics this pipeline computes (Phase 5) are a fast, deterministic
 sizing-quality signal; for PTM / foundry techs the CLI reports **ngspice-measured**
 performance instead (see :doc:`sizing_flow`, *Feasibility verdict and SPICE
-metrics*).
+metrics*).  For how a technology selects this path versus the Level-1 path — and
+the ``UnsupportedTechError`` case — see :doc:`../modules/sizer`, *Path selection*.
 
 All snippets below assume this bootstrap (topology ``two_stage_opamp_single_ended``,
 tech ``ptm45``, a 1.0 V spec):
