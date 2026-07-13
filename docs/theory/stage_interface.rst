@@ -43,6 +43,38 @@ local repair engine) in front of the expensive simulation.
    Here the "connector" is a DC voltage: the second stage presents one voltage,
    the first-stage load accepts a range, and this module checks that they fit.
 
+The whole check is one condition on the shared node.  Writing :math:`V_{\text{pin}}`
+for the voltage the second stage forces and :math:`[V_{\text{lo}}, V_{\text{hi}}]`
+for the window the load allows, the design is feasible when
+
+.. math::
+
+   V_{\text{lo}} + \Delta \;\le\; V_{\text{pin}} \;\le\; V_{\text{hi}} - \Delta,
+   \qquad \Delta = 0.05~\text{V},
+
+or equivalently :math:`\operatorname{slack} \ge \Delta` with
+
+.. math::
+
+   \operatorname{slack} = \min\!\bigl(V_{\text{pin}} - V_{\text{lo}},\;
+                                       V_{\text{hi}} - V_{\text{pin}}\bigr).
+
+All three voltages come from topology, not simulation:
+
+.. math::
+
+   V_{\text{pin}} &= V_{\text{rail}} \pm V_{GS}
+       \quad\text{(second-stage device pins the node)} \\
+   V_{\text{lo}}  &= V_{\text{anchor}} + \sum_k V_{DS,\text{sat}}^{(k)}
+       \quad\text{(NMOS output-leg stack)} \\
+   V_{\text{hi}}  &= V_{\text{anchor}} - \sum_k V_{DS,\text{sat}}^{(k)}
+       \quad\text{(PMOS output-leg stack)}
+
+The margin :math:`\Delta` keeps every device comfortably inside saturation
+rather than on the mathematical edge; the goal is to place :math:`V_{\text{pin}}`
+inside :math:`[V_{\text{lo}}+\Delta,\, V_{\text{hi}}-\Delta]` *while preserving
+each device's transconductance*.
+
 How the check works
 -------------------
 
@@ -265,6 +297,34 @@ grid and re-reading ``V_GS``/``V_DS,sat`` from the LUT).  The check scans every
 mirror gm/Id against every gm-valid second-stage gm/Id and takes the **first**
 assignment that clears the margin — the least deviation from the original
 sizing.
+
+Stated abstractly, the repair searches two discrete gm/Id choices — the load
+mirror group and the second-stage input device — for an assignment that restores
+the feasibility condition:
+
+.. math::
+
+   \text{find } \; & (g_m/I_D)_{\text{mir}},\;(g_m/I_D)_{\text{in}}
+       \in \mathcal{A} \\
+   \text{s.t. } \; & (g_m/I_D)_{\text{in}}\cdot I_{D,\text{in}}
+       \;\ge\; g_{m,\text{req}}
+       \quad\text{(preserve the stage's transconductance)} \\
+                   & V_{\text{lo}} + \Delta \;\le\; V_{\text{pin}}
+       \;\le\; V_{\text{hi}} - \Delta
+       \quad\text{(the violated bound moves with } (g_m/I_D)_{\text{mir}}\text{)}
+
+where :math:`\mathcal{A}` is the LUT's gm/Id axis.  The mirror knob lowers only
+the violated stack's bound; the input knob shifts :math:`V_{\text{pin}}`, but the
+gm floor is why a follower can move toward weak inversion while a common-source
+device sized exactly at its floor cannot.
+
+.. note::
+
+   This is a *feasibility search*, not a formal optimization: the code evaluates
+   no objective function.  It tries "unchanged" first, scans :math:`\mathcal{A}`,
+   and returns the **first** assignment that clears the margin — so it *prefers*
+   the least change from the original sizing without computing an ``argmin``.  If
+   none clears the full margin, it keeps the maximum-slack candidate.
 
 The verdict
 ~~~~~~~~~~~
