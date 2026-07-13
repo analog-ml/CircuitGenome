@@ -1,5 +1,10 @@
 """Stage-interface DC feasibility: the first-stage output pin vs the load window.
 
+This is the gm/Id sizer's *post-geometry* DC-bias check — distinct from the
+synthesizer's structural *stage-interface compatibility* filter
+(:mod:`circuitgenome.synthesizer.compatibility.second_stage`), which runs
+pre-enumeration and never looks at voltages.
+
 The second stage's input device pins the first-stage output node at a level of
 its own: its ``V_GS`` above the source rail (a common-source stage) or the
 quiescent output level plus ``V_GS`` (a follower).  A cascode load needs that
@@ -56,9 +61,9 @@ def _rail_v(net: str, spec: SizingSpec) -> float:
     return spec.vdd if net == "vdd!" else spec.vss
 
 
-def _diode_level(net: str | None, diode_by_net: dict, sizing: dict,
-                 spec: SizingSpec, _depth: int = 0) -> float | None:
-    """DC level of ``net`` when a diode chain ties it to a rail, else ``None``."""
+def _diode_chain_voltage(net: str | None, diode_by_net: dict, sizing: dict,
+                         spec: SizingSpec, _depth: int = 0) -> float | None:
+    """DC voltage of ``net`` when a diode chain ties it to a rail, else ``None``."""
     if net is None or _depth > 8:
         return None
     if net in RAILS:
@@ -67,8 +72,8 @@ def _diode_level(net: str | None, diode_by_net: dict, sizing: dict,
     s = sizing.get(d.ref) if d is not None else None
     if s is None:
         return None
-    base = _diode_level(d.terminals.get("s"), diode_by_net, sizing, spec,
-                        _depth + 1)
+    base = _diode_chain_voltage(d.terminals.get("s"), diode_by_net, sizing,
+                                spec, _depth + 1)
     if base is None:
         return None
     return base + abs(s.vgs_v) if d.type == "nmos" else base - abs(s.vgs_v)
@@ -109,7 +114,7 @@ def _stack_bound(net: str, dtype: str, devs: list, pair_refs: set[str],
         if dev.ref in pair_refs:
             return vcm - sgn * abs(s.vgs_v) + sgn * floor
         gate = dev.terminals.get("g")
-        g_lvl = (_diode_level(gate, diode_by_net, sizing, spec)
+        g_lvl = (_diode_chain_voltage(gate, diode_by_net, sizing, spec)
                  if gate != node else None)
         if g_lvl is not None:
             return g_lvl - sgn * abs(s.vgs_v) + sgn * floor
@@ -131,8 +136,8 @@ def _pin_device(blocks: OpAmpBlocks):
     return None
 
 
-def _pin_level(dev, s: TransistorSizing, spec: SizingSpec) -> float | None:
-    """DC level ``dev`` pins its gate (the stage-interface node) at."""
+def _pin_voltage(dev, s: TransistorSizing, spec: SizingSpec) -> float | None:
+    """DC voltage ``dev`` pins its gate (the stage-interface node) at."""
     vgs = abs(s.vgs_v)
     src, drn = dev.terminals.get("s"), dev.terminals.get("d")
     if src in RAILS:  # common-source: gate = source rail ± V_GS
@@ -143,8 +148,8 @@ def _pin_level(dev, s: TransistorSizing, spec: SizingSpec) -> float | None:
     return None
 
 
-def _resize_at(model: GmIdModel, tech: TechParams, dev,
-               s: TransistorSizing, gm_id: float) -> TransistorSizing | None:
+def _resize_at_gmid(model: GmIdModel, tech: TechParams, dev,
+                    s: TransistorSizing, gm_id: float) -> TransistorSizing | None:
     idw = model.lut.id_per_w(dev.type, gm_id, s.l_um)
     if idw <= 0:
         return None
@@ -206,7 +211,7 @@ def check_stage_interface(
         return min(vals)
 
     lo, hi = window(sizing)
-    pin = _pin_level(ss_dev, s_ss, spec)
+    pin = _pin_voltage(ss_dev, s_ss, spec)
     if pin is None or slack(pin, lo, hi) >= _MARGIN_V:
         return sizing, [], True
 
@@ -227,19 +232,19 @@ def check_stage_interface(
             base = dict(sizing)
             for d in mirror_devs:
                 s = base.get(d.ref)
-                ns = _resize_at(model, tech, d, s, gm_m) if s else None
+                ns = _resize_at_gmid(model, tech, d, s, gm_m) if s else None
                 if ns is not None:
                     base[d.ref] = ns
         for gm_s in ss_cands:
             cand = base
             if gm_s is not None:
-                ns = _resize_at(model, tech, ss_dev, s_ss, gm_s)
+                ns = _resize_at_gmid(model, tech, ss_dev, s_ss, gm_s)
                 if ns is None:
                     continue
                 cand = dict(base)
                 cand[ss_dev.ref] = ns
             lo2, hi2 = window(cand)
-            pin2 = _pin_level(ss_dev, cand[ss_dev.ref], spec)
+            pin2 = _pin_voltage(ss_dev, cand[ss_dev.ref], spec)
             if pin2 is None:
                 continue
             sl = slack(pin2, lo2, hi2)

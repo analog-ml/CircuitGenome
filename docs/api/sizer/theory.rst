@@ -10,9 +10,13 @@ the CP-SAT integer linearisation, and a worked numerical example.
 procedural pipeline and the role vs functional-building-block tagging that fixes
 each device's ``gm/Id``.  Which path runs for a given technology is decided in
 :doc:`../../modules/sizer`, *Path selection*.
+:doc:`../../theory/stage_interface` zooms into one gm/Id check: the DC-bias
+feasibility test at the first-stage-to-second-stage interface, and the local
+gm/Id repair it attempts before rejecting a candidate.
 
 .. toctree::
    :maxdepth: 1
 
    ../../theory/sizing_flow
    ../../theory/gmid_sizing_flow
+   ../../theory/stage_interface
