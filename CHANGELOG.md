@@ -11,6 +11,10 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+### Added
+
+- ✨ SKY130 1.8 V core PDK for the gm/Id sizer — trimmed vendored PDK, `device_handle`/`wl_units` tech fields, LUT monotone-envelope fix ([#159](https://github.com/analog-ml/CircuitGenome/pull/159)).
+
 ### Docs
 
 - 📝 Restructure this changelog to the Keep a Changelog + SemVer format (one line per PR).
