@@ -5,6 +5,7 @@ import re
 
 from ..models import SizingResult, SizingSpec, TechParams
 from .deck import (
+    _MOS_MODELS,
     _dev_prefix,
     _dut,
     _inject_sizes,
@@ -53,7 +54,10 @@ def _read_op(
     sink = _iref_sink(body)
     vdd, ibias = spec.vdd, spec.ibias
     vcm = (spec.vdd + spec.vss) / 2.0
-    prefixes = {r: _dev_prefix(tech, r) for r in refs}
+    # Generic device type per ref (nmos/pmos) — the OP handle can depend on it.
+    models = {tok[0]: tok[5].lower() for line in body
+              if len(tok := line.split()) >= 6 and tok[5].lower() in _MOS_MODELS}
+    prefixes = {r: _dev_prefix(tech, r, models.get(r, "nmos")) for r in refs}
     probe = "".join(
         f"print {pre}[id]\nprint {pre}[vds]\nprint {pre}[vdsat]\n"
         for pre in prefixes.values()

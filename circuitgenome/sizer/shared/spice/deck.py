@@ -6,6 +6,7 @@ two ngspice runners (table output via ``wrdata``, text output via ``print``).
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,15 +53,19 @@ def _xref(ref: str) -> str:
     return ("x" + ref[1:]) if ref[:1].lower() == "m" else ("x" + ref)
 
 
-def _dev_prefix(tech: TechParams, ref: str) -> str:
+def _dev_prefix(tech: TechParams, ref: str, model: str) -> str:
     """ngspice operating-point handle prefix for device ``ref`` inside ``Xdut``.
 
     PTM/generic instantiate ``.model`` MOSFETs (flat ``@m.xdut.<ref>``); a PDK
     with a ``device_map`` instantiates subcircuits, so the BSIM4 device sits one
-    level deeper at the subckt's internal ``m0`` (``@m.xdut.<xref>.m0``).
+    level deeper at the subckt's internal instance — ``m0`` by default (GF180),
+    or ``tech.device_handle[model]`` when the PDK names it per cell (sky130's
+    ``msky130_fd_pr__nfet_01v8``).  ``model`` is the generic device type of
+    ``ref`` (``"nmos"``/``"pmos"``).
     """
     if tech.device_map:
-        return f"@m.xdut.{_xref(ref)}.m0"
+        handle = (tech.device_handle or {}).get(model, "m0")
+        return f"@m.xdut.{_xref(ref)}.{handle}"
     return f"@m.xdut.{ref}"
 
 
@@ -69,6 +74,9 @@ def _emit_body(tech: TechParams, body: list[str]) -> list[str]:
 
     No-op unless ``tech.device_map`` is set.  Maps the model token via the map
     (``nmos`` → ``nmos_3p3``) and lowercases ``W=``/``L=`` to the subckt params.
+    For a ``wl_units="um"`` PDK (sky130) the SI micro suffix is dropped —
+    ``w=10.0u`` → ``w=10.0`` — because the library's ``.option scale=1.0u``
+    already interprets bare instance W/L as microns.
     """
     dm = tech.device_map
     if not dm:
@@ -78,6 +86,8 @@ def _emit_body(tech: TechParams, body: list[str]) -> list[str]:
         tok = line.split()
         if len(tok) >= 6 and tok[5].lower() in dm:
             rest = " ".join(tok[6:]).replace("W=", "w=").replace("L=", "l=")
+            if tech.wl_units == "um":
+                rest = re.sub(r"\b([wl]=[0-9.]+)u\b", r"\1", rest)
             out.append(
                 f"{_xref(tok[0])} {tok[1]} {tok[2]} {tok[3]} {tok[4]} "
                 f"{dm[tok[5].lower()]} {rest}".rstrip())

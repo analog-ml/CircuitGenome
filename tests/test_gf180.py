@@ -61,8 +61,31 @@ def test_gf180_device_translation_m_to_x():
 
 def test_gf180_op_handle_is_nested():
     tech = load_tech("gf180mcu")
-    assert deck._dev_prefix(tech, "m1_input_pair") == "@m.xdut.x1_input_pair.m0"
-    assert deck._dev_prefix(load_tech("ptm45"), "m1_input_pair") == "@m.xdut.m1_input_pair"
+    assert deck._dev_prefix(tech, "m1_input_pair", "pmos") == "@m.xdut.x1_input_pair.m0"
+    assert deck._dev_prefix(load_tech("ptm45"), "m1_input_pair", "pmos") == "@m.xdut.m1_input_pair"
+
+
+def test_device_handle_and_um_units():
+    """Per-polarity OP handles + micron W/L for a wl_units="um" PDK (sky130)."""
+    import dataclasses
+    tech = dataclasses.replace(
+        load_tech("gf180mcu"),
+        device_map={"nmos": "sky130_fd_pr__nfet_01v8", "pmos": "sky130_fd_pr__pfet_01v8"},
+        device_handle={"nmos": "msky130_fd_pr__nfet_01v8", "pmos": "msky130_fd_pr__pfet_01v8"},
+        wl_units="um",
+    )
+    assert (deck._dev_prefix(tech, "m1_input_pair", "pmos")
+            == "@m.xdut.x1_input_pair.msky130_fd_pr__pfet_01v8")
+    assert (deck._dev_prefix(tech, "m5_tail", "nmos")
+            == "@m.xdut.x5_tail.msky130_fd_pr__nfet_01v8")
+    # µm units: the SI micro suffix is dropped (bare numbers = microns under
+    # the library's `.option scale=1.0u`); non-MOS lines untouched.
+    body = ["m1_input_pair net1 in1 net2 net2 pmos W=10.00000u L=0.56000u",
+            "c1_compensation net2 out 1p"]
+    out = deck._emit_body(tech, body)
+    assert out[0] == ("x1_input_pair net1 in1 net2 net2 "
+                      "sky130_fd_pr__pfet_01v8 w=10.00000 l=0.56000")
+    assert out[1] == "c1_compensation net2 out 1p"
 
 
 def _first_feasible_size():

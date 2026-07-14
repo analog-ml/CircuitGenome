@@ -60,6 +60,20 @@ NODES: dict[str, dict] = {
         cap=(0.01, 20.0, 0.01), out="gf180mcu",
         desc="GF180MCU 180nm core 3.3V (nmos_3p3/pmos_3p3, BSIM4 level=54)",
     ),
+    "sky130": dict(
+        kind="pdk",
+        lib="sky130/ngspice/sky130.lib.spice", corner="tt",
+        nmos_dev="sky130_fd_pr__nfet_01v8", pmos_dev="sky130_fd_pr__pfet_01v8",
+        handles={"nmos": "msky130_fd_pr__nfet_01v8",
+                 "pmos": "msky130_fd_pr__pfet_01v8"},
+        wl_units="um",
+        # Level-1 fit at L=0.5um: the square-law fit is degenerate at
+        # Lmin=0.15um (130nm short channel; negative-lambda artifacts).
+        vdd=1.8, l_ext_um=0.5, w_ext_um=10.0,
+        width=(0.42, 100.0, 0.005), length=(0.15, 4.0, 0.01),
+        cap=(0.01, 20.0, 0.01), out="sky130",
+        desc="SKY130 130nm core 1.8V (sky130_fd_pr__{n,p}fet_01v8, BSIM4)",
+    ),
     "45": dict(
         card="ptm_45nm_HP.pm", vdd=1.0, l_ext_um=0.09, w_ext_um=1.0,
         width=(0.10, 100.0, 0.05), length=(0.045, 1.0, 0.005),
@@ -79,21 +93,37 @@ class _Model:
     """
 
     def __init__(self, cfg: dict):
+        self._um = cfg.get("wl_units") == "um"
         if cfg.get("kind") == "pdk":
             inc = f'.include "{_PDK / cfg["design"]}"\n' if cfg.get("design") else ""
             inc += f'.lib "{_PDK / cfg["lib"]}" {cfg.get("corner", "typical")}\n'
             self.include = inc
             self._dev = {"nmos": cfg["nmos_dev"], "pmos": cfg["pmos_dev"]}
             self._x = "x"
-            self.prefix = "@m.x1.m0"
+            # Subckt-internal BSIM4 instance: "m0" (GF180) unless overridden
+            # per polarity via cfg["handles"] (sky130 names it after the cell).
+            handles = cfg.get("handles", {})
+            self._prefix = {d: f"@m.x1.{handles.get(d, 'm0')}"
+                            for d in ("nmos", "pmos")}
         else:
             self.include = f'.include "{_MODELS / cfg["card"]}"\n'
             self._dev = {"nmos": "nmos", "pmos": "pmos"}
             self._x = "M"
-            self.prefix = "@m1"
+            self._prefix = {d: "@m1" for d in ("nmos", "pmos")}
+
+    def prefix(self, dev: str) -> str:
+        """Operating-point handle prefix for the ``<x>1`` instance of ``dev``."""
+        return self._prefix[dev]
 
     def inst(self, dev: str, nodes: str, w: float, l: float) -> str:
-        """A single sized device instance named ``<x>1`` on ``nodes`` (d g s b)."""
+        """A single sized device instance named ``<x>1`` on ``nodes`` (d g s b).
+
+        ``w``/``l`` are in meters; a ``wl_units="um"`` PDK (sky130, whose lib
+        sets ``.option scale=1.0u``) gets bare micron numbers instead.
+        """
+        if self._um:
+            return (f"{self._x}1 {nodes} {self._dev[dev]} "
+                    f"w={w / _UM:.6f} l={l / _UM:.6f}")
         return f"{self._x}1 {nodes} {self._dev[dev]} W={w:.6e} L={l:.6e}"
 
 
@@ -258,7 +288,7 @@ def _gmid_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float):
     w, l = w_um * _UM, l_um * _UM
     vds = vdd / 2.0
     step = vdd / 400.0
-    p = model.prefix
+    p = model.prefix(dev)
     fields = f"{p}[id] {p}[gm] {p}[gds] {p}[cgg] {p}[vdsat]"
     saves = f".save {fields}\n"
     if dev == "nmos":
@@ -290,9 +320,17 @@ def _gmid_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float):
 def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     """Resample per-point fields onto the uniform gm/Id axis at one L.
 
-    ``gm_id`` decreases as Vgs rises; we keep the strictly-decreasing, finite,
-    in-window samples, sort ascending, and linearly interpolate (np.interp
-    clamps out-of-range axis points to the endpoints).
+    ``gm_id`` decreases as Vgs rises (samples arrive in ascending-Vgs sweep
+    order); we keep the finite, in-window samples on the monotone envelope,
+    sort ascending, and linearly interpolate (np.interp clamps out-of-range
+    axis points to the endpoints).
+
+    The envelope guards against devices whose gm/Id vs Vgs is not single
+    valued (sky130's 1.8 V pfet at short L has a subthreshold hump, so one
+    gm/Id maps to several Vgs): a sample survives only if it is the maximum of
+    everything at higher Vgs, i.e. the branch continuous with strong
+    inversion.  For a cleanly decreasing device (GF180, PTM) it keeps every
+    sample, leaving those LUTs unchanged.
     """
     g = gm_id
     good = np.isfinite(g)
@@ -300,6 +338,8 @@ def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarra
         good &= np.isfinite(v)
     good &= (g >= _GMID_AXIS[0] - 2.0) & (g <= _GMID_AXIS[-1] + 4.0)
     g = g[good]
+    env = g >= np.maximum.accumulate(g[::-1])[::-1]
+    g = g[env]
     order = np.argsort(g)
     g = g[order]
     # Deduplicate equal gm/Id (flat weak-inversion tail) so np.interp is well posed.
@@ -307,7 +347,7 @@ def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarra
     g = g[keep]
     out: dict[str, np.ndarray] = {}
     for name, v in fields.items():
-        vv = v[good][order][keep]
+        vv = v[good][env][order][keep]
         out[name] = np.interp(_GMID_AXIS, g, vv)
     return out
 
