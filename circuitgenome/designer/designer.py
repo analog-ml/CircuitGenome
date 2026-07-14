@@ -34,6 +34,7 @@ from ..sizer import SizingSpec, TechParams, load_spec, load_tech, size_circuit
 from ..sizer.shared.spice_sim import (
     check_bias_soundness,
     ngspice_available,
+    pdk_netlist,
     simulate_metrics,
     sized_netlist,
 )
@@ -330,6 +331,12 @@ def design(
                 name = f"circuit_{outcome.index:04d}"
                 path = tdir / f"{name}_sized.ckt"
                 path.write_text(outcome.netlist)
+                if tech.spice_lib and tech.device_map:
+                    # PDK-native sibling: directly simulatable (.lib header,
+                    # subckt devices, native W/L units). The generic .ckt
+                    # stays the canonical, recognizer-parseable form.
+                    (tdir / f"{name}_sized.{tech.name}.spice").write_text(
+                        pdk_netlist(outcome.netlist, tech, base_dir=tdir))
                 report.solutions.append(DesignSolution(
                     name=name, topology=topology.name, variants=outcome.variants,
                     metrics=outcome.metrics, margins=outcome.margins,

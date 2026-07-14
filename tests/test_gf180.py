@@ -88,6 +88,19 @@ def test_device_handle_and_um_units():
     assert out[1] == "c1_compensation net2 out 1p"
 
 
+def test_gf180_pdk_netlist_keeps_si_units():
+    """The PDK-native export keeps GF180's meter (SI-suffix) W/L convention."""
+    tech = load_tech("gf180mcu")
+    sized = (".subckt c1 in1 out vdd! gnd!\n"
+             "m1_input_pair net1 in1 net2 net2 pmos W=10.00000u L=0.56000u\n"
+             ".ends\n")
+    out = deck.pdk_netlist(sized, tech)
+    assert ".include" in out and "design.ngspice" in out
+    assert '.lib "' in out and '" typical' in out
+    assert ("x1_input_pair net1 in1 net2 net2 "
+            "pmos_3p3 w=10.00000u l=0.56000u") in out
+
+
 def _first_feasible_size():
     """Size a couple of active-load circuits at GF180; return the gm/Id result."""
     spec = SizingSpec(vdd=3.3, vss=0.0, ibias=40e-6, cl=2e-12,

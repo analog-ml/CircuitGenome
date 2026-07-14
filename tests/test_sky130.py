@@ -65,6 +65,31 @@ def test_sky130_dispatches_to_gmid_lut():
     assert lut.id_per_w("nmos", 6.0, 0.15) > lut.id_per_w("nmos", 20.0, 0.15)
 
 
+def test_sky130_pdk_netlist_export():
+    """PDK-native sibling: .lib header + subckt devices + micron W/L."""
+    import pytest
+    tech = load_tech("sky130")
+    sized = (".subckt circuit_0001 in1 out vdd! gnd!\n"
+             "m1_input_pair net1 in1 net2 net2 pmos W=10.00000u L=0.56000u\n"
+             "c1_compensation net1 out 1.2500p\n"
+             "r1_load net1 gnd! 4496.2975\n"
+             ".ends\n")
+    out = deck.pdk_netlist(sized, tech)
+    assert f'.lib "{tech.spice_lib.file}" tt' in out
+    assert ("x1_input_pair net1 in1 net2 net2 "
+            "sky130_fd_pr__pfet_01v8 w=10.00000 l=0.56000") in out
+    # Passives and the subckt wrapper survive untouched.
+    assert "c1_compensation net1 out 1.2500p" in out
+    assert "r1_load net1 gnd! 4496.2975" in out
+    assert out.rstrip().endswith(".ends")
+    # base_dir relativizes the header path.
+    rel = deck.pdk_netlist(sized, tech, base_dir=Path(tech.spice_lib.file).parent)
+    assert '.lib "sky130.lib.spice" tt' in rel
+    # No PDK form exists for a flat-model tech.
+    with pytest.raises(ValueError):
+        deck.pdk_netlist(sized, load_tech("ptm45"))
+
+
 def test_sky130_op_handle_is_per_polarity():
     tech = load_tech("sky130")
     assert (deck._dev_prefix(tech, "m1_input_pair", "pmos")

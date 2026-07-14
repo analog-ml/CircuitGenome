@@ -19,13 +19,14 @@ Package layout:
     :mod:`.op` — operating-point reading + DC bias-soundness verdict
     :mod:`.simulate` — the :func:`simulate_metrics` entry point
 """
-from .deck import ngspice_available, sized_netlist
+from .deck import ngspice_available, pdk_netlist, sized_netlist
 from .op import check_bias_soundness, read_op_operating_point
 from .simulate import simulate_metrics
 
 __all__ = [
     "check_bias_soundness",
     "ngspice_available",
+    "pdk_netlist",
     "read_op_operating_point",
     "simulate_metrics",
     "sized_netlist",

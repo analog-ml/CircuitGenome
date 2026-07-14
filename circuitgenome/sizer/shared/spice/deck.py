@@ -6,6 +6,7 @@ two ngspice runners (table output via ``wrdata``, text output via ``print``).
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -130,6 +131,43 @@ def sized_netlist(netlist_text: str, result: SizingResult) -> str:
             "the sizing result carries no W/L for them")
     body = _inject_sizes(body, result)
     out = lines[:start] + [f".subckt {name} {' '.join(ports)}"] + body + [".ends"]
+    return "\n".join(out) + "\n"
+
+
+def pdk_netlist(sized_text: str, tech: TechParams,
+                base_dir: Path | str | None = None) -> str:
+    """Rewrite a sized generic netlist into the PDK-native, simulatable form.
+
+    The generic ``*_sized.ckt`` stays the canonical interchange format (the
+    recognizer parses only generic ``nmos``/``pmos`` M-lines); this sibling is
+    for running directly against the PDK: the corner ``.lib`` header plus the
+    same rewrite the verification decks use (``m…`` → ``x…``, ``device_map``
+    subcircuit names, native W/L units via ``wl_units``).  Header paths are
+    emitted relative to ``base_dir`` (the export directory) when given,
+    absolute otherwise — either way they are resolved on the machine that
+    exported the file.
+
+    :raises ValueError: for a tech without ``spice_lib`` + ``device_map`` —
+        there is no PDK form to export.
+    """
+    if not (tech.spice_lib and tech.device_map):
+        raise ValueError(
+            "pdk_netlist requires a PDK tech (spice_lib + device_map)")
+    lib = tech.spice_lib
+
+    def _path(p: str) -> str:
+        return os.path.relpath(p, base_dir) if base_dir is not None else p
+
+    name, ports, body = _parse_subckt(sized_text)
+    out = [f"* {name} sized for {tech.name} — PDK-native export "
+           f"(corner: {lib.corner})",
+           "* .lib/.include paths were resolved when this file was exported."]
+    if lib.design:
+        out.append(f'.include "{_path(lib.design)}"')
+    out.append(f'.lib "{_path(lib.file)}" {lib.corner}')
+    out.append(f".subckt {name} {' '.join(ports)}")
+    out += _emit_body(tech, body)
+    out.append(".ends")
     return "\n".join(out) + "\n"
 
 
