@@ -1166,6 +1166,82 @@ def test_stage_interface_leaves_fitting_candidates_alone():
 
 
 # ---------------------------------------------------------------------------
+# FD stage-interface equality check + repair (issue #161)
+# ---------------------------------------------------------------------------
+
+_FD_TOPO = "two_stage_opamp_fully_differential"
+
+_PTM45_FD_SPEC = dict(
+    vdd=1.0, vss=0.0, ibias=20e-6, cl=5e-12,
+    second_stage_current_ratio=2.5,
+    gain_min_db=45, gbw_min_hz=2e6, phase_margin_min_deg=60,
+)
+
+
+def _size_fd(tech_name, variants, **spec_overrides):
+    tech = load_tech(tech_name)
+    parsed, sr_result, fbr_result, topology = _fbr(_FD_TOPO, variants)
+    base = dict(_PTM45_FD_SPEC) if tech_name == "ptm45" else dict(_GF180_SPEC)
+    spec = SizingSpec(**{**base, **spec_overrides})
+    return spec, size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+
+
+def test_fd_stage_interface_repairs_cmfb_pinned_cs():
+    """CMFB-driven current-source load: the CMFB servos the first-stage output
+    CM to mid-rail, so the second-stage |Vgs| must match it (issue #161 —
+    unrepaired, the second stage over/under-drives and the open-loop output CM
+    rails).  At ptm45 the LUT reaches Vcm = 0.5 V, so the repair aligns the
+    pair symmetrically."""
+    spec, result = _size_fd("ptm45", {
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb"})
+    assert result.solver_status == "GMID"
+    assert result.bias_feasible
+    assert not any("stage interface" in w for w in result.warnings)
+    vcm = (spec.vdd + spec.vss) / 2.0
+    p = result.transistors["mn1_second_stage_p"]
+    n = result.transistors["mn1_second_stage_n"]
+    assert abs(abs(p.vgs_v) - vcm) <= 0.1        # pin matches the pinned CM
+    assert (p.w_um, p.l_um) == (n.w_um, n.l_um)  # both sides repaired alike
+
+
+def test_fd_stage_interface_rejects_unreachable_cm():
+    """The same CMFB variant at GF180's 3.3 V rail: no NMOS LUT point puts
+    |Vgs| at Vcm = 1.65 V, so the check reports an honest bias_feasible=False
+    instead of the pre-#161 noise-floor gain at the SPICE bench."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb"})
+    assert not result.bias_feasible
+    assert any("FD stage interface" in w for w in result.warnings)
+
+
+def test_fd_stage_interface_exempts_mirror_load():
+    """A mirror load without CMFB (active_load_*) leaves its high-impedance
+    side floating, which absorbs interface mismatch — no equality holds, so
+    the check must not intervene (an equality repair traded two comfortable
+    SPICE passes for fails in the ptm45 A/B).  The sizing must come through
+    unwarned; the family's real gate is an FD .op verdict (issue #162)."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "active_load_nmos"})
+    assert result.solver_status == "GMID"
+    assert not any("FD stage interface" in w for w in result.warnings)
+
+
+def test_fd_stage_interface_skips_resistor_load():
+    """Resistor loads self-bias on the load line (no knife edge) and are
+    exempt from the FD equality check."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "resistor_load_gnd"})
+    assert result.solver_status == "GMID"
+    assert not any("FD stage interface" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
 # Resistor-load DC-headroom gate (issue #148)
 # ---------------------------------------------------------------------------
 
