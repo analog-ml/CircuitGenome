@@ -43,13 +43,14 @@ _FD_BASE = {"input_pair": "differential_pair_pmos", "load": _FD_LOAD,
             "second_stage_p": "common_source_nmos", "second_stage_n": "common_source_nmos"}
 
 
-@pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb", "dda_cmfb"])
+# Two-stage FD gets the inverting CMFB orientation (issue #165).
+@pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_inverting", "dda_cmfb_inverting"])
 def test_fd_two_stage_gmid(cmfb):
     r = _size("two_stage_opamp_fully_differential", {**_FD_BASE, "cmfb": cmfb}, _FD_SPEC)
     assert r.solver_status == "GMID"
     assert r.transistors and r.cc_pf
     assert "gain_db" in r.metrics and r.metrics["gain_db"] > 0
-    if cmfb == "resistive_sense_cmfb":
+    if cmfb == "resistive_sense_cmfb_inverting":
         # CMFB sense resistors are sized large (not the 1 kΩ placeholder).
         cmfb_r = [v for k, v in r.resistors.items() if "cmfb" in k]
         assert cmfb_r and all(v > 1e5 for v in cmfb_r)

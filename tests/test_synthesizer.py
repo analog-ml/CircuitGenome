@@ -907,6 +907,47 @@ def test_prune_cmfb_empties_variant_for_other_loads():
     assert pruned.devices == []
 
 
+def test_orient_cmfb_inverts_for_two_stage_fd():
+    """Two-stage FD (issue #165): the output-sensing CM loop traverses one
+    inverting stage, so orient_cmfb swaps the amp's sense/vref gates (sense
+    to the mirror-output side) and renames the variant *_inverting.  The
+    resistive averager and every non-amp device are untouched."""
+    from circuitgenome.synthesizer.compatibility import orient_cmfb
+    modules = load_modules()
+    topo2 = next(t for t in load_topologies()
+                 if t.name == "two_stage_opamp_fully_differential")
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
+    inv = orient_cmfb(rs, topo2)
+    assert inv.name == "resistive_sense_cmfb_inverting"
+    gates = {d.ref: d.terminals.get("g") for d in inv.devices if d.type != "resistor"}
+    assert gates["m1"] == "vref" and gates["m2"] == "sense"
+    assert gates["m5"] == "bias"  # tail untouched
+    # dda: both pairs swap; the sensed outputs land on the output-side gates.
+    dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb")
+    dinv = orient_cmfb(dda, topo2)
+    assert dinv.name == "dda_cmfb_inverting"
+    dg = {d.ref: d.terminals.get("g") for d in dinv.devices}
+    assert dg["m1"] == "vref" and dg["m2"] == "in1"
+    assert dg["m3"] == "vref" and dg["m4"] == "in2"
+
+
+def test_orient_cmfb_keeps_stock_polarity_for_three_stage_fd():
+    """Three-stage FD: two inversions after the first stage make the stock
+    amp orientation the negative-feedback one — returned unchanged.  The
+    cmfb_absent placeholder also passes through untouched."""
+    from circuitgenome.synthesizer.compatibility import orient_cmfb
+    import dataclasses
+    modules = load_modules()
+    topo3 = next(t for t in load_topologies()
+                 if t.name == "three_stage_opamp_rnmc_fully_differential")
+    topo2 = next(t for t in load_topologies()
+                 if t.name == "two_stage_opamp_fully_differential")
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
+    assert orient_cmfb(rs, topo3) is rs
+    absent = dataclasses.replace(rs, name="cmfb_absent", ports=[], devices=[])
+    assert orient_cmfb(absent, topo2) is absent
+
+
 def test_enumerate_circuits_cmfb_present_iff_differential_load():
     """For every synthesized fully-differential circuit, the cmfb slot's
     variant has devices iff the load's output_cardinality is "differential" --
@@ -2343,8 +2384,8 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
     assert "net_bias9" in output_stage_terms
     assert "net_bias7" in tail_terms
     assert "net_bias4" in cmfb_terms
-    assert "net_loadout1" in cmfb_terms
-    assert "net_loadout2" in cmfb_terms
+    # CMFB senses the external outputs, not the first-stage nodes (issue #165).
+    assert {"outp", "outn"} <= cmfb_terms
     assert "net_cmfb_out" in cmfb_terms
 
 
@@ -2380,7 +2421,8 @@ def test_synthesize_differential_output_folded_cascode_has_nondegenerate_cascode
         assert dev.terminals["d"] != dev.terminals["s"]
 
     cmfb_sensed = {dev.terminals["t1"] for dev in cmfb_devices.values() if "t1" in dev.terminals}
-    assert cascode_outputs == cmfb_sensed
+    # CMFB senses the external outputs, not the cascode nodes (issue #165).
+    assert cmfb_sensed == {"outp", "outn"}
 
 
 def test_synthesize_single_output_cascode_load_has_nondegenerate_output_device():

@@ -948,3 +948,62 @@ patterns:
       vref: m2.g
       bias: m7.g
       out: m2.d
+
+  # Inverting-orientation CMFB twins (issue #165): the synthesizer swaps the
+  # sense/vref gates for two-stage FD topologies (the output-sensing CM loop
+  # traverses one inverting stage, so the amp itself must invert:
+  # sense ↑ → out ↓).  Structurally the diode-side gate is vref and the
+  # mirror-output-side gate carries the sensed CM.
+
+  - name: resistive_sense_cmfb_inverting
+    category: cmfb
+    circuit_block: cmfb
+    devices:
+      - {ref: r1, type: resistor}
+      - {ref: r2, type: resistor}
+      - {ref: m1, type: nmos}
+      - {ref: m2, type: nmos}
+      - {ref: m3, type: pmos}
+      - {ref: m4, type: pmos}
+      - {ref: m5, type: nmos}
+    same_net:
+      - [r1.t2, r2.t2, m2.g]      # sense: resistive averager → mirror-output-side gate
+      - [m1.d, m3.d, m3.g, m4.g]  # d1: diode-connected m3, mirror gate for m4
+      - [m1.s, m2.s, m5.d]         # tail
+      - [m2.d, m4.d]               # shared output
+      - [m3.s, m3.b, m4.s, m4.b]  # vdd
+      - [m1.b, m2.b, m5.s, m5.b]  # gnd
+    pins:
+      in1: r1.t1
+      in2: r2.t1
+      vref: m1.g
+      bias: m5.g
+      out: m2.d
+
+  - name: dda_cmfb_inverting
+    category: cmfb
+    circuit_block: cmfb
+    devices:
+      - {ref: m1, type: nmos}
+      - {ref: m2, type: nmos}
+      - {ref: m3, type: nmos}
+      - {ref: m4, type: nmos}
+      - {ref: m5, type: pmos}
+      - {ref: m6, type: pmos}
+      - {ref: m7, type: nmos}
+      - {ref: m8, type: nmos}
+    same_net:
+      - [m1.d, m3.d, m5.d, m5.g, m6.g]           # da: diode-connected m5 + cross-coupling
+      - [m2.d, m4.d, m6.d]                          # shared output
+      - [m1.s, m2.s, m7.d]                          # tail1
+      - [m3.s, m4.s, m8.d]                          # tail2
+      - [m1.g, m3.g]                                 # shared vref gate (diode side)
+      - [m7.g, m8.g]                                 # shared bias gate
+      - [m5.s, m5.b, m6.s, m6.b]                   # vdd
+      - [m1.b, m2.b, m3.b, m4.b, m7.s, m7.b, m8.s, m8.b]  # gnd
+    pins:
+      in1: m2.g
+      in2: m4.g
+      vref: m1.g
+      bias: m7.g
+      out: m2.d

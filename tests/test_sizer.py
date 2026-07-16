@@ -471,7 +471,8 @@ def two_stage_fd_fbr():
         "input_pair":     "differential_pair_pmos",
         "load":           "folded_cascode_load_pmos_input_differential_output",
         "tail_current":   "current_mirror_tail_pmos",
-        "cmfb":           "resistive_sense_cmfb",
+        # Two-stage FD gets the inverting CMFB orientation (issue #165).
+        "cmfb":           "resistive_sense_cmfb_inverting",
         "comp_p":         "miller_cap",
         "comp_n":         "miller_cap",
         "second_stage_p": "common_source_nmos",

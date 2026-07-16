@@ -69,3 +69,43 @@ def prune_cmfb(variant: ModuleVariant, load: ModuleVariant) -> ModuleVariant:
     if load.output_cardinality == _CMFB_CONSUMING_CARDINALITY:
         return variant
     return dataclasses.replace(variant, name="cmfb_absent", ports=[], devices=[])
+
+
+# Per-variant gate rewiring that flips the CMFB amplifier's comparison
+# polarity: the sensed CM moves to the mirror-output side and vref to the
+# diode side, so a rising sensed CM *lowers* cmfb.out.
+_INVERTING_GATE_SWAP: dict[str, dict[str, str]] = {
+    "resistive_sense_cmfb": {"m1": "vref", "m2": "sense"},
+    "dda_cmfb": {"m1": "vref", "m2": "in1", "m3": "vref", "m4": "in2"},
+}
+
+
+def orient_cmfb(variant: ModuleVariant, topology) -> ModuleVariant:
+    """Return the polarity-correct CMFB orientation for *topology* (issue #165).
+
+    The CMFB senses the external outputs (``outp``/``outn``) and drives the
+    first-stage load gates, so the CM loop traverses every stage after the
+    first.  Each amplification stage inverts, and all four CMFB-consuming
+    loads respond the same way (``cmfb.out`` up → first-stage output CM
+    down), so the loop sign depends only on the stage count:
+
+    - **two-stage** FD (one inversion to the outputs): the loop is positive
+      with the stock amp orientation — swap the sense/vref gates
+      (``<name>_inverting``) so a rising output CM lowers ``cmfb.out``;
+    - **three-stage** FD (two inversions): the stock orientation is already
+      negative — returned unchanged.
+
+    ``cmfb_absent`` placeholders pass through untouched.
+    """
+    if not variant.devices:
+        return variant
+    swap = _INVERTING_GATE_SWAP.get(variant.name)
+    if swap is None or topology.config.get("stages") != 2:
+        return variant
+    devices = [
+        dataclasses.replace(d, terminals={**d.terminals, "g": swap[d.ref]})
+        if d.ref in swap else d
+        for d in variant.devices
+    ]
+    return dataclasses.replace(variant, name=f"{variant.name}_inverting",
+                               devices=devices)
