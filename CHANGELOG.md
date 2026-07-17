@@ -11,6 +11,10 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Recognizer parser accepts *sized* SPICE netlists — MOSFET `W/L/nf/m` params, `sky130_fd_pr__*`/foundry model names via a configurable model-name table, and preserved R/C value tokens; sizes ride along on `Device.params` and `recognize()` is unchanged ([#168](https://github.com/analog-ml/CircuitGenome/pull/168)).
+
 ### Docs
 
 - 📝 Restructure this changelog to the Keep a Changelog + SemVer format (one line per PR).
