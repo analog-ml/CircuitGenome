@@ -907,6 +907,12 @@ def test_prune_cmfb_empties_variant_for_other_loads():
     assert pruned.devices == []
 
 
+def _stage_variants(modules, **slot_names):
+    """Variant-map fragment: {slot: variant} for the named stage variants."""
+    stages = {v.name: v for v in modules["amplification_stage"]}
+    return {slot: stages[name] for slot, name in slot_names.items()}
+
+
 def test_orient_cmfb_inverts_for_two_stage_fd():
     """Two-stage FD (issue #165): the output-sensing CM loop traverses one
     inverting stage, so orient_cmfb swaps the amp's sense/vref gates (sense
@@ -916,25 +922,28 @@ def test_orient_cmfb_inverts_for_two_stage_fd():
     modules = load_modules()
     topo2 = next(t for t in load_topologies()
                  if t.name == "two_stage_opamp_fully_differential")
+    vmap = _stage_variants(modules, second_stage_p="common_source_nmos",
+                           second_stage_n="common_source_nmos")
     rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
-    inv = orient_cmfb(rs, topo2)
+    inv = orient_cmfb(rs, topo2, vmap)
     assert inv.name == "resistive_sense_cmfb_inverting"
     gates = {d.ref: d.terminals.get("g") for d in inv.devices if d.type != "resistor"}
     assert gates["m1"] == "vref" and gates["m2"] == "sense"
     assert gates["m5"] == "bias"  # tail untouched
     # dda: both pairs swap; the sensed outputs land on the output-side gates.
     dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb")
-    dinv = orient_cmfb(dda, topo2)
+    dinv = orient_cmfb(dda, topo2, vmap)
     assert dinv.name == "dda_cmfb_inverting"
     dg = {d.ref: d.terminals.get("g") for d in dinv.devices}
     assert dg["m1"] == "vref" and dg["m2"] == "in1"
     assert dg["m3"] == "vref" and dg["m4"] == "in2"
 
 
-def test_orient_cmfb_keeps_stock_polarity_for_three_stage_fd():
-    """Three-stage FD: two inversions after the first stage make the stock
-    amp orientation the negative-feedback one — returned unchanged.  The
-    cmfb_absent placeholder also passes through untouched."""
+def test_orient_cmfb_keeps_stock_polarity_for_rnmc_three_stage_fd():
+    """RNMC three-stage FD: the CS+CS chain is net non-inverting (two
+    inversions), so the stock amp orientation is the negative-feedback one —
+    returned unchanged.  The cmfb_absent placeholder also passes through
+    untouched."""
     from circuitgenome.synthesizer.compatibility import orient_cmfb
     import dataclasses
     modules = load_modules()
@@ -942,10 +951,33 @@ def test_orient_cmfb_keeps_stock_polarity_for_three_stage_fd():
                  if t.name == "three_stage_opamp_rnmc_fully_differential")
     topo2 = next(t for t in load_topologies()
                  if t.name == "two_stage_opamp_fully_differential")
+    vmap3 = _stage_variants(modules, second_stage_p="common_source_nmos",
+                            third_stage_p="common_source_pmos",
+                            second_stage_n="common_source_nmos",
+                            third_stage_n="common_source_pmos")
     rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
-    assert orient_cmfb(rs, topo3) is rs
+    assert orient_cmfb(rs, topo3, vmap3) is rs
     absent = dataclasses.replace(rs, name="cmfb_absent", ports=[], devices=[])
-    assert orient_cmfb(absent, topo2) is absent
+    assert orient_cmfb(absent, topo2, {}) is absent
+
+
+def test_orient_cmfb_inverts_for_nmc_three_stage_fd():
+    """NMC three-stage FD: the chain is noninverting_stage + common source —
+    ONE net inversion despite the three stages, the same odd parity as a
+    two-stage (the stage-count rule would wrongly keep stock polarity and
+    make the CM loop positive: every CMFB variant railed at the .op gate)."""
+    from circuitgenome.synthesizer.compatibility import orient_cmfb
+    modules = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_fully_differential")
+    vmap = _stage_variants(modules, second_stage_p="noninverting_stage_nmos",
+                           third_stage_p="common_source_pmos",
+                           second_stage_n="noninverting_stage_nmos",
+                           third_stage_n="common_source_pmos")
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
+    assert orient_cmfb(rs, topo, vmap).name == "resistive_sense_cmfb_inverting"
+    dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb")
+    assert orient_cmfb(dda, topo, vmap).name == "dda_cmfb_inverting"
 
 
 def test_enumerate_circuits_cmfb_present_iff_differential_load():
