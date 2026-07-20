@@ -1,0 +1,29 @@
+# General SKY130 1.8 V survey spec for `design --all` — one spec every
+# template family can attempt (one/two/three-stage, SE and FD, buffered).
+# Targets sit at the intersection of the per-family example specs, scaled to
+# the 1.8 V rail: a pass here means "biases and functions at sky130", not
+# "peak performance" — use per-family specs to push any one family harder.
+#
+# sky130-specific calibration:
+# - gain 45 dB: low enough for the compensation-free one-stage family
+#   (repo convention ~40 dB) while still meaningful; sky130's intrinsic
+#   gain at short L is poor, so multi-stage variants clear it via longer L.
+# - power 2 mW: covers the fully-differential three-stage family, which
+#   duplicates the second/third-stage branches (~2x quiescent current).
+# - NO slew-rate or output-swing constraints: those benches are
+#   single-ended-only, so constraining them rejects every fully-differential
+#   candidate as "unverified" (constrained spec ngspice cannot measure).
+#   Add them back in per-family SE specs where they are measurable.
+vdd: 1.8            # V — positive supply
+vss: 0.0            # V — ground
+ibias: 20.0e-6      # A — input bias current
+cl: 5.0e-12         # F — output load capacitance
+
+second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 50 µA
+third_stage_current_ratio: 5.0    # iDS_3 = ratio × ibias = 100 µA
+
+gain_min_db: 45           # dB — minimum open-loop DC gain
+gbw_min_hz: 2.0e+6        # Hz — minimum unity-gain bandwidth (2 MHz)
+phase_margin_min_deg: 60  # °  — minimum phase margin
+
+power_max_w: 2.0e-3       # W  — maximum total quiescent power

@@ -1,0 +1,15 @@
+# Two-stage single-ended op-amp spec for the SKY130 1.8 V core (gm/Id sizer).
+# Same targets as spec_gf180.yaml with the voltage items scaled to the 1.8 V
+# rail (output swing keeps the same 0.3 V from-rail margins).
+vdd: 1.8
+vss: 0.0
+ibias: 20.0e-6
+cl: 5.0e-12
+second_stage_current_ratio: 2.5
+gain_min_db: 60
+gbw_min_hz: 2.0e+6
+phase_margin_min_deg: 60
+slew_rate_min_vps: 3.0e+5
+power_max_w: 2.0e-3
+output_swing_max_v: 1.5
+output_swing_min_v: 0.3
