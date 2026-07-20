@@ -1167,6 +1167,68 @@ def test_stage_interface_leaves_fitting_candidates_alone():
 
 
 # ---------------------------------------------------------------------------
+# FD stage-interface equality check + repair (issue #161)
+# ---------------------------------------------------------------------------
+
+_FD_TOPO = "two_stage_opamp_fully_differential"
+
+_PTM45_FD_SPEC = dict(
+    vdd=1.0, vss=0.0, ibias=20e-6, cl=5e-12,
+    second_stage_current_ratio=2.5,
+    gain_min_db=45, gbw_min_hz=2e6, phase_margin_min_deg=60,
+)
+
+
+def _size_fd(tech_name, variants, **spec_overrides):
+    tech = load_tech(tech_name)
+    parsed, sr_result, fbr_result, topology = _fbr(_FD_TOPO, variants)
+    base = dict(_PTM45_FD_SPEC) if tech_name == "ptm45" else dict(_GF180_SPEC)
+    spec = SizingSpec(**{**base, **spec_overrides})
+    return spec, size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+
+
+def test_fd_stage_interface_exempts_output_sensing_cmfb():
+    """Post-#165 the CMFB senses outp/outn, so the interface equality the
+    issue-#161 check enforced dissolves: the first stage self-biases to the
+    second stage's Vgs, no repair or reject applies, and the circuit stays
+    feasible at every supply — including GF180's 3.3 V, where the old
+    interface-sensing wiring was honestly unreachable (Vcm = 1.65 V beyond
+    the NMOS LUT).  The check machinery stays for any future
+    interface-sensing CMFB."""
+    for tech_name in ("ptm45", "gf180mcu"):
+        _, result = _size_fd(tech_name, {
+            "input_pair": "differential_pair_pmos",
+            "load": "current_source_load_nmos",
+            "cmfb": "resistive_sense_cmfb_inverting"})
+        assert result.solver_status == "GMID"
+        assert result.bias_feasible, tech_name
+        assert not any("FD stage interface" in w for w in result.warnings)
+
+
+def test_fd_stage_interface_exempts_mirror_load():
+    """A mirror load without CMFB (active_load_*) leaves its high-impedance
+    side floating, which absorbs interface mismatch — no equality holds, so
+    the check must not intervene (an equality repair traded two comfortable
+    SPICE passes for fails in the ptm45 A/B).  The sizing must come through
+    unwarned; the family's real gate is an FD .op verdict (issue #162)."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "active_load_nmos"})
+    assert result.solver_status == "GMID"
+    assert not any("FD stage interface" in w for w in result.warnings)
+
+
+def test_fd_stage_interface_skips_resistor_load():
+    """Resistor loads self-bias on the load line (no knife edge) and are
+    exempt from the FD equality check."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "resistor_load_gnd"})
+    assert result.solver_status == "GMID"
+    assert not any("FD stage interface" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
 # Resistor-load DC-headroom gate (issue #148)
 # ---------------------------------------------------------------------------
 
