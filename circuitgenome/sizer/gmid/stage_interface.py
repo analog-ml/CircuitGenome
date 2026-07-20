@@ -30,9 +30,25 @@ truth.  When even the raw bounds cannot be cleared, the verdict is an honest
 ``bias_feasible = False`` with an explanatory warning — the candidate is
 rejected before the SPICE evaluation it cannot pass.
 
-Scope: single-ended cascode loads only.  A fully-differential first stage's
-output levels are set by CMFB, not by the second-stage gate, and non-cascode
-loads have enough headroom for the interface never to bind.
+Scope, single-ended: cascode loads only — non-cascode SE loads have enough
+headroom for the window never to bind.
+
+Scope, fully differential (issue #161): the constraint is an *equality*, not a
+window — but only where the interface level is genuinely pinned.  A CMFB that
+senses the interface nets servos the first-stage output CM to mid-rail, and
+the second-stage input cannot pull the node anywhere: its designed ``|V_GS|``
+must *match* that level or the (open-loop) second-stage output CM rails,
+which is exactly how every CMFB-loaded FD variant died at the SPICE bench
+before this check existed.  The repair moves the second-stage pair (gm
+requirement permitting), always both sides at the same gm/Id.
+
+Exempt FD families: resistor loads (a linear load self-biases at the load
+line — no knife edge); a CMFB sensing the second-stage outputs (the loop
+closes around the interface itself); and mirror/diode loads without CMFB
+(``active_load_*`` — the mirror's high-impedance side floats and absorbs the
+mismatch, so an equality model provably over-constrains them: it traded two
+comfortable SPICE passes for fails in the ptm45 A/B).  What those unregulated
+families need is an FD ``.op`` verdict, tracked in issue #162.
 """
 from __future__ import annotations
 
@@ -168,6 +184,116 @@ def _mirror_group_devs(load_devs: list, dtype: str) -> list:
             for d in devs]
 
 
+def _fd_ss_devices(blocks: OpAmpBlocks) -> list:
+    """Both sides' second-stage signal devices (the symmetric FD pair)."""
+    devs = []
+    for slot in ("second_stage_p", "second_stage_n"):
+        b = blocks.blocks.get(slot)
+        sig = b.signal_device if b else None
+        if sig is not None:
+            devs.append(sig)
+    return devs
+
+
+def _fd_interface_target(
+    blocks: OpAmpBlocks, spec: SizingSpec, iface_nets: set[str],
+) -> float | None:
+    """The level the FD first-stage output CM is servoed to, when pinned.
+
+    A CMFB that senses the interface nets holds their CM at mid-rail
+    (``vcm_ref`` in every testbench rig).  ``None`` for every other family:
+    resistor loads self-bias, a CMFB sensing the second-stage outputs closes
+    the loop around this node itself, and a mirror/diode load without CMFB
+    leaves its high-impedance side floating (absorbing the mismatch), so no
+    equality holds — see the module docstring and issue #162.
+    """
+    cmfb = blocks.blocks.get("cmfb")
+    if cmfb is None:
+        return None
+    touched: set[str] = set()
+    for d in cmfb.mosfets:
+        touched.update(d.terminals.values())
+    for r in cmfb.resistors:
+        touched.update(r.terminals.values())
+    if touched & iface_nets:
+        return (spec.vdd + spec.vss) / 2.0
+    return None
+
+
+def _check_fd_interface(
+    model: GmIdModel,
+    blocks: OpAmpBlocks,
+    sizing: dict[str, TransistorSizing],
+    gm_req_map: dict[str, float],
+    spec: SizingSpec,
+    tech: TechParams,
+) -> tuple[dict[str, TransistorSizing], list[str], bool]:
+    """FD stage-interface check: second-stage ``|V_GS|`` vs the CMFB-pinned CM.
+
+    Repairs move the second-stage pair (gm-requirement permitting) — always
+    both sides at the same gm/Id so the circuit stays symmetric.  Within
+    ``_MARGIN_V`` → feasible; within twice that after the best repair → keep
+    the closest sizing and let the SPICE gate decide; beyond → honest
+    ``bias_feasible = False``.
+    """
+    ss = _fd_ss_devices(blocks)
+    ld = blocks.load
+    if len(ss) != 2 or not (ld and ld.mosfets):
+        return sizing, [], True
+    s0 = sizing.get(ss[0].ref)
+    if s0 is None:
+        return sizing, [], True
+    iface_nets = {d.terminals.get("g") for d in ss}
+    target = _fd_interface_target(blocks, spec, iface_nets)
+    if target is None:
+        return sizing, [], True
+    pin = _pin_level(ss[0], s0, spec)
+    if pin is None or abs(pin - target) <= _MARGIN_V:
+        return sizing, [], True
+
+    # --- repair: scan second-stage gm/Id, both sides together -------------
+    axis = [float(g) for g in model.lut.gm_id_axis]
+    gm_req = max(gm_req_map.get(d.ref, 0.0) for d in ss)
+
+    def apply(gm_s):
+        cand = dict(sizing)
+        for d in ss:
+            s = cand.get(d.ref)
+            ns = _resize_at(model, tech, d, s, gm_s) if s else None
+            if ns is None:
+                return None
+            cand[d.ref] = ns
+        return cand
+
+    best, best_err = sizing, abs(pin - target)
+    for gm_s in (g for g in axis if g * abs(s0.ids_a) >= gm_req):
+        cand = apply(gm_s)
+        if cand is None:
+            continue
+        p2 = _pin_level(ss[0], cand[ss[0].ref], spec)
+        if p2 is None:
+            continue
+        err = abs(p2 - target)
+        if err <= _MARGIN_V:
+            return cand, [], True  # first fit = least deviation
+        if err < best_err:
+            best, best_err = cand, err
+
+    if best_err <= 2 * _MARGIN_V:
+        # Close but not within margin: keep the closest-fitting sizing and
+        # let the SPICE gate ground the verdict.
+        return best, [], True
+
+    warning = (
+        f"FD stage interface cannot bias: the CMFB pins the first-stage "
+        f"output CM at {target:.2f} V but the second-stage input sits "
+        f"{pin:.2f} V from its rail — no symmetric gm/Id assignment closes "
+        "the gap, so the (open-loop) second-stage output CM will rail "
+        "(use a different load / second-stage pairing or supply)."
+    )
+    return sizing, [warning], False
+
+
 def check_stage_interface(
     model,
     blocks: OpAmpBlocks,
@@ -184,7 +310,9 @@ def check_stage_interface(
     """
     if not isinstance(model, GmIdModel):
         return sizing, [], True
-    if blocks.is_fully_differential or not blocks.has_cascode_load():
+    if blocks.is_fully_differential:
+        return _check_fd_interface(model, blocks, sizing, gm_req_map, spec, tech)
+    if not blocks.has_cascode_load():
         return sizing, [], True
     net_mid = blocks.first_stage_out_net()
     ss_dev = _pin_device(blocks)
