@@ -6,6 +6,8 @@ two ngspice runners (table output via ``wrdata``, text output via ``print``).
 """
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,15 +54,19 @@ def _xref(ref: str) -> str:
     return ("x" + ref[1:]) if ref[:1].lower() == "m" else ("x" + ref)
 
 
-def _dev_prefix(tech: TechParams, ref: str) -> str:
+def _dev_prefix(tech: TechParams, ref: str, model: str) -> str:
     """ngspice operating-point handle prefix for device ``ref`` inside ``Xdut``.
 
     PTM/generic instantiate ``.model`` MOSFETs (flat ``@m.xdut.<ref>``); a PDK
     with a ``device_map`` instantiates subcircuits, so the BSIM4 device sits one
-    level deeper at the subckt's internal ``m0`` (``@m.xdut.<xref>.m0``).
+    level deeper at the subckt's internal instance — ``m0`` by default (GF180),
+    or ``tech.device_handle[model]`` when the PDK names it per cell (sky130's
+    ``msky130_fd_pr__nfet_01v8``).  ``model`` is the generic device type of
+    ``ref`` (``"nmos"``/``"pmos"``).
     """
     if tech.device_map:
-        return f"@m.xdut.{_xref(ref)}.m0"
+        handle = (tech.device_handle or {}).get(model, "m0")
+        return f"@m.xdut.{_xref(ref)}.{handle}"
     return f"@m.xdut.{ref}"
 
 
@@ -69,6 +75,9 @@ def _emit_body(tech: TechParams, body: list[str]) -> list[str]:
 
     No-op unless ``tech.device_map`` is set.  Maps the model token via the map
     (``nmos`` → ``nmos_3p3``) and lowercases ``W=``/``L=`` to the subckt params.
+    For a ``wl_units="um"`` PDK (sky130) the SI micro suffix is dropped —
+    ``w=10.0u`` → ``w=10.0`` — because the library's ``.option scale=1.0u``
+    already interprets bare instance W/L as microns.
     """
     dm = tech.device_map
     if not dm:
@@ -78,6 +87,8 @@ def _emit_body(tech: TechParams, body: list[str]) -> list[str]:
         tok = line.split()
         if len(tok) >= 6 and tok[5].lower() in dm:
             rest = " ".join(tok[6:]).replace("W=", "w=").replace("L=", "l=")
+            if tech.wl_units == "um":
+                rest = re.sub(r"\b([wl]=[0-9.]+)u\b", r"\1", rest)
             out.append(
                 f"{_xref(tok[0])} {tok[1]} {tok[2]} {tok[3]} {tok[4]} "
                 f"{dm[tok[5].lower()]} {rest}".rstrip())
@@ -120,6 +131,43 @@ def sized_netlist(netlist_text: str, result: SizingResult) -> str:
             "the sizing result carries no W/L for them")
     body = _inject_sizes(body, result)
     out = lines[:start] + [f".subckt {name} {' '.join(ports)}"] + body + [".ends"]
+    return "\n".join(out) + "\n"
+
+
+def pdk_netlist(sized_text: str, tech: TechParams,
+                base_dir: Path | str | None = None) -> str:
+    """Rewrite a sized generic netlist into the PDK-native, simulatable form.
+
+    The generic ``*_sized.ckt`` stays the canonical interchange format (the
+    recognizer parses only generic ``nmos``/``pmos`` M-lines); this sibling is
+    for running directly against the PDK: the corner ``.lib`` header plus the
+    same rewrite the verification decks use (``m…`` → ``x…``, ``device_map``
+    subcircuit names, native W/L units via ``wl_units``).  Header paths are
+    emitted relative to ``base_dir`` (the export directory) when given,
+    absolute otherwise — either way they are resolved on the machine that
+    exported the file.
+
+    :raises ValueError: for a tech without ``spice_lib`` + ``device_map`` —
+        there is no PDK form to export.
+    """
+    if not (tech.spice_lib and tech.device_map):
+        raise ValueError(
+            "pdk_netlist requires a PDK tech (spice_lib + device_map)")
+    lib = tech.spice_lib
+
+    def _path(p: str) -> str:
+        return os.path.relpath(p, base_dir) if base_dir is not None else p
+
+    name, ports, body = _parse_subckt(sized_text)
+    out = [f"* {name} sized for {tech.name} — PDK-native export "
+           f"(corner: {lib.corner})",
+           "* .lib/.include paths were resolved when this file was exported."]
+    if lib.design:
+        out.append(f'.include "{_path(lib.design)}"')
+    out.append(f'.lib "{_path(lib.file)}" {lib.corner}')
+    out.append(f".subckt {name} {' '.join(ports)}")
+    out += _emit_body(tech, body)
+    out.append(".ends")
     return "\n".join(out) + "\n"
 
 

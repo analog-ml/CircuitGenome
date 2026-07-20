@@ -9,6 +9,7 @@ keeps the historical import path stable for callers::
 from .spice import (
     check_bias_soundness,
     ngspice_available,
+    pdk_netlist,
     read_op_operating_point,
     simulate_metrics,
     sized_netlist,
@@ -17,6 +18,7 @@ from .spice import (
 __all__ = [
     "check_bias_soundness",
     "ngspice_available",
+    "pdk_netlist",
     "read_op_operating_point",
     "simulate_metrics",
     "sized_netlist",

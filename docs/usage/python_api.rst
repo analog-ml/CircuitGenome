@@ -197,6 +197,48 @@ pipeline:
        for category, candidates in categories.items():
            print(f"[{circuit_block}] {category}: {candidates[0].name}")
 
+**Sized netlists** — :func:`~circuitgenome.recognizer.netlist_parser.parse` also
+accepts the sized dialect real design flows (and CircuitGenome's own sizer) emit:
+MOSFET ``W=``/``L=``/``nf=``/``m=`` parameters, real process model names, and
+resistor/capacitor value tokens. Sizes ride along on
+:attr:`~circuitgenome.synthesizer.models.Device.params`; recognition still matches
+on topology, so ``recognize()`` behaves identically to the bare ``nmos``/``pmos``
+equivalent:
+
+.. code-block:: python
+
+   from circuitgenome.recognizer import parse, recognize
+
+   netlist = """
+   .subckt ota5t in1 in2 out ibias vdd! gnd!
+   m3 n1   n1    vdd! vdd! sky130_fd_pr__pfet_01v8 W=6u L=0.5u
+   m4 out  n1    vdd! vdd! sky130_fd_pr__pfet_01v8 W=6u L=0.5u
+   m1 n1   in1   tail gnd! sky130_fd_pr__nfet_01v8 W=4u L=0.5u nf=2
+   m2 out  in2   tail gnd! sky130_fd_pr__nfet_01v8 W=4u L=0.5u nf=2
+   m5 tail ibias gnd! gnd! sky130_fd_pr__nfet_01v8 W=8u L=1u
+   .ends
+   """
+
+   parsed = parse(netlist)
+
+   m1 = next(d for d in parsed.devices if d.ref == "m1")
+   print(m1.type)      # "nmos"  — mapped from sky130_fd_pr__nfet_01v8
+   print(m1.params)    # {"W": "4u", "L": "0.5u", "nf": "2"}
+
+   names = {s.name for s in recognize(parsed).structures}
+   assert "differential_pair_nmos" in names
+   assert "current_mirror_pmos" in names
+
+Model names are resolved through
+:data:`~circuitgenome.recognizer.netlist_parser.DEFAULT_MODEL_MAP`, which covers the
+bare ``nmos``/``pmos`` tokens, the SKY130 primitives, and the GF180MCU core
+subcircuits. Pass ``model_map`` to teach the parser process-specific names — your
+entries win over the defaults:
+
+.. code-block:: python
+
+   parsed = parse(netlist_text, model_map={"my_fab__nfet_lvt": "nmos"})
+
 See the :doc:`Subcircuit Recognizer (SR) <../modules/subcircuit_recognizer>`
 and :doc:`Functional Block Recognizer (FBR) <../modules/functional_block_recognizer>`
 module pages for the pattern schema, hooks, and the topology-free

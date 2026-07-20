@@ -88,6 +88,14 @@ class TechParams:
         (``"nmos"``/``"pmos"``) to the PDK subcircuit name (e.g. ``"nmos_3p3"``).
         Present iff the SPICE deck must instantiate subcircuits (``X``) instead of
         ``.model`` MOSFETs (``M``).
+    :param device_handle: Optional mapping from the generic device type to the
+        subcircuit-internal BSIM4 instance name used for operating-point reads
+        (``@m.xdut.<xref>.<handle>``). ``None`` means the GF180 convention:
+        ``m0`` for both polarities. sky130 names the instance after the cell
+        (``msky130_fd_pr__nfet_01v8``), so it differs per polarity.
+    :param wl_units: Unit convention for the PDK subcircuit ``w=``/``l=``
+        instance parameters: ``"m"`` (SI values, GF180) or ``"um"`` (bare
+        micron numbers — sky130, whose library sets ``.option scale=1.0u``).
     """
     name: str
     nmos: MosfetParams
@@ -99,6 +107,8 @@ class TechParams:
     gmid_lut: str | None = None
     spice_lib: SpiceLib | None = None
     device_map: dict[str, str] | None = None
+    device_handle: dict[str, str] | None = None
+    wl_units: str = "m"
 
 
 @dataclass
