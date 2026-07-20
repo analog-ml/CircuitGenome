@@ -261,6 +261,63 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
     assert not ok and reason and "SPICE bias" in reason
 
 
+# --- FD bias gate (issue #162) ----------------------------------------------
+
+def _fd_circuit(want: dict[str, str]):
+    """First FD two-stage circuit matching ``want``; return (text, parsed, fbr, topo)."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_fully_differential")
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    return text, parsed, fbr, topo
+
+
+@ngspice
+def test_fd_bias_gate_passes_cm_regulated_cmfb_family():
+    """Post-#165 a CMFB variant regulates its own output CM, so the gate's
+    open-input .op finds a healthy mid-rail operating point and passes it —
+    the gate only ever downgrades on positive evidence.  (Pre-#165 this
+    family railed at the second-stage interface on every tech.)"""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_inverting"})
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    assert ok and reason is None, reason
+
+
+@ngspice
+def test_fd_bias_gate_catches_unregulated_mirror_family():
+    """A cmfb_absent mirror-load FD leaves its output CM unregulated: at the
+    open-input operating point (the state the post-#165 benches measure in)
+    the outputs split/rail, and the gate condemns it — previously invisible
+    because the gate auto-passed FD and the old bench ties suppressed the
+    split by forcing outp == outn."""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_nmos",
+        "load": "active_load_pmos",
+        "tail_current": "resistor_tail_gnd",
+        "comp_p": "miller_cap_with_nulling_resistor",
+        "comp_n": "miller_cap"})
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=45,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    assert not ok and reason and "SPICE bias" in reason
+
+
 # --- phase-margin plausibility guard ----------------------------------------
 
 def test_pm_plausible_range():
