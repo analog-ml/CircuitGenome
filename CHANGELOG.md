@@ -16,6 +16,14 @@ open the PR for the full root-cause / design detail. Emoji legend:
 - ✨ Recognizer parser accepts *sized* SPICE netlists — MOSFET `W/L/nf/m` params, `sky130_fd_pr__*`/foundry model names via a configurable model-name table, and preserved R/C value tokens; sizes ride along on `Device.params` and `recognize()` is unchanged ([#168](https://github.com/analog-ml/CircuitGenome/pull/168)).
 - ✨ SKY130 1.8 V core PDK for the gm/Id sizer — trimmed vendored PDK, `device_handle`/`wl_units` tech fields, LUT monotone-envelope fix ([#159](https://github.com/analog-ml/CircuitGenome/pull/159)).
 
+### Fixed
+
+- 🐛 FD load resistors never landed in the `load` slot — `out1`/`out2` pin aliases + rail-check hooks on `resistor_load_*`; the synthesizer's 1 kΩ placeholder no longer ships ([#163](https://github.com/analog-ml/CircuitGenome/pull/163)).
+- 🐛 FD CMFB senses the outputs (`outp`/`outn`), with loop polarity from the stage chain's inversion parity (`orient_cmfb`, `<name>_inverting` variants) — output CM was unregulated in every CMFB variant ([#167](https://github.com/analog-ml/CircuitGenome/pull/167)).
+- 🐛 FD stage-interface check for CMFB-pinned interfaces — equality repair machinery, auto-exempting output-sensing CMFBs ([#164](https://github.com/analog-ml/CircuitGenome/pull/164)).
+- 🐛 FD-capable DC bias-soundness gate — `_read_op_fd` open-input `.op`, output-state verdict (railed/split); dead FD circuits no longer masquerade as noise-floor gain misses ([#166](https://github.com/analog-ml/CircuitGenome/pull/166)).
+- 🐛 FD benches drop the cross-feedback ties for the standard open-input rig — the tie network is bistable against a real CM loop (healthy sky130 circuits measured −79 dB) and made the FD DC check vacuous ([#170](https://github.com/analog-ml/CircuitGenome/pull/170)).
+
 ### Docs
 
 - 📝 Restructure this changelog to the Keep a Changelog + SemVer format (one line per PR).
