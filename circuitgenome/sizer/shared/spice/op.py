@@ -99,19 +99,25 @@ def _parse_probes(prefixes: dict[str, str], txt: str) -> dict[str, dict[str, flo
     return op
 
 
+#: Largest |V(outp) − V(outn)| (fraction of the supply) an FD ``.op`` may
+#: show at zero differential input before the verdict is "railed": a split
+#: output CM is the signature of an unregulated output stage latching apart.
+_FD_SPLIT_FRAC = 0.2
+
+
 def _read_op_fd(name, ports, body, topo: _Topo, result: SizingResult,
                 tech: TechParams, spec: SizingSpec):
-    """FD ``.op`` in the metric benches' DC state (#162).
+    """FD ``.op`` in the metric benches' DC state (#162, rig per #165).
 
-    Reproduces the benches' DC network exactly: cross-coupled feedback
-    inductors (``outp``→``inn``, ``outn``→``inp``, DC shorts) with a 0 V
-    differential source across the inputs, so the amplifier settles at its
-    self-consistent feedback CM — the state every FD measurement runs at.
-    An open-input rig would be harsher than application conditions and
-    condemn circuits the benches can drive; this one condemns only what
-    rails even under feedback.  Verdict ``"railed"`` when either output
-    leaves the ``0.1–0.9·Vdd`` window; otherwise the per-device operating
-    points feed the usual starved/triode checks.
+    Inputs and ``vcm_ref`` sit at Vcm with **no feedback ties** — post-#165
+    the CMFB owns the output CM, and this is exactly the DC state the FD
+    benches measure in (``_loop_fb``'s FD branch anchors the inputs the same
+    way).  The old bench-tie network (``outp``→``inn``/``outn``→``inp``) is
+    bistable against a real CM loop and converges to its degenerate all-off
+    solution at tight headroom, falsely condemning healthy circuits.
+    Verdict ``"railed"`` when either output leaves the ``0.1–0.9·Vdd``
+    window or the outputs split apart at zero differential input; otherwise
+    the per-device operating points feed the usual starved/triode checks.
     """
     body_dut = _dut(tech, name, _inject_sizes(body, result))
     refs = list(result.transistors)
@@ -119,15 +125,17 @@ def _read_op_fd(name, ports, body, topo: _Topo, result: SizingResult,
         return None, "sim-failed"
     vdd = spec.vdd
     vcm = (spec.vdd + spec.vss) / 2.0
-    prefixes = {r: _dev_prefix(tech, r) for r in refs}
+    # Generic device type per ref (nmos/pmos) — the OP handle can depend on it.
+    models = {tok[0]: tok[5].lower() for line in body
+              if len(tok := line.split()) >= 6 and tok[5].lower() in _MOS_MODELS}
+    prefixes = {r: _dev_prefix(tech, r, models.get(r, "nmos")) for r in refs}
     probe = "".join(
         f"print {pre}[id]\nprint {pre}[vds]\nprint {pre}[vdsat]\n"
         for pre in prefixes.values()
     )
     netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
               "in1": "inp", "in2": "inn", "outp": "outp", "outn": "outn"}
-    fb = ("L1 outp inn 1e12\nL2 outn inp 1e12\n"
-          "Vid inp inn dc 0\n")
+    fb = f"Vip inp 0 {vcm}\nVin inn 0 {vcm}\n"
     if topo.has_vcm:
         netmap["vcm_ref"] = "ocm"
         fb += f"Vocm ocm 0 {vcm}\n"
@@ -143,7 +151,8 @@ def _read_op_fd(name, ports, body, topo: _Topo, result: SizingResult,
              re.finditer(r"v\((outp|outn)\)\s*=\s*([-\d.eE+]+)", txt)]
     if len(vouts) != 2:
         return None, "sim-failed"
-    if not all(0.1 * vdd < v < 0.9 * vdd for v in vouts):
+    if (not all(0.1 * vdd < v < 0.9 * vdd for v in vouts)
+            or abs(vouts[0] - vouts[1]) > _FD_SPLIT_FRAC * vdd):
         return None, "railed"
     op = _parse_probes(prefixes, txt)
     return (op, None) if op else (None, "sim-failed")
@@ -173,8 +182,15 @@ def check_bias_soundness(netlist_text: str, result: SizingResult,
     Runs the DC ``.op`` (:func:`read_op_operating_point` — SE in unity
     feedback, FD with inputs/``vcm_ref`` at Vcm, issue #162) and condemns the
     bias only on positive evidence: the operating point **rails** (no usable
-    mid-rail bias; for FD also a split output CM) or a device is
-    **starved/triode**.  Conservative by design: returns ``(True, None)`` when
+    mid-rail bias; for FD also a split output CM) or, single-ended, a device
+    is **starved/triode**.  FD skips the per-device verdicts: with inputs at
+    Vcm the CMFB amp's tail (its inputs also sit at Vcm) and the main tail
+    run in *marginal* triode by design at low supplies — degraded, still
+    functional, and universal to the family — so a device-level condemnation
+    would reject every low-voltage CMFB variant that measurably amplifies at
+    this very operating point; a dead FD circuit rails/splits its outputs
+    instead, which the ``.op`` verdict already catches (the benches quantify
+    any marginality).  Conservative by design: returns ``(True, None)`` when
     it cannot check (ngspice absent), so it only ever downgrades a feasible
     verdict.
     """
@@ -188,6 +204,9 @@ def check_bias_soundness(netlist_text: str, result: SizingResult,
                            "point.")
         return False, ("SPICE bias check: the .op simulation failed or did not "
                        "converge — no operating point to assess.")
+    _, ports, _ = _parse_subckt(netlist_text)
+    if _Topo(ports).fd:
+        return True, None   # output-state verdict above is the FD gate
     triode, starved = _op_bias_problems(op)
     if starved or triode:
         parts = []

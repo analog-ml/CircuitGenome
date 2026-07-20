@@ -278,28 +278,31 @@ def _fd_circuit(want: dict[str, str]):
 
 
 @ngspice
-def test_fd_bias_gate_catches_railed_cmfb_family():
-    """The FD .op rig (issue #162) condemns a CMFB variant whose second-stage
-    interface mismatch rails the outputs — previously auto-passed (the gate
-    skipped FD) and rejected only later as a fake noise-floor gain miss."""
+def test_fd_bias_gate_passes_cm_regulated_cmfb_family():
+    """Post-#165 a CMFB variant regulates its own output CM, so the gate's
+    open-input .op finds a healthy mid-rail operating point and passes it —
+    the gate only ever downgrades on positive evidence.  (Pre-#165 this
+    family railed at the second-stage interface on every tech.)"""
     text, parsed, fbr, topo = _fd_circuit({
         "input_pair": "differential_pair_pmos",
         "load": "current_source_load_nmos",
-        "cmfb": "resistive_sense_cmfb"})
+        "cmfb": "resistive_sense_cmfb_inverting"})
     tech = load_tech("gf180mcu")
     spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
                       second_stage_current_ratio=2.5, gain_min_db=60,
                       gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
-    assert not ok and reason and "SPICE bias" in reason
+    assert ok and reason is None, reason
 
 
 @ngspice
-def test_fd_bias_gate_passes_sound_mirror_family():
-    """A genuinely-biasing FD design (the mirror-load family that survives
-    both the metric benches and the gate) stays sound — the gate only ever
-    downgrades on positive evidence."""
+def test_fd_bias_gate_catches_unregulated_mirror_family():
+    """A cmfb_absent mirror-load FD leaves its output CM unregulated: at the
+    open-input operating point (the state the post-#165 benches measure in)
+    the outputs split/rail, and the gate condemns it — previously invisible
+    because the gate auto-passed FD and the old bench ties suppressed the
+    split by forcing outp == outn."""
     text, parsed, fbr, topo = _fd_circuit({
         "input_pair": "differential_pair_nmos",
         "load": "active_load_pmos",
@@ -312,7 +315,7 @@ def test_fd_bias_gate_passes_sound_mirror_family():
                       gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
-    assert ok and reason is None
+    assert not ok and reason and "SPICE bias" in reason
 
 
 # --- phase-margin plausibility guard ----------------------------------------
@@ -480,7 +483,8 @@ def test_fd_large_signal_metrics_stay_none():
             "tail_current": "current_mirror_tail_pmos",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
             "second_stage_p": "common_source_nmos", "second_stage_n": "common_source_nmos",
-            "cmfb": "resistive_sense_cmfb"}
+            # Two-stage FD gets the inverting CMFB orientation (issue #165).
+            "cmfb": "resistive_sense_cmfb_inverting"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
                        for k, v in want.items()))
