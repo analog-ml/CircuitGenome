@@ -25,11 +25,14 @@
 # produced by bias_gen's out1/out2/out3/out4.
 #
 # fully_differential templates additionally include a `cmfb` slot
-# (common-mode feedback): cmfb.in1/in2 sense net_loadout1/net_loadout2 (the
-# load's cascode-output nodes), cmfb.vref is wired to the external vcm_ref
+# (common-mode feedback): cmfb.in1/in2 sense the external outputs outp/outn
+# (issue #165 — sensing the first-stage net_loadout* nodes left the OUTPUT
+# common mode unregulated), cmfb.vref is wired to the external vcm_ref
 # port, cmfb.bias reuses net_bias4 (bias_gen.out4), and cmfb.out drives
 # load.bias_cmfb via a new net_cmfb_out net (replacing the static net_bias4
-# connection used directly elsewhere).
+# connection used directly elsewhere).  The CM loop therefore traverses the
+# stages after the first; enumerate_circuits swaps in the polarity-correct
+# amp orientation per stage count (compatibility/cmfb.py orient_cmfb).
 #
 # config.compensation_scheme (3-stage templates only) – "nested_miller" (NMC)
 # or "reversed_nested_miller" (RNMC). Filterable via synthesize(config=...).
@@ -163,8 +166,8 @@ topologies:
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
       - {slot: bias_gen,        port: out8,  net: net_bias8}
-      - {slot: cmfb,            port: in1,   net: net_loadout1}
-      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: in1,   net: outp}
+      - {slot: cmfb,            port: in2,   net: outn}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
@@ -345,8 +348,8 @@ topologies:
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
       - {slot: bias_gen,        port: out8,  net: net_bias8}
-      - {slot: cmfb,            port: in1,   net: net_loadout1}
-      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: in1,   net: outp}
+      - {slot: cmfb,            port: in2,   net: outn}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
@@ -422,8 +425,8 @@ topologies:
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
       - {slot: bias_gen,        port: out8,  net: net_bias8}
-      - {slot: cmfb,            port: in1,   net: net_loadout1}
-      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: in1,   net: outp}
+      - {slot: cmfb,            port: in2,   net: outn}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
@@ -553,8 +556,8 @@ topologies:
       - {slot: bias_gen,        port: out6,  net: net_bias6}
       - {slot: bias_gen,        port: out7,  net: net_bias7}
       - {slot: bias_gen,        port: out8,  net: net_bias8}
-      - {slot: cmfb,            port: in1,   net: net_loadout1}
-      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: in1,   net: outp}
+      - {slot: cmfb,            port: in2,   net: outn}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
@@ -748,8 +751,8 @@ topologies:
       - {slot: bias_gen,        port: out7,  net: net_bias7}
       - {slot: bias_gen,        port: out8,  net: net_bias8}
       - {slot: bias_gen,        port: out9,  net: net_bias9}
-      - {slot: cmfb,            port: in1,   net: net_loadout1}
-      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: in1,   net: outp}
+      - {slot: cmfb,            port: in2,   net: outn}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}
@@ -832,8 +835,8 @@ topologies:
       - {slot: bias_gen,        port: out7,  net: net_bias7}
       - {slot: bias_gen,        port: out8,  net: net_bias8}
       - {slot: bias_gen,        port: out9,  net: net_bias9}
-      - {slot: cmfb,            port: in1,   net: net_loadout1}
-      - {slot: cmfb,            port: in2,   net: net_loadout2}
+      - {slot: cmfb,            port: in1,   net: outp}
+      - {slot: cmfb,            port: in2,   net: outn}
       - {slot: cmfb,            port: vref,  net: vcm_ref}
       - {slot: cmfb,            port: bias,  net: net_bias4}
       - {slot: cmfb,            port: out,   net: net_cmfb_out}

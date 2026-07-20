@@ -22,7 +22,12 @@ submodule layout is an internal detail.
 """
 from __future__ import annotations
 
-from .cmfb import CANONICAL_CMFB_VARIANT, is_cmfb_compatible, prune_cmfb
+from .cmfb import (
+    CANONICAL_CMFB_VARIANT,
+    is_cmfb_compatible,
+    orient_cmfb,
+    prune_cmfb,
+)
 from .compensation import is_compensation_compatible, stage_inversions
 from .load_branch import is_load_branch_compatible, untapped_branch_is_dc_defined
 from .output import is_output_type_compatible
@@ -41,6 +46,7 @@ from .tail_current import (
 __all__ = [
     "CANONICAL_CMFB_VARIANT",
     "is_cmfb_compatible",
+    "orient_cmfb",
     "prune_cmfb",
     "is_compensation_compatible",
     "stage_inversions",

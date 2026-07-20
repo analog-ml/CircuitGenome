@@ -89,9 +89,15 @@ def test_build_edges_two_stage_fd_fanout(topologies, by_name):
 
     graph = topology_to_graph(topo, variant_map)
 
+    # load + second_stage + comp fan out on each first-stage node (3 pairwise
+    # edges); the cmfb left these nets to sense outp/outn (issue #165).
     for net in ("net_loadout1", "net_loadout2"):
         edges = [e for e in graph.edges if e.net == net]
-        assert len(edges) == 6, f"{net}: expected 6 edges, got {len(edges)}"
+        assert len(edges) == 3, f"{net}: expected 3 edges, got {len(edges)}"
+    for net in ("outp", "outn"):
+        cmfb_edges = [e for e in graph.edges
+                      if e.net == net and "cmfb" in (e.source, e.target)]
+        assert cmfb_edges, f"{net}: expected cmfb sense edges"
 
 
 def test_supply_nets_excluded_from_edges(topologies, modules):
