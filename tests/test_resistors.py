@@ -170,6 +170,29 @@ def test_no_resistors_for_active_circuit():
     assert r.resistors == {}
 
 
+def test_fd_load_resistors_sized():
+    """FD resistor loads land in the load slot and get sized (issue #160).
+
+    The FD load slot wires its nets under out1/out2; before the pattern
+    exposed those pins every load candidate scored 0, the tail mirror was
+    assigned arbitrarily, and r1/r2_load shipped with the synthesizer's 1 kΩ
+    placeholder (first-stage output at millivolts, gain at the noise floor).
+    """
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_fully_differential")
+    c = next(c for c in enumerate_circuits(topo, mods)
+             if c.variant_map["load"].name == "resistor_load_gnd")
+    parsed = parse(to_flat_spice(c))
+    fbr = assign_slots(recognize(parsed), topo)
+    assert [d.ref for d in fbr.slot_assignments["load"].structure.devices] == \
+        ["r1_load", "r2_load"]
+    r = size_circuit(parsed, recognize(parsed), fbr, topo,
+                     load_tech("ptm45"), _spec())
+    assert set(r.resistors) == {"r1_load", "r2_load"}
+    assert all(v > 1e3 for v in r.resistors.values())   # not the 1 kΩ placeholder
+
+
 # --- compensation resistors (issue #108) -----------------------------------
 def test_comp_resistor_zero_on_output_pole():
     """Nulling R = (Cc+CL)/(gm2·Cc) places the compensation zero on the

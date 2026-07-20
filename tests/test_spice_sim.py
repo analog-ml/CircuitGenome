@@ -426,7 +426,8 @@ def test_fd_large_signal_metrics_stay_none():
             "tail_current": "current_mirror_tail_pmos",
             "comp_p": "miller_cap", "comp_n": "miller_cap",
             "second_stage_p": "common_source_nmos", "second_stage_n": "common_source_nmos",
-            "cmfb": "resistive_sense_cmfb"}
+            # Two-stage FD gets the inverting CMFB orientation (issue #165).
+            "cmfb": "resistive_sense_cmfb_inverting"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
                        for k, v in want.items()))

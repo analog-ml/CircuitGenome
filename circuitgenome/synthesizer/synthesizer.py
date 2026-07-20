@@ -26,6 +26,7 @@ from .compatibility import (
     is_output_type_compatible,
     is_second_stage_compatible,
     is_tail_current_compatible,
+    orient_cmfb,
     prune_cmfb,
     prune_tail_current,
 )
@@ -152,6 +153,12 @@ def build_circuit(
         return None
     if "cmfb" in variant_map:
         variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
+        # Output-sensing CM loop polarity (issue #165): a net-inverting stage
+        # chain to the outputs (two-stage, NMC three-stage) needs the
+        # inverting amp orientation; a net non-inverting one (RNMC) keeps
+        # the stock one.
+        variant_map["cmfb"] = orient_cmfb(variant_map["cmfb"], topology,
+                                          variant_map)
 
     if not is_tail_current_compatible(variant_map):
         return None
