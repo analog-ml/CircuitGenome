@@ -1,0 +1,66 @@
+* Minimal SKY130 corner library for CircuitGenome.
+*
+* Trimmed from the SkyWater open PDK (sky130A): only the 1.8 V core MOSFETs
+* sky130_fd_pr__nfet_01v8 / sky130_fd_pr__pfet_01v8 across the tt/ss/ff/sf/fs
+* corners.  The per-device model files in this directory are UNMODIFIED
+* upstream files (Apache-2.0, The SkyWater PDK Authors); only this library
+* wrapper is hand-written, mirroring the structure of the stock
+* sky130.lib.spice sections:
+*   - mc_mm_switch/mc_pr_switch=0 (no Monte-Carlo; the stock corner sections
+*     set the same values)
+*   - .option scale=1.0u (upstream all.spice): instance W/L are in microns
+
+.lib tt
+.param mc_mm_switch=0
+.param mc_pr_switch=0
+.option scale=1.0u
+.include "lod.spice"
+.include "sky130_fd_pr__nfet_01v8__tt.pm3.spice"
+.include "sky130_fd_pr__nfet_01v8__mismatch.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__tt.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__mismatch.corner.spice"
+.endl tt
+
+.lib ss
+.param mc_mm_switch=0
+.param mc_pr_switch=0
+.option scale=1.0u
+.include "lod.spice"
+.include "sky130_fd_pr__nfet_01v8__ss.pm3.spice"
+.include "sky130_fd_pr__nfet_01v8__mismatch.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__ss.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__mismatch.corner.spice"
+.endl ss
+
+.lib ff
+.param mc_mm_switch=0
+.param mc_pr_switch=0
+.option scale=1.0u
+.include "lod.spice"
+.include "sky130_fd_pr__nfet_01v8__ff.pm3.spice"
+.include "sky130_fd_pr__nfet_01v8__mismatch.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__ff.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__mismatch.corner.spice"
+.endl ff
+
+.lib sf
+.param mc_mm_switch=0
+.param mc_pr_switch=0
+.option scale=1.0u
+.include "lod.spice"
+.include "sky130_fd_pr__nfet_01v8__sf.pm3.spice"
+.include "sky130_fd_pr__nfet_01v8__mismatch.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__sf.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__mismatch.corner.spice"
+.endl sf
+
+.lib fs
+.param mc_mm_switch=0
+.param mc_pr_switch=0
+.option scale=1.0u
+.include "lod.spice"
+.include "sky130_fd_pr__nfet_01v8__fs.pm3.spice"
+.include "sky130_fd_pr__nfet_01v8__mismatch.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__fs.corner.spice"
+.include "sky130_fd_pr__pfet_01v8__mismatch.corner.spice"
+.endl fs

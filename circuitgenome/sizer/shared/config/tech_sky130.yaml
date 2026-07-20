@@ -1,0 +1,59 @@
+# SKY130 130nm core 1.8V devices (sky130_fd_pr__nfet_01v8/__pfet_01v8), BSIM4.
+# A foundry PDK referenced via a corner library (`.lib <file> <corner>`) — a
+# trimmed, repo-vendored subset of the SkyWater sky130A tree (see
+# ../pdk/sky130/README.rst).  Devices are subcircuits taking w=/l= in MICRONS
+# (the library sets `.option scale=1.0u`) with the BSIM4 transistor at a
+# subckt-internal instance named after the cell — hence `wl_units`/`device_handle`.
+# Sizing uses the gm/Id LUT (characterized at the `tt` corner with
+# tools/extract_tech.py --node sky130 --gm-id); the CLI measures performance
+# in ngspice and reports the {tt,ss,ff,sf,fs} corner sweep.
+# Source: SkyWater open PDK (sky130A), Apache-2.0.
+name: sky130_1v8
+description: "SKY130 130nm core 1.8V (sky130_fd_pr__{n,p}fet_01v8, BSIM4)"
+
+spice_lib:
+  file: ../pdk/sky130/ngspice/sky130.lib.spice   # trimmed corner library
+  corner: tt                                     # nominal corner for sizing
+  corners: [tt, ss, ff, sf, fs]                  # CLI verification sweep
+
+device_map:                                      # generic type -> PDK subcircuit
+  nmos: sky130_fd_pr__nfet_01v8
+  pmos: sky130_fd_pr__pfet_01v8
+
+device_handle:                     # subckt-internal BSIM4 instance (OP reads)
+  nmos: msky130_fd_pr__nfet_01v8
+  pmos: msky130_fd_pr__pfet_01v8
+
+wl_units: um                       # subckt w=/l= are microns (.option scale=1.0u)
+
+gmid_lut: models/sky130_gmid.npz   # gm/Id LUT (drives sizing)
+
+# Nominal Level-1 params: the gm/Id path uses the LUT, so these only satisfy
+# the schema and seed the deterministic load-resistor bias (~vth+Vov).
+# mu_cox/lam: square-law fit at L=0.5um, tt (the fit is degenerate at
+# Lmin=0.15um in a 130nm process); vth: BSIM operating-point vth at Lmin, tt
+# (sky130's reverse short-channel effect puts it well above the ~0.45V
+# long-channel value).
+nmos:
+  mu_cox: 1.70e-04   # A/V²
+  vth: 0.72          # V
+  lam: 0.13          # 1/V
+pmos:
+  mu_cox: 6.40e-05   # A/V²
+  vth: -0.69         # V
+  lam: 0.08          # 1/V
+
+width:               # bins cover W in [0.36(n)/0.42(p), 100] µm; 0.42 fits both
+  min: 0.42
+  max: 100.0
+  step: 0.005
+
+length:              # bins cover L in [0.15, 100] µm
+  min: 0.15
+  max: 4.0
+  step: 0.01
+
+cap:
+  min_pf: 0.01
+  max_pf: 20.0
+  step_pf: 0.01

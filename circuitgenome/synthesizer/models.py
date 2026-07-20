@@ -17,10 +17,20 @@ class Device:
     :param terminals: Maps terminal names to local net names.
                       MOSFETs use ``d/g/s/b``; resistors use ``t1/t2``;
                       capacitors use ``p/m``.
+    :param params: Optional device parameters preserved verbatim from a
+                   *sized* SPICE line, keyed as written. MOSFETs carry
+                   ``W``/``L``/``nf``/``m`` (and any other ``key=value`` token,
+                   values kept as SI-suffixed SPICE strings like ``0.5u``);
+                   resistors/capacitors carry their positional value token
+                   under ``value`` (e.g. ``{"value": "1k"}``). Empty for
+                   devices built by the synthesizer or parsed from an unsized
+                   netlist. See
+                   :func:`~circuitgenome.recognizer.netlist_parser.parse`.
     """
     ref: str
     type: str
     terminals: dict[str, str]
+    params: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

@@ -83,6 +83,9 @@ def load_tech(path: Path | str | None = None) -> TechParams:
     device_map = data.get("device_map")
     if device_map is not None:
         device_map = {str(k): str(v) for k, v in device_map.items()}
+    device_handle = data.get("device_handle")
+    if device_handle is not None:
+        device_handle = {str(k): str(v) for k, v in device_handle.items()}
 
     return TechParams(
         name=str(data["name"]),
@@ -99,4 +102,6 @@ def load_tech(path: Path | str | None = None) -> TechParams:
         gmid_lut=gmid_lut,
         spice_lib=spice_lib,
         device_map=device_map,
+        device_handle=device_handle,
+        wl_units=str(data.get("wl_units", "m")),
     )
