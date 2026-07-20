@@ -578,3 +578,49 @@ def resistor_tail_gnd_check(
     if assignment["r1"].terminals["t2"] != "gnd!":
         return None
     return HookMatch(extra_devices=[], extra_pins={})
+
+
+def resistor_load_vdd_check(
+    assignment: dict[str, Device],
+    pins: dict[str, str],
+    netlist: ParsedNetlist,
+) -> HookMatch | None:
+    """Accept only if the load resistors' shared ``t1`` is the global ``vdd!``.
+
+    Hook for the ``resistor_load_vdd`` pattern (``config/opamp_patterns.yaml``).
+    The pattern's template is two resistors sharing one net -- without this
+    check any resistor pair sharing a node matches, e.g. the resistive-sense
+    CMFB's ``r1_cmfb``/``r2_cmfb`` (shared internal sense node), which then
+    competes for the ``load`` slot (issue #160).
+
+    :param assignment: Must contain key ``"r1"`` -- one of the two resistors
+                       (the pattern's ``same_net`` ties ``r2.t1`` to it).
+    :param pins: Unused; accepted for signature consistency with other hooks.
+    :param netlist: Unused; accepted for signature consistency with other hooks.
+    :returns: ``HookMatch(extra_devices=[], extra_pins={})`` if ``r1.t1 ==
+              "vdd!"``, else ``None`` (reject).
+    """
+    if assignment["r1"].terminals["t1"] != "vdd!":
+        return None
+    return HookMatch(extra_devices=[], extra_pins={})
+
+
+def resistor_load_gnd_check(
+    assignment: dict[str, Device],
+    pins: dict[str, str],
+    netlist: ParsedNetlist,
+) -> HookMatch | None:
+    """Accept only if the load resistors' shared ``t2`` is the global ``gnd!``.
+
+    Mirror of :func:`resistor_load_vdd_check` for the ``resistor_load_gnd``
+    pattern.
+
+    :param assignment: Must contain key ``"r1"`` -- one of the two resistors.
+    :param pins: Unused; accepted for signature consistency with other hooks.
+    :param netlist: Unused; accepted for signature consistency with other hooks.
+    :returns: ``HookMatch(extra_devices=[], extra_pins={})`` if ``r1.t2 ==
+              "gnd!"``, else ``None`` (reject).
+    """
+    if assignment["r1"].terminals["t2"] != "gnd!":
+        return None
+    return HookMatch(extra_devices=[], extra_pins={})

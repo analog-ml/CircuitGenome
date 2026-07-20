@@ -303,6 +303,13 @@ _TWO_STAGE_FULLY_DIFF_COMBOS = [
     ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source_nmos",       "common_drain_pmos"),
     ("differential_pair_pmos",              "current_source_load_nmos",                             "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
     ("differential_pair_nmos",              "current_source_load_pmos",                             "current_mirror_tail_nmos",          "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source_pmos",  None),
+    # Resistor loads (issue #160): the FD load slot wires its nets under
+    # out1/out2, which the resistor_load_* patterns must expose or every load
+    # candidate scores 0 and the slot is filled arbitrarily (the tail mirror
+    # won, leaving r1/r2_load slotless and unsized). The cmfb column becomes
+    # cmfb_absent via the compatibility hook (resistor loads set their own CM).
+    ("differential_pair_pmos",              "resistor_load_gnd",                                    "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
+    ("differential_pair_nmos",              "resistor_load_vdd",                                    "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
     # fmt: on
 ]
 
