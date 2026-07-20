@@ -471,7 +471,8 @@ def two_stage_fd_fbr():
         "input_pair":     "differential_pair_pmos",
         "load":           "folded_cascode_load_pmos_input_differential_output",
         "tail_current":   "current_mirror_tail_pmos",
-        "cmfb":           "resistive_sense_cmfb",
+        # Two-stage FD gets the inverting CMFB orientation (issue #165).
+        "cmfb":           "resistive_sense_cmfb_inverting",
         "comp_p":         "miller_cap",
         "comp_n":         "miller_cap",
         "second_stage_p": "common_source_nmos",
@@ -1186,36 +1187,22 @@ def _size_fd(tech_name, variants, **spec_overrides):
     return spec, size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
 
 
-def test_fd_stage_interface_repairs_cmfb_pinned_cs():
-    """CMFB-driven current-source load: the CMFB servos the first-stage output
-    CM to mid-rail, so the second-stage |Vgs| must match it (issue #161 —
-    unrepaired, the second stage over/under-drives and the open-loop output CM
-    rails).  At ptm45 the LUT reaches Vcm = 0.5 V, so the repair aligns the
-    pair symmetrically."""
-    spec, result = _size_fd("ptm45", {
-        "input_pair": "differential_pair_pmos",
-        "load": "current_source_load_nmos",
-        "cmfb": "resistive_sense_cmfb"})
-    assert result.solver_status == "GMID"
-    assert result.bias_feasible
-    assert not any("stage interface" in w for w in result.warnings)
-    vcm = (spec.vdd + spec.vss) / 2.0
-    p = result.transistors["mn1_second_stage_p"]
-    n = result.transistors["mn1_second_stage_n"]
-    assert abs(abs(p.vgs_v) - vcm) <= 0.1        # pin matches the pinned CM
-    assert (p.w_um, p.l_um) == (n.w_um, n.l_um)  # both sides repaired alike
-
-
-def test_fd_stage_interface_rejects_unreachable_cm():
-    """The same CMFB variant at GF180's 3.3 V rail: no NMOS LUT point puts
-    |Vgs| at Vcm = 1.65 V, so the check reports an honest bias_feasible=False
-    instead of the pre-#161 noise-floor gain at the SPICE bench."""
-    _, result = _size_fd("gf180mcu", {
-        "input_pair": "differential_pair_pmos",
-        "load": "current_source_load_nmos",
-        "cmfb": "resistive_sense_cmfb"})
-    assert not result.bias_feasible
-    assert any("FD stage interface" in w for w in result.warnings)
+def test_fd_stage_interface_exempts_output_sensing_cmfb():
+    """Post-#165 the CMFB senses outp/outn, so the interface equality the
+    issue-#161 check enforced dissolves: the first stage self-biases to the
+    second stage's Vgs, no repair or reject applies, and the circuit stays
+    feasible at every supply — including GF180's 3.3 V, where the old
+    interface-sensing wiring was honestly unreachable (Vcm = 1.65 V beyond
+    the NMOS LUT).  The check machinery stays for any future
+    interface-sensing CMFB."""
+    for tech_name in ("ptm45", "gf180mcu"):
+        _, result = _size_fd(tech_name, {
+            "input_pair": "differential_pair_pmos",
+            "load": "current_source_load_nmos",
+            "cmfb": "resistive_sense_cmfb_inverting"})
+        assert result.solver_status == "GMID"
+        assert result.bias_feasible, tech_name
+        assert not any("FD stage interface" in w for w in result.warnings)
 
 
 def test_fd_stage_interface_exempts_mirror_load():
