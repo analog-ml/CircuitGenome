@@ -26,6 +26,7 @@ from .rig import _POLARITIES, _deck, _fb_netmap
 # Feedback L must be AC-OPEN even at the lowest sweep frequency (1 Hz):
 # ωL = 2π·1·1e12 ≈ 6e12 Ω. C is an AC-short that grounds/couples at AC.
 _LH, _CH = "1e12", "1e3"
+_RH = "1e9"   # FD input-anchor resistors (zero DC drop into MOS gates)
 
 
 def _pols(polarity):
@@ -91,14 +92,26 @@ def _pm_plausible(pm: float | None) -> bool:
 
 
 def _loop_fb(topo, vcm, drive: str) -> tuple[str, str]:
-    """The AC-coupled feedback loop + output expression, with ``drive`` lines.
+    """The DC-bias network + output expression, with ``drive`` lines.
 
-    SE: ``Lfb`` (DC feedback) + ``Cfb`` (AC ground to ``cm``).  FD: ``L1``/
-    ``L2`` cross-feedback with the output CM pinned at ``ocm``.
+    SE: ``Lfb`` (DC feedback) + ``Cfb`` (AC ground to ``cm``).  FD (issue
+    #165): inputs DC-anchored at Vcm through huge inductors (DC shorts, AC
+    opens) with the CMFB owning the output CM — the standard FD bench.  The
+    old cross-feedback ties (``outp``→``inn``/``outn``→``inp``) were a
+    pre-#165 crutch that invented an output CM for unregulated circuits;
+    against a real CM loop they form a bistable DC network whose degenerate
+    all-off solution ngspice picks at tight headroom (sky130: healthy
+    circuits measured −79 dB), and they made the FD DC sanity check vacuous
+    (ties force ``outp == outn``).  With free outputs that check is
+    meaningful again.
     """
     if topo.fd:
-        fb = (f"Vocm ocm 0 {vcm}\n"
-              f"L1 outp inn {_LH}\nL2 outn inp {_LH}\n" + drive)
+        # Resistor anchors, not inductors: L anchors + the 0 V differential
+        # drive would form a singular L–V loop (two DC shorts plus a source),
+        # which ngspice regularizes into garbage bias.  MOS gates draw no DC
+        # current, so the R drop is zero and the inputs sit exactly at Vcm.
+        fb = (f"Vocm ocm 0 {vcm}\nVicm icm 0 {vcm}\n"
+              f"R1 icm inp {_RH}\nR2 icm inn {_RH}\n" + drive)
         return fb, "v(outp)-v(outn)"
     fb = (f"Vcm cm 0 {vcm}\n"
           f"Lfb out inn {_LH}\nCfb inn cm {_CH}\n" + drive)
