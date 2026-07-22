@@ -294,7 +294,7 @@
 
   <div class="eq-center"><span class="boxed-eq">gm/Id<sub>signal</sub> = gm<sub>required</sub> / I<sub>D</sub></span></div>
 
-  <p>The spec demands a certain <code>gm</code> to hit its gain-bandwidth; once the current is fixed by Kirchhoff, gm/Id falls out of arithmetic. So in the registry, signal blocks carry <code>gm_id = None</code> — a deliberate "this is <em>solved</em> later, not set here." Hold onto that <code>None</code>; it's the reason the field is <code>float | None</code>.</p>
+  <p>The spec demands a certain <code>gm</code> to hit its gain-bandwidth; once the current is fixed by Kirchhoff, gm/Id falls out of arithmetic. So in the registry, signal blocks carry <code>gm_id = None</code> — a deliberate "this is <em>solved</em> later, not set here." Hold onto that <code>None</code>; it's the reason the field is <code>float | None</code>. (One signal block bucks this — the source-follower output buffer, which has no gm requirement to solve; we meet it in Part 4.)</p>
 </section>
 
 <!-- ================= PART 3 ================= -->
@@ -307,11 +307,13 @@
 _MODERATE = <span class="tok-num">14.0</span>        <span class="tok-com"># signal nominal (pre-geometry estimate); real gm/Id is solved</span>
 _STRONG = <span class="tok-num">10.0</span>          <span class="tok-com"># current source: headroom + output resistance</span>
 _STRONG_CASCODE = <span class="tok-num">8.0</span>   <span class="tok-com"># cascode: small Vdsat to preserve stacked headroom</span>
+_FOLLOWER = <span class="tok-num">15.0</span>        <span class="tok-com"># follower buffer: low R_out (1/gm) + small V_ov to preserve output swing</span>
 
 <span class="tok-com"># --- channel length as a multiple of L_min ---</span>
 _L_SIGNAL = <span class="tok-num">2.0</span>         <span class="tok-com"># signal: balance gain and ft</span>
 _L_CS = <span class="tok-num">4.0</span>             <span class="tok-com"># current source: longer L → higher output resistance</span>
-_L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cascode</span></code></pre>
+_L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cascode</span>
+_L_FOLLOWER = <span class="tok-num">1.0</span>       <span class="tok-com"># follower: no gain to protect → short L for ft / output-pole speed</span></code></pre>
 
   <h3>Why is it called <code>_STRONG</code>?</h3>
   <p>I really like these names. <code>_STRONG = 10.0</code> doesn't say "ten," it says <em>"put this device in strong inversion."</em> The number is an implementation detail; the <em>name</em> is the intent. When you later read <code>BlockIntent(CURRENT_SOURCE, _STRONG, _L_CS, …)</code> you read a <strong>sentence</strong>: "a current source, in strong inversion, with a long channel." That's the whole reason to hoist constants to the top.</p>
@@ -344,9 +346,11 @@ _L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cas
       <tr><td><code>_MODERATE</code></td><td class="num">14.0</td><td>nominal signal gm/Id (only an estimate — real value is solved)</td></tr>
       <tr><td><code>_STRONG</code></td><td class="num">10.0</td><td>current-source gm/Id: headroom + output resistance</td></tr>
       <tr><td><code>_STRONG_CASCODE</code></td><td class="num">8.0</td><td>cascode gm/Id: small Vdsat to preserve the stack</td></tr>
+      <tr><td><code>_FOLLOWER</code></td><td class="num">15.0</td><td>source-follower output buffer gm/Id: low output impedance + swing headroom</td></tr>
       <tr><td><code>_L_SIGNAL</code></td><td class="num">2.0</td><td>short channel, fast signal device</td></tr>
       <tr><td><code>_L_CS</code></td><td class="num">4.0</td><td>long channel, stiff current source</td></tr>
       <tr><td><code>_L_CASCODE</code></td><td class="num">3.0</td><td>medium channel for the cascode</td></tr>
+      <tr><td><code>_L_FOLLOWER</code></td><td class="num">1.0</td><td>shortest channel — a follower has no gain to protect, so favour ft</td></tr>
     </tbody>
   </table>
 </section>
@@ -399,12 +403,15 @@ _L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cas
       <!-- SIGNAL column -->
       <rect x="16" y="16" width="168" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
       <text x="100" y="36" text-anchor="middle" font-size="12.5" font-weight="600">SIGNAL</text>
-      <text x="100" y="53" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id = None · L 2×</text>
+      <text x="100" y="53" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id = None · L 2×  *</text>
       <g font-size="11.5" text-anchor="middle">
         <rect x="16" y="72" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="100" y="91">input_stage</text>
         <rect x="16" y="108" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="100" y="127">gain_stage</text>
-        <rect x="16" y="144" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="100" y="163">output_stage</text>
+        <rect x="16" y="144" width="168" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="100" y="163">output_stage *</text>
       </g>
+      <text x="100" y="192" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">* output_stage is the</text>
+      <text x="100" y="205" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">follower exception:</text>
+      <text x="100" y="218" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">fixed gm/Id 15 · L 1×</text>
       <!-- CURRENT_SOURCE column -->
       <rect x="196" y="16" width="168" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
       <text x="280" y="36" text-anchor="middle" font-size="12.5" font-weight="600">CURRENT_SOURCE</text>
@@ -427,7 +434,7 @@ _L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cas
       <text x="460" y="128" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">just one — the</text>
       <text x="460" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">stack booster</text>
     </svg>
-    <figcaption>Ten blocks, three families. All signal blocks defer gm/Id (<code>None</code>); every current source shares the strong-inversion / long-L profile; the lone cascode gets its own tighter setting.</figcaption>
+    <figcaption>Ten blocks, three families. The two gain-path signal blocks defer gm/Id (<code>None</code>); the source-follower <code>output_stage</code> is the exception — a signal block with a <em>fixed</em> region (see below). Every current source shares the strong-inversion / long-L profile; the lone cascode gets its own tighter setting.</figcaption>
   </figure>
 
   <p>Here are two representative entries in full — one from each of the interesting families:</p>
@@ -443,6 +450,16 @@ _L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cas
 <span class="tok-str">     saturation headroom and high rout. A low gm/Id (strong inversion)…"</span>),</code></pre>
 
   <p>Read them as sentences. The <code>input_stage</code> says "I'm a signal device, my gm/Id is <code>None</code> because it's solved, keep me short." The <code>tail_current</code> says "I'm a current source, put me in strong inversion at <code>gm/Id = 10</code>, make me long." The <code>rationale</code> string isn't a comment that rots — it rides along into the sizing result so the finished design can explain <em>why</em> each device is the way it is.</p>
+
+  <h3>The one exception: the source-follower output stage</h3>
+  <p>Nine of the ten blocks obey the tidy rule — signal blocks defer gm/Id (<code>None</code>), current sources fix it. The tenth breaks it. The <code>output_stage</code> block is the unity-gain <strong>source-follower buffer</strong> that drives the load in the <code>*_buffered_*</code> topologies. It is a <em>signal</em> device (its gate is the signal), yet it carries a <strong>fixed</strong> gm/Id — because a follower is never given a gm requirement to solve against, so its region has to be set by intent, not left as <code>None</code>:</p>
+
+  <pre class="code"><code><span class="tok-str">"output_stage"</span>: <span class="tok-fn">BlockIntent</span>(
+    SIGNAL, _FOLLOWER, _L_FOLLOWER,
+    <span class="tok-str">"Source-follower output buffer (gain ~ 1): isolate the last gain</span>
+<span class="tok-str">     stage from the load. Moderate gm/Id for low output impedance …"</span>),</code></pre>
+
+  <p>So <code>output_stage</code> is the one signal block whose gm/Id is <em>not</em> <code>None</code>: a fixed <code>15</code>/V for low output impedance and a short <code>1×</code> channel for speed. The numbered gain stages — <code>second_stage</code> and <code>third_stage</code> — are the true "solved" signal blocks; a follower has no gain to contribute, so it is never one of them.</p>
 </section>
 
 <!-- ================= PART 5 ================= -->
@@ -516,7 +533,7 @@ _L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cas
     <figcaption>Same slot, two roles, two blocks. This is why <code>_SIGNAL_BLOCK</code> and <code>_CS_BLOCK</code> both list <code>second_stage</code> — pointing it at <code>gain_stage</code> and <code>stage_load</code> respectively.</figcaption>
   </figure>
 
-  <p>Look back at the two tables and you'll see this everywhere: <code>second_stage</code>, <code>third_stage</code>, and <code>output_stage</code> all appear in <em>both</em> maps, sending the signal driver to a stage block and the load to <code>stage_load</code>. The role, decided upstream by <code>is_signal_device()</code>, picks the lane.</p>
+  <p>Look back at the two tables and you'll see this everywhere: <code>second_stage</code>, <code>third_stage</code>, and <code>output_stage</code> all appear in <em>both</em> maps — the signal device on each goes to its signal block (the two gain stages to <code>gain_stage</code>, the follower to <code>output_stage</code>) while its current-source partner goes to <code>stage_load</code>. The role, decided upstream by <code>is_signal_device()</code>, picks the lane.</p>
 </section>
 
 <!-- ================= PART 6 ================= -->
@@ -690,7 +707,7 @@ cascode_refs = <span class="tok-fn">set</span>()   <span class="tok-com"># nothi
 
   <div class="eq-center"><span class="boxed-eq">signal: gm/Id = gm<sub>req</sub> / I<sub>D</sub>   →   store <code>None</code></span></div>
 
-  <p>Signal devices don't get to <em>choose</em> a region; the spec chooses it for them. That single fact is why <code>gm_id</code> is <code>float | None</code>, why every signal block carries <code>None</code>, and why <code>_MODERATE = 14</code> is only a "nominal" estimate for a pre-geometry calculation rather than a real setting.</p>
+  <p>Signal devices don't get to <em>choose</em> a region; the spec chooses it for them. That single fact is why <code>gm_id</code> is <code>float | None</code>, why the gain-path signal blocks carry <code>None</code> (all but the source-follower output stage, whose region is fixed because it has no gm to solve for), and why <code>_MODERATE = 14</code> is only a "nominal" estimate for a pre-geometry calculation rather than a real setting.</p>
 
   <p>Step back and the file is really implementing one clean mapping — a pure lookup from a device's identity to its design intent:</p>
   <div class="eq-center"><span class="boxed-eq">device (slot, role) &nbsp;→&nbsp; functional block &nbsp;→&nbsp; (region, L, rationale)</span></div>
@@ -698,7 +715,7 @@ cascode_refs = <span class="tok-fn">set</span>()   <span class="tok-com"># nothi
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li>It <strong>sizes nothing</strong>. It produces intent — the region, length, and reason — that a separate geometry solver (<code>GmIdModel.geometry_for</code>) consumes. It's the recipe, not the cooking.</li>
-    <li>For signal devices it deliberately <strong>refuses to set gm/Id</strong> (<code>None</code>); that number is solved elsewhere from the gm requirement.</li>
+    <li>For gain-path signal devices it deliberately <strong>refuses to set gm/Id</strong> (<code>None</code>); that number is solved elsewhere from the gm requirement. The lone exception is the source-follower <code>output_stage</code> — a signal device with a <em>fixed</em> gm/Id, because a follower has no gm requirement to solve.</li>
     <li>The taxonomy is <strong>fixed</strong> — ten blocks, three roles. A device in an unrecognized slot falls back to <code>gain_stage</code> or <code>current_source</code>; a device that is somehow both signal and cascode is treated as signal (signal precedence).</li>
     <li>Two circuit features — source degeneration and CMFB sense resistors — live as <strong>scalar knobs</strong> on <code>GmIdIntent</code>, outside the block registry, because they aren't per-transistor regions.</li>
   </ul>
@@ -707,7 +724,7 @@ cascode_refs = <span class="tok-fn">set</span>()   <span class="tok-com"># nothi
   <p>The whole design rides one move: <strong>turn a fuzzy design decision into an immutable, named, copyable data record, and attach its reason to it.</strong> That single move buys explainability (the rationale rides into the result), tunability (copy-one-key overrides), and safety (frozen defaults, fresh-copy factories) — all without a line of control flow. The three-level hierarchy is just this record applied at three altitudes.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>intent.py</code> makes analog design intent explicit as a three-level hierarchy — a spec at the top, a registry of per-building-block <code>BlockIntent</code> records in the tunable middle (each naming a gm/Id inversion region, a channel length, and a human rationale, with <code>None</code> for signal devices whose region is solved from the spec), resolved by <code>functional_block</code> and <code>resolve_transistor_intents</code> onto one explainable, overridable <code>TransistorIntent</code> per device.</p>
+  <p><strong>In one sentence:</strong> <code>intent.py</code> makes analog design intent explicit as a three-level hierarchy — a spec at the top, a registry of per-building-block <code>BlockIntent</code> records in the tunable middle (each naming a gm/Id inversion region, a channel length, and a human rationale, with <code>None</code> for the gain-path signal devices whose region is solved from the spec — all but the source-follower output stage, which is signal yet carries a fixed region), resolved by <code>functional_block</code> and <code>resolve_transistor_intents</code> onto one explainable, overridable <code>TransistorIntent</code> per device.</p>
 </section>
 
 </main>
