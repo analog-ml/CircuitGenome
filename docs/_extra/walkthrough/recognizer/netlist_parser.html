@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netlist_parser.py — SPICE text into a ParsedNetlist</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px; max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{ grid-template-columns:1fr; } #toc{ position:static; } }
+  header { grid-column:1 / -1; padding:36px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:12px; border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p, li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent); background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem; max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem; color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none; border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  .pkgnav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:18px; }
+  .pkgnav .layer { color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-size:0.68rem; margin-right:2px; }
+  .pkgnav a { text-decoration:none; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:4px 12px; font-size:0.8rem; }
+  .pkgnav a:hover { border-color:var(--accent); color:var(--accent); }
+  .pkgnav a.current { background:var(--accent-sf); color:var(--accent); border-color:var(--accent); font-weight:600; }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted); font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg); padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{ color:var(--tok-kw); font-weight:600; } .tok-str{ color:var(--tok-str); } .tok-num{ color:var(--tok-num); }
+  .tok-com{ color:var(--tok-com); font-style:italic; } .tok-fn{ color:var(--tok-fn); }
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.93rem; }
+  th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-sf); }
+  td.mono, .mono { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:0.86rem; }
+  .boxed-eq { display:inline-block; margin:1.2em auto; padding:12px 22px; border:2px solid var(--accent); border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  .eq-center { text-align:center; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px; border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px; cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+  <header>
+    <h1>netlist_parser.py <span style="color:var(--muted);font-weight:400;font-size:1.2rem">— Layer 0</span></h1>
+    <div class="subtitle">Read a flat SPICE <code>.subckt</code> block, one line at a time, and hand back a tidy <code>ParsedNetlist</code>. The simplest station on the line.</div>
+    <nav class="pkgnav">
+      <span class="layer">recognizer/</span>
+      <a href="index.html">Overview</a>
+      <a href="models.html">1 · models</a>
+      <a href="netlist_parser.html" class="current">2 · parser · L0</a>
+      <a href="subcircuit_recognizer.html">3 · SR · L1</a>
+      <a href="hooks.html">4 · hooks · L1</a>
+      <a href="functional_block_recognizer.html">5 · FBR · L2</a>
+      <a href="__init__.html">6 · API</a>
+    </nav>
+  </header>
+
+  <nav id="toc">
+    <div class="label">Contents</div>
+    <a href="#part-1">1 · Why parse at all?</a>
+    <a href="#part-2">2 · The shape of one line</a>
+    <a href="#part-3">3 · Dispatch by first letter</a>
+    <a href="#part-4">4 · Splitting params</a>
+    <a href="#part-5">5 · A line, traced by hand</a>
+    <a href="#part-6">6 · Two dialects, one parser</a>
+    <a href="#part-7">7 · The hidden idea</a>
+  </nav>
+
+  <main>
+
+    <section class="part" id="part-1">
+      <h2>Part 1 · Why does this file exist?</h2>
+      <blockquote><p><strong>The one job:</strong> "I have a wall of SPICE text. Turn it into Python objects I can reason about — without losing any wiring."</p></blockquote>
+
+      <p class="beat">SPICE is just lines of text. A machine can't ask a string "which transistors share the tail node?"</p>
+      <p class="beat">So before any recognition can happen, someone has to read the text and build a graph of devices and the nets between them.</p>
+      <p class="beat">That someone is <code>parse()</code>.</p>
+
+      <p>Think of it like a customs officer reading a packing list. Each line declares one item and where its connectors go. The officer's job is not to judge the shipment — only to log every item accurately into a ledger. That ledger is the <a href="models.html#part-4"><code>ParsedNetlist</code></a>.</p>
+
+      <blockquote><p><strong>The clean idea:</strong> this file is the <em>structural inverse</em> of the synthesizer's <code>to_flat_spice()</code>. One function writes devices out to text; this one reads them back in. That symmetry is what makes round-trip testing possible.</p></blockquote>
+    </section>
+
+    <section class="part" id="part-2">
+      <h2>Part 2 · The shape of one line</h2>
+      <p>Every SPICE device line is a sequence of whitespace-separated tokens. The <em>meaning</em> of each position depends on the device kind:</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 560 210" role="img" aria-label="Token layout for the three device kinds">
+          <text x="10" y="24" font-size="12" fill="var(--fig-muted)">MOSFET (6 tokens)</text>
+          <g font-family="monospace" font-size="13">
+            <rect x="10"  y="32" width="50" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/><text x="35"  y="52" text-anchor="middle">m1</text>
+            <rect x="66"  y="32" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="91"  y="52" text-anchor="middle">d</text>
+            <rect x="122" y="32" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="147" y="52" text-anchor="middle">g</text>
+            <rect x="178" y="32" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="203" y="52" text-anchor="middle">s</text>
+            <rect x="234" y="32" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="259" y="52" text-anchor="middle">b</text>
+            <rect x="290" y="32" width="140" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="360" y="52" text-anchor="middle">nmos | pmos</text>
+            <rect x="436" y="32" width="114" height="30" rx="5" fill="none" stroke="var(--fig-muted)" stroke-dasharray="4 3" stroke-width="2"/><text x="493" y="52" text-anchor="middle" font-size="11" fill="var(--fig-muted)">W= L= …</text>
+          </g>
+
+          <text x="10" y="96" font-size="12" fill="var(--fig-muted)">resistor (3–4 tokens)</text>
+          <g font-family="monospace" font-size="13">
+            <rect x="10"  y="104" width="50" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/><text x="35"  y="124" text-anchor="middle">r1</text>
+            <rect x="66"  y="104" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="91"  y="124" text-anchor="middle">t1</text>
+            <rect x="122" y="104" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="147" y="124" text-anchor="middle">t2</text>
+            <rect x="178" y="104" width="70" height="30" rx="5" fill="none" stroke="var(--fig-muted)" stroke-dasharray="4 3" stroke-width="2"/><text x="213" y="124" text-anchor="middle" font-size="11" fill="var(--fig-muted)">1k</text>
+          </g>
+
+          <text x="10" y="168" font-size="12" fill="var(--fig-muted)">capacitor (3–4 tokens)</text>
+          <g font-family="monospace" font-size="13">
+            <rect x="10"  y="176" width="50" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/><text x="35"  y="196" text-anchor="middle">c1</text>
+            <rect x="66"  y="176" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="91"  y="196" text-anchor="middle">p</text>
+            <rect x="122" y="176" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="147" y="196" text-anchor="middle">m</text>
+            <rect x="178" y="176" width="70" height="30" rx="5" fill="none" stroke="var(--fig-muted)" stroke-dasharray="4 3" stroke-width="2"/><text x="213" y="196" text-anchor="middle" font-size="11" fill="var(--fig-muted)">1p</text>
+          </g>
+        </svg>
+        <figcaption>Solid orange = the ref (name). Solid boxes = terminals → nets. Dashed = optional trailing values / params.</figcaption>
+      </figure>
+
+      <p>All of this is wrapped in a <code>.subckt &lt;name&gt; &lt;ports…&gt;</code> … <code>.ends</code> block. The parser also tolerates the common typos <code>.suckt</code> and <code>.end</code>.</p>
+    </section>
+
+    <section class="part" id="part-3">
+      <h2>Part 3 · Dispatch by first letter — the heart of the loop</h2>
+      <blockquote><p><strong>The one job:</strong> "Given an unknown device line, how do I know whether it's a transistor, a resistor, or a capacitor?"</p></blockquote>
+
+      <p>SPICE has a lovely convention: the <em>first character of the ref name</em> tells you the device kind. <code>m1</code> is a MOSFET, <code>r5</code> a resistor, <code>c2</code> a capacitor. The parser leans entirely on this:</p>
+
+      <pre class="code"><code>ref   = tokens[<span class="tok-num">0</span>]
+first = ref[<span class="tok-num">0</span>].lower()</code></pre>
+
+      <figure class="fig">
+        <svg viewBox="0 0 520 230" role="img" aria-label="First-letter dispatch tree">
+          <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="200" y="14" width="120" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="260" y="37" text-anchor="middle" font-size="13" font-weight="600">first char?</text>
+
+          <g stroke="var(--fig-muted)" stroke-width="2">
+            <line x1="220" y1="50" x2="80"  y2="90" marker-end="url(#arrow)"/>
+            <line x1="245" y1="50" x2="215" y2="90" marker-end="url(#arrow)"/>
+            <line x1="275" y1="50" x2="330" y2="90" marker-end="url(#arrow)"/>
+            <line x1="300" y1="50" x2="450" y2="90" marker-end="url(#arrow)"/>
+          </g>
+          <g font-family="monospace" font-size="12" fill="var(--fig-accent)">
+            <text x="120" y="78">m / x</text>
+            <text x="205" y="78">c</text>
+            <text x="325" y="78">r</text>
+            <text x="430" y="78">else</text>
+          </g>
+
+          <rect x="20"  y="92" width="130" height="56" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="85"  y="114" text-anchor="middle" font-size="12" font-weight="600">MOSFET</text>
+          <text x="85"  y="132" text-anchor="middle" font-size="10" fill="var(--fig-muted)">5 positionals: d g s b model</text>
+
+          <rect x="165" y="92" width="120" height="56" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="225" y="114" text-anchor="middle" font-size="12" font-weight="600">capacitor</text>
+          <text x="225" y="132" text-anchor="middle" font-size="10" fill="var(--fig-muted)">2–3 positionals</text>
+
+          <rect x="300" y="92" width="120" height="56" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="360" y="114" text-anchor="middle" font-size="12" font-weight="600">resistor</text>
+          <text x="360" y="132" text-anchor="middle" font-size="10" fill="var(--fig-muted)">2–3 positionals</text>
+
+          <rect x="435" y="92" width="70" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="470" y="118" text-anchor="middle" font-size="12" font-weight="600">raise</text>
+          <text x="470" y="134" text-anchor="middle" font-size="10" fill="var(--fig-muted)">ValueError</text>
+
+          <text x="85" y="176" text-anchor="middle" font-size="11" fill="var(--fig-muted)">x accepted only if its model</text>
+          <text x="85" y="190" text-anchor="middle" font-size="11" fill="var(--fig-muted)">token names a known MOSFET</text>
+        </svg>
+        <figcaption>One switch on <code>ref[0]</code> routes every line. Unknown first letters fail loud, not silent.</figcaption>
+      </figure>
+
+      <p>The <code>x</code> case is the subtle one. Real design flows (SKY130, gf180) instantiate transistors as <em>subcircuits</em>, so a MOSFET may appear as <code>x1 …</code> instead of <code>m1 …</code>. The parser accepts <code>x</code> <strong>only when</strong> its model token resolves to a MOSFET in the model map; a genuine hierarchical subcircuit is out of scope and raises.</p>
+
+      <h3>Why is the design map called <code>DEFAULT_MODEL_MAP</code>? I like this name.</h3>
+      <p>It maps a process's <em>real</em> model name onto the bare type the recognizer cares about:</p>
+      <pre class="code"><code><span class="tok-str">"sky130_fd_pr__nfet_01v8"</span>: <span class="tok-str">"nmos"</span>,
+<span class="tok-str">"pmos_3p3"</span>:               <span class="tok-str">"pmos"</span>,
+<span class="tok-str">"nmos"</span>:                  <span class="tok-str">"nmos"</span>,  <span class="tok-com"># bare token still works</span></code></pre>
+      <p>The recognizer only ever wants to know "is this n or p?" The map is the one place that translates a whole zoo of vendor model names down to that single question. Callers can extend it, and their entries win.</p>
+    </section>
+
+    <section class="part" id="part-4">
+      <h2>Part 4 · Splitting positionals from params</h2>
+      <blockquote><p><strong>The one job:</strong> "The tokens after the ref are a mix of net names and <code>key=value</code> settings. Sort them into two piles."</p></blockquote>
+
+      <p>A sized MOSFET line looks like:</p>
+      <pre class="code"><code>m1 net1 in1 tail vdd! sky130_fd_pr__pfet_01v8 W=4u L=0.5u nf=2 m=1</code></pre>
+
+      <p>The bare tokens (<code>net1 in1 tail vdd! sky130…</code>) are <em>positional</em> — their meaning is their position. The <code>W=4u</code>-style tokens are <em>named</em> params. <code>_split_positional_params</code> walks left to right and files each token:</p>
+
+      <pre class="code"><code><span class="tok-kw">for</span> tok <span class="tok-kw">in</span> tokens:
+    <span class="tok-kw">if</span> <span class="tok-str">"="</span> <span class="tok-kw">in</span> tok:
+        key, _, val = tok.partition(<span class="tok-str">"="</span>)
+        params[key] = val
+    <span class="tok-kw">elif</span> params:                    <span class="tok-com"># a bare token AFTER a param = malformed</span>
+        <span class="tok-kw">raise</span> ValueError(...)
+    <span class="tok-kw">else</span>:
+        positionals.append(tok)</code></pre>
+
+      <p class="beat">The <span class="keyline">elif params:</span> line is the single most important guard here.</p>
+      <p>It enforces the SPICE rule that positionals always come <em>before</em> params. Once you've seen one <code>key=value</code>, a bare token is a mistake — so it fails loudly rather than silently mis-assigning a net.</p>
+    </section>
+
+    <section class="part" id="part-5">
+      <h2>Part 5 · A whole line, traced by hand</h2>
+      <p>Let's parse one MOSFET line end to end. Input token list (after <code>.split()</code>):</p>
+      <pre class="code"><code>[<span class="tok-str">"m1"</span>, <span class="tok-str">"net1"</span>, <span class="tok-str">"in1"</span>, <span class="tok-str">"tail"</span>, <span class="tok-str">"vdd!"</span>, <span class="tok-str">"pmos_3p3"</span>, <span class="tok-str">"W=4u"</span>]</code></pre>
+
+      <table>
+        <tr><th>Step</th><th>Value</th></tr>
+        <tr><td><code>ref = tokens[0]</code></td><td class="mono">"m1"</td></tr>
+        <tr><td><code>first = ref[0].lower()</code></td><td class="mono">"m"  → MOSFET branch</td></tr>
+        <tr><td>split <code>tokens[1:]</code></td><td class="mono">positionals=["net1","in1","tail","vdd!","pmos_3p3"], params={"W":"4u"}</td></tr>
+        <tr><td>len(positionals) == 5?</td><td class="mono">yes ✓ (else raise)</td></tr>
+        <tr><td>model = positionals[4].lower()</td><td class="mono">"pmos_3p3" → in map → dev_type = "pmos"</td></tr>
+        <tr><td>terminals</td><td class="mono">{d:"net1", g:"in1", s:"tail", b:"vdd!"}</td></tr>
+      </table>
+
+      <p>Result: one <code>Device(ref="m1", type="pmos", terminals={…}, params={"W":"4u"})</code> appended, and its four nets folded into <code>referenced_nets</code>.</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 540 120" role="img" aria-label="One line becoming one Device">
+          <defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="10" y="35" width="230" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="125" y="55" text-anchor="middle" font-size="11" font-family="monospace">m1 net1 in1 tail vdd!</text>
+          <text x="125" y="72" text-anchor="middle" font-size="11" font-family="monospace">pmos_3p3 W=4u</text>
+          <line x1="240" y1="58" x2="310" y2="58" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arrow2)"/>
+          <text x="275" y="48" text-anchor="middle" font-size="11" fill="var(--fig-muted)">parse</text>
+          <rect x="315" y="35" width="215" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="422" y="55" text-anchor="middle" font-size="11" font-family="monospace">Device(type="pmos",</text>
+          <text x="422" y="72" text-anchor="middle" font-size="11" font-family="monospace">terminals={…}, params={W:4u})</text>
+        </svg>
+        <figcaption>One text line in, one structured Device out — sizes preserved but never used for matching.</figcaption>
+      </figure>
+    </section>
+
+    <section class="part" id="part-6">
+      <h2>Part 6 · Two dialects, one parser (the honest limitations)</h2>
+      <p>The parser deliberately swallows two SPICE dialects with the same code:</p>
+
+      <table>
+        <tr><th>Feature</th><th>Unsized (synthesizer)</th><th>Sized (real flows / sizer)</th></tr>
+        <tr><td>type token</td><td class="mono">nmos / pmos</td><td class="mono">sky130_fd_pr__nfet_01v8</td></tr>
+        <tr><td>ref prefix</td><td class="mono">m…</td><td class="mono">m… or x…</td></tr>
+        <tr><td>trailing tokens</td><td>none</td><td class="mono">W= L= nf= m=</td></tr>
+        <tr><td>R/C value</td><td>often absent</td><td class="mono">kept under params["value"]</td></tr>
+      </table>
+
+      <p><strong>What it does <em>not</em> do:</strong> it makes no attempt to interpret sizes, flatten hierarchy, or resolve genuine subcircuits. An <code>x</code>-line whose model isn't a known MOSFET raises <code>ValueError</code> — out of scope, on purpose. The parser's whole ethos is "log faithfully, judge nothing."</p>
+
+      <blockquote><p><strong>Why this matters downstream:</strong> because sizes ride along untouched and recognition matches only on topology, <code>recognize()</code> gives <em>identical</em> answers on sized and unsized netlists. The complexity is quarantined here.</p></blockquote>
+    </section>
+
+    <section class="part" id="part-7">
+      <h2>Part 7 · The hidden idea</h2>
+      <p>The last three lines quietly compute a set difference that the whole rest of the package leans on:</p>
+
+      <div class="eq-center"><div class="boxed-eq">internal_nets = (⋃ every terminal net) − external_ports</div></div>
+
+      <p>In plain English: <em>a net is "internal" exactly when a device touches it but the outside world can't.</em> That single boolean — is this net a port or not? — is what Layer 2 uses over and over to tell a real signal path from a bias reference. Layer 0 pays the cost once so nobody else has to.</p>
+
+      <hr>
+      <p><strong>In one sentence:</strong> <code>netlist_parser.py</code> is a customs officer that reads SPICE line by line, dispatches on the first letter, files sizes without judging them, and hands the next station a faithful, port-aware ledger of devices and nets.</p>
+
+      <blockquote><p><strong>Looking ahead →</strong> <a href="subcircuit_recognizer.html">Part 3 · subcircuit_recognizer.py</a> is where it gets exciting: a backtracking search that matches template patterns against this ledger. It's the heart of the package.</p></blockquote>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  })();
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {}; links.forEach(function (a){ map[a.getAttribute('href').slice(1)] = a; });
+    var obs = new IntersectionObserver(function (entries){
+      entries.forEach(function (e){
+        if (e.isIntersecting && map[e.target.id]) {
+          links.forEach(function (l){ l.classList.remove('active'); });
+          map[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin:'-20% 0px -70% 0px' });
+    document.querySelectorAll('section.part').forEach(function (s){ obs.observe(s); });
+  })();
+</script>
+</body>
+</html>

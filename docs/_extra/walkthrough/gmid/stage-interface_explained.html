@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stage_interface.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>stage_interface.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/stage_interface.py</code> — the level the second stage forces onto the first-stage output node, versus the window the cascode load needs it to stay inside.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The pin, the window, the rule</a>
+  <a href="#part-3">3 · _snap_w() &amp; _rail_v()</a>
+  <a href="#part-4">4 · _pin_level()</a>
+  <a href="#part-5">5 · _diode_level()</a>
+  <a href="#part-6">6 · _stack_bound() — the two walls</a>
+  <a href="#part-7">7 · The repair knobs</a>
+  <a href="#part-8">8 · check_stage_interface()</a>
+  <a href="#part-9">9 · The fully-differential path</a>
+  <a href="#part-10">10 · The hidden inequality</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> after every transistor is sized, does the DC level the second stage <em>forces</em> onto the first-stage output node actually land inside the window the cascode load needs — and if not, can we quietly nudge it back in before wasting a SPICE run?</p></blockquote>
+
+  <p class="beat">Here is the whole story with no code at all.</p>
+
+  <p>The gm/Id sizer plans one device at a time. It hands each transistor a current, reads its lookup table at a fixed <code>Vds</code>, and sizes the width to hit a target <code>gm/Id</code>. That works beautifully — <em>per device</em>. But two devices meet at the first-stage output node, and <strong>nobody ever compares what they each want that one node to be.</strong></p>
+
+  <p>Picture a single shared shelf between two neighbours. The neighbour on the right (the <strong>second stage's input device</strong>) nails the shelf to <em>one</em> height — its gate is that node, so the node is pinned at the second stage's own <code>|V<sub>GS</sub>|</code> above its source rail. The neighbour on the left (the <strong>cascode load</strong>) doesn't care about a single height; it needs the shelf to sit inside a <em>window</em>: high enough that its NMOS output leg stays saturated, low enough that its PMOS output leg stays saturated. Per-device planning nails the shelf and draws the window — but never checks the nail is inside the window.</p>
+
+  <p>When the pinned level falls outside, the load's output cascode drops out of saturation into <strong>triode</strong>. Its output resistance collapses, the gain evaporates, and — because per-device planning saw nothing wrong — the candidate comes back <code>bias_feasible = True</code> and only dies later at the SPICE <code>.op</code> gate. That is <strong>issue #124</strong>: every telescopic-load candidate sailing through planning and face-planting at the bench.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 230" role="img" aria-label="Good case versus bad case: the pinned node either sits inside the saturation window or falls below it and triodes the output leg">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- GOOD -->
+      <text x="140" y="22" text-anchor="middle" font-size="13" fill="var(--fig-good)" font-weight="600">good — pin inside window</text>
+      <text x="40" y="52" font-size="11" fill="var(--fig-muted)">upper</text>
+      <line x1="70" y1="48" x2="240" y2="48" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <rect x="70" y="48" width="170" height="84" fill="var(--fig-good-fill)" stroke="none"/>
+      <text x="245" y="90" font-size="10" fill="var(--fig-good)">window</text>
+      <line x1="70" y1="132" x2="240" y2="132" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="40" y="136" font-size="11" fill="var(--fig-muted)">lower</text>
+      <line x1="70" y1="90" x2="240" y2="90" stroke="var(--fig-good)" stroke-width="3" stroke-dasharray="7 4"/>
+      <text x="95" y="84" font-size="11" fill="var(--fig-good)" font-weight="600">pin — output leg saturated ✓</text>
+      <!-- BAD -->
+      <text x="420" y="22" text-anchor="middle" font-size="13" fill="var(--fig-bad)" font-weight="600">bad — pin below window</text>
+      <text x="325" y="52" font-size="11" fill="var(--fig-muted)">upper</text>
+      <line x1="350" y1="48" x2="520" y2="48" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <rect x="350" y="48" width="170" height="84" fill="var(--fig-fill)" stroke="none"/>
+      <line x1="350" y1="132" x2="520" y2="132" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="325" y="136" font-size="11" fill="var(--fig-muted)">lower</text>
+      <line x1="350" y1="162" x2="520" y2="162" stroke="var(--fig-bad)" stroke-width="3" stroke-dasharray="7 4"/>
+      <text x="360" y="182" font-size="11" fill="var(--fig-bad)" font-weight="600">pin — output cascode in triode ✗</text>
+      <path d="M410,132 L410,162" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="418" y="152" font-size="10" fill="var(--fig-bad)">too low</text>
+    </svg>
+    <figcaption>Same shelf, same window. On the right the second stage pins the node below the load's lower wall — the output cascode has nowhere to stand and slips into triode.</figcaption>
+  </figure>
+
+  <p>So this file is a <strong>referee</strong> that runs after sizing. It computes both numbers — the pinned level and the window — <em>detects</em> the mismatch, <em>tries to close the gap</em> with the plan's real degrees of freedom, and only then <em>reports an honest verdict</em> (<code>bias_feasible</code>) so the SPICE gate is never asked to judge a candidate that provably cannot pass.</p>
+
+  <h3>The cast of characters</h3>
+  <p>Thirteen small functions, but only a handful carry weight. Hover any box to trace who it calls.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 580 340" role="img" aria-label="Call graph of stage_interface.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="fd"    x1="250" y1="60"  x2="130" y2="104" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="pindev" x1="300" y1="60"  x2="300" y2="104" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="stack"  x1="350" y1="60"  x2="470" y2="104" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="pin"    x1="330" y1="60"  x2="440" y2="188" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="mirror" x1="270" y1="60"  x2="180" y2="188" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="resize" x1="290" y1="60"  x2="300" y2="188" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="diode"  x1="500" y1="146" x2="500" y2="188" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="resize2" x1="130" y1="146" x2="290" y2="188" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="200" y="20" width="200" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="45" text-anchor="middle" font-weight="600" font-size="13">check_stage_interface()</text>
+      </g>
+      <!-- FD path -->
+      <g class="node" data-group="fd">
+        <rect x="20" y="104" width="200" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="120" y="124" text-anchor="middle" font-weight="600" font-size="12.5">_check_fd_interface()</text>
+        <text x="120" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the equality variant (FD)</text>
+      </g>
+      <!-- pin device -->
+      <g class="node" data-group="pindev">
+        <rect x="235" y="104" width="130" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="300" y="124" text-anchor="middle" font-weight="600" font-size="12.5">_pin_device()</text>
+        <text x="300" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">who nails the node?</text>
+      </g>
+      <!-- stack bound -->
+      <g class="node" data-group="stack">
+        <rect x="390" y="104" width="180" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="480" y="124" text-anchor="middle" font-weight="600" font-size="12.5">_stack_bound()</text>
+        <text x="480" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the window's two walls</text>
+      </g>
+      <!-- mirror group -->
+      <g class="node" data-group="mirror">
+        <rect x="90" y="188" width="180" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="180" y="208" text-anchor="middle" font-weight="600" font-size="12">_mirror_group_devs()</text>
+        <text x="180" y="223" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">which devices to move</text>
+      </g>
+      <!-- resize -->
+      <g class="node" data-group="resize">
+        <rect x="285" y="188" width="130" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="350" y="208" text-anchor="middle" font-weight="600" font-size="12">_resize_at()</text>
+        <text x="350" y="223" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">re-size at a gm/Id</text>
+      </g>
+      <!-- pin level -->
+      <g class="node" data-group="pin">
+        <rect x="425" y="188" width="145" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="497" y="208" text-anchor="middle" font-weight="600" font-size="12">_pin_level()</text>
+        <text x="497" y="223" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">where is it pinned?</text>
+      </g>
+      <!-- diode level (grandchild of stack) -->
+      <g class="node" data-group="diode">
+        <rect x="420" y="272" width="155" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="497" y="292" text-anchor="middle" font-weight="600" font-size="12">_diode_level()</text>
+        <text x="497" y="307" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">recover mirror bias</text>
+      </g>
+      <!-- snap / rail leaves under resize -->
+      <g class="node" data-group="resize2">
+        <rect x="235" y="272" width="150" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="310" y="292" text-anchor="middle" font-weight="600" font-size="12">_snap_w() · _rail_v()</text>
+        <text x="310" y="307" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">grid &amp; rail primitives</text>
+      </g>
+    </svg>
+    <figcaption>The orchestrator on top; the two number-makers (<code>_pin_level</code>, <code>_stack_bound</code>) in the middle; the repair helpers and leaves below. We learn it bottom-up so the top reads easily.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> before any code, Part&nbsp;2 builds the three ideas the whole file rests on — the <em>pin</em>, the <em>window</em>, and the one inequality that ties them together — as a single picture.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The pin, the window, and the one rule</h2>
+
+  <p class="beat">Three ideas. Each is simpler than its name.</p>
+
+  <h3>The pin — a single height the second stage forces</h3>
+  <p>The second stage's input transistor has its <em>gate</em> tied to the first-stage output node. A transistor's gate sits a fixed <code>|V<sub>GS</sub>|</code> away from its source. So once that device is sized, the node has no freedom left — it is <strong>pinned</strong>. For a common-source NMOS second stage whose source is the bottom rail:</p>
+  <div class="eq-center"><span class="boxed-eq">pin&nbsp;=&nbsp;V<sub>ss</sub>&nbsp;+&nbsp;|V<sub>GS,ss</sub>|</span></div>
+  <p>With <code>V<sub>ss</sub> = 0</code> and <code>|V<sub>GS,ss</sub>| = 0.55&nbsp;V</code>, the node is nailed at <code>0.55&nbsp;V</code>. (A follower pins it differently — Part&nbsp;4 covers both.)</p>
+
+  <h3>The window — a range the cascode load can tolerate</h3>
+  <p>The load doesn't want a single height; it wants a range. Its <strong>NMOS output leg</strong> (input pair + cascode, stacked up from the bottom rail) needs the node to sit <em>above</em> some level to stay saturated — that is the <strong>lower</strong> wall. Its <strong>PMOS output leg</strong> (mirror + cascode, stacked down from the top rail) needs the node <em>below</em> some level — the <strong>upper</strong> wall. Together:</p>
+  <div class="eq-center"><span class="boxed-eq">lower&nbsp;≤&nbsp;node&nbsp;≤&nbsp;upper</span></div>
+
+  <h3>The rule — the pin must land inside the window</h3>
+  <p>Per-device planning computes each of these three numbers in isolation and never lines them up. The entire file exists to check the one inequality nobody else checks:</p>
+  <div class="eq-center"><span class="keyline">lower ≤ pin ≤ upper</span></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 260" role="img" aria-label="Voltage window: the pin level sits just below the load's lower wall, outside the saturation window">
+      <!-- y=40 -> 1.0V, y=240 -> 0.4V ; 333.33 px/V ; y = 40 + (1.0 - V)*333.33 -->
+      <line x1="90" y1="30" x2="90" y2="250" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <text x="70" y="34" font-size="10" fill="var(--fig-muted)" text-anchor="end">↑ Vdd</text>
+      <text x="70" y="250" font-size="10" fill="var(--fig-muted)" text-anchor="end">↓ Vss</text>
+      <!-- window band: upper 0.90 (y=73) to lower 0.60 (y=173) -->
+      <rect x="90" y="73" width="250" height="100" fill="var(--fig-good-fill)" stroke="none"/>
+      <text x="330" y="128" font-size="12" fill="var(--fig-good)" text-anchor="end">saturation window</text>
+      <!-- upper wall -->
+      <line x1="90" y1="73" x2="340" y2="73" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="346" y="77" font-size="12" fill="var(--fig-accent2)">upper = 0.90 V — PMOS stack</text>
+      <!-- lower wall -->
+      <line x1="90" y1="173" x2="340" y2="173" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="346" y="177" font-size="12" fill="var(--fig-accent)">lower = 0.60 V — NMOS stack</text>
+      <!-- pin at 0.55 -> y = 40 + 0.45*333 = 190 -->
+      <line x1="90" y1="190" x2="340" y2="190" stroke="var(--fig-bad)" stroke-width="3" stroke-dasharray="7 4"/>
+      <text x="346" y="194" font-size="12" fill="var(--fig-bad)" font-weight="600">pin = 0.55 V — 2nd stage</text>
+      <!-- short-by bracket 173 -> 190 -->
+      <path d="M120,173 L120,190" stroke="var(--fig-bad)" stroke-width="2"/>
+      <path d="M115,173 L125,173 M115,190 L125,190" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="132" y="186" font-size="11" fill="var(--fig-bad)">short by 50 mV</text>
+    </svg>
+    <figcaption>The pin lands 50 mV under the lower wall — outside the window. The load's NMOS output cascode is starved of its Vdsat and triodes. This is the bug, drawn to scale.</figcaption>
+  </figure>
+
+  <h3>The one knob that saves us: gm/Id</h3>
+  <p>Just as in <code>bias.py</code>, raising a device's <code>gm/Id</code> pushes it toward <strong>weak inversion</strong>, shrinking <em>both</em> its <code>|V<sub>GS</sub>|</code> <em>and</em> its <code>V<sub>dsat</sub></code>. Every wall of the window is built from those two voltages, so the knob moves the walls:</p>
+  <ul>
+    <li>Weaken the load's <strong>NMOS mirror group</strong> → smaller diode <code>V<sub>GS</sub></code> and <code>V<sub>dsat</sub></code> → the <em>lower</em> wall drops, opening room below the pin.</li>
+    <li>Weaken the load's <strong>PMOS mirror group</strong> → the <em>upper</em> wall rises.</li>
+    <li>Weaken the <strong>second-stage device</strong> → its <code>|V<sub>GS</sub>|</code> shrinks → the <em>pin</em> itself moves (down, for a common-source stage).</li>
+  </ul>
+  <p>And the loophole is the same one <code>bias.py</code> exploits: <strong>mirror devices carry no gm requirement at all</strong>, so re-sizing a whole mirror group toward weak inversion is always spec-safe. A second-stage device may only move while <code>gm/Id · Id</code> still clears its gm minimum — which, as we'll see, sometimes means it can't move the helpful way.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>_snap_w()</code> &amp; <code>_rail_v()</code> — the two leaves</h2>
+
+  <blockquote><p><strong>The one job:</strong> two tiny primitives — snap a width to the manufacturing grid, and turn a rail's <em>name</em> into its <em>voltage</em>.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_snap_w</span>(tech: TechParams, w_um: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
+    g = tech.width
+    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(<span class="tok-fn">round</span>(w_um / g.step) * g.step, g.min), g.max))
+
+<span class="tok-kw">def</span> <span class="tok-fn">_rail_v</span>(net: <span class="tok-kw">str</span>, spec: SizingSpec) -&gt; <span class="tok-kw">float</span>:
+    <span class="tok-kw">return</span> spec.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> spec.vss</code></pre>
+
+  <p><code>_snap_w</code> is the lumber-yard rule: you can order boards in whole grid steps only. Ask for <code>2.34&nbsp;µm</code> on a <code>0.1&nbsp;µm</code> grid and you get <code>round(2.34/0.1)·0.1 = 2.3&nbsp;µm</code>, then it's clamped between <code>min</code> and <code>max</code>. Every width the repair invents passes through it, so nothing unbuildable escapes.</p>
+
+  <p><code>_rail_v</code> is even smaller: the netlist calls the top rail <code>"vdd!"</code> and everything else is the bottom rail. This one line is the anchor every voltage calculation eventually bottoms out on — the base case of the recursion in Part&nbsp;5 and the rail exit in Part&nbsp;6 both call it.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>_pin_level()</code> — where the node gets nailed</h2>
+
+  <blockquote><p><strong>The one job:</strong> given the already-sized second-stage input device, compute the single DC level it forces onto its gate — the stage-interface node.</p></blockquote>
+
+  <p>First, <em>which</em> device does the nailing? <code>_pin_device()</code> just walks a priority list of slots and returns the first stage's signal device it finds:</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_pin_device</span>(blocks: OpAmpBlocks):
+    <span class="tok-kw">for</span> slot <span class="tok-kw">in</span> (<span class="tok-str">"second_stage"</span>, <span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>,
+                 <span class="tok-str">"third_stage"</span>, <span class="tok-str">"third_stage_p"</span>, <span class="tok-str">"third_stage_n"</span>):
+        b = blocks.blocks.get(slot)
+        sig = b.signal_device <span class="tok-kw">if</span> b <span class="tok-kw">else</span> <span class="tok-kw">None</span>
+        <span class="tok-kw">if</span> sig <span class="tok-kw">is not None</span>:
+            <span class="tok-kw">return</span> sig
+    <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
+
+  <p>Then <code>_pin_level()</code> reads the level off that device's terminals:</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_pin_level</span>(dev, s: TransistorSizing, spec: SizingSpec) -&gt; <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
+    vgs = <span class="tok-fn">abs</span>(s.vgs_v)
+    src, drn = dev.terminals.get(<span class="tok-str">"s"</span>), dev.terminals.get(<span class="tok-str">"d"</span>)
+    <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS:  <span class="tok-com"># common-source: gate = source rail ± V_GS</span>
+        <span class="tok-kw">return</span> <span class="tok-fn">_rail_v</span>(src, spec) + (vgs <span class="tok-kw">if</span> dev.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -vgs)
+    <span class="tok-kw">if</span> drn <span class="tok-kw">in</span> RAILS:  <span class="tok-com"># follower: gate = quiescent output ± V_GS</span>
+        vout_q = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+        <span class="tok-kw">return</span> vout_q + (vgs <span class="tok-kw">if</span> dev.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -vgs)
+    <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
+
+  <p>Two shapes, one idea — the gate sits one <code>|V<sub>GS</sub>|</code> from whichever terminal is fixed.</p>
+
+  <table>
+    <thead><tr><th>Second-stage kind</th><th>What's fixed</th><th>Pinned node</th></tr></thead>
+    <tbody>
+      <tr><td>Common-source</td><td>source is a rail</td><td><code>rail ± |V<sub>GS</sub>|</code></td></tr>
+      <tr><td>Follower</td><td>drain is a rail</td><td><code>V<sub>out,q</sub> ± |V<sub>GS</sub>|</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>The <code>±</code> is just the transistor flavour: an NMOS gate sits <em>above</em> its source (<code>+</code>), a PMOS gate <em>below</em> (<code>−</code>).</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Our second stage is a common-source NMOS with <code>|V<sub>GS</sub>| = 0.55&nbsp;V</code> and its source on the bottom rail (<code>V<sub>ss</sub> = 0</code>):</p>
+  <pre class="code"><code>src = "vss!"  ->  in RAILS
+pin = _rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 150" role="img" aria-label="A common-source NMOS pins its gate one V_GS above the source rail">
+      <line x1="60" y1="30" x2="300" y2="30" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="306" y="34" font-size="12" fill="var(--fig-muted)">Vdd</text>
+      <rect x="150" y="52" width="60" height="34" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="180" y="73" text-anchor="middle" font-size="11">2nd-stage</text>
+      <!-- gate node = pin -->
+      <circle cx="150" cy="69" r="4" fill="var(--fig-accent)"/>
+      <line x1="150" y1="69" x2="90" y2="69" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="86" y="65" text-anchor="end" font-size="11" fill="var(--fig-accent)">pin node (gate)</text>
+      <line x1="60" y1="120" x2="300" y2="120" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="306" y="124" font-size="12" fill="var(--fig-muted)">Vss = 0</text>
+      <line x1="180" y1="86" x2="180" y2="120" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="188" y="106" font-size="10" fill="var(--fig-muted)">source on rail</text>
+      <!-- V_GS bracket -->
+      <path d="M360,69 L360,120" stroke="var(--fig-accent)" stroke-width="2"/>
+      <path d="M355,69 L365,69 M355,120 L365,120" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="372" y="98" font-size="12" fill="var(--fig-accent)">|V_GS| = 0.55 V</text>
+      <text x="372" y="60" font-size="12" fill="var(--fig-accent)" font-weight="600">pin = 0.55 V</text>
+    </svg>
+    <figcaption>Source welded to the bottom rail, gate exactly one V_GS above it — the node has no freedom left. It <em>is</em> 0.55 V.</figcaption>
+  </figure>
+
+  <p>Returning <code>None</code> when neither terminal is a rail is the honest escape hatch: if this device isn't a recognizable common-source or follower, the file declines to guess and the whole check bows out feasible.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>_diode_level()</code> — recovering the mirror's bias</h2>
+
+  <blockquote><p><strong>The one job:</strong> find the DC level of a net when a chain of diode-connected devices ties it to a supply rail — by climbing the chain one diode drop at a time.</p></blockquote>
+
+  <p>Why do we need this? The load's cascode gates aren't nailed to a rail directly — they're set by a <strong>mirror's diode branch</strong>. To know the window's walls in Part&nbsp;6 we first have to recover those hidden bias voltages, and a diode chain is a <strong>staircase</strong>: you can't know the level of one step without first knowing the step below it. That's recursion.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_diode_level</span>(net, diode_by_net, sizing, spec, _depth=<span class="tok-num">0</span>) -&gt; <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
+    <span class="tok-kw">if</span> net <span class="tok-kw">is None</span> <span class="tok-kw">or</span> _depth &gt; <span class="tok-num">8</span>:
+        <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+    <span class="tok-kw">if</span> net <span class="tok-kw">in</span> RAILS:
+        <span class="tok-kw">return</span> <span class="tok-fn">_rail_v</span>(net, spec)          <span class="tok-com"># base case: a rail is a known voltage</span>
+    d = diode_by_net.get(net)
+    s = sizing.get(d.ref) <span class="tok-kw">if</span> d <span class="tok-kw">is not None</span> <span class="tok-kw">else</span> <span class="tok-kw">None</span>
+    <span class="tok-kw">if</span> s <span class="tok-kw">is None</span>:
+        <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+    base = <span class="tok-fn">_diode_level</span>(d.terminals.get(<span class="tok-str">"s"</span>), diode_by_net, sizing, spec, _depth + <span class="tok-num">1</span>)
+    <span class="tok-kw">if</span> base <span class="tok-kw">is None</span>:
+        <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+    <span class="tok-kw">return</span> base + <span class="tok-fn">abs</span>(s.vgs_v) <span class="tok-kw">if</span> d.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> base - <span class="tok-fn">abs</span>(s.vgs_v)</code></pre>
+
+  <p>Read the last line as the physics: a diode-connected device's gate sits one <code>|V<sub>GS</sub>|</code> off its source. NMOS climbs <em>up</em> from the rail (<code>+</code>); PMOS hangs <em>down</em> from it (<code>−</code>). The <code>_depth &gt; 8</code> guard is a seatbelt against a malformed loop.</p>
+
+  <h3>Traced by hand — a single PMOS diode off Vdd</h3>
+  <p>Our load's cascode gate is set by one PMOS diode with <code>|V<sub>GS</sub>| = 0.50&nbsp;V</code> hanging off <code>Vdd = 1.2</code>:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 200" role="img" aria-label="Recursion trace: diode level climbs down from Vdd by one V_GS">
+      <!-- descending call -->
+      <rect x="30" y="24" width="250" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="155" y="46" text-anchor="middle" font-size="12.5">_diode_level("mbias")  →  base − 0.50</text>
+      <line x1="155" y1="58" x2="155" y2="82" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="165" y="74" font-size="10.5" fill="var(--fig-muted)">recurse on source net</text>
+      <rect x="30" y="82" width="250" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="155" y="104" text-anchor="middle" font-size="12.5">_diode_level("vdd!")  →  1.20  (base)</text>
+      <!-- return climbing -->
+      <g stroke="var(--fig-accent)" stroke-width="2" fill="none">
+        <path d="M295,99 C360,99 360,41 285,41" marker-end="url(#ar)"/>
+      </g>
+      <text x="370" y="72" font-size="12" fill="var(--fig-accent)">returns 1.20</text>
+      <text x="300" y="150" font-size="13" fill="var(--fig-accent)" font-weight="600">mbias = 1.20 − 0.50 = 0.70 V</text>
+      <text x="30" y="150" font-size="11" fill="var(--fig-muted)">PMOS diode → subtract one |V_GS|</text>
+    </svg>
+    <figcaption>The rail is the base case (1.20 V); the value climbs back up, losing one V_GS per PMOS diode, to give the cascode's gate bias of 0.70 V.</figcaption>
+  </figure>
+
+  <p>That <code>0.70&nbsp;V</code> is exactly the <code>g_lvl</code> Part&nbsp;6 needs to place the PMOS wall. <strong>Why is it called <code>base</code>?</strong> Because it's the level of the step directly below — the foundation this diode stacks its own <code>V<sub>GS</sub></code> onto. A staircase you must build from the ground up. I like that naming.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>_stack_bound()</code> — building the two walls</h2>
+
+  <blockquote><p><strong>The one job:</strong> starting at the stage-interface net, walk a series stack of same-type devices toward its anchor, adding up each device's <code>V<sub>dsat</sub></code> floor, and return the voltage that stack demands of the node.</p></blockquote>
+
+  <p>This is the heart of the file. Call it once for <code>"nmos"</code> and you get the <em>lower</em> wall; call it for <code>"pmos"</code> and you get the <em>upper</em> wall.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_stack_bound</span>(net, dtype, devs, pair_refs, sizing, spec) -&gt; <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
+    sgn = <span class="tok-num">1.0</span> <span class="tok-kw">if</span> dtype == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -<span class="tok-num">1.0</span>
+    vcm = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+    <span class="tok-com"># index devices of this type by their drain net; note the diode-tied ones</span>
+    by_drain, diode_by_net = {}, {}
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs:
+        <span class="tok-kw">if</span> d.type != dtype: <span class="tok-kw">continue</span>
+        by_drain.setdefault(d.terminals.get(<span class="tok-str">"d"</span>), d)
+        <span class="tok-kw">if</span> d.terminals.get(<span class="tok-str">"g"</span>) == d.terminals.get(<span class="tok-str">"d"</span>):
+            diode_by_net.setdefault(d.terminals.get(<span class="tok-str">"d"</span>), d)
+    node, floor, seen = net, <span class="tok-num">0.0</span>, <span class="tok-fn">set</span>()
+    <span class="tok-kw">while</span> node <span class="tok-kw">not in</span> seen:
+        seen.<span class="tok-fn">add</span>(node)
+        dev = by_drain.get(node)
+        s = sizing.get(dev.ref) <span class="tok-kw">if</span> dev <span class="tok-kw">is not None</span> <span class="tok-kw">else</span> <span class="tok-kw">None</span>
+        <span class="tok-kw">if</span> s <span class="tok-kw">is None</span>: <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+        floor += <span class="tok-fn">abs</span>(s.vds_sat_v)                       <span class="tok-com"># stack one more Vdsat</span>
+        <span class="tok-kw">if</span> dev.ref <span class="tok-kw">in</span> pair_refs:                        <span class="tok-com"># anchor A: the input pair</span>
+            <span class="tok-kw">return</span> vcm - sgn * <span class="tok-fn">abs</span>(s.vgs_v) + sgn * floor
+        gate = dev.terminals.get(<span class="tok-str">"g"</span>)
+        g_lvl = (<span class="tok-fn">_diode_level</span>(gate, diode_by_net, sizing, spec)
+                 <span class="tok-kw">if</span> gate != node <span class="tok-kw">else</span> <span class="tok-kw">None</span>)
+        <span class="tok-kw">if</span> g_lvl <span class="tok-kw">is not None</span>:                          <span class="tok-com"># anchor B: a mirror cascode</span>
+            <span class="tok-kw">return</span> g_lvl - sgn * <span class="tok-fn">abs</span>(s.vgs_v) + sgn * floor
+        src = dev.terminals.get(<span class="tok-str">"s"</span>)
+        <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS:                             <span class="tok-com"># anchor C: a supply rail</span>
+            <span class="tok-kw">return</span> <span class="tok-fn">_rail_v</span>(src, spec) + sgn * floor
+        node = src                                    <span class="tok-com"># else hop down one device</span>
+    <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
+
+  <p>It's a <strong>linked-list walk over circuit nets</strong>, exactly like <code>bias.py</code>'s stack-to-rail — each device's <em>source</em> is the next device's <em>drain</em>. But this walk carries a running total, <code>floor</code>, and stops at the <em>first</em> anchor whose absolute level it can pin down. Three kinds of anchor:</p>
+
+  <table>
+    <thead><tr><th>Anchor</th><th>Level known from</th><th>Formula returned</th></tr></thead>
+    <tbody>
+      <tr><td>A · input pair</td><td>feedback holds gates at <code>V<sub>cm</sub></code>, source at <code>V<sub>cm</sub> ∓ |V<sub>GS</sub>|</code></td><td><code>V<sub>cm</sub> − sgn·|V<sub>GS</sub>| + sgn·floor</code></td></tr>
+      <tr><td>B · mirror cascode</td><td>gate level from <code>_diode_level</code> (Part&nbsp;5)</td><td><code>g_lvl − sgn·|V<sub>GS</sub>| + sgn·floor</code></td></tr>
+      <tr><td>C · supply rail</td><td><code>_rail_v</code> (Part&nbsp;3)</td><td><code>rail + sgn·floor</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Why is it called <code>floor</code>?</h3>
+  <p>Every device the walk crosses stacks one more minimum voltage under the node — like stacking books to raise a shelf. <code>floor</code> is <em>the minimum voltage floor built up beneath this node so far</em>. The <code>sgn</code> flips the whole construction for PMOS: the NMOS stack builds a floor <em>upward</em> from below (a lower bound), the PMOS stack hangs a ceiling <em>downward</em> from above (an upper bound). One function, mirrored by a single <code>±1</code>. I really like this.</p>
+
+  <h3>Both walls, traced by hand</h3>
+  <p>Our telescopic load. <code>V<sub>cm</sub> = 0.6</code>. Walk the NMOS side (<code>sgn = +1</code>) from the node down to the input-pair anchor, and the PMOS side (<code>sgn = −1</code>) up to the diode-biased cascode from Part&nbsp;5.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 300" role="img" aria-label="The two stacks: PMOS cascode + mirror above set the upper wall, NMOS cascode + input pair below set the lower wall">
+      <!-- center node -->
+      <line x1="60" y1="150" x2="360" y2="150" stroke="var(--fig-stroke)" stroke-width="2.5" stroke-dasharray="6 4"/>
+      <circle cx="210" cy="150" r="4" fill="var(--fig-stroke)"/>
+      <text x="366" y="154" font-size="12" fill="var(--fig-stroke)" font-weight="600">net_mid (the node)</text>
+
+      <!-- PMOS side (up) -->
+      <line x1="60" y1="24" x2="360" y2="24" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="366" y="28" font-size="11" fill="var(--fig-muted)">Vdd = 1.2</text>
+      <rect x="140" y="34" width="140" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="210" y="53" text-anchor="middle" font-size="11">PMOS mirror</text>
+      <rect x="140" y="80" width="140" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="210" y="99" text-anchor="middle" font-size="11">PMOS cascode</text>
+      <text x="70" y="98" font-size="10.5" fill="var(--fig-accent2)">gate @ 0.70 V</text>
+      <text x="70" y="128" font-size="10.5" fill="var(--fig-accent2)">− Vdsat 0.20</text>
+      <line x1="210" y1="110" x2="210" y2="150" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="285" y="132" font-size="11.5" fill="var(--fig-accent2)" font-weight="600">upper = 0.90 V</text>
+
+      <!-- NMOS side (down) -->
+      <rect x="140" y="190" width="140" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="210" y="209" text-anchor="middle" font-size="11">NMOS cascode</text>
+      <rect x="140" y="236" width="140" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="210" y="255" text-anchor="middle" font-size="11">input pair (anchor)</text>
+      <text x="70" y="209" font-size="10.5" fill="var(--fig-accent)">+ Vdsat 0.20</text>
+      <text x="70" y="255" font-size="10.5" fill="var(--fig-accent)">+ Vdsat 0.20</text>
+      <line x1="210" y1="150" x2="210" y2="190" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="285" y="176" font-size="11.5" fill="var(--fig-accent)" font-weight="600">lower = 0.60 V</text>
+      <line x1="60" y1="276" x2="360" y2="276" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="366" y="280" font-size="11" fill="var(--fig-muted)">Vss = 0</text>
+    </svg>
+    <figcaption>Upward from the node, two PMOS Vdsats hang below the 0.70 V bias to fix the upper wall at 0.90 V; downward, two NMOS Vdsats stack above the pair's 0.20 V source to fix the lower wall at 0.60 V.</figcaption>
+  </figure>
+
+  <p>The arithmetic, both anchors:</p>
+  <pre class="code"><code>NMOS  (anchor A, sgn=+1):  0.6 − 0.40 + (0.20 + 0.20)  =  0.60 V   →  lower
+PMOS  (anchor B, sgn=−1):  0.70 + 0.40 − 0.20          =  0.90 V   →  upper</code></pre>
+  <p>For the NMOS wall the pair's <code>|V<sub>GS</sub>| = 0.40</code> puts its source at <code>0.6 − 0.40 = 0.20&nbsp;V</code>, then two <code>0.20&nbsp;V</code> floors stack on top. For the PMOS wall the cascode's gate sits at <code>0.70&nbsp;V</code> (Part&nbsp;5), its source one <code>|V<sub>GS</sub>| = 0.40</code> above at <code>1.10&nbsp;V</code>, and its drain (our node) can rise to at most <code>1.10 − 0.20 = 0.90&nbsp;V</code> before it triodes.</p>
+
+  <blockquote><p><strong>Window = [0.60 V, 0.90 V].</strong> And from Part&nbsp;4, <strong>pin = 0.55 V</strong> — 50 mV below the lower wall.</p></blockquote>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · The repair knobs — <code>_resize_at()</code> &amp; <code>_mirror_group_devs()</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> two helpers the repair leans on — re-size a single device at a new <code>gm/Id</code> (keeping its current), and select the mirror devices that are safe to move together.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_resize_at</span>(model, tech, dev, s, gm_id) -&gt; TransistorSizing | <span class="tok-kw">None</span>:
+    idw = model.lut.<span class="tok-fn">id_per_w</span>(dev.type, gm_id, s.l_um)
+    <span class="tok-kw">if</span> idw &lt;= <span class="tok-num">0</span>: <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+    w = <span class="tok-fn">_snap_w</span>(tech, <span class="tok-fn">abs</span>(s.ids_a) / idw)          <span class="tok-com"># hold current, change width</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">TransistorSizing</span>(ref=dev.ref, w_um=w, l_um=s.l_um, ids_a=s.ids_a,
+        vgs_v=model.<span class="tok-fn">vgs</span>(dev.type, w, s.l_um, s.ids_a),
+        vds_sat_v=model.<span class="tok-fn">vds_sat</span>(dev.type, w, s.l_um, s.ids_a))</code></pre>
+
+  <p>The current <code>ids_a</code> is <em>held fixed</em> (Kirchhoff already decided it); only the width moves to hit the new <code>gm/Id</code>, and the resulting <code>V<sub>GS</sub></code> and <code>V<sub>dsat</sub></code> are re-read. This is the single move that turns the gm/Id knob.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_mirror_group_devs</span>(load_devs, dtype) -&gt; <span class="tok-kw">list</span>:
+    groups = {}
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load_devs:
+        gate = d.terminals.get(<span class="tok-str">"g"</span>)
+        <span class="tok-kw">if</span> d.type == dtype <span class="tok-kw">and</span> gate:
+            groups.setdefault(gate, []).<span class="tok-fn">append</span>(d)
+    <span class="tok-kw">return</span> [d <span class="tok-kw">for</span> gate, devs <span class="tok-kw">in</span> groups.items()
+            <span class="tok-kw">if</span> <span class="tok-fn">any</span>(m.terminals.get(<span class="tok-str">"d"</span>) == gate <span class="tok-kw">for</span> m <span class="tok-kw">in</span> devs)
+            <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs]</code></pre>
+
+  <p>It buckets load devices by shared gate, then keeps only the buckets that contain a <em>diode member</em> (some device whose drain <em>is</em> that gate). That test — "does a diode set this gate?" — is what identifies a real current mirror, whose whole group can be re-sized at one <code>gm/Id</code> because they share a gate and <code>W ∝ I</code> preserves every mirror ratio. Move the whole group together, and the mirror stays a mirror.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 150" role="img" aria-label="A mirror gate group: a diode member and its copies share one gate and move together">
+      <line x1="60" y1="30" x2="440" y2="30" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="250" y="22" text-anchor="middle" font-size="11" fill="var(--fig-muted)">shared gate net</text>
+      <!-- diode member -->
+      <rect x="70" y="50" width="110" height="46" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="125" y="70" text-anchor="middle" font-size="12">diode member</text>
+      <text x="125" y="86" text-anchor="middle" font-size="10" fill="var(--fig-accent)">drain = gate</text>
+      <line x1="125" y1="50" x2="125" y2="30" stroke="var(--fig-accent)" stroke-width="2"/>
+      <!-- copies -->
+      <rect x="210" y="50" width="110" height="46" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="265" y="76" text-anchor="middle" font-size="12">copy</text>
+      <line x1="265" y1="50" x2="265" y2="30" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="340" y="50" width="110" height="46" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="395" y="76" text-anchor="middle" font-size="12">copy</text>
+      <line x1="395" y1="50" x2="395" y2="30" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="250" y="128" text-anchor="middle" font-size="11" fill="var(--fig-muted)">one gm/Id for the whole group → ratios preserved, no gm spec to break</text>
+    </svg>
+    <figcaption>A group counts as a mirror only if a diode member sets its gate. That's the spec-safe knob — the load carries no gm requirement.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · <code>check_stage_interface()</code> — the referee</h2>
+
+  <blockquote><p><strong>The one job:</strong> compute the window and the pin, and if the pin is outside, search the two knobs — mirror group and second-stage <code>gm/Id</code> — for an assignment that lands it inside; otherwise return an honest <code>bias_feasible = False</code>. Never mutate the caller's sizing.</p></blockquote>
+
+  <h3>Beat 1 — bail out unless this is a cascode-load SE case</h3>
+  <pre class="code"><code><span class="tok-kw">if not</span> <span class="tok-fn">isinstance</span>(model, GmIdModel):        <span class="tok-kw">return</span> sizing, [], <span class="tok-kw">True</span>
+<span class="tok-kw">if</span> blocks.is_fully_differential:
+    <span class="tok-kw">return</span> <span class="tok-fn">_check_fd_interface</span>(...)          <span class="tok-com"># Part 9</span>
+<span class="tok-kw">if not</span> blocks.<span class="tok-fn">has_cascode_load</span>():           <span class="tok-kw">return</span> sizing, [], <span class="tok-kw">True</span>
+net_mid = blocks.<span class="tok-fn">first_stage_out_net</span>()
+ss_dev  = <span class="tok-fn">_pin_device</span>(blocks)
+ld, ip  = blocks.load, blocks.input_pair
+s_ss = sizing.get(ss_dev.ref) <span class="tok-kw">if</span> ss_dev <span class="tok-kw">is not None</span> <span class="tok-kw">else</span> <span class="tok-kw">None</span>
+<span class="tok-kw">if not</span> (net_mid <span class="tok-kw">and</span> ld <span class="tok-kw">and</span> ld.mosfets <span class="tok-kw">and</span> s_ss): <span class="tok-kw">return</span> sizing, [], <span class="tok-kw">True</span></code></pre>
+  <p>Every guard returns the input sizing untouched and <code>True</code>. Non-cascode loads have enough headroom that the window never binds, so the check declines. "If I can't help, I do no harm."</p>
+
+  <h3>Beat 2 — compute the window, the pin, and the slack</h3>
+  <pre class="code"><code>pair_refs  = {d.ref <span class="tok-kw">for</span> d <span class="tok-kw">in</span> ip.mosfets} <span class="tok-kw">if</span> ip <span class="tok-kw">else</span> <span class="tok-fn">set</span>()
+stack_devs = ld.mosfets + (ip.mosfets <span class="tok-kw">if</span> ip <span class="tok-kw">else</span> [])
+
+<span class="tok-kw">def</span> <span class="tok-fn">window</span>(szg):
+    <span class="tok-kw">return</span> (<span class="tok-fn">_stack_bound</span>(net_mid, <span class="tok-str">"nmos"</span>, stack_devs, pair_refs, szg, spec),
+            <span class="tok-fn">_stack_bound</span>(net_mid, <span class="tok-str">"pmos"</span>, stack_devs, pair_refs, szg, spec))
+
+<span class="tok-kw">def</span> <span class="tok-fn">slack</span>(pin, lo, hi):
+    <span class="tok-kw">return</span> <span class="tok-fn">min</span>(pin - lo <span class="tok-kw">if</span> lo <span class="tok-kw">is not None else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>),
+               hi - pin <span class="tok-kw">if</span> hi <span class="tok-kw">is not None else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>))
+
+lo, hi = <span class="tok-fn">window</span>(sizing)
+pin = <span class="tok-fn">_pin_level</span>(ss_dev, s_ss, spec)
+<span class="tok-kw">if</span> pin <span class="tok-kw">is None or</span> <span class="tok-fn">slack</span>(pin, lo, hi) &gt;= _MARGIN_V:
+    <span class="tok-kw">return</span> sizing, [], <span class="tok-kw">True</span>          <span class="tok-com"># already comfortably inside</span></code></pre>
+  <p><code>slack</code> is the punchline in one line: the distance from the pin to the <em>nearer</em> wall. Positive and roomy → done. Our numbers: <code>slack(0.55, 0.60, 0.90) = min(−0.05, 0.35) = −0.05</code>. Negative — the pin is outside. Repair time.</p>
+
+  <h3>Beat 3 — pick which mirror side to move, then search</h3>
+  <pre class="code"><code>mirror_devs = []
+<span class="tok-kw">if</span> lo <span class="tok-kw">is not None and</span> pin &lt; lo + _MARGIN_V:
+    mirror_devs += <span class="tok-fn">_mirror_group_devs</span>(ld.mosfets, <span class="tok-str">"nmos"</span>)   <span class="tok-com"># lower the floor</span>
+<span class="tok-kw">if</span> hi <span class="tok-kw">is not None and</span> pin &gt; hi - _MARGIN_V:
+    mirror_devs += <span class="tok-fn">_mirror_group_devs</span>(ld.mosfets, <span class="tok-str">"pmos"</span>)   <span class="tok-com"># raise the ceiling</span>
+gm_req_ss = gm_req_map.get(ss_dev.ref, <span class="tok-num">0.0</span>)
+ss_cands  = [<span class="tok-kw">None</span>] + [g <span class="tok-kw">for</span> g <span class="tok-kw">in</span> axis <span class="tok-kw">if</span> g * <span class="tok-fn">abs</span>(s_ss.ids_a) &gt;= gm_req_ss]</code></pre>
+  <p>The violated side chooses the knob: our pin is below the lower wall, so only the <strong>NMOS mirror group</strong> is enrolled. The second-stage candidate list starts with <code>None</code> (leave it) and adds only <code>gm/Id</code> points that still clear the stage's gm minimum — the <code>g · Id &gt;= gm_req</code> filter. That filter is exactly why a common-source stage sized at <code>gm_req/Id</code> <em>can't</em> raise its pin: raising the pin needs a bigger <code>|V<sub>GS</sub>|</code>, i.e. a <em>lower</em> gm/Id, which the filter forbids. So here, the pin can't move up — the lower wall must come down.</p>
+
+  <pre class="code"><code>best, best_slack = sizing, <span class="tok-fn">slack</span>(pin, lo, hi)
+<span class="tok-kw">for</span> gm_m <span class="tok-kw">in</span> [<span class="tok-kw">None</span>] + (axis <span class="tok-kw">if</span> mirror_devs <span class="tok-kw">else</span> []):
+    base = ...resize mirror_devs at gm_m...
+    <span class="tok-kw">for</span> gm_s <span class="tok-kw">in</span> ss_cands:
+        cand = ...resize ss_dev at gm_s (or base)...
+        lo2, hi2 = <span class="tok-fn">window</span>(cand)
+        pin2 = <span class="tok-fn">_pin_level</span>(ss_dev, cand[ss_dev.ref], spec)
+        sl = <span class="tok-fn">slack</span>(pin2, lo2, hi2)
+        <span class="tok-kw">if</span> sl &gt;= _MARGIN_V: <span class="tok-kw">return</span> cand, [], <span class="tok-kw">True</span>   <span class="tok-com"># first fit = least deviation</span>
+        <span class="tok-kw">if</span> sl &gt; best_slack: best, best_slack = cand, sl</code></pre>
+
+  <h3>Beat 4 — the verdict, traced by hand</h3>
+  <p>Re-sizing the NMOS mirror group toward weak inversion shrinks its diode <code>V<sub>GS</sub></code> and <code>V<sub>dsat</sub></code>, so <code>_stack_bound</code> returns a lower floor. Say the group's Vdsats drop enough to pull the lower wall from <code>0.60</code> to <code>0.50&nbsp;V</code>:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="Repair trace: weakening the NMOS mirror group drops the lower wall until the pin sits inside the window">
+      <!-- start -->
+      <rect x="20" y="20" width="250" height="52" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="145" y="42" text-anchor="middle" font-size="12" font-weight="600">start: pin 0.55 &lt; lower 0.60</text>
+      <text x="145" y="60" text-anchor="middle" font-size="11" fill="var(--fig-bad)">slack −50 mV — outside window</text>
+      <line x1="145" y1="72" x2="145" y2="92" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- knob choice -->
+      <rect x="20" y="92" width="250" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="145" y="112" text-anchor="middle" font-size="12" font-weight="600">pin can't rise (gm min), so…</text>
+      <text x="145" y="130" text-anchor="middle" font-size="11">weaken NMOS mirror group</text>
+      <line x1="145" y1="144" x2="145" y2="164" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- result -->
+      <rect x="20" y="164" width="250" height="42" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="145" y="184" text-anchor="middle" font-size="12" font-weight="600">lower 0.60 → 0.50 V</text>
+      <text x="145" y="199" text-anchor="middle" font-size="11" fill="var(--fig-good)">pin 0.55 inside [0.50, 0.90], slack +50 mV ✓</text>
+      <!-- right column -->
+      <g font-size="11.5">
+        <text x="300" y="42" fill="var(--fig-muted)">mirror carries no gm req →</text>
+        <text x="300" y="58" fill="var(--fig-muted)">re-sizing the group is spec-safe</text>
+        <text x="300" y="118" fill="var(--fig-muted)">first fit wins = least</text>
+        <text x="300" y="134" fill="var(--fig-muted)">deviation from the plan</text>
+        <text x="300" y="188" fill="var(--fig-good)">slack ≥ _MARGIN_V (0.05)</text>
+        <text x="300" y="204" fill="var(--fig-good)">→ feasible, new sizing returned</text>
+      </g>
+    </svg>
+    <figcaption>The pin is stuck (a common-source stage at its gm minimum can't rise), so the spec-safe mirror knob drops the lower wall until the node sits back inside the window.</figcaption>
+  </figure>
+
+  <p>Two honest fallbacks close the function. If no assignment clears the margin but the <em>best</em> one still clears the <em>raw</em> bounds (<code>best_slack &gt;= 0</code>), it keeps that closest sizing and lets the SPICE gate ground the verdict. Only when even the raw bounds can't be cleared does it return <code>False</code> with a warning that names which wall was hit and why:</p>
+  <pre class="code"><code>parts = []
+<span class="tok-kw">if</span> lo <span class="tok-kw">is not None and</span> pin &lt; lo: parts.<span class="tok-fn">append</span>(f<span class="tok-str">"≥ {lo:.2f} V (its NMOS output-leg stack)"</span>)
+<span class="tok-kw">if</span> hi <span class="tok-kw">is not None and</span> pin &gt; hi: parts.<span class="tok-fn">append</span>(f<span class="tok-str">"≤ {hi:.2f} V (its PMOS output-leg stack)"</span>)
+warning = (f<span class="tok-str">"stage interface cannot bias: the second-stage input pins the "</span>
+           f<span class="tok-str">"first-stage output at {pin:.2f} V but the load needs it "</span>
+           + <span class="tok-str">" and "</span>.join(parts) + <span class="tok-str">" — … the load's output leg will triode …"</span>)
+<span class="tok-kw">return</span> sizing, [warning], <span class="tok-kw">False</span></code></pre>
+</section>
+
+<!-- ================= PART 9 ================= -->
+<section class="part" id="part-9">
+  <h2>Part 9 · The fully-differential path — a window that collapses to a point</h2>
+
+  <blockquote><p><strong>The one job:</strong> when the amplifier is fully differential and a CMFB pins the interface, the constraint is not a window but an <em>equality</em> — the second stage's <code>|V<sub>GS</sub>|</code> must <em>match</em> the servoed common-mode level, or the open-loop output rails.</p></blockquote>
+
+  <p><code>_fd_interface_target()</code> decides whether an equality even applies. A common-mode feedback loop that <em>senses the interface nets</em> holds their CM at mid-rail; that is the only family where the level is genuinely pinned:</p>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_fd_interface_target</span>(blocks, spec, iface_nets) -&gt; <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
+    cmfb = blocks.blocks.get(<span class="tok-str">"cmfb"</span>)
+    <span class="tok-kw">if</span> cmfb <span class="tok-kw">is None</span>: <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+    touched = <span class="tok-fn">set</span>()
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> cmfb.mosfets: touched.<span class="tok-fn">update</span>(d.terminals.values())
+    <span class="tok-kw">for</span> r <span class="tok-kw">in</span> cmfb.resistors: touched.<span class="tok-fn">update</span>(r.terminals.values())
+    <span class="tok-kw">if</span> touched &amp; iface_nets: <span class="tok-kw">return</span> (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+    <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
+  <p>Returning <code>None</code> exempts every other family — resistor loads self-bias on the load line, a CMFB sensing the <em>second-stage</em> outputs closes the loop around this node itself, and a mirror/diode load without CMFB leaves its high-impedance side floating to absorb the mismatch. Forcing an equality on those would over-constrain a circuit that SPICE proves is fine (tracked in issue #162).</p>
+
+  <p>When the target does apply, <code>_check_fd_interface()</code> compares it to the pin and — if they differ by more than <code>_MARGIN_V</code> — scans the second-stage <code>gm/Id</code> with <em>both</em> sides moved together, keeping the pair symmetric:</p>
+  <pre class="code"><code>pin = <span class="tok-fn">_pin_level</span>(ss[<span class="tok-num">0</span>], s0, spec)
+<span class="tok-kw">if</span> pin <span class="tok-kw">is None or</span> <span class="tok-fn">abs</span>(pin - target) &lt;= _MARGIN_V:
+    <span class="tok-kw">return</span> sizing, [], <span class="tok-kw">True</span>
+<span class="tok-com"># else: scan gm/Id (both sides) for the closest match; within margin → fit,</span>
+<span class="tok-com"># within 2×margin → keep best &amp; let SPICE decide, beyond → feasible = False</span></code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 130" role="img" aria-label="In the FD case the window collapses to a single target the pin must match">
+      <line x1="60" y1="70" x2="460" y2="70" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <!-- target point -->
+      <line x1="260" y1="46" x2="260" y2="94" stroke="var(--fig-accent2)" stroke-width="3"/>
+      <text x="260" y="38" text-anchor="middle" font-size="12" fill="var(--fig-accent2)" font-weight="600">target = 0.60 V (CMFB mid-rail)</text>
+      <text x="260" y="112" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">the window is a single point</text>
+      <!-- pin -->
+      <circle cx="330" cy="70" r="6" fill="var(--fig-bad)"/>
+      <text x="330" y="58" text-anchor="middle" font-size="11" fill="var(--fig-bad)">pin</text>
+      <path d="M324,70 L266,70" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="390" y="74" font-size="11" fill="var(--fig-bad)">must move both sides to match</text>
+    </svg>
+    <figcaption>Fully differential with an interface-sensing CMFB: there is no tolerance band. The pin must land <em>on</em> the target, or the open-loop second-stage output CM rails.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 10 ================= -->
+<section class="part" id="part-10">
+  <h2>Part 10 · The hidden inequality, limits, and the one line</h2>
+
+  <p>The file never writes it as a single formula, but every branch is testing one physical statement — the pinned interface node must sit inside the load's saturation window:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <munder><mo>&#8721;</mo><mi>nmos</mi></munder>
+          <msub><mi>V</mi><mi>dsat</mi></msub>
+          <mspace width="0.3em"/><mo>&#8804;</mo><mspace width="0.3em"/>
+          <mrow><mo>(</mo><msub><mi>V</mi><mi>rail</mi></msub><mo>&#177;</mo>
+            <mo>|</mo><msub><mi>V</mi><mrow><mi>GS</mi><mo>,</mo><mi>ss</mi></mrow></msub><mo>|</mo><mo>)</mo></mrow>
+          <mspace width="0.3em"/><mo>&#8804;</mo><mspace width="0.3em"/>
+          <msub><mi>V</mi><mi>dd</mi></msub><mo>&#8722;</mo>
+          <munder><mo>&#8721;</mo><mi>pmos</mi></munder>
+          <msub><mi>V</mi><mi>dsat</mi></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+  <p class="eq-center" style="color:var(--muted);font-size:0.95rem;">that is, <code>lower ≤ pin ≤ upper</code>.</p>
+
+  <p>Read it aloud: <em>"the level the second stage forces onto the node must stay above the NMOS output-leg stack and below the PMOS output-leg stack, so neither cascode triodes."</em> The SE path checks both walls; the FD path collapses the two walls onto one target and checks equality. <code>_stack_bound</code> builds each wall as a rail/anchor plus a sum of <code>V<sub>dsat</sub></code> floors — the entire cascode-headroom theory compressed into forty lines.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>Only the <code>GmIdModel</code> path is checked — any other model returns <code>feasible = True</code> untouched.</li>
+    <li>Single-ended: <strong>cascode loads only</strong>. Non-cascode SE loads have enough headroom that the window never binds, so the check declines.</li>
+    <li>Fully differential: only families with an <em>interface-sensing CMFB</em> get the equality. Resistor loads, second-stage-sensing CMFBs, and unregulated mirror/diode loads are exempt — an equality would over-constrain them (issue #162).</li>
+    <li>It repairs only with the plan's real knobs (mirror group, second-stage <code>gm/Id</code>). A common-source stage at its gm minimum simply cannot raise its pin, and the file says so honestly rather than faking a fit.</li>
+    <li>When even the raw bounds can't be cleared, it warns and rejects <em>before</em> the SPICE run — but when a candidate merely clears the raw bounds, the SPICE <code>.op</code> gate stays the ground truth.</li>
+    <li>It never mutates the caller's <code>sizing</code>; a repair always comes back as a new mapping.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole check rides one insight per side: <strong>a series stack of transistors demands exactly <code>anchor ± Σ V<sub>dsat</sub></code> of the node it hangs from</strong>, and the same <code>gm/Id</code> knob that <code>bias.py</code> used for headroom moves those walls here too — spec-safely, because mirror devices carry no gm requirement. One function with a single <code>±1</code> builds both walls; one <code>slack</code> line renders the verdict; and the repair only ever spends the degrees of freedom the plan genuinely has.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>stage_interface.py</code> computes the DC level the second stage pins onto the first-stage output node and the <code>[lower, upper]</code> saturation window the cascode load needs it inside, repairs a violation by weakening the offending mirror group (or, spec permitting, the second-stage device) toward weak inversion, and returns an honest <code>bias_feasible</code> verdict — catching the issue-#124 telescopic-load candidates that per-device planning waved through only to have the mirror's output cascode triode at the SPICE bench.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

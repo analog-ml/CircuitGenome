@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>metrics.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>metrics.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/metrics.py</code> — turn a solved geometry into predicted op-amp metrics (gain, GBW, PM, CMRR…) through one DeviceModel, so the same code is exact for both sizers.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The DeviceModel seam</a>
+  <a href="#part-3">3 · _sz, _gm, _gds</a>
+  <a href="#part-4">4 · Building each stage's Rout</a>
+  <a href="#part-5">5 · Gain — the product</a>
+  <a href="#part-6">6 · GBW, phase margin, slew</a>
+  <a href="#part-7">7 · Power, swing, CMRR, PSRR</a>
+  <a href="#part-8">8 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> the sizer has already chosen every transistor's width, length and current. Given that <em>solved geometry</em>, what performance does the amplifier actually deliver — its gain, bandwidth, phase margin, slew rate, power, swing, CMRR and PSRR — and does each number clear its spec?</p></blockquote>
+
+  <p class="beat">Here is the whole story without a line of code.</p>
+
+  <p>Sizing an op-amp is like assembling a team: you pick the players (transistors), give each a role and a budget (current). But picking the team is not the same as knowing how it will <em>perform</em> on game day. Someone still has to compute the <strong>report card</strong>.</p>
+
+  <p>That is all <code>metrics.py</code> is — a report card generator. It reads the finished sizing and computes the numbers a circuit designer actually cares about, then compares each against the target to produce a <strong>margin</strong> (how much headroom you have, positive means "meets spec").</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 180" role="img" aria-label="A solved sizing goes in, a report card of metrics comes out">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <rect x="20" y="52" width="140" height="76" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="90" y="80" text-anchor="middle" font-size="13" font-weight="600">solved sizing</text>
+      <text x="90" y="99" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W, L, Ids per device</text>
+      <text x="90" y="114" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Cc, spec, tech</text>
+      <rect x="210" y="46" width="140" height="88" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="280" y="82" text-anchor="middle" font-size="13" font-weight="600">_evaluate_</text>
+      <text x="280" y="100" text-anchor="middle" font-size="13" font-weight="600">metrics()</text>
+      <text x="280" y="120" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the report card</text>
+      <rect x="400" y="30" width="150" height="52" rx="10" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="475" y="52" text-anchor="middle" font-size="12" font-weight="600">metrics</text>
+      <text x="475" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gain, GBW, PM…</text>
+      <rect x="400" y="98" width="150" height="52" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="475" y="120" text-anchor="middle" font-size="12" font-weight="600">margins</text>
+      <text x="475" y="138" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">metric − spec</text>
+      <line x1="160" y1="90" x2="210" y2="90" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="350" y1="82" x2="398" y2="60" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="350" y1="98" x2="398" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    </svg>
+    <figcaption>Two dictionaries come out: the raw <code>metrics</code>, and the <code>margins</code> that say by how much each metric beats (or misses) its spec.</figcaption>
+  </figure>
+
+  <p>But here is the twist that makes this file interesting. There are <strong>two different sizers</strong> in CircuitGenome — a simple Level-1 one (geometry-free <code>λ·Id</code> physics) and a gm/Id one (lookup tables from real device curves). A naïve design would need <em>two</em> report-card generators, one per physics model. This file needs only one.</p>
+
+  <p>The trick: every small-signal number it needs — <code>gm</code>, <code>gds</code> — is fetched through a single object, the <strong>DeviceModel</strong>, evaluated <em>at the solved geometry</em>. Swap the model, and the exact same arithmetic below becomes exact for the other physics. One codebase, two sizers, no duplication. That is the hidden idea, and Part 2 is entirely about it.</p>
+
+  <h3>The cast of characters</h3>
+  <p>Only one public function — <code>_evaluate_metrics()</code> — plus three tiny local helpers and two neighbours it leans on. Hover any box to trace who talks to whom.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 600 360" role="img" aria-label="Call graph of metrics.py">
+      <!-- edges -->
+      <line class="edge" data-group="sz"    x1="255" y1="64" x2="90"  y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="gm"    x1="285" y1="64" x2="230" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="gds"   x1="315" y1="64" x2="375" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="kfs"   x1="345" y1="64" x2="518" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="model" x1="290" y1="64" x2="210" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="eq"    x1="310" y1="64" x2="410" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="gm"    x1="230" y1="164" x2="205" y2="236" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <line class="edge" data-group="gds"   x1="375" y1="164" x2="255" y2="236" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="200" y="20" width="200" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="47" text-anchor="middle" font-weight="600" font-size="13">_evaluate_metrics()</text>
+      </g>
+      <!-- _sz -->
+      <g class="node" data-group="sz">
+        <rect x="20" y="118" width="140" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="138" text-anchor="middle" font-weight="600" font-size="12.5">_sz()</text>
+        <text x="90" y="154" text-anchor="middle" font-size="10" fill="var(--fig-muted)">look up a sizing</text>
+      </g>
+      <!-- _gm -->
+      <g class="node" data-group="gm">
+        <rect x="168" y="118" width="130" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="233" y="138" text-anchor="middle" font-weight="600" font-size="12.5">_gm()</text>
+        <text x="233" y="154" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gm, capped</text>
+      </g>
+      <!-- _gds -->
+      <g class="node" data-group="gds">
+        <rect x="306" y="118" width="130" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="371" y="138" text-anchor="middle" font-weight="600" font-size="12.5">_gds()</text>
+        <text x="371" y="154" text-anchor="middle" font-size="10" fill="var(--fig-muted)">output conductance</text>
+      </g>
+      <!-- k_fs -->
+      <g class="node" data-group="kfs">
+        <rect x="444" y="118" width="146" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="517" y="138" text-anchor="middle" font-weight="600" font-size="12.5">k_fs factor</text>
+        <text x="517" y="154" text-anchor="middle" font-size="9" fill="var(--fig-muted)">_first_stage_gain_factor</text>
+      </g>
+      <!-- DeviceModel -->
+      <g class="node" data-group="model">
+        <rect x="110" y="238" width="190" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="205" y="260" text-anchor="middle" font-weight="600" font-size="13">DeviceModel</text>
+        <text x="205" y="277" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">params @ solved geometry</text>
+      </g>
+      <!-- equations -->
+      <g class="node" data-group="eq">
+        <rect x="320" y="238" width="190" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="415" y="260" text-anchor="middle" font-weight="600" font-size="13">eq.*  (equations.py)</text>
+        <text x="415" y="277" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">textbook formulas → metrics</text>
+      </g>
+    </svg>
+    <figcaption>The orchestrator on top; three private helpers below it; and the two neighbours everything routes through — the <strong>DeviceModel</strong> (the swappable-physics seam) and <strong>equations.py</strong> (the formulas). The dashed edges show that <code>_gm</code>/<code>_gds</code> are just thin wrappers over the model.</figcaption>
+  </figure>
+
+  <p>We will learn it in reading order, not file order: first the <em>seam</em> (Part 2), then the three helpers (Part 3), then how a stage's resistance is built (Part 4), and only then the metrics themselves — gain, then dynamics, then the rest.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part 2 answers the question that makes this whole file possible — <em>how can one function be exact for two completely different physics models?</em></p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The DeviceModel seam (the idea behind the file)</h2>
+
+  <blockquote><p><strong>The one job of this Part:</strong> understand why the metrics code never mentions <code>λ</code> or a lookup table directly — it only ever asks a <code>DeviceModel</code> for <code>gm</code> and <code>gds</code> at the geometry already chosen.</p></blockquote>
+
+  <p>Think of a <strong>universal power adapter</strong>. Your laptop does not care whether the wall socket behind the adapter is European or American — it just asks the adapter for "clean DC," and the adapter hides the difference. The <code>DeviceModel</code> is that adapter. The metrics code plugs into it and asks for two things:</p>
+
+  <ul>
+    <li><code>model.gm(type, W, L, Ids)</code> — the small-signal <em>transconductance</em>: how strongly this device turns a gate voltage into a drain current.</li>
+    <li><code>model.gds(type, W, L, Ids)</code> — the small-signal <em>output conductance</em>: how "leaky" the device is, i.e. how far it falls short of an ideal current source.</li>
+  </ul>
+
+  <p>Behind that adapter sit two completely different physics engines — but the metrics code cannot tell them apart:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="One metrics code plugs into DeviceModel, which has two swappable physics backends">
+      <rect x="180" y="20" width="200" height="48" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="280" y="41" text-anchor="middle" font-size="13" font-weight="600">_evaluate_metrics()</text>
+      <text x="280" y="58" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">asks only: gm, gds</text>
+      <line x1="280" y1="68" x2="280" y2="96" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="170" y="96" width="220" height="46" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="280" y="118" text-anchor="middle" font-size="13" font-weight="600">DeviceModel  (the adapter)</text>
+      <text x="280" y="134" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">evaluated at the SOLVED geometry</text>
+      <line x1="230" y1="142" x2="150" y2="182" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="330" y1="142" x2="410" y2="182" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="30" y="182" width="235" height="52" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="147" y="204" text-anchor="middle" font-size="12.5" font-weight="600">Level-1 backend</text>
+      <text x="147" y="222" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm=√(2·µCox·W/L·Id), gds=λ·Id</text>
+      <rect x="295" y="182" width="235" height="52" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="412" y="204" text-anchor="middle" font-size="12.5" font-weight="600">gm/Id backend</text>
+      <text x="412" y="222" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">lookup table from real curves</text>
+    </svg>
+    <figcaption>Same top box, two possible bottom boxes. Because the numbers are read <em>at the geometry the sizer already solved</em>, both backends are exact — not an approximation of each other.</figcaption>
+  </figure>
+
+  <p>Why is this "exact" and not just "roughly consistent"? Because the metrics are evaluated <strong>after</strong> the geometry is frozen. The Level-1 backend evaluates its <code>λ·Id</code> physics at that <code>(W, L, Id)</code>; the gm/Id backend looks up its table at that same <code>(W, L, Id)</code>. Neither is guessing — each reports <em>its own</em> truth at the solved point. The arithmetic downstream (multiply gm by Rout, take a log) is physics-agnostic.</p>
+
+  <p>Look at how the module docstring says exactly this:</p>
+
+  <pre class="code"><code><span class="tok-com"># from the module docstring</span>
+<span class="tok-str">"""Performance-metric evaluation from a solved sizing.
+
+Small-signal parameters come through a DeviceModel evaluated at the
+*solved* geometry, so the same code is exact for both Level-1
+(geometry-free λ·Id) and gm/Id (LUT).  Shared by both sizers.
+"""</span></code></pre>
+
+  <blockquote><p><strong>The takeaway:</strong> the file's power is a design decision, not an algorithm — route <em>all</em> physics through one <code>gm</code>/<code>gds</code> interface, and one report card serves both sizers exactly.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>_sz</code>, <code>_gm</code>, <code>_gds</code> — the three tiny helpers</h2>
+
+  <blockquote><p><strong>The one job:</strong> three one-liners that turn "a device plus its sizing" into the two small-signal numbers everything else is built from — with one safety clamp on <code>gm</code>.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_sz</span>(ref: <span class="tok-kw">str</span>) -> TransistorSizing | <span class="tok-kw">None</span>:
+    <span class="tok-kw">return</span> transistor_sizing.get(ref)
+
+<span class="tok-kw">def</span> <span class="tok-fn">_gm</span>(d: Device, s: TransistorSizing) -> <span class="tok-kw">float</span>:
+    <span class="tok-kw">return</span> <span class="tok-fn">min</span>(model.<span class="tok-fn">gm</span>(d.type, s.w_um, s.l_um, s.ids_a),
+               model.<span class="tok-fn">gm_ceiling</span>(d.type, s.ids_a, s.l_um))
+
+<span class="tok-kw">def</span> <span class="tok-fn">_gds</span>(d: Device, s: TransistorSizing) -> <span class="tok-kw">float</span>:
+    <span class="tok-kw">return</span> model.<span class="tok-fn">gds</span>(d.type, s.w_um, s.l_um, s.ids_a)</code></pre>
+
+  <p><code>_sz</code> is a dictionary lookup: given a device reference like <code>"M1"</code>, hand back its solved sizing (or <code>None</code> if it was never sized). <code>_gds</code> is a pure pass-through to the model. The interesting one is <code>_gm</code>, and it is interesting because of that <code>min(…)</code>.</p>
+
+  <h3>Why the <code>min</code>? The weak-inversion ceiling</h3>
+
+  <p>The Level-1 square-law formula <code>gm = √(2·µCox·(W/L)·Id)</code> has no upper limit — make the device wide enough and it promises unbounded transconductance. But real physics says <code>gm</code> can never exceed <code>Id / (n·φt)</code>, roughly <code>gm/Id ≤ 25 /V</code> at room temperature (the weak-inversion limit). Left unchecked, the square-law formula would let the sizer <em>promise a gm the device can only reach by sliding into weak inversion</em> — a gm the amplifier will never actually deliver.</p>
+
+  <p>So <code>_gm</code> takes the smaller of the two: the formula's value, or the physical ceiling <code>gm_ceiling = 25 · |Id|</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 190" role="img" aria-label="gm is the minimum of the square-law value and the physical ceiling">
+      <text x="260" y="22" text-anchor="middle" font-size="12.5" font-weight="600">min( square-law gm , ceiling 25·Id )</text>
+      <!-- case A: formula below ceiling -->
+      <text x="130" y="52" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">narrow device</text>
+      <rect x="70" y="60" width="120" height="30" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="130" y="80" text-anchor="middle" font-size="11">formula = 0.6 mA/V</text>
+      <line x1="70" y1="108" x2="190" y2="108" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="130" y="126" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ceiling = 0.5 mA/V</text>
+      <text x="130" y="150" text-anchor="middle" font-size="11" fill="var(--fig-bad)">picks ceiling: 0.5 ✗ formula</text>
+      <line x1="255" y1="55" x2="255" y2="155" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 4"/>
+      <!-- case B -->
+      <text x="390" y="52" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">honest device</text>
+      <rect x="330" y="90" width="120" height="30" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="390" y="110" text-anchor="middle" font-size="11">formula = 0.4 mA/V</text>
+      <line x1="330" y1="70" x2="450" y2="70" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="390" y="64" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ceiling = 0.5 mA/V</text>
+      <text x="390" y="150" text-anchor="middle" font-size="11" fill="var(--fig-good)">picks formula: 0.4 ✓</text>
+    </svg>
+    <figcaption>When the square-law formula over-promises (left), the clamp pulls it down to the physical ceiling; when it is honest (right), the formula wins. Either way, <code>gm</code> stays believable.</figcaption>
+  </figure>
+
+  <h3>A number, traced</h3>
+  <p>Say a device carries <code>Id = 20 µA</code>, and the square-law formula returns <code>0.6 mA/V</code>:</p>
+  <pre class="code"><code>ceiling = 25 × 20e-6 = 500e-6 = 0.5 mA/V
+gm      = min(0.6 mA/V, 0.5 mA/V) = 0.5 mA/V   <span class="tok-com"># clamped</span></code></pre>
+
+  <p>Note the ceiling depends on <code>Id</code> (and length), <em>not</em> width — you cannot buy more <code>gm</code> per amp of current than physics allows, no matter how wide you go. With these three helpers in hand, every metric below is just arithmetic on <code>gm</code> and <code>gds</code>.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · Building each stage's <code>Rout</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> for each gain stage, gather its signal transistor's <code>gm</code> and the stage's total output resistance <code>Rout</code> — the two numbers a stage's voltage gain is made of.</p></blockquote>
+
+  <p>A gain stage is a signal transistor pushing current into a resistance. Its gain is <code>gm · Rout</code>. We already have <code>gm</code>. Where does <code>Rout</code> come from? From the transistors fighting to hold the output node — every device connected there leaks a little (its <code>gds</code>), and leaks in parallel <strong>add as conductances</strong>:</p>
+
+  <div class="eq-center"><span class="boxed-eq">R<sub>out</sub>&nbsp;=&nbsp;1&nbsp;/&nbsp;(g<sub>ds,top</sub>&nbsp;+&nbsp;g<sub>ds,bot</sub>)</span></div>
+
+  <p>Analogy: two leaks draining the same bucket empty it faster together than either alone. The "resistance to going empty" is one over the total leak rate. That is literally <code>eq.rout</code>:</p>
+
+  <pre class="code"><code><span class="tok-com"># --- Load / input pair → Rout1 ---</span>
+gd_ip = <span class="tok-fn">_gds</span>(ip_devs[<span class="tok-num">0</span>], s_ip)          <span class="tok-com"># input-pair leak</span>
+<span class="tok-com"># gd_ld = _gds(load device)         # load leak</span>
+<span class="tok-kw">if</span> rout1_override <span class="tok-kw">is not None</span>:
+    rout1 = rout1_override            <span class="tok-com"># gm/Id pipeline: cascode-aware value</span>
+<span class="tok-kw">else</span>:
+    rout1 = (eq.<span class="tok-fn">rout</span>(gd_ip, gd_ld + gd_load_r)
+             <span class="tok-kw">if</span> (gd_ip + gd_ld + gd_load_r) &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>))</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 180" role="img" aria-label="Two output conductances add in parallel to set Rout">
+      <line x1="60" y1="30" x2="180" y2="30" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="120" y="22" text-anchor="middle" font-size="11" fill="var(--fig-muted)">Vdd</text>
+      <rect x="80" y="42" width="80" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="62" text-anchor="middle" font-size="11">load</text>
+      <text x="168" y="61" font-size="10.5" fill="var(--fig-muted)">gds_top = 6 µS</text>
+      <line x1="120" y1="72" x2="120" y2="100" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="120" cy="100" r="4" fill="var(--fig-accent)"/>
+      <text x="120" y="94" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">out</text>
+      <rect x="80" y="108" width="80" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="128" text-anchor="middle" font-size="11">drive</text>
+      <text x="168" y="127" font-size="10.5" fill="var(--fig-muted)">gds_bot = 4 µS</text>
+      <line x1="60" y1="150" x2="180" y2="150" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <line x1="285" y1="90" x2="335" y2="90" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <rect x="345" y="62" width="160" height="56" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="425" y="86" text-anchor="middle" font-size="12">Rout = 1/(6+4) µS</text>
+      <text x="425" y="106" text-anchor="middle" font-size="12" font-weight="600">= 100 kΩ</text>
+    </svg>
+    <figcaption>Both devices leak into the output node; their conductances add, and <code>Rout</code> is one over the sum. Here 6 µS + 4 µS → 100 kΩ.</figcaption>
+  </figure>
+
+  <h3>The <code>_override</code> escape hatch — where the two sizers differ</h3>
+
+  <p>Notice <code>rout1_override</code>. This is the <em>one</em> place the two physics models genuinely need different treatment. The Level-1 default just sums single-device <code>gds</code> values. But a gm/Id design may use a <strong>cascode</strong> — a stack of devices that multiply the output resistance far beyond one device's <code>gds</code>. So the gm/Id pipeline computes a cascode-aware <code>Rout</code> itself and passes it in through the override; when it is <code>None</code> (the Level-1 case), the simple estimate is used unchanged. Same escape hatch exists for <code>rout2</code> and <code>rout3</code>.</p>
+
+  <h3>The same story, three times</h3>
+  <p>The file repeats this pattern for each stage that exists:</p>
+  <table>
+    <thead><tr><th>Stage</th><th>Signal transistor gives</th><th>Rout from</th><th>When absent</th></tr></thead>
+    <tbody>
+      <tr><td>1 · input pair</td><td><code>gm1</code></td><td>input-pair + load gds</td><td>always present</td></tr>
+      <tr><td>2 · second stage</td><td><code>gm2</code></td><td>nmos + pmos gds</td><td><code>rout2 = ∞</code></td></tr>
+      <tr><td>3 · third stage</td><td><code>gm3</code></td><td>nmos + pmos gds</td><td><code>rout3 = ∞</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>Two things to note. First, "which device is the signal transistor?" is decided by <code>is_signal_device(d)</code> — the other device in the stage is the current-source load, whose <code>gds</code> we also grab (for PSRR later). Second, when a stage does not exist, its <code>Rout</code> is set to <code>float("inf")</code> — a clean sentinel that makes the gain code below simply skip that stage.</p>
+
+  <blockquote><p><strong>Why <code>inf</code> is elegant:</strong> an absent stage has no output node to load, so its "resistance" is infinite. Using <code>inf</code> lets the gain logic test <code>rout &lt; inf</code> to mean "this stage is real" — the physics and the code agree.</p></blockquote>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · Gain — the product of the stages</h2>
+
+  <blockquote><p><strong>The one job:</strong> multiply each stage's <code>gm · Rout</code> together to get the total open-loop DC gain, then convert to decibels.</p></blockquote>
+
+  <p>This is the headline metric. Cascade three amplifiers and their gains <strong>multiply</strong> — like gears, where the final speed-up is the product of every gear ratio. The DC gain is:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>A</mi><mn>0</mn></msub><mo>=</mo>
+          <munderover><mo>&#8719;</mo><mi>i</mi><mi>N</mi></munderover>
+          <msub><mi>g</mi><mrow><mi>m</mi><mo>,</mo><mi>i</mi></mrow></msub>
+          <mo>&#183;</mo>
+          <msub><mi>R</mi><mrow><mi>out</mi><mo>,</mo><mi>i</mi></mrow></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <pre class="code"><code>k_fs = <span class="tok-fn">_first_stage_gain_factor</span>(slot_transistors)   <span class="tok-com"># 0.5 or 1.0</span>
+<span class="tok-kw">if</span> is_three_stage <span class="tok-kw">and</span> rout2 &lt; <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>) <span class="tok-kw">and</span> rout3 &lt; <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>):
+    stage_gains = [k_fs * gm1 * rout1, gm2 * rout2, gm3 * rout3]
+<span class="tok-kw">elif</span> has_second_stage <span class="tok-kw">and</span> rout2 &lt; <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>):
+    stage_gains = [k_fs * gm1 * rout1, gm2 * rout2]
+<span class="tok-kw">else</span>:
+    stage_gains = [k_fs * gm1 * rout1]
+<span class="tok-kw">if</span> <span class="tok-fn">all</span>(g &gt; <span class="tok-num">0</span> <span class="tok-kw">for</span> g <span class="tok-kw">in</span> stage_gains):
+    gain_db = eq.<span class="tok-fn">open_loop_gain_db</span>(stage_gains)   <span class="tok-com"># 20·log10(∏)</span></code></pre>
+
+  <p>See how the <code>rout &lt; inf</code> sentinel from Part 4 does the work: the code picks the two-, or one-stage form automatically. And <code>k_fs</code> — the first-stage gain factor — is <code>0.5</code> for a single-ended non-mirror first stage (which throws away half the signal) and <code>1.0</code> for a mirror or fully-differential front end that keeps all of it.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 150" role="img" aria-label="Stage gains multiply into total gain">
+      <rect x="20" y="46" width="120" height="58" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="80" y="70" text-anchor="middle" font-size="12" font-weight="600">stage 1</text>
+      <text x="80" y="88" text-anchor="middle" font-size="11">gm1·Rout1 = 100</text>
+      <text x="152" y="80" text-anchor="middle" font-size="16" fill="var(--fig-muted)">×</text>
+      <rect x="170" y="46" width="120" height="58" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="230" y="70" text-anchor="middle" font-size="12" font-weight="600">stage 2</text>
+      <text x="230" y="88" text-anchor="middle" font-size="11">gm2·Rout2 = 100</text>
+      <line x1="300" y1="75" x2="345" y2="75" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <rect x="355" y="40" width="165" height="70" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="437" y="64" text-anchor="middle" font-size="12">A0 = 100 × 100</text>
+      <text x="437" y="82" text-anchor="middle" font-size="12">= 10 000</text>
+      <text x="437" y="100" text-anchor="middle" font-size="12" font-weight="600">= 80 dB</text>
+    </svg>
+    <figcaption>Two 40-dB stages don't add to 40 — they multiply to 10 000, which is 80 dB. Decibels turn the product into a sum you can read at a glance.</figcaption>
+  </figure>
+
+  <h3>Traced by hand</h3>
+  <p>Using our running two-stage design — <code>gm1 = 1 mA/V</code>, <code>Rout1 = 100 kΩ</code>, <code>gm2 = 4 mA/V</code>, <code>Rout2 = 25 kΩ</code>, mirror front end so <code>k_fs = 1</code>:</p>
+  <pre class="code"><code>stage 1: 1.0e-3 × 100e3 = 100
+stage 2: 4.0e-3 × 25e3  = 100
+A0      = 100 × 100 = 10 000
+gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
+
+  <p>Then, if the spec set a floor, the margin is <code>gain_db − spec.gain_min_db</code>. If the floor was 70 dB, the margin is <code>+10 dB</code> — a positive number, meaning the design comfortably clears the bar.</p>
+
+  <p>One honest edge case: the whole block is guarded by <code>all(g &gt; 0)</code>. If any stage gain is zero or negative (a device that never got sized, an <code>inf</code> resistance producing a degenerate product), the gain is simply <em>not reported</em> rather than reporting a garbage number. Silence beats a lie.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · GBW, phase margin, slew rate — the dynamics</h2>
+
+  <blockquote><p><strong>The one job:</strong> from the input-pair <code>gm</code> and the compensation capacitor <code>Cc</code>, predict how fast the amplifier is (GBW), how stable it is (phase margin), and how fast it can swing (slew rate).</p></blockquote>
+
+  <p>Gain tells you how <em>strong</em> the amplifier is; this Part tells you how <em>fast and stable</em> it is. All three numbers hinge on one component: the Miller compensation capacitor <code>Cc</code>, which deliberately slows the amplifier down to keep it from oscillating.</p>
+
+  <pre class="code"><code>cc_f = (cc_pf * <span class="tok-num">1e-12</span>) <span class="tok-kw">if</span> cc_pf <span class="tok-kw">else</span> <span class="tok-kw">None</span>
+<span class="tok-kw">if</span> has_second_stage <span class="tok-kw">and</span> cc_f <span class="tok-kw">and</span> gm1 &gt; <span class="tok-num">0</span>:
+    gm1_loop = k_fs * gm1                     <span class="tok-com"># gm into the Miller loop</span>
+    gbw = eq.<span class="tok-fn">unity_gain_bw</span>(gm1_loop, cc_f)     <span class="tok-com"># gm1 / (2π·Cc)</span></code></pre>
+
+  <h3>GBW — the gain-bandwidth product</h3>
+  <p>The gain rolls off at <code>−20 dB/decade</code> from a low-frequency pole, and hits unity (0 dB) at:</p>
+  <div class="eq-center"><span class="boxed-eq">GBW&nbsp;=&nbsp;g<sub>m1</sub>&nbsp;/&nbsp;(2π&nbsp;·&nbsp;C<sub>c</sub>)</span></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 210" role="img" aria-label="Bode magnitude sketch: 80 dB rolling off to unity gain at GBW">
+      <!-- axes -->
+      <line x1="55" y1="30" x2="55" y2="170" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <line x1="55" y1="170" x2="470" y2="170" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <text x="30" y="46" font-size="10.5" fill="var(--fig-muted)">dB</text>
+      <text x="455" y="188" font-size="10.5" fill="var(--fig-muted)">log f</text>
+      <!-- 0 dB line -->
+      <line x1="55" y1="150" x2="470" y2="150" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="20" y="154" font-size="10" fill="var(--fig-muted)">0</text>
+      <text x="20" y="46" font-size="10" fill="var(--fig-muted)">80</text>
+      <!-- gain curve: flat 80dB to dominant pole, then -20/dec to 0dB at GBW, then steeper -->
+      <path d="M55,42 L130,42 L360,150 L420,186" fill="none" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <!-- dominant pole marker -->
+      <line x1="130" y1="42" x2="130" y2="170" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 3"/>
+      <text x="130" y="185" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">dominant pole</text>
+      <!-- GBW marker at 0 dB crossing (x=360,y=150) -->
+      <circle cx="360" cy="150" r="4" fill="var(--fig-accent2)"/>
+      <line x1="360" y1="150" x2="360" y2="170" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+      <text x="360" y="185" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">GBW ≈ 159 MHz</text>
+      <text x="235" y="90" font-size="10.5" fill="var(--fig-accent)">−20 dB / decade</text>
+    </svg>
+    <figcaption>The magnitude falls from 80 dB at −20 dB/decade and crosses unity gain at the GBW — the single frequency the amplifier can no longer amplify.</figcaption>
+  </figure>
+
+  <p>Traced: <code>gm1_loop = 1 × 1 mA/V = 1e-3</code>, <code>Cc = 1 pF = 1e-12 F</code>:</p>
+  <pre class="code"><code>GBW = 1e-3 / (2π × 1e-12) = 1e-3 / 6.283e-12 ≈ 1.59e8 Hz = 159 MHz</code></pre>
+
+  <h3>Phase margin — how much stability is left</h3>
+  <p>Every pole adds phase <em>lag</em>. If the total lag reaches 180° while the gain is still above 1, the negative feedback becomes positive and the amplifier oscillates. <strong>Phase margin</strong> is the leftover angle to that 180° cliff at the unity-gain frequency:</p>
+  <div class="eq-center"><span class="boxed-eq">PM<sub>2-stage</sub>&nbsp;≈&nbsp;90°&nbsp;−&nbsp;arctan(g<sub>m1</sub>·C<sub>L</sub>&nbsp;/&nbsp;(g<sub>m2</sub>·C<sub>c</sub>))</span></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 130" role="img" aria-label="Phase budget: 90 degrees dominant plus 26.6 lag leaves 63.4 degrees of margin">
+      <!-- baseline 0..180 -->
+      <text x="40" y="30" font-size="11" fill="var(--fig-muted)">phase lag at GBW, out of 180°</text>
+      <!-- bar segments; x from 40..440 maps 0..180 deg (2.222 px/deg) -->
+      <rect x="40" y="45" width="200" height="34" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="140" y="66" text-anchor="middle" font-size="11">dominant pole 90°</text>
+      <rect x="240" y="45" width="59" height="34" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+      <text x="269" y="66" text-anchor="middle" font-size="10">26.6°</text>
+      <rect x="299" y="45" width="141" height="34" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="369" y="66" text-anchor="middle" font-size="11" font-weight="600">PM = 63.4°</text>
+      <!-- 180 cliff -->
+      <line x1="440" y1="38" x2="440" y2="90" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="440" y="104" text-anchor="middle" font-size="10" fill="var(--fig-bad)">180° = unstable</text>
+      <text x="269" y="102" text-anchor="middle" font-size="9.5" fill="var(--fig-accent2)">2nd pole</text>
+    </svg>
+    <figcaption>The dominant pole eats 90°, the second pole adds 26.6° more; what remains before the 180° cliff is the 63.4° phase margin — healthy (designers want ≳ 60°).</figcaption>
+  </figure>
+
+  <p>Traced with <code>gm1 = 1e-3</code>, <code>CL = 2 pF</code>, <code>gm2 = 4e-3</code>, <code>Cc = 1 pF</code>:</p>
+  <pre class="code"><code>ratio = (1e-3 × 2e-12) / (4e-3 × 1e-12) = 2e-15 / 4e-15 = 0.5
+PM    = 90° − arctan(0.5) = 90° − 26.57° = 63.4°</code></pre>
+
+  <p>The code chooses between a two- and three-stage phase-margin formula (three-stage adds a second <code>arctan</code> lag term for the extra pole), and only computes it when the relevant <code>gm</code> values are positive — otherwise <code>pm = None</code> and it is not reported.</p>
+
+  <h3>Slew rate — the large-signal speed limit</h3>
+  <p>GBW is the <em>small-signal</em> speed. When a big step arrives, the tail current <code>Ibias</code> can only charge <code>Cc</code> so fast:</p>
+  <div class="eq-center"><span class="boxed-eq">SR&nbsp;=&nbsp;I<sub>bias</sub>&nbsp;/&nbsp;C<sub>c</sub></span></div>
+  <pre class="code"><code>SR = 20e-6 / 1e-12 = 2e7 V/s = 20 V/µs</code></pre>
+  <p>Same <code>Cc</code> that stabilizes the loop also caps the slew rate — one component, three metrics, all traced back to it.</p>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · Power, output swing, CMRR, PSRR</h2>
+
+  <blockquote><p><strong>The one job:</strong> finish the report card — how much power it burns, how far the output can swing, and how well it rejects common-mode and supply noise.</p></blockquote>
+
+  <h3>Power — add up every leg's current</h3>
+  <p>Quiescent power is simply the supply voltage times the total current drawn. The code assembles the supply-current list one leg at a time — the tail, the second (and third) stage scaled by how many slots it fills, plus a bias-generator approximation:</p>
+  <pre class="code"><code>supply_currents = [spec.ibias]                        <span class="tok-com"># tail</span>
+<span class="tok-kw">if</span> has_second_stage: supply_currents.append(ids_2 * n_ss)
+<span class="tok-kw">if</span> is_three_stage:   supply_currents.append(ids_3 * n_ts)
+supply_currents.append(spec.ibias * <span class="tok-fn">max</span>(n_bias_legs, <span class="tok-num">1</span>))  <span class="tok-com"># bias gen approx</span>
+power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, supply_currents)</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 130" role="img" aria-label="Supply currents add up, multiplied by supply voltage, to give power">
+      <g font-size="11" text-anchor="middle">
+        <rect x="20"  y="40" width="90" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="65"  y="58">tail</text><text x="65" y="74" fill="var(--fig-muted)">20 µA</text>
+        <text x="123" y="66">+</text>
+        <rect x="135" y="40" width="90" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="180" y="58">2nd stage</text><text x="180" y="74" fill="var(--fig-muted)">80 µA</text>
+        <text x="238" y="66">+</text>
+        <rect x="250" y="40" width="90" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="295" y="58">bias gen</text><text x="295" y="74" fill="var(--fig-muted)">20 µA</text>
+      </g>
+      <line x1="345" y1="60" x2="385" y2="60" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <rect x="395" y="34" width="115" height="52" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="452" y="55" text-anchor="middle" font-size="11">1 V × 120 µA</text>
+      <text x="452" y="73" text-anchor="middle" font-size="12" font-weight="600">= 120 µW</text>
+    </svg>
+    <figcaption><code>P = (Vdd − Vss)·ΣI</code>. Three legs of 20 + 80 + 20 µA at a 1 V supply burn 120 µW. Its margin is <code>power_max − power</code> — reversed sign, because here <em>less</em> is better.</figcaption>
+  </figure>
+
+  <h3>Output swing — from the saturation voltage</h3>
+  <p>The output cannot reach the rail; it stops a saturation voltage short. So the max output is <code>Vdd − Vds_sat</code> of the top (PMOS) device, and the min is <code>Vss + Vds_sat</code> of the bottom (NMOS). With <code>Vds_sat = 0.1 V</code> and <code>Vdd = 1.0 V</code>, the top swing is <code>0.9 V</code>.</p>
+
+  <h3>CMRR — rejecting common-mode noise</h3>
+  <p>A differential pair is only as good at ignoring common-mode input as its tail current source is stiff. A leaky tail (large <code>gd_tail</code>) lets common-mode signal through:</p>
+  <div class="eq-center"><span class="boxed-eq">CMRR&nbsp;≈&nbsp;20·log<sub>10</sub>(&nbsp;g<sub>m1</sub>&nbsp;/&nbsp;(2·g<sub>d,tail</sub>)&nbsp;)</span></div>
+  <pre class="code"><code>CMRR = 20·log10( 1e-3 / (2 × 0.2e-6) ) = 20·log10(2500) ≈ 68 dB</code></pre>
+  <p>This is the reason Part 4 bothered to grab the tail device's <code>gds</code> even though it is not a gain stage — it is the denominator here. And the guard <code>gd_tail &gt; 0</code> means a resistor-degenerated or ideal tail (zero conductance) simply skips CMRR rather than dividing by zero.</p>
+
+  <h3>PSRR — rejecting supply noise (approximate)</h3>
+  <p>The last metric reuses the second-stage load conductance <code>ss_load_gd</code> gathered back in Part 4:</p>
+  <div class="eq-center"><span class="boxed-eq">PSRR<sup>+</sup>&nbsp;≈&nbsp;20·log<sub>10</sub>(&nbsp;g<sub>m2</sub>&nbsp;/&nbsp;g<sub>d,load</sub>&nbsp;)</span></div>
+  <pre class="code"><code>PSRR = 20·log10( 4e-3 / 4e-6 ) = 20·log10(1000) = 60 dB</code></pre>
+  <p>The name of the function is honest about its status — <code>psrr_db_approx</code>. It is a first-order estimate; accurate PSRR needs a simulator, which brings us to the limits.</p>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · The hidden idea, the limits, and one sentence</h2>
+
+  <p>Step back from the eight metrics and one structure remains. Every single line above is one expression in one variable's language: it reads a small-signal parameter through the <code>DeviceModel</code> at the solved geometry, then feeds it to a textbook formula. Written as one idea:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <mi>metric</mi><mo>=</mo>
+          <mi>f</mi><mo>(</mo>
+          <msub><mi>g</mi><mi>m</mi></msub><mo>,</mo>
+          <msub><mi>g</mi><mi>ds</mi></msub><mo>)</mo>
+          <mtext>&#160;where&#160;</mtext>
+          <msub><mi>g</mi><mi>m</mi></msub><mo>,</mo>
+          <msub><mi>g</mi><mi>ds</mi></msub>
+          <mo>=</mo>
+          <mi>Model</mi><mo>(</mo><mi>W</mi><mo>,</mo><mi>L</mi><mo>,</mo><msub><mi>I</mi><mi>d</mi></msub><mo>)</mo>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Because <code>Model</code> is the only physics-dependent term and it is evaluated at the frozen geometry, swapping Level-1 for gm/Id changes <em>what the numbers are</em> without changing <em>a single line that computes them</em>. That is the whole reason this file is called <code>shared</code>.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>Every formula here is <strong>analytical</strong> — a dominant-pole, first-order model. It is fast enough to guide a search over thousands of candidate sizings, but it is not the truth.</li>
+    <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
+    <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
+    <li>The cascode-aware output resistances arrive through <code>rout{1,2,3}_override</code> — this file does not compute them; the gm/Id pipeline does and passes them in.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The cleverness is not in any one formula — they are all standard analog textbook results. It is in the <strong>seam</strong>: by insisting that every small-signal number flow through one <code>gm</code>/<code>gds</code> interface at the solved geometry, the author collapsed what could have been two parallel metric engines into one, and made "add a new physics backend" a change that touches this file <em>zero</em> times.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>metrics.py</code> turns a solved transistor sizing into the op-amp's predicted report card — gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin — by routing every small-signal number through a single <code>DeviceModel</code> evaluated at the frozen geometry, so the exact same analytical code is correct for both the Level-1 and the gm/Id sizer.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

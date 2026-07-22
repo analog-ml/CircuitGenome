@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>preprocess.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>preprocess.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/preprocess.py</code> — the model-independent pre-sizing both sizers run <em>before</em> any geometry is chosen.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · Slot extraction</a>
+  <a href="#part-3">3 · size_load_resistors()</a>
+  <a href="#part-4">4 · check_topology_match()</a>
+  <a href="#part-5">5 · deduplicate_devices()</a>
+  <a href="#part-6">6 · assign_ids() — KCL currents</a>
+  <a href="#part-7">7 · _first_stage_gain_factor()</a>
+  <a href="#part-8">8 · compute_requirements() — the bias point</a>
+  <a href="#part-9">9 · compute_requirements() — the gm demands</a>
+  <a href="#part-10">10 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> take a recognized netlist plus a performance spec and work out <em>everything that can be decided before you pick a transistor model</em> — which device carries which current, which node needs which gm, how big the load resistor and compensation cap must be — so that <em>both</em> sizers start from the same, already-solved pre-work.</p></blockquote>
+
+  <p class="beat">Here is the whole story with no code.</p>
+
+  <p>Sizing an op-amp is a big job, and CircuitGenome does it two very different ways: a fast <strong>Level-1 analytical sizer</strong> (square-law hand equations) and a table-driven <strong>gm/Id pipeline</strong> (silicon lookup tables). But a surprising amount of the work is <em>identical</em> no matter which one you use.</p>
+
+  <p>Think of building a house. Before you choose whether the walls are brick or timber, you still have to read the blueprint, count the rooms, and decide how much load each beam carries. That structural pre-work does not care about the wall material. <strong>This file is exactly that pre-work</strong> — it is factored out of both sizers and run once, up front.</p>
+
+  <p>What can be decided model-independently? A lot:</p>
+  <ul>
+    <li><strong>Which transistors are where</strong> — pull the MOSFETs and resistors out of each recognized slot.</li>
+    <li><strong>How much current each carries</strong> — Kirchhoff's current law plus the one number the user gives, <code>spec.ibias</code>.</li>
+    <li><strong>How big the load resistor must be</strong> — Ohm's law, <code>R = V / I</code>.</li>
+    <li><strong>How much gm each gain device needs</strong> — read straight off the GBW / gain / CMRR / phase-margin spec.</li>
+  </ul>
+
+  <p>The only place a device model sneaks in is the output conductance <code>gds</code> — and even that is asked through a <code>DeviceModel</code> handle, so the gm/Id path gets LUT-accurate <code>gds</code> while Level-1 reproduces the analytical <code>λ·Id</code>. Same code, both answers. We'll unpack that at the very end.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 340" role="img" aria-label="The pre-sizing pipeline: spec and netlist in, per-device targets out, feeding both sizers">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- inputs -->
+      <rect x="8" y="110" width="140" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="78" y="130" text-anchor="middle" font-size="12" font-weight="600">SizingSpec</text>
+      <text x="78" y="145" text-anchor="middle" font-size="10" fill="var(--fig-muted)">ibias, GBW, gain…</text>
+      <rect x="8" y="170" width="140" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="78" y="190" text-anchor="middle" font-size="12" font-weight="600">FBR netlist</text>
+      <text x="78" y="205" text-anchor="middle" font-size="10" fill="var(--fig-muted)">slot assignments</text>
+      <line x1="148" y1="131" x2="205" y2="150" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="148" y1="191" x2="205" y2="172" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- pipeline column -->
+      <g font-size="11" text-anchor="middle">
+        <rect x="208" y="18"  width="224" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="320" y="37">1 · extract slots (mosfets + resistors)</text>
+        <rect x="208" y="58"  width="224" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="320" y="77">2 · deduplicate refs</text>
+        <rect x="208" y="98"  width="224" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="320" y="117">3 · assign IDS  (KCL + ibias)</text>
+        <rect x="208" y="138" width="224" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="320" y="157">4 · topology sanity check</text>
+        <rect x="208" y="178" width="224" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="320" y="197">5 · size load resistors</text>
+        <rect x="208" y="218" width="224" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="320" y="234" font-weight="600">6 · gm &amp; VDS_sat requirements</text>
+        <text x="320" y="247" font-size="9.5" fill="var(--fig-muted)">+ Cc, Cc2</text>
+      </g>
+      <g stroke="var(--fig-muted)" stroke-width="1.5">
+        <line x1="320" y1="48" x2="320" y2="58" marker-end="url(#ar)"/>
+        <line x1="320" y1="88" x2="320" y2="98" marker-end="url(#ar)"/>
+        <line x1="320" y1="128" x2="320" y2="138" marker-end="url(#ar)"/>
+        <line x1="320" y1="168" x2="320" y2="178" marker-end="url(#ar)"/>
+        <line x1="320" y1="208" x2="320" y2="218" marker-end="url(#ar)"/>
+      </g>
+      <!-- outputs -->
+      <line x1="432" y1="150" x2="492" y2="132" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="432" y1="180" x2="492" y2="198" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="494" y="104" width="140" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="564" y="124" text-anchor="middle" font-size="11.5" font-weight="600">Level-1 sizer</text>
+      <text x="564" y="140" text-anchor="middle" font-size="10" fill="var(--fig-muted)">reproduces λ·Id</text>
+      <rect x="494" y="174" width="140" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="564" y="194" text-anchor="middle" font-size="11.5" font-weight="600">gm/Id pipeline</text>
+      <text x="564" y="210" text-anchor="middle" font-size="10" fill="var(--fig-muted)">LUT-accurate gds</text>
+      <text x="564" y="252" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">same pre-work → both</text>
+    </svg>
+    <figcaption>Read the netlist, decide currents and targets model-independently, hand the identical pre-work to whichever sizer runs. That is the whole file.</figcaption>
+  </figure>
+
+  <h3>The cast of characters</h3>
+  <p>Nine functions. Five are little leaf helpers the sizer calls in order; two are the big <em>passes</em> (<code>assign_ids</code> and <code>compute_requirements</code>), each with one private helper. We'll learn the leaves first, so the two passes read easily. Hover any box to trace its link.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 640 380" role="img" aria-label="Call graph of preprocess.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- root fan edges (muted, static) -->
+      <g stroke="var(--fig-muted)" stroke-width="1.5">
+        <line x1="290" y1="56" x2="112" y2="92"  marker-end="url(#ar2)"/>
+        <line x1="320" y1="56" x2="315" y2="92"  marker-end="url(#ar2)"/>
+        <line x1="350" y1="56" x2="522" y2="92"  marker-end="url(#ar2)"/>
+        <line x1="290" y1="56" x2="112" y2="200" marker-end="url(#ar2)"/>
+        <line x1="330" y1="56" x2="315" y2="200" marker-end="url(#ar2)"/>
+        <line x1="352" y1="56" x2="522" y2="200" marker-end="url(#ar2)"/>
+      </g>
+      <!-- parent -> child edges (grouped) -->
+      <line class="edge" data-group="cascade" x1="522" y1="250" x2="522" y2="292" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="kfs"     x1="522" y1="250" x2="522" y2="292" stroke="var(--fig-muted)" stroke-width="0"/>
+      <line class="edge" data-group="kfs"     x1="315" y1="250" x2="315" y2="292" stroke="var(--fig-muted)" stroke-width="0"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="240" y="16" width="160" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="320" y="34" text-anchor="middle" font-weight="600" font-size="12">sizer driver</text>
+        <text x="320" y="49" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">(external — calls in order)</text>
+      </g>
+      <!-- row A -->
+      <g class="node" data-group="ext">
+        <rect x="12" y="92" width="200" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="112" y="112" text-anchor="middle" font-weight="600" font-size="11.5">extract_slot_transistors /</text>
+        <text x="112" y="127" text-anchor="middle" font-weight="600" font-size="11.5">extract_slot_resistors</text>
+      </g>
+      <g class="node" data-group="dedup">
+        <rect x="218" y="92" width="196" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="316" y="113" text-anchor="middle" font-weight="600" font-size="12">deduplicate_devices</text>
+        <text x="316" y="129" text-anchor="middle" font-size="10" fill="var(--fig-muted)">each ref once, by priority</text>
+      </g>
+      <g class="node" data-group="ids">
+        <rect x="422" y="92" width="200" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="522" y="113" text-anchor="middle" font-weight="600" font-size="12">assign_ids</text>
+        <text x="522" y="129" text-anchor="middle" font-size="10" fill="var(--fig-muted)">KCL current to each device</text>
+      </g>
+      <!-- row B -->
+      <g class="node" data-group="topo">
+        <rect x="12" y="200" width="200" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="112" y="221" text-anchor="middle" font-weight="600" font-size="12">check_topology_match</text>
+        <text x="112" y="237" text-anchor="middle" font-size="10" fill="var(--fig-muted)">warn on netlist mismatch</text>
+      </g>
+      <g class="node" data-group="loadr">
+        <rect x="218" y="200" width="196" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="316" y="221" text-anchor="middle" font-weight="600" font-size="12">size_load_resistors</text>
+        <text x="316" y="237" text-anchor="middle" font-size="10" fill="var(--fig-muted)">R = V_node / (ibias/2)</text>
+      </g>
+      <g class="node" data-group="req">
+        <rect x="422" y="200" width="200" height="48" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="522" y="221" text-anchor="middle" font-weight="600" font-size="12">compute_requirements</text>
+        <text x="522" y="237" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gm, VDS_sat, Cc targets</text>
+      </g>
+      <!-- children -->
+      <g class="node" data-group="cascade">
+        <rect x="418" y="292" width="208" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="522" y="312" text-anchor="middle" font-weight="600" font-size="11">_cascode_load_current_plan</text>
+        <text x="522" y="328" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">KCL at the folding node</text>
+      </g>
+      <g class="node" data-group="kfs">
+        <rect x="212" y="292" width="200" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="312" y="312" text-anchor="middle" font-weight="600" font-size="11">_first_stage_gain_factor</text>
+        <text x="312" y="328" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">k_fs = 1.0 or 0.5</text>
+      </g>
+      <!-- dashed link req -> kfs -->
+      <line class="edge" data-group="kfs" x1="470" y1="248" x2="360" y2="292" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)" stroke-dasharray="5 3"/>
+    </svg>
+    <figcaption>Five leaf helpers (top + left) and the two orchestrating passes (right, teal). We climb bottom-up: leaves first, passes last.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 starts with the humblest pair of functions — just pulling transistors and resistors out of the recognized slots.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · Slot extraction — the humble first step</h2>
+
+  <blockquote><p><strong>The one job:</strong> the recognizer already grouped devices into named <em>slots</em> (<code>input_pair</code>, <code>load</code>, <code>tail_current</code>…); these two functions just fish the MOSFETs (or the resistors) out of each slot into a tidy <code>{slot: [devices]}</code> dictionary.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">extract_slot_transistors</span>(fbr_result) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">list</span>[Device]]:
+    result = {}
+    <span class="tok-kw">for</span> slot_name, sa <span class="tok-kw">in</span> fbr_result.slot_assignments.items():
+        mosfets = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> sa.structure.devices <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
+        <span class="tok-kw">if</span> mosfets:
+            result[slot_name] = mosfets
+    <span class="tok-kw">return</span> result</code></pre>
+
+  <p>Analogy: the recognizer handed us a set of labeled drawers (a drawer marked <code>input_pair</code>, one marked <code>load</code>, …). Each drawer is a jumble of parts. This function walks every drawer and keeps only the transistors, skipping caps, resistors, and anything else. <code>extract_slot_resistors</code> is the identical walk, but it keeps <code>type == "resistor"</code> instead.</p>
+
+  <p>The one subtlety: <strong>a slot with no matching device is dropped, not stored as an empty list.</strong> That's the <code>if mosfets:</code> guard. So later code can write <code>slot_transistors.get("load", [])</code> and trust that a present key always has at least one device — a small invariant that removes a lot of "is it empty?" checks downstream.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 260" role="img" aria-label="Slot assignments filtered into transistors-per-slot and resistors-per-slot">
+      <text x="90" y="24" text-anchor="middle" font-size="12" font-weight="600">slot_assignments</text>
+      <!-- three drawers -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="20" y="40" width="140" height="52" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="56" font-weight="600">input_pair</text>
+        <text x="90" y="72" fill="var(--fig-muted)">M1 nmos · M2 nmos</text>
+        <text x="90" y="86" fill="var(--fig-muted)">(2 devices)</text>
+        <rect x="20" y="100" width="140" height="52" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="116" font-weight="600">load</text>
+        <text x="90" y="132" fill="var(--fig-muted)">R1 resistor</text>
+        <text x="90" y="146" fill="var(--fig-muted)">M3 pmos</text>
+        <rect x="20" y="160" width="140" height="52" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="176" font-weight="600">bias_gen</text>
+        <text x="90" y="192" fill="var(--fig-muted)">Cc cap only</text>
+        <text x="90" y="206" fill="var(--fig-muted)">(no mosfet)</text>
+      </g>
+      <!-- arrows -->
+      <line x1="165" y1="66" x2="240" y2="66" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="203" y="56" text-anchor="middle" font-size="10" fill="var(--fig-accent)">keep mos</text>
+      <line x1="165" y1="126" x2="240" y2="126" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="165" y1="186" x2="240" y2="186" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="205" y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">empty → dropped</text>
+      <!-- output transistor dict -->
+      <g font-size="10.5" text-anchor="middle">
+        <text x="360" y="24" font-weight="600">extract_slot_transistors →</text>
+        <rect x="250" y="40" width="230" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="365" y="59">input_pair: [M1, M2]</text>
+        <rect x="250" y="78" width="230" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="365" y="97">load: [M3]</text>
+        <text x="365" y="128" font-size="10" fill="var(--fig-muted)">bias_gen absent — no mosfet to keep</text>
+      </g>
+      <!-- resistor dict -->
+      <g font-size="10.5" text-anchor="middle">
+        <text x="360" y="168" font-weight="600">extract_slot_resistors →</text>
+        <rect x="250" y="182" width="230" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="365" y="201">load: [R1]</text>
+      </g>
+    </svg>
+    <figcaption>One pass, one type filter. A slot survives only if it actually holds a device of the wanted kind — so present keys are never empty.</figcaption>
+  </figure>
+
+  <p>That empty-drop rule is the whole cleverness. Everything that follows leans on it.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>size_load_resistors()</code> — Ohm's law biases a node</h2>
+
+  <blockquote><p><strong>The one job:</strong> pick the resistance of a <em>resistor load</em> so that the DC current flowing through it drops just enough voltage to switch the next transistor on — nothing more than <code>R = V / I</code>.</p></blockquote>
+
+  <p>Analogy: a resistor with current flowing through it is a <strong>voltage divider you tune by choosing the resistance</strong>. You know the current (physics fixed it). You know the voltage you <em>want</em> at the node (enough to turn the driven device on). So the resistance is forced: <code>R = wanted-drop / current</code>.</p>
+
+  <p>How much drop do we want? Enough that the output node sits at a threshold plus a little overdrive — that <code>0.15 V</code> constant:</p>
+
+  <pre class="code"><code>_RESISTOR_LOAD_OVERDRIVE = <span class="tok-num">0.15</span>   <span class="tok-com"># V_node ≈ Vth + this</span>
+
+<span class="tok-kw">def</span> <span class="tok-fn">size_load_resistors</span>(slot_resistors, spec, tech) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">float</span>]:
+    branch_i = spec.ibias / <span class="tok-num">2.0</span>          <span class="tok-com"># each load carries one pair branch</span>
+    <span class="tok-kw">if</span> branch_i &lt;= <span class="tok-num">0</span>: <span class="tok-kw">return</span> {}
+    vov = _RESISTOR_LOAD_OVERDRIVE
+    <span class="tok-kw">for</span> r <span class="tok-kw">in</span> slot_resistors.get(<span class="tok-str">"load"</span>, []):
+        nets = [<span class="tok-fn">str</span>(n).lower() <span class="tok-kw">for</span> n <span class="tok-kw">in</span> r.terminals.values()]
+        <span class="tok-kw">if</span> <span class="tok-fn">any</span>(<span class="tok-str">"gnd"</span> <span class="tok-kw">in</span> n <span class="tok-kw">or</span> n <span class="tok-kw">in</span> (<span class="tok-str">"0"</span>, <span class="tok-str">"vss!"</span>) <span class="tok-kw">for</span> n <span class="tok-kw">in</span> nets):
+            v = tech.nmos.vth + vov            <span class="tok-com"># resistor to gnd → NMOS turns on</span>
+        <span class="tok-kw">elif</span> <span class="tok-fn">any</span>(<span class="tok-str">"vdd"</span> <span class="tok-kw">in</span> n <span class="tok-kw">for</span> n <span class="tok-kw">in</span> nets):
+            v = <span class="tok-fn">abs</span>(tech.pmos.vth) + vov         <span class="tok-com"># resistor from vdd → PMOS turns on</span>
+        <span class="tok-kw">else</span>:
+            <span class="tok-kw">continue</span>                            <span class="tok-com"># not rail-referenced → skip</span>
+        <span class="tok-kw">if</span> v &gt; <span class="tok-num">0</span>:
+            out[r.ref] = v / branch_i
+    <span class="tok-kw">return</span> out</code></pre>
+
+  <h3>Traced with real numbers</h3>
+  <p>Take <code>spec.ibias = 20 µA</code>, so each branch carries <code>10 µA</code>. The resistor connects to <code>gnd</code>, so it must lift its node high enough to turn an NMOS on. With <code>Vth,n = 0.45 V</code> and <code>Vov = 0.15 V</code>:</p>
+
+  <pre class="code"><code>V_node = Vth_n + Vov = 0.45 + 0.15 = 0.60 V
+R      = V_node / branch_i = 0.60 V / 10 µA = 60 kΩ</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 210" role="img" aria-label="A load resistor from a rail dropping V_node at the branch current">
+      <!-- rail -->
+      <line x1="60" y1="34" x2="360" y2="34" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="366" y="38" font-size="11" fill="var(--fig-muted)">gnd rail (0 V)</text>
+      <!-- resistor as zigzag box -->
+      <rect x="185" y="60" width="50" height="70" rx="4" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="210" y="90" text-anchor="middle" font-size="11">R</text>
+      <text x="210" y="106" text-anchor="middle" font-size="10" fill="var(--fig-accent)">60 kΩ</text>
+      <line x1="210" y1="34" x2="210" y2="60" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- current arrow -->
+      <line x1="150" y1="95" x2="180" y2="95" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="120" y="99" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">10 µA</text>
+      <!-- node -->
+      <circle cx="210" cy="150" r="4" fill="var(--fig-accent)"/>
+      <text x="210" y="172" text-anchor="middle" font-size="11" fill="var(--fig-accent)">V_node = 0.60 V</text>
+      <line x1="210" y1="130" x2="210" y2="146" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="255" y="150" font-size="10" fill="var(--fig-muted)">→ turns NMOS on (Vth 0.45 + Vov 0.15)</text>
+      <!-- the equation restated -->
+      <text x="430" y="90" text-anchor="middle" font-size="12" font-weight="600">R = V / I</text>
+      <text x="430" y="112" text-anchor="middle" font-size="11" fill="var(--fig-muted)">0.60 / 10µA</text>
+      <text x="430" y="130" text-anchor="middle" font-size="12" fill="var(--fig-accent)">= 60 kΩ</text>
+    </svg>
+    <figcaption>The current is fixed; the wanted node voltage is fixed; so the resistance is forced. Ohm's law, nothing more.</figcaption>
+  </figure>
+
+  <p><strong>Honest limits.</strong> Only the <code>load</code> slot is sized, and only if the resistor actually touches a rail (<code>gnd</code>/<code>vss!</code>/<code>0</code>, or <code>vdd</code>). A resistor floating between two internal nodes hits the <code>else: continue</code> and keeps whatever value the netlist gave it — this function refuses to guess when it can't reason about the drop. The polarity mirror is neat: a resistor <em>to ground</em> lifts its node to switch an <strong>NMOS</strong> on; a resistor <em>from vdd</em> drops from the top to switch a <strong>PMOS</strong> on.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>check_topology_match()</code> — the sanity inspector</h2>
+
+  <blockquote><p><strong>The one job:</strong> catch the case where the netlist you handed in does not actually realize the topology you asked to size for — and say so, loudly, instead of silently producing garbage gain/PM numbers.</p></blockquote>
+
+  <p>Analogy: you asked the builder for a two-car garage, but the blueprint clearly shows one car space. Rather than pour a foundation that half-fits, the inspector stops and says "this blueprint doesn't match the order." That's this function.</p>
+
+  <p>The tell-tale sign of a valid gain stage: <strong>every stage slot holds exactly one <em>signal</em> transistor</strong> — a device whose gate is driven by the previous stage's output, not a bias rail. If a stage slot exists but contains <em>no</em> signal device (just bias-generator leftovers shoved in), the netlist doesn't match the chosen topology.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">check_topology_match</span>(slot_transistors, topology_name) -> <span class="tok-kw">list</span>[<span class="tok-kw">str</span>]:
+    warnings = []
+    <span class="tok-kw">for</span> slot <span class="tok-kw">in</span> <span class="tok-fn">sorted</span>(STAGE_SLOTS):
+        devs = slot_transistors.get(slot)
+        <span class="tok-kw">if</span> devs <span class="tok-kw">and not</span> <span class="tok-fn">any</span>(<span class="tok-fn">is_signal_device</span>(d) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs):
+            warnings.append(<span class="tok-str">f"stage slot '{slot}' has no signal transistor …"</span>)
+    <span class="tok-kw">return</span> warnings</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 190" role="img" aria-label="Decision: does the stage slot contain a signal transistor?">
+      <polygon points="180,15 300,55 180,95 60,55" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="180" y="50" text-anchor="middle" font-size="11">stage slot holds a</text>
+      <text x="180" y="66" text-anchor="middle" font-size="11">signal transistor?</text>
+      <line x1="120" y1="78" x2="80" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="240" y1="78" x2="320" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="92" y="106" font-size="10" fill="var(--fig-muted)">yes</text>
+      <text x="292" y="106" font-size="10" fill="var(--fig-muted)">no</text>
+      <rect x="20" y="122" width="130" height="44" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="85" y="142" text-anchor="middle" font-size="11">valid gain stage</text>
+      <text x="85" y="158" text-anchor="middle" font-size="10" fill="var(--fig-good)">no warning</text>
+      <rect x="255" y="122" width="245" height="44" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="377" y="141" text-anchor="middle" font-size="11">topology mismatch</text>
+      <text x="377" y="157" text-anchor="middle" font-size="10" fill="var(--fig-bad)">warn: check --topology</text>
+    </svg>
+    <figcaption>An occupied stage slot with only bias devices means single-ended vs fully-differential was mixed up — worth a warning, not silence.</figcaption>
+  </figure>
+
+  <p>Why does this matter so much? Because the downstream gain, phase-margin, and PSRR math <em>reads</em> the second/third-stage signal device. If that device is missing, those metrics would silently drop out and the sizer would happily report numbers for a circuit it never actually sized. A concrete trigger: sizing a single-ended netlist against a fully-differential <code>--topology</code>, where a bias-generator leftover gets shoehorned into <code>second_stage_p</code>. The function doesn't fix it — it just refuses to be silent about it.</p>
+
+  <p>Note the <code>if devs and …</code>: an <em>absent</em> stage slot is fine (a two-stage amp simply has no third stage). Only a slot that exists <em>but has no signal device</em> trips the warning.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>deduplicate_devices()</code> — one ref, one home</h2>
+
+  <blockquote><p><strong>The one job:</strong> a single physical transistor can appear in two slots at once; before we assign it a current, decide which slot "owns" it — the higher-priority slot wins.</p></blockquote>
+
+  <p>Analogy: an employee is listed on two org charts (they help two teams). For <em>payroll</em>, you must pick exactly one home team so they don't get paid twice. This function picks that home team using a fixed priority list.</p>
+
+  <p>The classic collision: a tail-mirror <strong>reference</strong> transistor legitimately shows up in both <code>tail_current</code> and <code>bias_gen</code>. If we assigned current from both slots we'd double-count. So we impose an order and let the <em>first</em> slot encountered win.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">deduplicate_devices</span>(slot_transistors) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">tuple</span>[Device, <span class="tok-kw">str</span>]]:
+    priority = [<span class="tok-str">"input_pair"</span>, <span class="tok-str">"load"</span>, <span class="tok-str">"tail_current"</span>,
+                <span class="tok-str">"second_stage"</span>, …, <span class="tok-str">"bias_gen"</span>]
+    ordered = <span class="tok-fn">sorted</span>(slot_transistors.keys(),
+        key=<span class="tok-kw">lambda</span> s: priority.index(s) <span class="tok-kw">if</span> s <span class="tok-kw">in</span> priority <span class="tok-kw">else</span> <span class="tok-fn">len</span>(priority))
+    seen = {}
+    <span class="tok-kw">for</span> slot <span class="tok-kw">in</span> ordered:
+        <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors[slot]:
+            <span class="tok-kw">if</span> d.ref <span class="tok-kw">not in</span> seen:
+                seen[d.ref] = (d, slot)     <span class="tok-com"># first (highest-priority) slot wins</span>
+    <span class="tok-kw">return</span> seen</code></pre>
+
+  <p>The two-line trick worth admiring: <code>sorted(..., key=priority.index)</code> walks the slots in priority order, and <code>if d.ref not in seen</code> means a ref is claimed exactly once — by whichever high-priority slot reached it first. Unknown slots sort to the very end (<code>len(priority)</code>), so they only ever claim refs nobody else wanted.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="A shared reference transistor claimed by the higher-priority slot">
+      <!-- two slots both containing MR -->
+      <rect x="20" y="30" width="150" height="60" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="52" text-anchor="middle" font-size="11" font-weight="600">tail_current</text>
+      <text x="95" y="70" text-anchor="middle" font-size="10" fill="var(--fig-muted)">priority #3</text>
+      <text x="95" y="84" text-anchor="middle" font-size="10">holds MR</text>
+      <rect x="20" y="120" width="150" height="60" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="142" text-anchor="middle" font-size="11" font-weight="600">bias_gen</text>
+      <text x="95" y="160" text-anchor="middle" font-size="10" fill="var(--fig-muted)">priority #13 (last)</text>
+      <text x="95" y="174" text-anchor="middle" font-size="10">also lists MR</text>
+      <!-- arrows -->
+      <line x1="172" y1="60" x2="300" y2="95" stroke="var(--fig-good)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="230" y="66" text-anchor="middle" font-size="10" fill="var(--fig-good)">wins ✓</text>
+      <line x1="172" y1="150" x2="300" y2="112" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <text x="238" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">skipped (already seen)</text>
+      <!-- result -->
+      <rect x="305" y="80" width="215" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="412" y="98" text-anchor="middle" font-size="11" font-weight="600">seen["MR"] = (MR, "tail_current")</text>
+      <text x="412" y="113" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">counted once, in tail_current</text>
+    </svg>
+    <figcaption>MR sits in two slots; priority order lets <code>tail_current</code> claim it first, so <code>bias_gen</code>'s copy is skipped and never double-counted.</figcaption>
+  </figure>
+
+  <p>The output shape — <code>{ref: (Device, slot)}</code> — is exactly what the next pass wants: a flat list of every unique transistor, each tagged with the one slot that decides its current.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>assign_ids()</code> — Kirchhoff hands out the currents</h2>
+
+  <blockquote><p><strong>The one job:</strong> give every transistor its quiescent drain current, worked out purely from where it sits in the circuit (its slot) and the one bias number the user supplied, <code>spec.ibias</code>.</p></blockquote>
+
+  <p>Analogy: <code>ibias</code> is a river of current entering at the tail. Kirchhoff's law says whatever flows in must split and flow out — so each branch's share is fixed by the wiring, not by any transistor model. A differential pair splits the tail evenly: two branches, half each.</p>
+
+  <p>The slot <em>names</em> encode the split. The taxonomy groups them:</p>
+
+  <table>
+    <thead><tr><th>Slot group</th><th>Rule</th><th>Current each device gets</th></tr></thead>
+    <tbody>
+      <tr><td><code>HALF_BIAS_SLOTS</code><br><span style="color:var(--muted)">input_pair, load</span></td><td>2-device group splits the tail</td><td class="num"><code>ibias / n</code></td></tr>
+      <tr><td><code>FULL_BIAS_SLOTS</code><br><span style="color:var(--muted)">tail_current, bias_gen</span></td><td>carries the whole tail</td><td class="num"><code>ibias</code></td></tr>
+      <tr><td><code>SECOND_STAGE_SLOTS</code></td><td>scaled by ratio</td><td class="num"><code>ibias · ratio₂</code></td></tr>
+      <tr><td><code>THIRD_STAGE_SLOTS</code></td><td>scaled by ratio</td><td class="num"><code>ibias · ratio₃</code></td></tr>
+    </tbody>
+  </table>
+
+  <pre class="code"><code><span class="tok-kw">for</span> ref, (device, slot) <span class="tok-kw">in</span> all_transistors.items():
+    <span class="tok-kw">if</span> slot == <span class="tok-str">"load"</span> <span class="tok-kw">and</span> ref <span class="tok-kw">in</span> cascode_load:
+        ids_map[ref] = cascode_load[ref]        <span class="tok-com"># special: folding/cascode plan</span>
+    <span class="tok-kw">elif</span> slot <span class="tok-kw">in</span> HALF_BIAS_SLOTS:
+        n = <span class="tok-fn">len</span>([d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors[slot] <span class="tok-kw">if</span> d.type == device.type])
+        ids_map[ref] = spec.ibias / <span class="tok-fn">max</span>(n, <span class="tok-num">1</span>)
+    <span class="tok-kw">elif</span> slot <span class="tok-kw">in</span> FULL_BIAS_SLOTS:
+        ids_map[ref] = spec.ibias
+    <span class="tok-kw">elif</span> slot <span class="tok-kw">in</span> SECOND_STAGE_SLOTS:
+        ids_map[ref] = ids_2                     <span class="tok-com"># ibias · second_stage_current_ratio</span>
+    <span class="tok-kw">elif</span> slot <span class="tok-kw">in</span> THIRD_STAGE_SLOTS:
+        ids_map[ref] = spec.ibias * spec.third_stage_current_ratio
+    <span class="tok-kw">else</span>:
+        ids_map[ref] = spec.ibias                <span class="tok-com"># conservative default</span></code></pre>
+
+  <h3>The easy split, traced</h3>
+  <p>With <code>ibias = 20 µA</code>, an <code>input_pair</code> of two NMOS devices: <code>n = 2</code>, so each gets <code>20 / 2 = 10 µA</code>. The <code>tail_current</code> device carries the full <code>20 µA</code>. Clean KCL.</p>
+
+  <h3>The hard split: <code>_cascode_load_current_plan()</code></h3>
+  <p>The generic "half each" rule <strong>starves a folded/telescopic cascode load</strong>. At the folding node, the bottom sink must swallow the input-pair branch current <em>plus</em> the cascode branch current — otherwise the pair's excess current has nowhere to go and the whole load rails. So the helper reads the assembled netlist and does real KCL at that node:</p>
+
+  <pre class="code"><code>pair_drains = {d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> pair}
+cascode = {d.ref <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load <span class="tok-kw">if</span> d.terminals.get(<span class="tok-str">"s"</span>) <span class="tok-kw">in</span> pair_drains}
+<span class="tok-kw">if not</span> cascode: <span class="tok-kw">return</span> {}                          <span class="tok-com"># simple load → generic rule</span>
+folding = {d.ref <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load
+           <span class="tok-kw">if</span> d.terminals.get(<span class="tok-str">"s"</span>) <span class="tok-kw">in</span> RAILS
+           <span class="tok-kw">and</span> d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">in</span> pair_drains}
+i_pair = spec.ibias / <span class="tok-num">2.0</span>
+<span class="tok-kw">if not</span> folding:
+    <span class="tok-kw">return</span> {d.ref: i_pair <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load}        <span class="tok-com"># telescopic: whole stack = ibias/2</span>
+i_casc = spec.ibias / <span class="tok-num">2.0</span>
+<span class="tok-kw">return</span> {d.ref: (i_pair + i_casc <span class="tok-kw">if</span> d.ref <span class="tok-kw">in</span> folding <span class="tok-kw">else</span> i_casc)
+        <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load}</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 250" role="img" aria-label="KCL at the folding node: pair branch plus cascode branch must both be sunk">
+      <!-- folding node -->
+      <circle cx="260" cy="120" r="5" fill="var(--fig-accent)"/>
+      <text x="260" y="108" text-anchor="middle" font-size="11" fill="var(--fig-accent)">folding node</text>
+      <!-- current in from pair (from left) -->
+      <line x1="120" y1="120" x2="252" y2="120" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="150" y="110" font-size="10.5" fill="var(--fig-accent2)">pair branch</text>
+      <text x="150" y="138" font-size="10.5" fill="var(--fig-accent2)">i_pair = 10 µA</text>
+      <!-- current in from cascode (from top) -->
+      <line x1="260" y1="40" x2="260" y2="112" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="272" y="58" font-size="10.5" fill="var(--fig-accent2)">cascode branch</text>
+      <text x="272" y="74" font-size="10.5" fill="var(--fig-accent2)">i_casc = 10 µA</text>
+      <!-- folding device below sinks both -->
+      <rect x="215" y="150" width="90" height="46" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="260" y="170" text-anchor="middle" font-size="11" font-weight="600">folding dev</text>
+      <text x="260" y="185" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">source on rail</text>
+      <line x1="260" y1="128" x2="260" y2="150" stroke="var(--fig-bad)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="360" y="145" font-size="11" fill="var(--fig-bad)" font-weight="600">must sink</text>
+      <text x="360" y="161" font-size="11" fill="var(--fig-bad)">10 + 10 = 20 µA</text>
+      <!-- rail -->
+      <line x1="200" y1="220" x2="320" y2="220" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <line x1="260" y1="196" x2="260" y2="220" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="326" y="224" font-size="10" fill="var(--fig-muted)">supply rail</text>
+      <!-- KCL note -->
+      <text x="130" y="200" font-size="11" fill="var(--fig-muted)">KCL: in = out</text>
+    </svg>
+    <figcaption>The folding device carries both branches (<code>ibias/2 + ibias/2 = ibias</code>); every plain cascode device carries only the cascode branch <code>ibias/2</code>. The generic "half each" rule would have starved it.</figcaption>
+  </figure>
+
+  <p>Three shapes fall out of the same helper:</p>
+  <ul>
+    <li><strong>Simple load</strong> (nothing stacked on the pair drains) → returns <code>{}</code>, keep the generic rule.</li>
+    <li><strong>Telescopic</strong> (cascode devices, no folding devices) → whole stack carries <code>ibias/2</code>.</li>
+    <li><strong>Folded</strong> → folding devices carry <code>ibias/2 + ibias/2</code>; cascode devices carry <code>ibias/2</code>.</li>
+  </ul>
+  <p>This is the file's one genuine topology-reading moment — everything else keys off slot names, but here it walks terminals to find the fold.</p>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>_first_stage_gain_factor()</code> — the ½ that bites</h2>
+
+  <blockquote><p><strong>The one job:</strong> return <code>k_fs = 1.0</code> or <code>0.5</code> — a single number that says whether the first stage delivers its <em>full</em> transconductance to the loop, or only half of it because a non-mirror load throws one branch away.</p></blockquote>
+
+  <p>Analogy: a differential pair generates signal in <em>two</em> branches. To use both, you need a load that <strong>folds them together</strong> — an active current mirror. A plain resistor or a non-mirror current-source load only lets one branch through, and you lose half the gm. It's like a two-lane road merging: a smart merge keeps all the traffic; a bad one drops a lane.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_first_stage_gain_factor</span>(slot_transistors) -> <span class="tok-kw">float</span>:
+    <span class="tok-kw">if</span> <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span>
+           (<span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>, <span class="tok-str">"third_stage_p"</span>, <span class="tok-str">"third_stage_n"</span>)):
+        <span class="tok-kw">return</span> <span class="tok-num">1.0</span>   <span class="tok-com"># fully-differential: both branches drive the next stage</span>
+    mosfets = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors.get(<span class="tok-str">"load"</span>, []) <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
+    is_mirror = <span class="tok-fn">any</span>(d.terminals.get(<span class="tok-str">"g"</span>) == d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets)
+    <span class="tok-kw">return</span> <span class="tok-num">1.0</span> <span class="tok-kw">if</span> is_mirror <span class="tok-kw">else</span> <span class="tok-num">0.5</span></code></pre>
+
+  <p>The mirror test is beautifully cheap: a current-mirror load has a <strong>diode-connected</strong> device, and diode-connected means <code>gate == drain</code> (<code>g</code> and <code>d</code> on the same net). One terminal comparison detects the whole topology.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 200" role="img" aria-label="Mirror load recovers full gm; non-mirror load halves it">
+      <!-- left: mirror -->
+      <text x="135" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-good)">mirror load — k_fs = 1.0</text>
+      <rect x="40" y="40" width="80" height="40" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="80" y="64" text-anchor="middle" font-size="10">branch A</text>
+      <rect x="150" y="40" width="80" height="40" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="190" y="64" text-anchor="middle" font-size="10">branch B</text>
+      <line x1="120" y1="60" x2="150" y2="60" stroke="var(--fig-good)" stroke-width="2.5"/>
+      <text x="135" y="98" text-anchor="middle" font-size="10" fill="var(--fig-good)">g = d → diode-connected</text>
+      <path d="M80,80 C80,120 190,120 190,132" stroke="var(--fig-good)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+      <text x="135" y="150" text-anchor="middle" font-size="10.5">both branches combine</text>
+      <text x="135" y="168" text-anchor="middle" font-size="11" fill="var(--fig-good)">full gm1·Rout1</text>
+      <!-- divider -->
+      <line x1="275" y1="30" x2="275" y2="180" stroke="var(--fig-border)" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="3 4"/>
+      <!-- right: non-mirror -->
+      <text x="405" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-bad)">resistor load — k_fs = 0.5</text>
+      <rect x="310" y="40" width="80" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="350" y="64" text-anchor="middle" font-size="10">branch A</text>
+      <rect x="420" y="40" width="80" height="40" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="460" y="60" text-anchor="middle" font-size="10" fill="var(--fig-muted)">branch B</text>
+      <text x="460" y="74" text-anchor="middle" font-size="9" fill="var(--fig-muted)">wasted</text>
+      <path d="M350,80 L350,132" stroke="var(--fig-bad)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+      <text x="405" y="150" text-anchor="middle" font-size="10.5">only one branch tapped</text>
+      <text x="405" y="168" text-anchor="middle" font-size="11" fill="var(--fig-bad)">half: gm1·Rout1 / 2</text>
+    </svg>
+    <figcaption>A mirror folds both branches back together (full gm); a resistor or non-mirror source drops a branch, so the device must be twice as strong to hit the same spec.</figcaption>
+  </figure>
+
+  <p>Why does <code>0.5</code> "bite"? Because everywhere the requirements pass later divides by <code>k_fs</code>: a non-mirror load needs a proportionally <em>larger</em> device gm1 to hit the same GBW and gain. One branch wasted → double the transconductance demanded. (Subtle detail the docstring flags: <code>k_fs</code> is applied to gain and to gm1's role in GBW/PM, but <em>not</em> to the raw-device gm1 used for CMRR.)</p>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · <code>compute_requirements()</code> — the bias point &amp; the cap</h2>
+
+  <blockquote><p><strong>The one job (first half):</strong> establish the small-signal operating point — each node's output resistance <code>Rout</code> and the compensation cap <code>Cc</code> — because every gm requirement in the second half is derived from these two.</p></blockquote>
+
+  <p>This is the big pass. We'll take it in two Parts. Part&nbsp;8 sets the stage: <em>output resistances</em> and the <em>compensation cap</em>. Part&nbsp;9 turns those into gm demands.</p>
+
+  <h3>Output resistances — conductances in parallel</h3>
+  <p>The output resistance of a stage is set by the two devices fighting over the node — the drive device and the load. In conductance terms they simply add, and resistance is the reciprocal:</p>
+
+  <div class="eq-center"><span class="boxed-eq">Rout1 = 1 / (g<sub>ds,ip</sub> + g<sub>ds,ld</sub> + 1/R<sub>load</sub>)</span></div>
+
+  <p>Analogy: two leaky taps draining the same bucket. Each leak (conductance) adds; the bucket's ability to <em>hold</em> voltage (resistance) is one over the total leak. A resistor load is just a third, fixed leak of <code>1/R</code>.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_gds_est</span>(device, ids) -> <span class="tok-kw">float</span>:
+    role = SIGNAL <span class="tok-kw">if</span> <span class="tok-fn">is_signal_device</span>(device) <span class="tok-kw">else</span> CURRENT_SOURCE
+    <span class="tok-kw">return</span> model.<span class="tok-fn">gds_estimate</span>(device.type, ids, role)      <span class="tok-com"># ← the ONLY model call</span>
+
+gd_ip = <span class="tok-fn">_gds_est</span>(ip_devices[<span class="tok-num">0</span>], spec.ibias / <span class="tok-num">2</span>)
+gd_ld = <span class="tok-fn">_gds_est</span>(ld_devices[<span class="tok-num">0</span>], spec.ibias / <span class="tok-num">2</span>)
+rout1 = eq.<span class="tok-fn">rout</span>(gd_ip, gd_ld + gd_load_r)                <span class="tok-com"># resistor load folded in</span>
+k_fs  = <span class="tok-fn">_first_stage_gain_factor</span>(slot_transistors)</code></pre>
+
+  <p><strong>This <code>_gds_est</code> is the hidden hinge of the whole file.</strong> It's the single place a device model is consulted. Everything else — currents, Rs, gm targets — is pure algebra. Route <code>gds</code> through the <code>DeviceModel</code> and the exact same code gives Level-1 its analytical <code>λ·Id</code> and the gm/Id path its LUT-accurate silicon <code>gds</code>. We'll draw that fork in Part&nbsp;10.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 170" role="img" aria-label="Output conductances add in parallel; resistance is the reciprocal">
+      <text x="260" y="22" text-anchor="middle" font-size="12" font-weight="600">first-stage output node</text>
+      <circle cx="260" cy="80" r="5" fill="var(--fig-accent)"/>
+      <!-- three leaks -->
+      <line x1="90" y1="80" x2="252" y2="80" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="80" y="66" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">gds,ip</text>
+      <line x1="260" y1="30" x2="260" y2="72" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="260" y="24" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">gds,ld</text>
+      <line x1="430" y1="80" x2="270" y2="80" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="452" y="84" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">1/R</text>
+      <line x1="260" y1="88" x2="260" y2="130" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="260" y="150" text-anchor="middle" font-size="11" fill="var(--fig-accent)">Rout1 = 1 / (sum of leaks)</text>
+    </svg>
+    <figcaption>Every conductance draining the node adds; the node's output resistance is one over their sum. The resistor load is just another <code>1/R</code> term.</figcaption>
+  </figure>
+
+  <p>The same pattern computes <code>rout2</code> (from the second stage's NMOS+PMOS) and <code>rout3</code> (third stage). When a stage is absent, its rout is <code>float("inf")</code> — a clean sentinel that later gain math treats as "not a limiting factor."</p>
+
+  <h3>The compensation cap <code>Cc</code> — pick the smallest stable one</h3>
+  <p>For a two-stage amp you need a Miller cap to split the poles for stability. The file's philosophy is <strong>pick the smallest <code>Cc</code> that's still stable</strong>, because every extra picofarad inflates the gm1 you'll need (issue #108).</p>
+
+  <pre class="code"><code>cc_ub_f = cc_max_f
+<span class="tok-kw">if</span> spec.slew_rate_min_vps:
+    cc_ub_f = <span class="tok-fn">min</span>(cc_ub_f, spec.ibias / spec.slew_rate_min_vps)   <span class="tok-com"># SR upper-bounds Cc</span>
+cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>(_CC_STABILITY_RATIO * spec.cl, cc_ub_f))
+                     <span class="tok-com"># floor: 0.25·CL keeps ~60° phase margin</span></code></pre>
+
+  <h3>Traced with real numbers</h3>
+  <p>With <code>CL = 4 pF</code> and the stability ratio <code>0.25</code>, the pole-split floor is <code>1 pF</code>. If the user also asked for a slew rate of <code>20 V/µs</code> at <code>ibias = 20 µA</code>, the upper bound is <code>20µA / 20e6 = 1 pF</code> — they coincide, so <code>Cc = 1 pF</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 140" role="img" aria-label="Cc is clamped between the stability floor and the slew-rate ceiling">
+      <line x1="40" y1="70" x2="480" y2="70" stroke="var(--fig-muted)" stroke-width="2"/>
+      <text x="40" y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">small Cc</text>
+      <text x="480" y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">large Cc</text>
+      <!-- floor -->
+      <line x1="180" y1="50" x2="180" y2="90" stroke="var(--fig-good)" stroke-width="3"/>
+      <text x="180" y="42" text-anchor="middle" font-size="10" fill="var(--fig-good)">floor 0.25·CL</text>
+      <text x="180" y="112" text-anchor="middle" font-size="10" fill="var(--fig-good)">= 1 pF</text>
+      <!-- ceiling -->
+      <line x1="330" y1="50" x2="330" y2="90" stroke="var(--fig-bad)" stroke-width="3"/>
+      <text x="330" y="42" text-anchor="middle" font-size="10" fill="var(--fig-bad)">SR ceiling ibias/SR</text>
+      <text x="330" y="112" text-anchor="middle" font-size="10" fill="var(--fig-bad)">= 1 pF</text>
+      <!-- chosen -->
+      <circle cx="200" cy="70" r="6" fill="var(--fig-accent)"/>
+      <text x="200" y="60" text-anchor="middle" font-size="10" fill="var(--fig-accent)">pick smallest stable</text>
+    </svg>
+    <figcaption>Slew rate only <em>upper</em>-bounds Cc; the stability floor <em>lower</em>-bounds it. The chosen Cc sits at the floor so gm1 stays as small as possible.</figcaption>
+  </figure>
+
+  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code>. Both are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
+</section>
+
+<!-- ================= PART 9 ================= -->
+<section class="part" id="part-9">
+  <h2>Part 9 · <code>compute_requirements()</code> — the gm demands &amp; the ceiling</h2>
+
+  <blockquote><p><strong>The one job (second half):</strong> turn each performance spec — GBW, gain, CMRR, phase margin — into a <em>minimum gm</em> for each stage, take the worst-case (the max), then clamp it to what the device can physically deliver.</p></blockquote>
+
+  <p>Every spec is a lower bound on some device's transconductance. The pattern is always the same: <strong>compute the gm this spec demands, and keep it only if it's bigger than what we already need.</strong> That's why every line reads <code>gm1_req = max(gm1_req, …)</code> — many springs push up on one value; the tallest wins.</p>
+
+  <h3>Where each gm demand comes from</h3>
+  <table>
+    <thead><tr><th>Spec</th><th>Demands</th><th>Formula (simplified)</th></tr></thead>
+    <tbody>
+      <tr><td>CMRR</td><td>gm1</td><td><code>cmrr_lin · 2 · g<sub>ds,tail</sub></code></td></tr>
+      <tr><td>GBW</td><td>gm1</td><td><code>2π · GBW · Cc / k_fs</code></td></tr>
+      <tr><td>Phase margin</td><td>gm2 (gm2,gm3 in 3-stage)</td><td><code>k_fs·gm1·CL / (Cc·tan(90°−PM))</code></td></tr>
+      <tr><td>Gain</td><td>gm2 (or gm3)</td><td><code>A₀ / (k_fs·gm1·Rout1·Rout2)</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Traced with real numbers — the GBW demand</h3>
+  <p>With <code>GBW = 10 MHz</code>, <code>Cc = 1 pF</code>, and a mirror load (<code>k_fs = 1.0</code>):</p>
+  <pre class="code"><code>gm1 = 2π · GBW · Cc / k_fs = 2π · 10e6 · 1e-12 / 1.0 ≈ 62.8 µS</code></pre>
+  <p>If instead the load were a resistor (<code>k_fs = 0.5</code>), that same GBW would demand <code>125.7 µS</code> — twice as much, exactly the ½-penalty from Part&nbsp;7.</p>
+
+  <h3>And the CMRR demand competes</h3>
+  <p>Say <code>CMRR = 60 dB</code> (linear <code>1000</code>) and the tail's <code>g<sub>ds,tail</sub> = 0.2 µS</code>:</p>
+  <pre class="code"><code>gm1 ≥ 1000 · 2 · 0.2 µS = 400 µS</code></pre>
+  <p>So <code>gm1 = max(62.8, 400) = 400 µS</code> — here CMRR dominates GBW. The <code>max()</code> found the binding constraint automatically.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="Several spec-driven gm demands funnel into a max, then get clamped by the weak-inversion ceiling">
+      <!-- demands -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="20" y="20"  width="120" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="80" y="39">CMRR → 400 µS</text>
+        <rect x="20" y="62"  width="120" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="80" y="81">GBW → 62.8 µS</text>
+        <rect x="20" y="104" width="120" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="80" y="123">gain → 90 µS</text>
+        <rect x="20" y="146" width="120" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="80" y="165">PM → 120 µS</text>
+      </g>
+      <!-- max funnel -->
+      <g stroke="var(--fig-muted)" stroke-width="1.5">
+        <line x1="140" y1="35"  x2="230" y2="90" marker-end="url(#ar)"/>
+        <line x1="140" y1="77"  x2="230" y2="93" marker-end="url(#ar)"/>
+        <line x1="140" y1="119" x2="230" y2="99" marker-end="url(#ar)"/>
+        <line x1="140" y1="161" x2="230" y2="102" marker-end="url(#ar)"/>
+      </g>
+      <polygon points="232,72 300,92 300,104 232,124" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="266" y="102" text-anchor="middle" font-size="11" font-weight="600">max</text>
+      <line x1="300" y1="98" x2="350" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="325" y="88" text-anchor="middle" font-size="10" fill="var(--fig-muted)">400 µS</text>
+      <!-- ceiling clamp -->
+      <rect x="352" y="72" width="90" height="52" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="397" y="92" text-anchor="middle" font-size="10">ceiling</text>
+      <text x="397" y="107" text-anchor="middle" font-size="10">350 µS</text>
+      <text x="397" y="120" text-anchor="middle" font-size="8.5" fill="var(--fig-bad)">clamp ✂</text>
+      <line x1="442" y1="98" x2="488" y2="98" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="480" y="128" text-anchor="middle" font-size="10" fill="var(--fig-bad)">gm1 = 350 µS + warning</text>
+    </svg>
+    <figcaption>Each spec is a spring pushing gm up; <code>max()</code> keeps the tallest. Then the weak-inversion ceiling clamps it — and a binding clamp becomes an honest warning.</figcaption>
+  </figure>
+
+  <h3>The weak-inversion ceiling — the honesty guard</h3>
+  <p>Here's a trap the square-law model walks straight into. Square-law says gm can grow without limit if you demand it — but a <em>real</em> transistor, as you push its gm up at fixed current, slides into <strong>weak inversion</strong> where gm saturates. So the code clamps every requirement to a physical ceiling:</p>
+
+  <pre class="code"><code>gm1_ceil = <span class="tok-fn">_ceil</span>(spec.ibias / <span class="tok-num">2.0</span>, ip_devices)
+<span class="tok-kw">if</span> gm1_req &gt; gm1_ceil:
+    gm1_req = gm1_ceil
+    gm_ceiling_warnings.append(<span class="tok-str">"input-pair gm requirement exceeds the weak-inversion ceiling …"</span>)</code></pre>
+
+  <p>Continuing our trace: if <code>gm_ceiling(nmos, 10 µA) = 350 µS</code>, our demanded <code>400 µS</code> is <em>impossible</em> at this current. The code clamps to <code>350 µS</code> and emits a warning: the spec needs more bias current than the device can physically give. <strong>It doesn't pretend</strong> — the shortfall also shows up in the reported margins. This clamp runs for gm1, gm2, and gm3 identically.</p>
+
+  <h3>Mapping requirements back to individual transistors</h3>
+  <p>Finally the stage-level demands are stamped onto devices. Only the <em>signal</em> transistor of a stage gets a gm requirement — its partner is a current-source load and needs none:</p>
+  <pre class="code"><code><span class="tok-kw">for</span> ref, (device, slot) <span class="tok-kw">in</span> all_transistors.items():
+    <span class="tok-kw">if</span> slot == <span class="tok-str">"input_pair"</span>:            gm_req_map[ref] = gm1_req
+    <span class="tok-kw">elif</span> slot <span class="tok-kw">in</span> SECOND_STAGE_SLOTS:  gm_req_map[ref] = gm2_req <span class="tok-kw">if</span> <span class="tok-fn">is_signal_device</span>(device) <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
+    <span class="tok-kw">elif</span> slot <span class="tok-kw">in</span> THIRD_STAGE_SLOTS:   gm_req_map[ref] = gm3_req <span class="tok-kw">if</span> <span class="tok-fn">is_signal_device</span>(device) <span class="tok-kw">else</span> <span class="tok-num">0.0</span></code></pre>
+
+  <h3>VDS_sat upper bounds from output swing</h3>
+  <p>The last block runs the swing spec backwards. If the user wants the output to reach within <code>output_swing_max_v</code> of the top rail, then the load device can only "cost" so much saturation voltage:</p>
+  <div class="eq-center"><span class="boxed-eq">VDS_sat,max = Vdd − output_swing_max_v</span></div>
+  <p>That cap is stamped onto load devices (high side) and second/third-stage PMOS (which sit on every output path). The low-side mirror uses <code>output_swing_min_v − Vss</code> for the NMOS. Wherever two constraints hit the same device, <code>min()</code> keeps the tighter one.</p>
+</section>
+
+<!-- ================= PART 10 ================= -->
+<section class="part" id="part-10">
+  <h2>Part 10 · The hidden idea, the limits, and the one line</h2>
+
+  <p>Step back and the whole file is implementing a single principle it never writes down:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <mtext>pre-sizing</mtext><mo>=</mo>
+          <mtext>everything decidable</mtext>
+          <mspace width="4px"/><mtext>before</mtext><mspace width="4px"/>
+          <mtext>a device model is chosen</mtext>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Currents come from Kirchhoff. Resistances come from Ohm. gm targets come straight off the spec via algebra. <strong>None of that needs to know whether you'll size with square-law equations or silicon lookup tables.</strong> So it's factored out, run once, and handed to both sizers.</p>
+
+  <p>The one place a model <em>is</em> unavoidable is output conductance <code>gds</code> — and even there the file doesn't branch on the model. It asks a <code>DeviceModel</code> handle, which routes the question:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 200" role="img" aria-label="gds_estimate routes through the DeviceModel to LUT gds or analytical lambda-Id">
+      <rect x="180" y="20" width="160" height="44" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="260" y="40" text-anchor="middle" font-size="12" font-weight="600">model.gds_estimate()</text>
+      <text x="260" y="56" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">the one model call in the file</text>
+      <line x1="230" y1="64" x2="150" y2="118" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="290" y1="64" x2="370" y2="118" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="40" y="120" width="220" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="150" y="142" text-anchor="middle" font-size="11.5" font-weight="600">gm/Id pipeline</text>
+      <text x="150" y="159" text-anchor="middle" font-size="10" fill="var(--fig-muted)">LUT-accurate silicon gds</text>
+      <rect x="280" y="120" width="220" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="390" y="142" text-anchor="middle" font-size="11.5" font-weight="600">Level-1 analytical</text>
+      <text x="390" y="159" text-anchor="middle" font-size="10" fill="var(--fig-muted)">reproduces λ·Id exactly</text>
+    </svg>
+    <figcaption>Same call, two truths. Polymorphism keeps the pre-sizing code model-agnostic while each path gets the <code>gds</code> it deserves.</figcaption>
+  </figure>
+
+  <h3>Why it's elegant</h3>
+  <p>The design win is <strong>a clean seam</strong>. By pushing the only model-dependent quantity behind one method, an entire pre-sizing stage — extraction, KCL currents, resistor sizing, the whole gm/VDS_sat derivation — is written once and shared verbatim. Two sizers, zero duplication, and the analytical path still reproduces its textbook <code>λ·Id</code> to the letter.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It never picks a <em>geometry</em> — no W or L is chosen here. It only sets currents and targets; the sizers turn those into widths.</li>
+    <li><code>size_load_resistors</code> only touches rail-referenced <code>load</code> resistors; anything else keeps its netlist value.</li>
+    <li>The gm ceiling clamp doesn't rescue an infeasible spec — it caps the demand and <em>warns</em>, leaving the shortfall visible in the margins.</li>
+    <li><code>check_topology_match</code> only <em>detects</em> a mismatch; it never repairs the netlist.</li>
+    <li>Absent stages use <code>rout = inf</code> as "not limiting" — a modelling convenience, not a physical infinity.</li>
+  </ul>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>preprocess.py</code> is the model-independent pre-sizing both sizers share — it extracts each slot's devices, assigns every transistor its KCL current from <code>spec.ibias</code>, sizes rail-referenced load resistors by Ohm's law, sanity-checks the topology, and derives per-stage gm and VDS_sat targets (plus the compensation caps) straight from the performance spec, pushing the only model-dependent quantity, <code>gds</code>, behind a <code>DeviceModel</code> so the gm/Id path gets LUT-accurate conductance while Level-1 reproduces <code>λ·Id</code> exactly.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

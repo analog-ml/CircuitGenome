@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>subcircuit_recognizer.py — the pattern-matching engine</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px; max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{ grid-template-columns:1fr; } #toc{ position:static; } }
+  header { grid-column:1 / -1; padding:36px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:12px; border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p, li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent); background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem; max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem; color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none; border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  .pkgnav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:18px; }
+  .pkgnav .layer { color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-size:0.68rem; margin-right:2px; }
+  .pkgnav a { text-decoration:none; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:4px 12px; font-size:0.8rem; }
+  .pkgnav a:hover { border-color:var(--accent); color:var(--accent); }
+  .pkgnav a.current { background:var(--accent-sf); color:var(--accent); border-color:var(--accent); font-weight:600; }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted); font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg); padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{ color:var(--tok-kw); font-weight:600; } .tok-str{ color:var(--tok-str); } .tok-num{ color:var(--tok-num); }
+  .tok-com{ color:var(--tok-com); font-style:italic; } .tok-fn{ color:var(--tok-fn); }
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.93rem; }
+  th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-sf); }
+  .mono { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:0.86rem; }
+  .boxed-eq { display:inline-block; margin:1.2em auto; padding:12px 22px; border:2px solid var(--accent); border-radius:10px; background:var(--surface); font-size:1.05rem; }
+  .eq-center { text-align:center; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px; border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px; cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl) { opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl) { opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+  <header>
+    <h1>subcircuit_recognizer.py <span style="color:var(--muted);font-weight:400;font-size:1.2rem">— Layer 1</span></h1>
+    <div class="subtitle">The engine room. A tiny backtracking search matches a library of template patterns against the netlist, in ordered passes, and reports every candidate it finds.</div>
+    <nav class="pkgnav">
+      <span class="layer">recognizer/</span>
+      <a href="index.html">Overview</a>
+      <a href="models.html">1 · models</a>
+      <a href="netlist_parser.html">2 · parser · L0</a>
+      <a href="subcircuit_recognizer.html" class="current">3 · SR · L1</a>
+      <a href="hooks.html">4 · hooks · L1</a>
+      <a href="functional_block_recognizer.html">5 · FBR · L2</a>
+      <a href="__init__.html">6 · API</a>
+    </nav>
+  </header>
+
+  <nav id="toc">
+    <div class="label">Contents</div>
+    <a href="#part-1">1 · What is recognition?</a>
+    <a href="#part-2">2 · Cast of characters</a>
+    <a href="#part-3">3 · Loading the rulebook</a>
+    <a href="#part-4">4 · same_net: the constraint</a>
+    <a href="#part-5">5 · Backtracking, traced</a>
+    <a href="#part-6">6 · Levels: a topo-sort</a>
+    <a href="#part-7">7 · recognize(): the 3 passes</a>
+    <a href="#part-8">8 · The hidden problem</a>
+  </nav>
+
+  <main>
+
+    <section class="part" id="part-1">
+      <h2>Part 1 · What problem is "recognition" even solving?</h2>
+      <blockquote><p><strong>The one job:</strong> "Given a flat bag of transistors, find every sub-group that looks like a known building block — a differential pair, a current mirror, a bias reference."</p></blockquote>
+
+      <p class="beat">A flattened opamp netlist is just a pile of 20–40 transistors. No labels. No hierarchy.</p>
+      <p class="beat">But an analog designer looking at it instantly sees: "those two share a tail — differential pair. Those two share a gate and one's diode-connected — current mirror."</p>
+      <p class="beat">Recognition teaches the computer to see the same shapes.</p>
+
+      <h3>The everyday analogy: cookie cutters on rolled dough</h3>
+      <p>Picture the netlist as a big sheet of dough (all the devices). The pattern library is a drawer of cookie cutters (templates). Recognition presses every cutter everywhere it fits and keeps a record of each stamp — <em>even where two cutters overlap</em>.</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 520 150" role="img" aria-label="Templates stamped onto a netlist">
+          <rect x="20" y="30" width="200" height="90" rx="10" fill="var(--fig-fill)" stroke="var(--fig-muted)" stroke-width="1"/>
+          <text x="120" y="24" text-anchor="middle" font-size="11" fill="var(--fig-muted)">netlist (dough)</text>
+          <g font-family="monospace" font-size="11" fill="var(--fig-muted)">
+            <circle cx="55" cy="60" r="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)"/><text x="55" y="64" text-anchor="middle">m1</text>
+            <circle cx="95" cy="60" r="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)"/><text x="95" y="64" text-anchor="middle">m2</text>
+            <circle cx="135" cy="60" r="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)"/><text x="135" y="64" text-anchor="middle">m3</text>
+            <circle cx="175" cy="60" r="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)"/><text x="175" y="64" text-anchor="middle">m4</text>
+            <circle cx="75" cy="95" r="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)"/><text x="75" y="99" text-anchor="middle">r1</text>
+            <circle cx="150" cy="95" r="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)"/><text x="150" y="99" text-anchor="middle">c1</text>
+          </g>
+          <ellipse cx="75" cy="60" rx="42" ry="20" fill="none" stroke="var(--fig-accent)" stroke-width="2.5"/>
+          <text x="75" y="40" text-anchor="middle" font-size="10" fill="var(--fig-accent)">diff pair?</text>
+          <ellipse cx="155" cy="60" rx="42" ry="20" fill="none" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+          <text x="165" y="40" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">mirror?</text>
+
+          <text x="300" y="55" font-size="13">Output: one <tspan font-family="monospace" font-size="12">RecognizedStructure</tspan></text>
+          <text x="300" y="78" font-size="13">per stamp — overlaps and all.</text>
+          <text x="300" y="106" font-size="12" fill="var(--fig-muted)">SR never picks a winner. That is</text>
+          <text x="300" y="123" font-size="12" fill="var(--fig-muted)">Layer 2's job.</text>
+        </svg>
+        <figcaption>Every cutter that fits leaves a stamp. Deliberate over-reporting keeps Layer 1 simple and total.</figcaption>
+      </figure>
+    </section>
+
+    <section class="part" id="part-2">
+      <h2>Part 2 · The cast of characters</h2>
+      <p>Before diving in, here's who calls whom. Hover a box to trace its link.</p>
+
+      <figure class="fig interactive">
+        <svg viewBox="0 0 560 320" role="img" aria-label="Call graph of subcircuit_recognizer">
+          <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+
+          <line class="edge" data-group="load" x1="180" y1="60" x2="120" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+          <line class="edge" data-group="lvl"  x1="230" y1="60" x2="280" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+          <line class="edge" data-group="find" x1="280" y1="60" x2="430" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+          <line class="edge" data-group="find" x1="430" y1="140" x2="430" y2="185" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+          <line class="edge" data-group="pins" x1="240" y1="60" x2="150" y2="185" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+          <line class="edge" data-group="child" x1="255" y1="60" x2="270" y2="185" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+          <line class="edge" data-group="hook" x1="270" y1="60" x2="410" y2="255" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <g class="node" data-group="root">
+            <rect x="160" y="22" width="150" height="38" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+            <text x="235" y="46" text-anchor="middle" font-weight="600" font-size="13">recognize()</text>
+          </g>
+
+          <g class="node" data-group="load">
+            <rect x="30" y="112" width="170" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="115" y="132" text-anchor="middle" font-weight="600" font-size="12">load_patterns()</text>
+            <text x="115" y="148" text-anchor="middle" font-size="10" fill="var(--fig-muted)">read the 3 YAML files</text>
+          </g>
+          <g class="node" data-group="lvl">
+            <rect x="215" y="112" width="170" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="300" y="132" text-anchor="middle" font-weight="600" font-size="12">_compute_levels()</text>
+            <text x="300" y="148" text-anchor="middle" font-size="10" fill="var(--fig-muted)">topo-sort children</text>
+          </g>
+          <g class="node" data-group="find">
+            <rect x="345" y="112" width="180" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="435" y="132" text-anchor="middle" font-weight="600" font-size="12">_find_assignments()</text>
+            <text x="435" y="148" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the backtracking search</text>
+          </g>
+
+          <g class="node" data-group="pins">
+            <rect x="30" y="187" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="105" y="211" text-anchor="middle" font-size="12">_resolve_pins()</text>
+          </g>
+          <g class="node" data-group="child">
+            <rect x="195" y="187" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="270" y="211" text-anchor="middle" font-size="12">_match_children()</text>
+          </g>
+          <g class="node" data-group="find">
+            <rect x="360" y="187" width="150" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+            <text x="435" y="207" text-anchor="middle" font-size="12">_check_same_net()</text>
+            <text x="435" y="221" text-anchor="middle" font-size="10" fill="var(--fig-muted)">prune each branch</text>
+          </g>
+          <g class="node" data-group="hook">
+            <rect x="345" y="245" width="170" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="430" y="265" text-anchor="middle" font-size="12">_resolve_hook()</text>
+            <text x="430" y="279" text-anchor="middle" font-size="10" fill="var(--fig-muted)">→ hooks.py</text>
+          </g>
+        </svg>
+        <figcaption>recognize() orchestrates; _find_assignments() (with _check_same_net) does the real searching. Hooks live one file over.</figcaption>
+      </figure>
+    </section>
+
+    <section class="part" id="part-3">
+      <h2>Part 3 · Loading the rulebook</h2>
+      <blockquote><p><strong>The one job:</strong> "Read the pattern templates from three YAML files, in dependency order."</p></blockquote>
+
+      <p><code>load_patterns()</code> stitches three files into one list, and the <em>order</em> is deliberate:</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 540 120" role="img" aria-label="Three pattern files loaded in order">
+          <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="10" y="35" width="150" height="50" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="85" y="56" text-anchor="middle" font-size="12" font-weight="600">primitives</text>
+          <text x="85" y="73" text-anchor="middle" font-size="10" fill="var(--fig-muted)">level-0 exclusive</text>
+          <rect x="195" y="35" width="150" height="50" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="270" y="56" text-anchor="middle" font-size="12" font-weight="600">structural</text>
+          <text x="270" y="73" text-anchor="middle" font-size="10" fill="var(--fig-muted)">mirrors, cascodes</text>
+          <rect x="380" y="35" width="150" height="50" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="455" y="56" text-anchor="middle" font-size="12" font-weight="600">opamp</text>
+          <text x="455" y="73" text-anchor="middle" font-size="10" fill="var(--fig-muted)">FBR categories</text>
+          <line x1="160" y1="60" x2="195" y2="60" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#a3)"/>
+          <line x1="345" y1="60" x2="380" y2="60" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#a3)"/>
+        </svg>
+        <figcaption>Primitives → structural → opamp. Later files may reference patterns from earlier ones as children.</figcaption>
+      </figure>
+
+      <p><code>_load_file()</code> is a straight YAML-to-dataclass map: each dict entry becomes a <a href="models.html#part-5"><code>PatternDef</code></a>, with nested <code>devices</code> and <code>children</code> lists rebuilt as <code>PatternDevice</code> and <code>ChildDef</code>. Nothing clever — just faithful hydration.</p>
+    </section>
+
+    <section class="part" id="part-4">
+      <h2>Part 4 · <code>same_net</code> — the one constraint that defines a pattern</h2>
+      <blockquote><p><strong>The one job:</strong> "Does this tentative assignment respect the wiring the pattern demands?"</p></blockquote>
+
+      <p>A differential pair isn't just "two nmos transistors." It's two nmos transistors <em>whose sources share a net</em> (the tail). That "share a net" requirement is a <code>same_net</code> group:</p>
+      <pre class="code"><code>same_net = [[<span class="tok-str">"m1.s"</span>, <span class="tok-str">"m2.s"</span>]]  <span class="tok-com"># m1's source == m2's source</span></code></pre>
+
+      <p><code>_check_same_net()</code> verifies it. The subtle, clever part is that it accepts <strong>partial</strong> assignments:</p>
+
+      <pre class="code"><code><span class="tok-kw">for</span> group <span class="tok-kw">in</span> pattern.same_net:
+    nets = <span class="tok-fn">set</span>()
+    <span class="tok-kw">for</span> ref_term <span class="tok-kw">in</span> group:
+        ref, term = ref_term.split(<span class="tok-str">"."</span>)
+        dev = assignment.get(ref)
+        <span class="tok-kw">if</span> dev <span class="tok-kw">is</span> <span class="tok-kw">None</span>:
+            <span class="tok-kw">break</span>            <span class="tok-com"># ref not bound yet → skip this group</span>
+        nets.add(dev.terminals[term])
+    <span class="tok-kw">else</span>:
+        <span class="tok-kw">if</span> <span class="tok-fn">len</span>(nets) != <span class="tok-num">1</span>:   <span class="tok-com"># all bound, but ≠1 distinct net → fail</span>
+            <span class="tok-kw">return</span> <span class="tok-kw">False</span>
+<span class="tok-kw">return</span> <span class="tok-kw">True</span></code></pre>
+
+      <p class="beat">The <code>for…else</code> is the trick.</p>
+      <p>The <code>else</code> runs only if the loop <em>didn't</em> <code>break</code> — i.e. only when every ref in the group is already bound. A group that's half-assigned is neither passed nor failed; it's simply skipped. That lets the search call this check after <em>every</em> single binding and prune bad branches the instant they become provably bad.</p>
+    </section>
+
+    <section class="part" id="part-5">
+      <h2>Part 5 · Backtracking search, traced by hand</h2>
+      <blockquote><p><strong>The one job:</strong> "Find every way to assign the pattern's template devices to real devices such that all constraints hold."</p></blockquote>
+
+      <p>This is the single most important function in the file. It's a depth-first search that binds template devices one at a time, checking constraints as it goes and undoing bindings that lead nowhere.</p>
+
+      <h3>The concrete example</h3>
+      <p>Pattern <code>differential_pair_nmos</code>: two template devices <code>m1, m2</code> (both type nmos), constraint <code>m1.s == m2.s</code>. The netlist has three nmos devices:</p>
+
+      <table>
+        <tr><th>Device</th><th>type</th><th>source net</th></tr>
+        <tr><td class="mono">mA</td><td class="mono">nmos</td><td class="mono">tail</td></tr>
+        <tr><td class="mono">mB</td><td class="mono">nmos</td><td class="mono">tail</td></tr>
+        <tr><td class="mono">mC</td><td class="mono">nmos</td><td class="mono">gnd!</td></tr>
+      </table>
+
+      <p>We want the search to find exactly <strong>{mA, mB}</strong> — the only pair sharing a source net.</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 560 340" role="img" aria-label="Backtracking search tree traced by hand">
+          <defs><marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+
+          <!-- root -->
+          <rect x="220" y="14" width="120" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="280" y="36" text-anchor="middle" font-size="12" font-weight="600">bind m1 = ?</text>
+
+          <!-- level 1: choose mA / mB / mC for m1 -->
+          <g stroke="var(--fig-muted)" stroke-width="2">
+            <line x1="245" y1="48" x2="110" y2="80" marker-end="url(#ab)"/>
+            <line x1="280" y1="48" x2="280" y2="80" marker-end="url(#ab)"/>
+            <line x1="315" y1="48" x2="450" y2="80" marker-end="url(#ab)"/>
+          </g>
+          <rect x="55" y="82" width="110" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="110" y="102" text-anchor="middle" font-size="11">m1=mA (tail)</text>
+          <rect x="225" y="82" width="110" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+          <text x="280" y="102" text-anchor="middle" font-size="11" fill="var(--fig-muted)">m1=mB …</text>
+          <rect x="395" y="82" width="110" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+          <text x="450" y="102" text-anchor="middle" font-size="11" fill="var(--fig-muted)">m1=mC …</text>
+          <text x="185" y="102" font-size="10" fill="var(--fig-muted)">(1 bound → no group full yet, OK)</text>
+
+          <!-- level 2 under m1=mA: choose m2 -->
+          <g stroke="var(--fig-muted)" stroke-width="2">
+            <line x1="85"  y1="112" x2="55"  y2="150" marker-end="url(#ab)"/>
+            <line x1="110" y1="112" x2="175" y2="150" marker-end="url(#ab)"/>
+          </g>
+          <rect x="10" y="152" width="90" height="46" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+          <text x="55" y="170" text-anchor="middle" font-size="11" font-weight="600">m2=mB</text>
+          <text x="55" y="188" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">tail==tail ✓</text>
+          <rect x="130" y="152" width="90" height="46" rx="6" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="4 3"/>
+          <text x="175" y="170" text-anchor="middle" font-size="11">m2=mC</text>
+          <text x="175" y="188" text-anchor="middle" font-size="10" fill="var(--fig-accent)">tail≠gnd! ✗</text>
+
+          <!-- yield -->
+          <line x1="55" y1="198" x2="55" y2="230" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ab)"/>
+          <rect x="10" y="232" width="150" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="85" y="254" text-anchor="middle" font-size="11" font-weight="600">yield {mA, mB}</text>
+
+          <text x="200" y="250" font-size="11" fill="var(--fig-muted)">m1=mB later yields {mB, mA} —</text>
+          <text x="200" y="268" font-size="11" fill="var(--fig-muted)">same frozenset, so `seen` skips it.</text>
+          <text x="200" y="292" font-size="11" fill="var(--fig-muted)">m1=mC finds no partner (only mC on gnd!),</text>
+          <text x="200" y="310" font-size="11" fill="var(--fig-muted)">so that branch dies with no yield.</text>
+        </svg>
+        <figcaption>Bind, check, recurse, undo. The ✗ branch is pruned the moment m2=mC fails the same_net check.</figcaption>
+      </figure>
+
+      <p>The code, with the three moving parts marked:</p>
+      <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">backtrack</span>(i, assignment, used):
+    <span class="tok-kw">if</span> i == <span class="tok-fn">len</span>(pattern.devices):
+        <span class="tok-kw">yield</span> <span class="tok-fn">dict</span>(assignment)          <span class="tok-com"># complete → emit a copy</span>
+        <span class="tok-kw">return</span>
+    template_dev = pattern.devices[i]
+    <span class="tok-kw">for</span> dev <span class="tok-kw">in</span> devices:
+        <span class="tok-kw">if</span> dev.ref <span class="tok-kw">in</span> used <span class="tok-kw">or</span> dev.type != template_dev.type:
+            <span class="tok-kw">continue</span>                     <span class="tok-com"># wrong type or already used</span>
+        assignment[template_dev.ref] = dev
+        used.add(dev.ref)
+        <span class="tok-kw">if</span> <span class="tok-fn">_check_same_net</span>(pattern, assignment):   <span class="tok-com"># prune early</span>
+            <span class="tok-kw">yield from</span> <span class="tok-fn">backtrack</span>(i + <span class="tok-num">1</span>, assignment, used)
+        used.discard(dev.ref)             <span class="tok-com"># UNDO — this is backtracking</span>
+        <span class="tok-kw">del</span> assignment[template_dev.ref]</code></pre>
+
+      <h3>Why the <code>frozenset</code> de-dup?</h3>
+      <p>Swapping <code>m1</code>↔<code>m2</code> gives the same physical pair. Keying <code>seen</code> by the <em>frozenset of device refs</em> means <code>{mA,mB}</code> and <code>{mB,mA}</code> collapse to one match — no duplicate structures for symmetric templates.</p>
+
+      <blockquote><p>The docstring is honest about scale: "Patterns are 1–4 devices, so plain backtracking (no graph library) is sufficient." A hand-rolled DFS is exactly right here — reaching for a subgraph-isomorphism library would be over-engineering.</p></blockquote>
+    </section>
+
+    <section class="part" id="part-6">
+      <h2>Part 6 · Levels — a topological sort so children come first</h2>
+      <blockquote><p><strong>The one job:</strong> "A composite pattern needs its children to already be recognized. What order do we process patterns in?"</p></blockquote>
+
+      <p>Some patterns are composites: they declare <code>children</code> that must already exist as matches before the parent can be accepted. So we must recognize the children <em>first</em>. <code>_compute_levels()</code> assigns each pattern a level by recursion + memoization:</p>
+
+      <div class="eq-center"><div class="boxed-eq">level(p) = 0 if no children, else 1 + max(level(child))</div></div>
+
+      <figure class="fig">
+        <svg viewBox="0 0 480 190" role="img" aria-label="Pattern levels">
+          <text x="20" y="30" font-size="12" fill="var(--fig-muted)">level 0</text>
+          <text x="20" y="95" font-size="12" fill="var(--fig-muted)">level 1</text>
+          <text x="20" y="160" font-size="12" fill="var(--fig-muted)">level 2</text>
+          <defs><marker id="al" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="100" y="14" width="150" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="175" y="34" text-anchor="middle" font-size="11">diode_connected_nmos</text>
+          <rect x="280" y="14" width="130" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="345" y="34" text-anchor="middle" font-size="11">plain_nmos</text>
+          <rect x="120" y="78" width="180" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="210" y="98" text-anchor="middle" font-size="11">current_mirror (children ↑)</text>
+          <rect x="130" y="142" width="200" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="230" y="162" text-anchor="middle" font-size="11">cascoded_mirror (child ↑)</text>
+          <line x1="185" y1="78" x2="180" y2="46" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#al)"/>
+          <line x1="240" y1="78" x2="330" y2="46" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#al)"/>
+          <line x1="220" y1="142" x2="210" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#al)"/>
+        </svg>
+        <figcaption>Level = one more than the deepest child. Processing in level order guarantees children exist when a parent is checked.</figcaption>
+      </figure>
+
+      <p><code>_match_children()</code> then does the verification: for each declared child, it looks for a previously-recognized structure whose <em>device set</em> equals the child's device set (resolved through the current assignment) <em>and</em> whose name matches. If any child is missing, the whole parent match is rejected (<code>return None</code>).</p>
+    </section>
+
+    <section class="part" id="part-7">
+      <h2>Part 7 · <code>recognize()</code> — the three passes</h2>
+      <p>Now everything assembles. <code>recognize()</code> runs three distinct passes over the netlist:</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 560 250" role="img" aria-label="The three recognition passes">
+          <defs><marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="20" y="20" width="520" height="60" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="36" y="42" font-size="13" font-weight="600" fill="var(--fig-accent)">Pass 0 — exclusive primitives</text>
+          <text x="36" y="62" font-size="11" fill="var(--fig-muted)">each device → its highest-priority exclusive pattern. Each device claimed once.</text>
+
+          <rect x="20" y="95" width="520" height="60" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="36" y="117" font-size="13" font-weight="600">Passes 1+ — multi-level composites</text>
+          <text x="36" y="137" font-size="11" fill="var(--fig-muted)">level by level; accept only if _match_children() succeeds (+ optional hook).</text>
+
+          <rect x="20" y="170" width="520" height="60" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="36" y="192" font-size="13" font-weight="600" fill="var(--fig-accent2)">Non-exclusive level-0 pass — MVP composites</text>
+          <text x="36" y="212" font-size="11" fill="var(--fig-muted)">the original single-pass algorithm; every assignment accepted (backward-compatible).</text>
+
+          <line x1="280" y1="80" x2="280" y2="95" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ap)"/>
+          <line x1="280" y1="155" x2="280" y2="170" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ap)"/>
+        </svg>
+        <figcaption>Three passes, one accumulating list of structures. Order matters: exclusivity and children both depend on earlier passes.</figcaption>
+      </figure>
+
+      <h3>Pass 0 — exclusive, priority-sorted</h3>
+      <p>Exclusive patterns are sorted by descending priority, then each device is offered to them in turn. The first match wins and the device is recorded in <code>device_map</code>, so no later exclusive pattern can claim it. This is how <code>diode_connected_nmos</code> (priority 10) beats bare <code>nmos</code> (priority 0) for the same transistor.</p>
+
+      <h3>Passes 1+ — composites with hooks</h3>
+      <p>For each level, for each pattern, for each assignment: resolve pins, optionally run the pattern's <a href="hooks.html">hook</a> (which may reject or append extra devices/pins), verify children, then emit a structure. <code>prev_level_structures</code> is threaded forward so level N can see level N−1's results.</p>
+
+      <h3>The last pass and <code>unrecognized_devices</code></h3>
+      <p>The non-exclusive level-0 pass runs the MVP composite patterns unchanged. Finally:</p>
+      <pre class="code"><code>claimed_refs = {d.ref <span class="tok-kw">for</span> s <span class="tok-kw">in</span> all_structures <span class="tok-kw">for</span> d <span class="tok-kw">in</span> s.devices}
+unrecognized = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> netlist.devices <span class="tok-kw">if</span> d.ref <span class="tok-kw">not in</span> claimed_refs]</code></pre>
+      <p>Any device no pattern touched lands in <code>unrecognized_devices</code>. For a netlist round-tripped from a known synthesized circuit this should be <em>empty</em> — a non-empty list is a signal that the pattern library has a gap.</p>
+    </section>
+
+    <section class="part" id="part-8">
+      <h2>Part 8 · The hidden problem it's really solving</h2>
+      <p>Although the file never writes it down, <code>_find_assignments()</code> is solving a constrained <strong>subgraph matching</strong> problem:</p>
+
+      <blockquote><p>Find an injective map <em>φ</em> from template devices to netlist devices such that every device's <em>type</em> is preserved and every <code>same_net</code> equality holds.</p></blockquote>
+
+      <p>That's the classic sub-graph isomorphism problem — NP-hard in general — but tamed here by three facts the code exploits:</p>
+      <ul>
+        <li>patterns are tiny (1–4 devices), so the search tree is shallow;</li>
+        <li><code>_check_same_net</code> prunes branches the instant a constraint is violable;</li>
+        <li>type-matching filters most candidates before any constraint check.</li>
+      </ul>
+
+      <p>And the architectural masterstroke: SR <em>refuses to disambiguate</em>. It emits every overlapping candidate and defers all judgement to Layer 2. That keeps this file a pure, total, easily-tested function of (netlist, patterns) — no context, no guessing.</p>
+
+      <hr>
+      <p><strong>In one sentence:</strong> <code>subcircuit_recognizer.py</code> presses a library of tiny cookie-cutter templates onto the netlist with a pruned backtracking search, in level order so composites see their children, and reports every stamp — overlaps and all — for Layer 2 to sort out.</p>
+
+      <blockquote><p><strong>Looking ahead →</strong> <a href="hooks.html">Part 4 · hooks.py</a> unpacks the escape hatch we glossed over: hooks that let a pattern discover a variable number of extra devices (like a bias generator's "legs") at match time.</p></blockquote>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  })();
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {}; links.forEach(function (a){ map[a.getAttribute('href').slice(1)] = a; });
+    var obs = new IntersectionObserver(function (entries){
+      entries.forEach(function (e){
+        if (e.isIntersecting && map[e.target.id]) {
+          links.forEach(function (l){ l.classList.remove('active'); });
+          map[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin:'-20% 0px -70% 0px' });
+    document.querySelectorAll('section.part').forEach(function (s){ obs.observe(s); });
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function (fig){
+    fig.querySelectorAll('.node').forEach(function (node){
+      node.addEventListener('mouseenter', function (){
+        var g = node.getAttribute('data-group'); fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function (el){ el.classList.add('hl'); });
+      });
+      node.addEventListener('mouseleave', function (){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function (el){ el.classList.remove('hl'); });
+      });
+    });
+  });
+</script>
+</body>
+</html>

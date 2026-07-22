@@ -22,6 +22,9 @@ The sizer has two paths, selected by technology:
 Both paths are described below and derived in full on their theory pages.  Every
 sized design is then checked in **ngspice** (see `SPICE verification`_).
 
+Deep dive: the `sizer walkthrough <../walkthrough/index.html>`__ is a
+figure-rich tour of the sizing code itself (see :doc:`../walkthroughs`).
+
 Entry points
 ------------
 

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>level1.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>level1.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/analytical/level1.py</code> — the Level-1 square-law sizing pipeline for the card-less <code>generic</code> technology.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · Two ideas: square law + a parts catalog</a>
+  <a href="#part-3">3 · The shared prep stations</a>
+  <a href="#part-4">4 · The geometry search — the only new part</a>
+  <a href="#part-5">5 · Solve, then assemble or bail</a>
+  <a href="#part-6">6 · The hidden idea, limits, summary</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> given a recognized circuit and a spec, choose an actual <em>width</em> and <em>length</em> for every transistor — using the simple square-law model and a discrete parts catalog — so the amplifier meets its requirements.</p></blockquote>
+
+  <p class="beat">Here is the whole story before a single line of code.</p>
+
+  <p>A sizer's job is to turn a <em>topology</em> (which transistors connect to what) plus a <em>spec</em> (gain, bandwidth, power…) into concrete <strong>geometries</strong>: numbers like "this device is 3.0&nbsp;µm wide and 0.15&nbsp;µm long." CircuitGenome has two ways to do this. The fancy one reads a measured <code>gm/Id</code> lookup table baked into a technology <em>card</em>. But some technologies are <strong>card-less</strong> — the generic, no-PDK case — and have no table to read.</p>
+
+  <p>That's what <code>level1.py</code> is for. It sizes using the textbook <strong>square-law (Level-1) MOSFET model</strong>, where a transistor's behaviour follows a clean algebraic formula instead of a measured table. And because the generic technology only offers geometries on a fixed manufacturing grid, it can't spin a smooth dial — it must <strong>pick parts from a discrete catalog</strong>. It hands that discrete search to a real constraint solver, Google OR-Tools' CP-SAT.</p>
+
+  <p>Think of the file as a <strong>factory production line</strong>. Most of its stations are shared with the fancy sizer — cutting the raw netlist into slots, de-duplicating matched devices, assigning currents, computing what each device must achieve, and finally scoring the finished amplifier. Only <em>one</em> station is special to Level-1: the machine that actually picks each transistor's width and length off the catalog. Everything else is borrowed.</p>
+
+  <blockquote><p><strong>The punchline, stated early:</strong> the <em>only</em> thing that separates this pipeline from the <code>gm/Id</code> pipeline is the geometry-search station in the middle. The prep before it and the scoring after it are literally the same shared code.</p></blockquote>
+
+  <h3>The cast of characters</h3>
+  <p>One public function, <code>size_level1()</code>, orchestrates five collaborators. Hover any box to trace it.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 900 210" role="img" aria-label="Call graph of size_level1">
+      <defs>
+        <marker id="cg-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges (draw first) -->
+      <line class="edge" data-group="pre"   x1="442" y1="63" x2="92"  y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#cg-ar)"/>
+      <line class="edge" data-group="model" x1="442" y1="63" x2="267" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#cg-ar)"/>
+      <line class="edge" data-group="build" x1="442" y1="63" x2="442" y2="108" stroke="var(--fig-accent2)" stroke-width="2.5" marker-end="url(#cg-ar)"/>
+      <line class="edge" data-group="solve" x1="442" y1="63" x2="617" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#cg-ar)"/>
+      <line class="edge" data-group="eval"  x1="442" y1="63" x2="792" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#cg-ar)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="352" y="16" width="180" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="442" y="45" text-anchor="middle" font-weight="600" font-size="14">size_level1()</text>
+      </g>
+      <!-- n1 preprocess -->
+      <g class="node" data-group="pre">
+        <rect x="10" y="110" width="165" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="92" y="132" text-anchor="middle" font-weight="600" font-size="12.5">shared.preprocess</text>
+        <text x="92" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">extract · dedup · requirements</text>
+      </g>
+      <!-- n2 model -->
+      <g class="node" data-group="model">
+        <rect x="185" y="110" width="165" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="267" y="132" text-anchor="middle" font-weight="600" font-size="12.5">Level1Model</text>
+        <text x="267" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">square-law device physics</text>
+      </g>
+      <!-- n3 build_model (the specialist) -->
+      <g class="node" data-group="build">
+        <rect x="360" y="110" width="165" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="3"/>
+        <text x="442" y="132" text-anchor="middle" font-weight="600" font-size="12.5">build_model()</text>
+        <text x="442" y="150" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">.constraints · discrete W/L</text>
+      </g>
+      <!-- n4 solve -->
+      <g class="node" data-group="solve">
+        <rect x="535" y="110" width="165" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="617" y="132" text-anchor="middle" font-weight="600" font-size="12.5">CpSolver.solve()</text>
+        <text x="617" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">OR-Tools CP-SAT</text>
+      </g>
+      <!-- n5 metrics -->
+      <g class="node" data-group="eval">
+        <rect x="710" y="110" width="180" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="800" y="132" text-anchor="middle" font-weight="600" font-size="12.5">_evaluate_metrics()</text>
+        <text x="800" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">shared.metrics</text>
+      </g>
+    </svg>
+    <figcaption>One orchestrator, five helpers. Four are shared with the gm/Id sizer; only the teal box — <code>build_model()</code> — is special to Level-1.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 builds the two ideas the whole file rests on — the square-law formula, and why a discrete catalog forces a solver instead of a dial.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · Two ideas: the square law and a parts catalog</h2>
+
+  <p class="beat">Two concepts unlock everything. Neither is scary.</p>
+
+  <h3>Idea 1 — the square-law model</h3>
+  <p>In the textbook (Level-1) model, a saturated MOSFET's transconductance <code>gm</code> — how strongly it converts voltage into current — follows one clean formula:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>g</mi><mi>m</mi></msub><mo>=</mo>
+          <msqrt><mrow>
+            <mn>2</mn><mo>&#183;</mo><mi>&#181;</mi><msub><mi>C</mi><mi>ox</mi></msub>
+            <mo>&#183;</mo><mfrac><mi>W</mi><mi>L</mi></mfrac>
+            <mo>&#183;</mo><msub><mi>I</mi><mi>DS</mi></msub>
+          </mrow></msqrt>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Read it in words: a transistor's strength grows with the square root of its <strong>shape</strong> <code>W/L</code> and its <strong>current</strong> <code>I<sub>DS</sub></code>. The term <code>µC<sub>ox</sub></code> is a fixed property of the technology. That is the entire physics of the <code>Level1Model</code> — a few algebraic formulas, no measured table required. Its saturation-voltage cousin is just as clean:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>V</mi><mi>dsat</mi></msub><mo>=</mo>
+          <msqrt><mfrac>
+            <mrow><mn>2</mn><mo>&#183;</mo><msub><mi>I</mi><mi>DS</mi></msub></mrow>
+            <mrow><mi>&#181;</mi><msub><mi>C</mi><mi>ox</mi></msub><mo>&#183;</mo><mfrac><mi>W</mi><mi>L</mi></mfrac></mrow>
+          </mfrac></msqrt>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <h3>Idea 2 — a discrete catalog, not a smooth dial</h3>
+  <p>The fancy <code>gm/Id</code> sizer reads a measured table and can, in effect, dial any operating point it likes. The generic technology can't: it only manufactures widths and lengths on a <strong>fixed grid</strong> — like a hardware store that stocks lumber in whole tenths of a millimetre, nothing in between. So sizing here isn't "turn a knob to the value you want." It's "<strong>pick the best parts from a catalog of allowed sizes</strong>." Picking discrete parts to satisfy constraints is exactly what a constraint solver is built for — hence CP-SAT.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 190" role="img" aria-label="Continuous dial versus discrete catalog">
+      <text x="145" y="26" text-anchor="middle" font-size="13" font-weight="600">gm/Id path: a smooth dial</text>
+      <line x1="40" y1="95" x2="250" y2="95" stroke="var(--fig-muted)" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="170" cy="95" r="12" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="3"/>
+      <text x="145" y="135" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">stop anywhere — read the table</text>
+
+      <line x1="280" y1="30" x2="280" y2="165" stroke="var(--fig-border,var(--fig-muted))" stroke-width="1" stroke-dasharray="3 4"/>
+
+      <text x="415" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">Level-1: a discrete catalog</text>
+      <line x1="310" y1="95" x2="520" y2="95" stroke="var(--fig-muted)" stroke-width="2"/>
+      <g fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2">
+        <rect x="315" y="83" width="16" height="24"/>
+        <rect x="350" y="83" width="16" height="24"/>
+        <rect x="385" y="83" width="16" height="24"/>
+        <rect x="455" y="83" width="16" height="24"/>
+        <rect x="490" y="83" width="16" height="24"/>
+      </g>
+      <rect x="420" y="79" width="16" height="32" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="3"/>
+      <text x="415" y="135" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">only grid steps — a solver picks one</text>
+    </svg>
+    <figcaption>Left: a lookup table lets the gm/Id sizer stop anywhere. Right: Level-1 must choose from fixed grid steps — a discrete search.</figcaption>
+  </figure>
+
+  <h3>How the stations line up</h3>
+  <p>Zoomed out, <code>size_level1()</code> is a five-stage assembly line. Watch where the two paths agree and where they split.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 680 120" role="img" aria-label="The size_level1 pipeline stages">
+      <defs>
+        <marker id="pl-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <g text-anchor="middle">
+        <rect x="8"   y="30" width="108" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="62"  y="52" font-size="12" font-weight="600">preprocess</text>
+        <text x="62"  y="69" font-size="9.5" fill="var(--fig-muted)">shared</text>
+
+        <rect x="145" y="30" width="108" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+        <text x="199" y="52" font-size="12" font-weight="600">build model</text>
+        <text x="199" y="69" font-size="9.5" fill="var(--fig-accent2)">CP-SAT</text>
+
+        <rect x="282" y="30" width="108" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+        <text x="336" y="52" font-size="12" font-weight="600">solve</text>
+        <text x="336" y="69" font-size="9.5" fill="var(--fig-accent2)">CP-SAT</text>
+
+        <rect x="419" y="30" width="108" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="473" y="52" font-size="12" font-weight="600">assemble</text>
+        <text x="473" y="69" font-size="9.5" fill="var(--fig-muted)">steps &#8594; µm</text>
+
+        <rect x="556" y="30" width="108" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="610" y="52" font-size="12" font-weight="600">evaluate</text>
+        <text x="610" y="69" font-size="9.5" fill="var(--fig-muted)">shared metrics</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="116" y1="56" x2="145" y2="56" marker-end="url(#pl-ar)"/>
+        <line x1="253" y1="56" x2="282" y2="56" marker-end="url(#pl-ar)"/>
+        <line x1="390" y1="56" x2="419" y2="56" marker-end="url(#pl-ar)"/>
+        <line x1="527" y1="56" x2="556" y2="56" marker-end="url(#pl-ar)"/>
+      </g>
+    </svg>
+    <figcaption>Five stages, output feeding input. The two teal stages in the middle are the Level-1 geometry search; the rest is shared code.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 walks the shared prep stations that run <em>before</em> the solver — turning a raw netlist into a tidy list of requirements.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · The shared prep stations</h2>
+
+  <blockquote><p><strong>The one job:</strong> turn the recognizer's messy output into three clean inputs the solver needs — <em>which</em> devices to size, <em>how much current</em> each carries, and <em>what target</em> each must hit.</p></blockquote>
+
+  <p>None of this code is Level-1-specific. It is imported wholesale from <code>sizer.shared.preprocess</code>, the same module the gm/Id sizer uses. Here is the whole prep block.</p>
+
+  <pre class="code"><code>slot_transistors  = <span class="tok-fn">extract_slot_transistors</span>(fbr_result)
+topology_warnings = <span class="tok-fn">check_topology_match</span>(slot_transistors, topology.name)
+all_transistors   = <span class="tok-fn">deduplicate_devices</span>(slot_transistors)
+ids_map           = <span class="tok-fn">assign_ids</span>(slot_transistors, all_transistors, spec)
+
+<span class="tok-com"># Size resistor loads (deterministic) and fold them into first-stage Rout.</span>
+resistors = <span class="tok-fn">size_load_resistors</span>(<span class="tok-fn">extract_slot_resistors</span>(fbr_result), spec, tech)
+gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(resistors.values())) <span class="tok-kw">if</span> resistors <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
+
+dev_model = <span class="tok-fn">Level1Model</span>(tech)
+gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = <span class="tok-fn">compute_requirements</span>(
+    slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
+)
+all_warnings = topology_warnings + gm_ceiling_warnings</code></pre>
+
+  <p>Read it as five short moves, each a station on the line:</p>
+
+  <table>
+    <thead><tr><th>Call</th><th>What it produces</th><th>Why it exists</th></tr></thead>
+    <tbody>
+      <tr><td><code>extract_slot_transistors</code></td><td>devices grouped by role (input_pair, tail, load…)</td><td>the solver reasons about roles, not raw refs</td></tr>
+      <tr><td><code>deduplicate_devices</code></td><td>one entry per <em>distinct</em> device to size</td><td>matched twins share one geometry, not two</td></tr>
+      <tr><td><code>assign_ids</code></td><td><code>ids_map</code>: ref &#8594; drain current</td><td>current is fixed by Kirchhoff <em>before</em> sizing</td></tr>
+      <tr><td><code>size_load_resistors</code></td><td>resistor values + a load conductance <code>gd_load_r</code></td><td>resistor loads are deterministic; solve them directly</td></tr>
+      <tr><td><code>compute_requirements</code></td><td><code>gm_req_map</code>, <code>vod_max_map</code>, comp caps</td><td>translate the spec into a per-device target</td></tr>
+    </tbody>
+  </table>
+
+  <p>The two maps at the end are the real hand-off. <span class="keyline"><code>gm_req_map</code></span> says "device X must reach <em>at least</em> this transconductance," and <span class="keyline"><code>vod_max_map</code></span> says "device X may spend <em>at most</em> this saturation voltage." Everything the solver does is chasing those two numbers per device.</p>
+
+  <h3>Why <code>Level1Model(tech)</code> matters here</h3>
+  <p>Notice <code>compute_requirements</code> is handed a <code>dev_model</code>. This is the one spot in prep where the square-law choice leaks in: the requirements are computed <em>through</em> the Level-1 formulas from Part&nbsp;2. Swap in the gm/Id model and the same function computes the same-shaped maps a different way. That is precisely why the surrounding code can be shared — the model is a plug-in.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> now we have per-device targets. Part&nbsp;4 is the heart — turning those targets into a discrete W/L pick with CP-SAT.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · The geometry search — the only new part</h2>
+
+  <blockquote><p><strong>The one job:</strong> hand the per-device targets to <code>build_model()</code>, which encodes them as integer constraints over grid-step W and L, then let CP-SAT pick the smallest-width sizing that satisfies them all.</p></blockquote>
+
+  <p>This is the single station that makes <code>level1.py</code> different from every other sizer in the codebase. It is only five lines.</p>
+
+  <pre class="code"><code>cp_mdl, W_vars, L_vars = <span class="tok-fn">build_model</span>(
+    all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
+)
+solver = cp_model.<span class="tok-fn">CpSolver</span>()
+solver.parameters.max_time_in_seconds = time_limit_s
+status = solver.<span class="tok-fn">solve</span>(cp_mdl)
+status_name = solver.<span class="tok-fn">status_name</span>(status)</code></pre>
+
+  <p><code>build_model()</code> lives in the sibling <code>constraints.py</code> (its own page: <code>constraints_explained.html</code>). We only need its shape here: it invents two integer variables per device — <code>W_vars[ref]</code> and <code>L_vars[ref]</code>, both counted in <em>grid steps</em>, not µm — and writes down the targets as linear inequalities.</p>
+
+  <h3>The hidden trick: a square root becomes linear</h3>
+  <p>Here is the beautiful part. The <code>gm ≥ gm_req</code> requirement <em>looks</em> non-linear — there's a square root and a division. But square both sides and separate <code>W</code> from <code>L</code>, and it collapses into a plain linear inequality a CP-SAT solver eats for breakfast:</p>
+
+  <div class="eq-center">
+    <span style="font-size:1.05rem;">&#8730;( 2&#183;µC<sub>ox</sub>&#183;(W/L)&#183;I<sub>DS</sub> ) &#8805; gm<sub>req</sub></span>
+    <span style="color:var(--muted); margin:0 10px;">&#10230; square &amp; cross-multiply &#10230;</span>
+  </div>
+  <div class="eq-center">
+    <span class="boxed-eq">2&#183;µC<sub>ox</sub>&#183;I<sub>DS</sub>&#183;W &#8805; gm<sub>req</sub><sup>2</sup>&#183;L</span>
+  </div>
+
+  <p>Now <code>W</code> and <code>L</code> appear separately and only to the first power — linear. The <code>V<sub>dsat</sub> ≤ vod_max</code> cap linearises the same way. <code>build_model()</code> also adds matched-pair symmetry (twins get equal W and L) and current-mirror ratio constraints, then sets the objective: <strong>minimise total width</strong>, a proxy for power and area.</p>
+
+  <h3>A requirement, traced to a discrete pick</h3>
+  <p>Let's follow one device with real numbers. Suppose:</p>
+  <table>
+    <thead><tr><th>Quantity</th><th class="num">Value</th></tr></thead>
+    <tbody>
+      <tr><td><code>µC<sub>ox</sub></code></td><td class="num">100 µA/V²</td></tr>
+      <tr><td><code>I<sub>DS</sub></code> (from <code>ids_map</code>)</td><td class="num">10 µA</td></tr>
+      <tr><td><code>gm<sub>req</sub></code> (from <code>gm_req_map</code>)</td><td class="num">0.2 mA/V</td></tr>
+      <tr><td>width grid step</td><td class="num">0.1 µm</td></tr>
+      <tr><td>length (at grid min)</td><td class="num">0.15 µm</td></tr>
+    </tbody>
+  </table>
+
+  <p>Plug into the linearised gm constraint <code>2·µC<sub>ox</sub>·I<sub>DS</sub>·W ≥ gm<sub>req</sub>²·L</code>. Dividing through, it says simply <code>W/L ≥ gm<sub>req</sub>² / (2·µC<sub>ox</sub>·I<sub>DS</sub>)</code>:</p>
+  <pre class="code"><code>W/L  &#8805;  (2e-4)&#178; / (2 &#183; 100e-6 &#183; 10e-6)
+     =  4e-8 / 2e-9
+     =  <span class="tok-num">20</span></code></pre>
+
+  <p>So this device needs a shape ratio of at least 20. With <code>L</code> pinned at its grid minimum <code>0.15 µm</code>, that means <code>W ≥ 20 × 0.15 = 3.0 µm</code>. The solver now scans the discrete width catalog and, because it is <em>minimising</em> width, grabs the <strong>smallest grid step that still clears 3.0&nbsp;µm</strong>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 165" role="img" aria-label="Scanning discrete widths for the smallest that meets the ratio">
+      <text x="20" y="26" font-size="11.5" fill="var(--fig-muted)">W candidates at L = 0.15 µm (grid step 0.1 µm) &#8594;</text>
+      <g font-size="12" text-anchor="middle">
+        <rect x="15"  y="42" width="96" height="50" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="63"  y="64">W = 2.6</text><text x="63"  y="82" font-size="10.5" fill="var(--fig-muted)">W/L 17.3 ✗</text>
+        <rect x="120" y="42" width="96" height="50" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="168" y="64">W = 2.8</text><text x="168" y="82" font-size="10.5" fill="var(--fig-muted)">W/L 18.7 ✗</text>
+        <rect x="225" y="40" width="96" height="54" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="3"/>
+        <text x="273" y="64" font-weight="600">W = 3.0</text><text x="273" y="82" font-size="10.5" fill="var(--fig-accent2)">W/L 20.0 ✓</text>
+        <rect x="330" y="42" width="96" height="50" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="378" y="64">W = 3.2</text><text x="378" y="82" font-size="10.5" fill="var(--fig-muted)">W/L 21.3</text>
+        <rect x="435" y="42" width="96" height="50" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="483" y="64">W = 3.4</text><text x="483" y="82" font-size="10.5" fill="var(--fig-muted)">W/L 22.7</text>
+      </g>
+      <line x1="20" y1="112" x2="273" y2="112" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#pl-ar)"/>
+      <text x="280" y="138" text-anchor="middle" font-size="11" fill="var(--fig-accent)">minimise width &#8594; first W with W/L &#8805; 20 wins &#8594; 3.0 µm</text>
+    </svg>
+    <figcaption>The solver walks the grid and stops at the narrowest width that still meets the ratio — the discrete catalog pick, W = 3.0 µm, L = 0.15 µm.</figcaption>
+  </figure>
+
+  <p>Let's confirm the pick actually meets the target. With <code>W/L = 20</code>:</p>
+  <pre class="code"><code>gm = &#8730;(2 &#183; 100e-6 &#183; 20 &#183; 10e-6) = &#8730;(4e-8) = <span class="tok-num">2e-4</span> = 0.2 mA/V  ✓ exactly gm_req</code></pre>
+  <p>And its saturation voltage stays under the cap: <code>V<sub>dsat</sub> = √(2·10e-6 / (100e-6·20)) = √0.01 = 100 mV</code>. The solver did in one shot what a human would do by hand — but across <em>every</em> device at once, respecting every matched-pair and mirror constraint simultaneously.</p>
+
+  <p>The <code>time_limit_s</code> (default 30&nbsp;s) is the safety valve: CP-SAT keeps improving until it's optimal or the clock runs out, then reports the best it found. Its verdict lands in <code>status</code>.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> the solver returns a <em>status</em>. Part&nbsp;5 reads it, and either assembles the answer or bails out honestly.</p></blockquote>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · Solve, then assemble or bail</h2>
+
+  <blockquote><p><strong>The one job:</strong> if the solver found a sizing, convert its integer step-counts back into micrometres, score the amplifier, and package a <code>SizingResult</code>; if it didn't, return an honest empty result carrying the failure status.</p></blockquote>
+
+  <h3>The fork</h3>
+  <p>Everything downstream hinges on one branch.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 210" role="img" aria-label="Branch on solver status">
+      <defs>
+        <marker id="br-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <polygon points="260,10 362,55 260,100 158,55" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="260" y="50" text-anchor="middle" font-size="12.5" font-weight="600">solver status?</text>
+      <text x="260" y="67" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">OPTIMAL / FEASIBLE?</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="200" y1="82" x2="120" y2="122" marker-end="url(#br-ar)"/>
+        <line x1="320" y1="82" x2="400" y2="122" marker-end="url(#br-ar)"/>
+      </g>
+      <text x="150" y="112" font-size="11" fill="var(--fig-muted)">no</text>
+      <text x="372" y="112" font-size="11" fill="var(--fig-muted)">yes</text>
+      <rect x="20" y="122" width="185" height="72" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="112" y="146" text-anchor="middle" font-size="12" font-weight="600">give up honestly</text>
+      <text x="112" y="165" text-anchor="middle" font-size="10.5">transistors = {}</text>
+      <text x="112" y="181" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">solver_status kept</text>
+      <rect x="315" y="122" width="185" height="72" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="407" y="146" text-anchor="middle" font-size="12" font-weight="600">assemble result</text>
+      <text x="407" y="165" text-anchor="middle" font-size="10.5">steps &#8594; µm, build sizing</text>
+      <text x="407" y="181" text-anchor="middle" font-size="10.5" fill="var(--fig-good)">then evaluate metrics</text>
+    </svg>
+    <figcaption>The whole tail of the function is one if/else on the solver's verdict — a clean happy path and an honest fallback.</figcaption>
+  </figure>
+
+  <pre class="code"><code><span class="tok-kw">if</span> status <span class="tok-kw">not in</span> (cp_model.OPTIMAL, cp_model.FEASIBLE):
+    <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
+        transistors={}, cc_pf=cc_pf, metrics={}, margins={},
+        solver_status=status_name, cc2_pf=cc2_pf,
+        warnings=all_warnings, resistors=resistors,
+    )</code></pre>
+
+  <p>The fallback is careful: it still returns the resistor values, the compensation caps, and the warnings it already gathered — it just hands back an <em>empty</em> transistor map and the status name (say <code>"INFEASIBLE"</code>). Callers learn exactly why, and nothing pretends to be a valid sizing.</p>
+
+  <h3>The happy path — integers back to micrometres</h3>
+  <p>Remember the solver worked in grid <em>steps</em>. To make a real answer we multiply each step-count by its step size.</p>
+
+  <pre class="code"><code>w_step = tech.width.step
+l_step = tech.length.step
+transistor_sizing = {}
+<span class="tok-kw">for</span> ref, (device, _slot) <span class="tok-kw">in</span> all_transistors.items():
+    w_um = solver.<span class="tok-fn">value</span>(W_vars[ref]) * w_step
+    l_um = solver.<span class="tok-fn">value</span>(L_vars[ref]) * l_step
+    ids_a = ids_map[ref]
+    transistor_sizing[ref] = <span class="tok-fn">TransistorSizing</span>(
+        ref=ref, w_um=w_um, l_um=l_um, ids_a=ids_a,
+        vgs_v=dev_model.<span class="tok-fn">vgs</span>(device.type, w_um, l_um, ids_a),
+        vds_sat_v=dev_model.<span class="tok-fn">vds_sat</span>(device.type, w_um, l_um, ids_a),
+    )</code></pre>
+
+  <p>Trace our device: the solver returned <code>W_vars[ref] = 30</code> steps and <code>L_vars[ref] = 3</code> steps. Multiply back:</p>
+  <pre class="code"><code>w_um = 30 &#183; 0.1  = <span class="tok-num">3.0</span> µm
+l_um = 3  &#183; 0.05 = <span class="tok-num">0.15</span> µm</code></pre>
+  <p>Then it re-derives <code>vgs</code> and <code>vds_sat</code> through the <em>same</em> <code>Level1Model</code> and stores a tidy <code>TransistorSizing</code> record per device. The integer world stays inside the solver; the outside world only ever sees micrometres and volts.</p>
+
+  <h3>Score, then package</h3>
+  <pre class="code"><code>metrics, margins = <span class="tok-fn">_evaluate_metrics</span>(
+    transistor_sizing, slot_transistors, cc_pf, tech, spec, dev_model,
+    cc2_pf=cc2_pf, gd_load_r=gd_load_r,
+)
+<span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
+    transistors=transistor_sizing, cc_pf=cc_pf, metrics=metrics,
+    margins=margins, solver_status=status_name, cc2_pf=cc2_pf,
+    warnings=all_warnings, resistors=resistors,
+)</code></pre>
+
+  <p><code>_evaluate_metrics</code> is — once again — shared code. It takes the finished geometries and computes the amplifier's actual gain, bandwidth, and their margins against spec. The function then returns one <code>SizingResult</code> bundling geometries, metrics, margins, warnings, resistors, and the solver status. That object <em>is</em> the file's product.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · The hidden idea, the limits, the summary</h2>
+
+  <h3>The hidden idea, made visible</h3>
+  <p>Step back and the design intent is unmistakable. Two sizing pipelines run through the <em>same</em> shared stations on both ends, and diverge in exactly one box in the middle.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 225" role="img" aria-label="gm/Id path and Level-1 path differ only in the middle box">
+      <defs>
+        <marker id="hi-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- dashed brace around the middle column -->
+      <rect x="226" y="16" width="168" height="180" rx="10" fill="none" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="6 5"/>
+
+      <text x="90"  y="28" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gm/Id path</text>
+      <text x="90"  y="128" text-anchor="middle" font-size="11" fill="var(--fig-muted)">Level-1 path</text>
+
+      <!-- top row -->
+      <g text-anchor="middle">
+        <rect x="15"  y="34" width="150" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90"  y="65" font-size="11.5">shared preprocess</text>
+        <rect x="235" y="34" width="150" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+        <text x="310" y="60" font-size="11.5" font-weight="600">gm/Id LUT</text>
+        <text x="310" y="76" font-size="10" fill="var(--fig-muted)">table lookup</text>
+        <rect x="455" y="34" width="150" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="530" y="65" font-size="11.5">shared metrics</text>
+      </g>
+      <!-- bottom row -->
+      <g text-anchor="middle">
+        <rect x="15"  y="134" width="150" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90"  y="165" font-size="11.5">shared preprocess</text>
+        <rect x="235" y="134" width="150" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+        <text x="310" y="160" font-size="11.5" font-weight="600">CP-SAT search</text>
+        <text x="310" y="176" font-size="10" fill="var(--fig-muted)">discrete W/L</text>
+        <rect x="455" y="134" width="150" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="530" y="165" font-size="11.5">shared metrics</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="165" y1="60"  x2="235" y2="60"  marker-end="url(#hi-ar)"/>
+        <line x1="385" y1="60"  x2="455" y2="60"  marker-end="url(#hi-ar)"/>
+        <line x1="165" y1="160" x2="235" y2="160" marker-end="url(#hi-ar)"/>
+        <line x1="385" y1="160" x2="455" y2="160" marker-end="url(#hi-ar)"/>
+      </g>
+      <text x="310" y="214" text-anchor="middle" font-size="11.5" fill="var(--fig-accent)" font-weight="600">only this box changes</text>
+    </svg>
+    <figcaption>Same prep, same scoring. The whole identity of Level-1 sizing is a single swapped station — a discrete CP-SAT search in place of a table lookup.</figcaption>
+  </figure>
+
+  <p>That is the elegance worth naming: the file achieves a whole alternative sizing strategy by <strong>reusing everything except the one part that must differ</strong>. The square-law model plugs in as <code>dev_model</code>; the discrete search plugs in as <code>build_model</code>; the rest is untouched shared code.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li><strong>Discrete grid only.</strong> The answer is the best point <em>on the manufacturing grid</em> — a value between two grid steps is unreachable by construction.</li>
+    <li><strong>Square-law validity.</strong> The Level-1 model is an idealization. Short-channel effects, mobility degradation, and true weak inversion are not captured, so the metrics are optimistic estimates, not SPICE truth.</li>
+    <li><strong>Solver time and infeasibility.</strong> CP-SAT is bounded by <code>time_limit_s</code>; a hard problem can time out with only a <code>FEASIBLE</code> (not proven optimal) answer, or return <code>INFEASIBLE</code> and force the honest empty result from Part&nbsp;5.</li>
+    <li><strong>Resistors are pre-solved.</strong> Resistor loads are sized deterministically and folded in as a conductance — they are not part of the CP-SAT search.</li>
+  </ul>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>level1.py</code> sizes a card-less generic-technology amplifier by running the <em>same</em> shared preprocessing and metric evaluation as the gm/Id sizer, but replacing the one middle station with a square-law-driven CP-SAT search that picks each transistor's discrete grid-step width and length to meet its per-device gm and V<sub>dsat</sub> targets at minimum total width.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

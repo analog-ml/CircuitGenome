@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>device_model.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>device_model.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/device_model.py</code> — one small-signal device interface, two interchangeable backends, so the whole op-amp sizing math stays single-source.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The five primitives</a>
+  <a href="#part-3">3 · The Protocol &amp; _params()</a>
+  <a href="#part-4">4 · Level1Model (square law)</a>
+  <a href="#part-5">5 · GmIdModel (the LUT)</a>
+  <a href="#part-6">6 · GmIdPolicy &amp; role L</a>
+  <a href="#part-7">7 · geometry_for()</a>
+  <a href="#part-8">8 · The hidden idea</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> give the op-amp sizer <em>one</em> way to ask a transistor "what's your gm? your gds? your Vdsat?" — so the same topology math works whether those answers come from a textbook square law or from a measured lookup table.</p></blockquote>
+
+  <p class="beat">Here is the whole idea before a single line of code.</p>
+
+  <p>An op-amp designer computes performance from a handful of relationships that are <strong>the same for every technology</strong>:</p>
+
+  <div class="eq-center"><span class="boxed-eq">gain&nbsp;=&nbsp;∏<sub>i</sub>&nbsp;gm<sub>i</sub>·rout<sub>i</sub>&nbsp;&nbsp;·&nbsp;&nbsp;GBW&nbsp;=&nbsp;gm<sub>1</sub>&nbsp;/&nbsp;2πC<sub>c</sub></span></div>
+
+  <p>Gain, gain-bandwidth, phase margin, CMRR — all of them are built from just <code>gm</code>, <code>gds</code>, <code>Vdsat</code>, <code>Vgs</code>. The <em>formulas</em> never change. Only the <strong>device primitives</strong> — the actual numbers that come back when you ask "what is this transistor's gm?" — differ between technologies.</p>
+
+  <p>CircuitGenome has two ways to produce those primitives:</p>
+  <ul>
+    <li>the <strong>Level-1 square law</strong> (the Shichman-Hodges equations in <code>equations.py</code>), for a card-less generic technology, and</li>
+    <li>a <strong>gm/Id lookup table</strong> (<code>GmIdLut</code>), pre-extracted from real BSIM4 simulations, for PTM process nodes.</li>
+  </ul>
+
+  <h3>The analogy: a universal wall socket</h3>
+  <p>Think of a <strong>standardized wall socket</strong>. Your laptop charger and your lamp both end in the same plug shape. The wall doesn't know or care which appliance you push in — it exposes one contract (two flat pins + ground), and any compliant plug works.</p>
+
+  <p><code>DeviceModel</code> <em>is</em> that socket. It defines six pins — <code>gm</code>, <code>gds</code>, <code>vds_sat</code>, <code>vgs</code>, <code>gm_ceiling</code>, <code>gds_estimate</code> — and declares nothing about <em>how</em> they're computed. Then two plugs are built to fit it: <code>Level1Model</code> (square law) and <code>GmIdModel</code> (LUT). The sizer only ever talks to the socket.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 580 300" role="img" aria-label="One interface, two implementations: topology math plugs into DeviceModel, which two backends satisfy">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- topology math (consumer) -->
+      <rect x="150" y="16" width="280" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="290" y="36" text-anchor="middle" font-size="12.5" font-weight="600">sizer topology math (one codebase)</text>
+      <text x="290" y="53" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gain = ∏ gm·rout · GBW · PM · CMRR</text>
+      <line x1="290" y1="62" x2="290" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="300" y="84" font-size="10.5" fill="var(--fig-muted)">asks through one interface</text>
+      <!-- the socket / interface -->
+      <rect x="180" y="100" width="220" height="66" rx="10" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="290" y="122" text-anchor="middle" font-size="13" font-weight="600">DeviceModel — the socket</text>
+      <text x="290" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm · gds · vds_sat · vgs</text>
+      <text x="290" y="155" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm_ceiling · gds_estimate</text>
+      <!-- two plugs -->
+      <line x1="240" y1="166" x2="150" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="340" y1="166" x2="430" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <!-- left plug: Level1 -->
+      <rect x="30" y="214" width="230" height="66" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="145" y="236" text-anchor="middle" font-size="13" font-weight="600">Level1Model</text>
+      <text x="145" y="253" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square law — equations.*</text>
+      <text x="145" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">card-less tech · is_gmid = False</text>
+      <!-- right plug: GmId -->
+      <rect x="320" y="214" width="240" height="66" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="440" y="236" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">GmIdModel</text>
+      <text x="440" y="253" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">LUT — GmIdLut(tech.gmid_lut)</text>
+      <text x="440" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">PTM nodes · is_gmid = True</text>
+    </svg>
+    <figcaption>One socket, two compliant plugs. The topology math on top never learns which backend answered — that is the entire point of the file.</figcaption>
+  </figure>
+
+  <p>This is the <strong>Strategy pattern</strong>: a fixed interface, swappable implementations chosen at runtime. Without it, every gain / GBW / CMRR formula in the sizer would need an <code>if gmid: … else: …</code> fork. With it, they write <code>model.gm(...)</code> once and forget which technology they're in.</p>
+
+  <h3>The cast of characters</h3>
+  <p>The file holds two model classes, two little data holders, and one selector. Hover any box to trace who it calls.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 600 320" role="img" aria-label="Call graph of device_model.py">
+      <defs>
+        <marker id="arrowg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="l1"     x1="250" y1="58"  x2="130" y2="100" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="gmid"   x1="325" y1="58"  x2="310" y2="100" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="proto"  x1="190" y1="118" x2="428" y2="120" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="proto"  x1="395" y1="126" x2="428" y2="128" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="geo"    x1="300" y1="146" x2="287" y2="190" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="at"     x1="248" y1="146" x2="110" y2="205" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="role"   x1="365" y1="212" x2="393" y2="212" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrowg)"/>
+      <line class="edge" data-group="policy" x1="470" y1="234" x2="470" y2="256" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrowg)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="205" y="18" width="190" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="43" text-anchor="middle" font-weight="600" font-size="13">build_device_model()</text>
+      </g>
+      <!-- Level1Model -->
+      <g class="node" data-group="l1">
+        <rect x="25" y="100" width="165" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="107" y="120" text-anchor="middle" font-weight="600" font-size="12.5">Level1Model</text>
+        <text x="107" y="136" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square-law primitives</text>
+      </g>
+      <!-- GmIdModel -->
+      <g class="node" data-group="gmid">
+        <rect x="225" y="100" width="170" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="310" y="120" text-anchor="middle" font-weight="600" font-size="12.5">GmIdModel</text>
+        <text x="310" y="136" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">LUT primitives + geometry</text>
+      </g>
+      <!-- Protocol -->
+      <g class="node" data-group="proto">
+        <rect x="430" y="100" width="150" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="505" y="120" text-anchor="middle" font-weight="600" font-size="12.5">DeviceModel</text>
+        <text x="505" y="136" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">(Protocol) interface</text>
+      </g>
+      <!-- geometry_for -->
+      <g class="node" data-group="geo">
+        <rect x="210" y="190" width="155" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="287" y="210" text-anchor="middle" font-weight="600" font-size="12">geometry_for()</text>
+        <text x="287" y="225" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">invert to (W, L)</text>
+      </g>
+      <!-- role_length -->
+      <g class="node" data-group="role">
+        <rect x="393" y="190" width="150" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="468" y="210" text-anchor="middle" font-weight="600" font-size="12">role_length()</text>
+        <text x="468" y="225" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">L from role policy</text>
+      </g>
+      <!-- _gm_id_at -->
+      <g class="node" data-group="at">
+        <rect x="15" y="205" width="160" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="95" y="225" text-anchor="middle" font-weight="600" font-size="12">_gm_id_at()</text>
+        <text x="95" y="240" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">recover gm/Id</text>
+      </g>
+      <!-- GmIdPolicy -->
+      <g class="node" data-group="policy">
+        <rect x="393" y="256" width="150" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="468" y="276" text-anchor="middle" font-weight="600" font-size="12">GmIdPolicy</text>
+        <text x="468" y="291" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">L / gm-Id knobs</text>
+      </g>
+    </svg>
+    <figcaption>The selector on top; two backends satisfy the dashed Protocol contract. The gm/Id side carries the extra geometry machinery. We learn it socket-first, then each plug.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the socket and names its six pins — what each primitive actually <em>means</em> in a circuit — before we watch either backend fill them in.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The five primitives (what the socket promises)</h2>
+
+  <p class="beat">Before any implementation, you only need to understand the <em>questions</em> the interface can answer. Every one takes a device (<code>dtype</code> = nmos/pmos), its geometry (<code>W</code>, <code>L</code> in µm), and its current (<code>Id</code> in A), and returns one small-signal number.</p>
+
+  <table>
+    <thead><tr><th>Primitive</th><th>Plain-English question</th><th>Units</th></tr></thead>
+    <tbody>
+      <tr><td><code>gm</code></td><td>How strongly does this device turn drain current into a signal? (transconductance)</td><td>A/V</td></tr>
+      <tr><td><code>gds</code></td><td>How "leaky" is it — how far from an ideal current source? (output conductance)</td><td>A/V</td></tr>
+      <tr><td><code>vds_sat</code></td><td>How much drain-source voltage does it <em>need</em> to stay saturated?</td><td>V</td></tr>
+      <tr><td><code>vgs</code></td><td>How much gate-source voltage does it "cost" to turn on? (signed)</td><td>V</td></tr>
+      <tr><td><code>gm_ceiling</code></td><td>What is the hard physical maximum gm at this current? (weak-inversion limit)</td><td>A/V</td></tr>
+      <tr><td><code>gds_estimate</code></td><td>A geometry-<em>free</em> gds guess from the device's <em>role</em>, before W/L exist.</td><td>A/V</td></tr>
+    </tbody>
+  </table>
+
+  <p>Why does <code>gm</code> matter so much? Because it is the numerator of nearly every op-amp figure: gain scales with <code>gm·rout</code>, and gain-bandwidth is <code>gm₁/2πCc</code>. Give the sizer accurate primitives and the topology math is correct; give it wrong ones and every downstream metric is wrong too.</p>
+
+  <p>The crucial insight is that <strong>one call, two backends, two answers</strong> — but the caller writes the same line either way:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 210" role="img" aria-label="The same gm() call routed to two backends returns two different numbers">
+      <rect x="150" y="16" width="260" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="280" y="35" text-anchor="middle" font-size="12" font-weight="600">model.gm("nmos", 10, 1, 100µA)</text>
+      <text x="280" y="51" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the caller writes exactly one line</text>
+      <line x1="230" y1="58" x2="140" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="330" y1="58" x2="420" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <!-- level1 -->
+      <rect x="40" y="100" width="200" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="140" y="120" text-anchor="middle" font-size="12" font-weight="600">Level1Model</text>
+      <text x="140" y="137" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">√(2·µCox·(W/L)·Id)</text>
+      <rect x="60" y="162" width="160" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="140" y="184" text-anchor="middle" font-size="12">gm = 632 µS</text>
+      <line x1="140" y1="146" x2="140" y2="162" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <!-- gmid -->
+      <rect x="320" y="100" width="200" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="420" y="120" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">GmIdModel</text>
+      <text x="420" y="137" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">(gm/Id)·Id, gm/Id from LUT</text>
+      <rect x="340" y="162" width="160" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="420" y="184" text-anchor="middle" font-size="12">gm = 1.50 mA/V</text>
+      <line x1="420" y1="146" x2="420" y2="162" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#arrow)"/>
+    </svg>
+    <figcaption>Same question, same signature. Level-1 evaluates a formula; gm/Id reads a measured table. The caller never branches.</figcaption>
+  </figure>
+
+  <p>Notice <code>gds_estimate</code> is the odd one out — it takes a <code>role</code>, not geometry. It exists for a chicken-and-egg moment during <em>requirement derivation</em>: the sizer needs a rough gds to size for gain <em>before</em> it has chosen any W/L. So the interface offers a geometry-free estimate keyed on what the device is <em>for</em>. Hold that thought — it pays off in Part 6.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 reads the actual <code>Protocol</code> declaration and the tiny <code>_params()</code> helper that both backends lean on.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · The <code>Protocol</code> &amp; <code>_params()</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> write down the socket's shape as a Python <code>Protocol</code>, and give both backends one shared line for "fetch the nmos-or-pmos parameter block."</p></blockquote>
+
+  <p>A <code>Protocol</code> is Python's version of a socket <em>spec sheet</em>. It lists method signatures with no bodies — anything that has these methods "fits," with no inheritance required (structural typing, aka duck typing made explicit).</p>
+
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">DeviceModel</span>(Protocol):
+    is_gmid: <span class="tok-kw">bool</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
+    <span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
+    <span class="tok-kw">def</span> <span class="tok-fn">vds_sat</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
+    <span class="tok-kw">def</span> <span class="tok-fn">vgs</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
+    <span class="tok-kw">def</span> <span class="tok-fn">gm_ceiling</span>(self, dtype, ids, l_um) -> <span class="tok-kw">float</span>: ...
+    <span class="tok-kw">def</span> <span class="tok-fn">gds_estimate</span>(self, dtype, ids, role) -> <span class="tok-kw">float</span>: ...</code></pre>
+
+  <p>The <code>...</code> bodies are literally the word "ellipsis" — the spec says <em>what</em>, never <em>how</em>. The lone data field <code>is_gmid</code> is a runtime flag callers use for the rare case where they genuinely must know which path they're on (like the bias-repair pass, which only makes sense for the LUT backend).</p>
+
+  <h3>Why is it called <code>_params()</code>? Because it just picks a drawer</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_params</span>(tech, dtype) -> MosfetParams:
+    <span class="tok-kw">return</span> tech.nmos <span class="tok-kw">if</span> dtype == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> tech.pmos</code></pre>
+
+  <p>A technology carries two parameter blocks — one for NMOS, one for PMOS. Like a filing cabinet with two labeled drawers. Every primitive starts by opening the right drawer: <code>_params(self.tech, "pmos")</code> hands back the PMOS <code>µCox</code>, <code>Vth</code>, <code>λ</code>. It is a one-line utility, but it is the seam that keeps every method polarity-correct without repeating the ternary five times.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;4 fills the socket with its simplest plug — <code>Level1Model</code>, which is a thin, regression-safe wrapper over the textbook square-law equations.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>Level1Model</code> — the square-law backend</h2>
+
+  <blockquote><p><strong>The one job:</strong> answer every primitive from the Shichman-Hodges square law, reproducing the existing generic-tech numbers byte-for-byte.</p></blockquote>
+
+  <p>This is the plug you build first because it is the simplest: each method is a one-line delegation to <code>equations.py</code>. The class exists so those loose functions present the <code>DeviceModel</code> face.</p>
+
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">Level1Model</span>:
+    is_gmid = <span class="tok-kw">False</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids):
+        <span class="tok-kw">return</span> eq.<span class="tok-fn">gm</span>(<span class="tok-fn">_params</span>(self.tech, dtype).mu_cox, w_um, l_um, ids)
+    <span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids):
+        <span class="tok-kw">return</span> eq.<span class="tok-fn">gd</span>(<span class="tok-fn">_params</span>(self.tech, dtype).lam, ids)</code></pre>
+
+  <p>The star primitive is <code>gm</code>. The square law says transconductance grows with the square root of both the device's shape and its current:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow><mi>gm</mi><mo>=</mo>
+          <msqrt><mrow><mn>2</mn><mo>·</mo><mi>µCox</mi><mo>·</mo>
+          <mfrac><mi>W</mi><mi>L</mi></mfrac><mo>·</mo>
+          <mo>|</mo><msub><mi>I</mi><mi>d</mi></msub><mo>|</mo></mrow></msqrt>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <h3>Traced with real numbers</h3>
+  <p>Take an NMOS with <code>µCox = 200 µA/V²</code>, <code>W = 10 µm</code>, <code>L = 1 µm</code>, <code>Id = 100 µA</code>:</p>
+  <pre class="code"><code>gm = √(2 · 200e-6 · (10/1) · 100e-6)
+   = √(4e-7)
+   = 6.32e-4 A/V  =  632 µS</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 120" role="img" aria-label="Square-law gm pipeline: inputs feed the formula, which outputs gm">
+      <g text-anchor="middle" font-size="12">
+        <rect x="20" y="42" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="95" y="60">µCox, W/L, Id</text>
+        <text x="95" y="75" font-size="10" fill="var(--fig-muted)">200µ · 10 · 100µ</text>
+        <rect x="215" y="42" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="290" y="62">√(2·µCox·(W/L)·Id)</text>
+        <text x="290" y="76" font-size="10" fill="var(--fig-muted)">= √(4e-7)</text>
+        <rect x="410" y="42" width="140" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="480" y="66" font-weight="600">gm = 632 µS</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="170" y1="62" x2="215" y2="62" marker-end="url(#arrow)"/>
+        <line x1="365" y1="62" x2="410" y2="62" marker-end="url(#arrow)"/>
+      </g>
+    </svg>
+    <figcaption>A pure formula pipeline — no table, no interpolation. Same inputs always give the same 632 µS.</figcaption>
+  </figure>
+
+  <h3>Two tells that this is the "cheap" model</h3>
+  <p>Look at <code>gds</code>: it returns <code>eq.gd(λ, Id) = λ·|Id|</code> and <strong>ignores W and L entirely</strong>. Under Level-1, output conductance is purely current-proportional — geometry doesn't enter. That's a known limitation of the square law, faithfully preserved.</p>
+  <p>And <code>gm_ceiling</code> returns <code>eq.gm_ceiling(ids) = 25·|Id|</code>, independent of dtype <em>and</em> L. It's the weak-inversion limit baked in as a flat heuristic. Finally, <code>gds_estimate</code> just returns <code>λ·|Id|</code> again — the docstring says it plainly: <em>"role is irrelevant under the square law."</em> The Level-1 world has no role-dependence because its primitives don't depend on operating point.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;5 swaps in the richer plug — <code>GmIdModel</code> — where every primitive is a <em>measured</em> lookup and the geometry finally matters.</p></blockquote>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>GmIdModel</code> — LUT-backed primitives</h2>
+
+  <blockquote><p><strong>The one job:</strong> answer the same six questions, but from a table of real BSIM4 behaviour indexed by the device's <em>operating point</em>, not a textbook formula.</p></blockquote>
+
+  <p>The gm/Id method sizes a transistor by its <strong>transconductance efficiency</strong> <code>gm/Id</code> — a single knob that says how deep into weak or strong inversion the device sits. The lookup table <code>GmIdLut</code> stores, for each <code>(gm/Id, L)</code> point, the measured <code>id/W</code>, intrinsic gain <code>gm/gds</code>, <code>Vdsat</code>, and <code>Vgs</code>.</p>
+
+  <h3>The single most important method: <code>_gm_id_at()</code></h3>
+  <p>Every primitive here first needs to know <em>where on the table</em> a solved device sits. Geometry gives us <code>(W, L, Id)</code>; the table is indexed by <code>gm/Id</code>. So we invert:</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_gm_id_at</span>(self, dtype, w_um, l_um, ids):
+    <span class="tok-kw">if</span> w_um &lt;= <span class="tok-num">0</span>:
+        <span class="tok-kw">return</span> self.policy.cs_gmid          <span class="tok-com"># degenerate guard</span>
+    <span class="tok-kw">return</span> self.lut.<span class="tok-fn">gm_id_from_idw</span>(dtype, <span class="tok-fn">abs</span>(ids) / w_um, l_um)</code></pre>
+
+  <p>The trick: <strong>current density <code>Id/W</code> pins the operating point</strong>. A device pushing more current per micron of width is deeper in strong inversion (lower gm/Id). So <code>Id/W</code> plus <code>L</code> is enough to recover <code>gm/Id</code> from the table.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 130" role="img" aria-label="Recovering gm/Id from geometry: Id over W into the table, out comes gm/Id, then gm">
+      <g text-anchor="middle" font-size="12">
+        <rect x="15" y="46" width="130" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="80" y="64">W, L, Id</text>
+        <text x="80" y="80" font-size="10" fill="var(--fig-muted)">10µm · 1µm · 100µA</text>
+        <rect x="185" y="46" width="120" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="245" y="64">Id / W</text>
+        <text x="245" y="80" font-size="10" fill="var(--fig-muted)">= 10 µA/µm</text>
+        <rect x="345" y="46" width="90" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="390" y="64" font-weight="600">LUT</text>
+        <text x="390" y="80" font-size="10" fill="var(--fig-muted)">inverse</text>
+        <rect x="470" y="46" width="80" height="42" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="510" y="64" font-weight="600">gm/Id</text>
+        <text x="510" y="80" font-size="10" fill="var(--fig-accent2)">= 15 /V</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="145" y1="67" x2="185" y2="67" marker-end="url(#arrow)"/>
+        <line x1="305" y1="67" x2="345" y2="67" marker-end="url(#arrow)"/>
+        <line x1="435" y1="67" x2="470" y2="67" marker-end="url(#arrow)"/>
+      </g>
+    </svg>
+    <figcaption>Geometry → current density → table inverse → operating gm/Id. Every gm/Id primitive starts with this recovery.</figcaption>
+  </figure>
+
+  <h3>Now the primitives fall out in one line each</h3>
+  <p>Once you have the operating <code>gm/Id</code>, the answers are direct:</p>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids):
+    <span class="tok-kw">return</span> self.<span class="tok-fn">_gm_id_at</span>(dtype, w_um, l_um, ids) * <span class="tok-fn">abs</span>(ids)
+<span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids):
+    gm_id = self.<span class="tok-fn">_gm_id_at</span>(dtype, w_um, l_um, ids)
+    gm = gm_id * <span class="tok-fn">abs</span>(ids)
+    <span class="tok-kw">return</span> gm / self.lut.<span class="tok-fn">gm_gds</span>(dtype, gm_id, l_um)</code></pre>
+
+  <p><code>gm</code> is just the identity <code>gm = (gm/Id)·Id</code>. And <code>gds = gm / (gm/gds)</code> — the table hands back the <em>intrinsic gain</em> <code>gm/gds</code>, so we divide. Compare to Level-1: here <code>gds</code> genuinely depends on geometry, because <code>gm/gds</code> is read at the device's real operating point and length.</p>
+
+  <h3>Traced with real numbers</h3>
+  <pre class="code"><code>gm/Id (from table)   = 15 /V     at Id/W = 10 µA/µm, L = 1 µm
+gm    = 15 · 100µA   = 1.50 mA/V
+gm/gds (from table)  = 20        intrinsic gain
+gds   = 1.50m / 20   = 75 µS
+Vdsat (from table)   = 0.12 V
+Vgs   (from table)   = +0.45 V   (NMOS → positive)</code></pre>
+
+  <p>The <code>vgs</code> method adds one careful touch: the table stores a <em>magnitude</em>, so the code re-applies the sign from the threshold — <code>mag if vth >= 0 else -mag</code> — giving <code>+</code> for NMOS, <code>−</code> for PMOS. That sign convention is exactly what the Level-1 <code>vgs_from_ids</code> also produces, so the socket's contract holds across both plugs.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> the gm/Id plug has two extra powers Level-1 lacks — a <em>policy</em> for choosing L by role (Part&nbsp;6) and full <em>geometry inversion</em> (Part&nbsp;7). Those are what let it not just <em>measure</em> devices but <em>size</em> them.</p></blockquote>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>GmIdPolicy</code> &amp; role-based length</h2>
+
+  <blockquote><p><strong>The one job:</strong> decide a device's channel length and nominal gm/Id from what it is <em>for</em> — a signal device, a current source, or a cascode — via a small table of tunable knobs.</p></blockquote>
+
+  <p>Remember <code>gds_estimate</code> from Part 2 — the geometry-free question. To answer it, the model needs a sensible default operating point <em>before</em> W/L exist. That default comes from the device's <strong>role</strong>. Two (well, three) roles drive everything:</p>
+
+  <table>
+    <thead><tr><th>Role</th><th>What it is</th><th>L multiple</th><th>gm/Id</th></tr></thead>
+    <tbody>
+      <tr><td><code>"signal"</code></td><td>input pair, gain-stage driver</td><td class="num">2×</td><td class="num">14 (nominal)</td></tr>
+      <tr><td><code>"cascode"</code></td><td>cascode device (small Vdsat)</td><td class="num">3×</td><td class="num">8</td></tr>
+      <tr><td><code>"current_source"</code></td><td>tail, active load, bias gen</td><td class="num">4×</td><td class="num">10</td></tr>
+    </tbody>
+  </table>
+
+  <p>The intuition is physical. A <strong>signal</strong> device wants a balance of gain and speed → moderate L. A <strong>current source</strong> wants high output resistance → long L and low gm/Id (strong inversion, for headroom). A <strong>cascode</strong> wants a small Vdsat → strong inversion but a middling L. These live in the <code>GmIdPolicy</code> dataclass as defaults tuned during SPICE validation.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 170" role="img" aria-label="Channel length grows with role: signal 2x, cascode 3x, current source 4x of L_min">
+      <text x="30" y="24" font-size="11" fill="var(--fig-muted)">L (× L_min), longer → higher output resistance →</text>
+      <!-- signal 2x -->
+      <text x="70" y="52" text-anchor="middle" font-size="12" font-weight="600">signal</text>
+      <rect x="30" y="60" width="80" height="26" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="70" y="78" text-anchor="middle" font-size="11">2× · gm/Id 14</text>
+      <!-- cascode 3x -->
+      <text x="205" y="52" text-anchor="middle" font-size="12" font-weight="600">cascode</text>
+      <rect x="145" y="60" width="120" height="26" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="205" y="78" text-anchor="middle" font-size="11">3× · gm/Id 8</text>
+      <!-- current source 4x -->
+      <text x="380" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">current source</text>
+      <rect x="300" y="60" width="160" height="26" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="380" y="78" text-anchor="middle" font-size="11">4× · gm/Id 10</text>
+      <!-- snap note -->
+      <text x="260" y="120" text-anchor="middle" font-size="11" fill="var(--fig-muted)">role_length() = _snap_l(mult × L_min) → clamped to the length grid</text>
+      <text x="260" y="140" text-anchor="middle" font-size="11" fill="var(--fig-muted)">e.g. L_min 0.045µm → signal 0.09µm · cascode 0.135µm · CS 0.18µm</text>
+    </svg>
+    <figcaption>Role sets length. Longer channel = higher rout for bias devices; shorter = faster signal devices. The multiplier is snapped to the manufacturing grid.</figcaption>
+  </figure>
+
+  <p>The plumbing is three tiny methods. <code>role_length()</code> looks up the multiplier for a role and calls <code>length_for()</code>, which multiplies by <code>L_min</code> and snaps to the grid via <code>_snap_l()</code>. And <code>_role_gm_id()</code> returns the cascode or current-source nominal gm/Id.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">role_length</span>(self, role):
+    mult = {CURRENT_SOURCE: self.policy.cs_l_mult,
+            CASCODE: self.policy.cascode_l_mult}.<span class="tok-fn">get</span>(role, self.policy.signal_l_mult)
+    <span class="tok-kw">return</span> self.<span class="tok-fn">length_for</span>(mult)</code></pre>
+
+  <p>Note the <code>.get(role, signal_l_mult)</code> default — anything that isn't explicitly a current source or cascode is treated as <strong>signal</strong>. That's the "unknown → signal" fallback.</p>
+
+  <p>Now <code>gds_estimate</code> finally makes sense: pick the role's L, pick the role's nominal gm/Id (signal uses <code>signal_nominal_gmid = 14</code>), compute <code>gm = (gm/Id)·Id</code>, then <code>gds = gm / (gm/gds)</code> from the table. A gds guess with <em>no geometry</em> — exactly what requirement-derivation needs before it commits to a W and L.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;7 is the gm/Id backend's crown jewel — <code>geometry_for()</code>, which runs the whole thing <em>backwards</em>: from a target gm to an actual (W, L).</p></blockquote>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>geometry_for()</code> — inverting to (W, L)</h2>
+
+  <blockquote><p><strong>The one job:</strong> given a device's role, its current, and (for signal devices) a target gm, choose the actual channel length and width that hit it — clamped to what the table physically allows.</p></blockquote>
+
+  <p>Every primitive so far went <em>forward</em>: geometry in, small-signal number out. The procedural sizer needs the <strong>inverse</strong>: "I want this much gm at this current — what W and L do I build?" That's <code>geometry_for()</code>.</p>
+
+  <p>The logic is a clean fork on the device's role:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 240" role="img" aria-label="geometry_for decision: signal with gm target solves gm/Id and clamps to ceiling; other roles use policy gm/Id">
+      <polygon points="270,14 380,50 270,86 160,50" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="270" y="46" text-anchor="middle" font-size="11">signal role with</text>
+      <text x="270" y="60" text-anchor="middle" font-size="11">a gm target?</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="200" y1="70" x2="120" y2="104" marker-end="url(#arrow)"/>
+        <line x1="340" y1="70" x2="420" y2="104" marker-end="url(#arrow)"/>
+      </g>
+      <text x="150" y="94" font-size="11" fill="var(--fig-muted)">yes</text>
+      <text x="395" y="94" font-size="11" fill="var(--fig-muted)">no</text>
+      <!-- yes branch -->
+      <rect x="10" y="106" width="230" height="70" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="125" y="126" text-anchor="middle" font-size="11.5" font-weight="600">solve from spec</text>
+      <text x="125" y="143" text-anchor="middle" font-size="11">gm/Id = gm_target / |Id|</text>
+      <text x="125" y="159" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">clamp ↓ ceiling, floor ↑ axis[0]</text>
+      <text x="125" y="172" text-anchor="middle" font-size="10" fill="var(--fig-muted)">capped=True if it hit the ceiling</text>
+      <!-- no branch -->
+      <rect x="300" y="106" width="230" height="70" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="415" y="126" text-anchor="middle" font-size="11.5" font-weight="600">use policy gm/Id</text>
+      <text x="415" y="143" text-anchor="middle" font-size="11">cascode → 8 · CS → 10</text>
+      <text x="415" y="159" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">or a per-device override</text>
+      <!-- merge to width -->
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="125" y1="176" x2="230" y2="204" marker-end="url(#arrow)"/>
+        <line x1="415" y1="176" x2="310" y2="204" marker-end="url(#arrow)"/>
+      </g>
+      <rect x="170" y="206" width="200" height="30" rx="8" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="270" y="226" text-anchor="middle" font-size="11.5" font-weight="600">W = |Id| / id_per_w(gm/Id, L)</text>
+    </svg>
+    <figcaption>Two ways to land on a gm/Id; then the table's id/W turns current into width. Signal devices are spec-driven; bias devices are policy-driven.</figcaption>
+  </figure>
+
+  <pre class="code"><code>l_um = l_um <span class="tok-kw">if</span> l_um <span class="tok-kw">is not None else</span> self.<span class="tok-fn">role_length</span>(role)
+<span class="tok-kw">if</span> role != SIGNAL <span class="tok-kw">or not</span> gm_target <span class="tok-kw">or</span> ids &lt;= <span class="tok-num">0</span>:
+    gm_id = gm_id <span class="tok-kw">if</span> gm_id <span class="tok-kw">is not None else</span> self.<span class="tok-fn">_role_gm_id</span>(role)
+<span class="tok-kw">else</span>:
+    gm_id = gm_target / <span class="tok-fn">abs</span>(ids)
+    ceiling = self.lut.<span class="tok-fn">max_gm_id</span>(dtype, l_um)
+    <span class="tok-kw">if</span> gm_id &gt; ceiling:
+        gm_id, capped = ceiling, <span class="tok-kw">True</span>
+    gm_id = <span class="tok-fn">max</span>(gm_id, <span class="tok-fn">float</span>(self.lut.gm_id_axis[<span class="tok-num">0</span>]))
+<span class="tok-kw">if</span> gm_id_min <span class="tok-kw">is not None</span>:
+    gm_id = <span class="tok-fn">max</span>(gm_id, gm_id_min)
+idw = self.lut.<span class="tok-fn">id_per_w</span>(dtype, gm_id, l_um)
+w_um = <span class="tok-fn">abs</span>(ids) / idw <span class="tok-kw">if</span> idw &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> self.tech.width.max</code></pre>
+
+  <h3>Traced with real numbers — a signal device</h3>
+  <p>The sizer wants <code>gm_target = 1.5 mA/V</code> at <code>Id = 100 µA</code>, role <code>signal</code>:</p>
+  <pre class="code"><code>gm/Id  = 1.5m / 100µ   = 15 /V
+ceiling (table)        = 25 /V   →  15 < 25, no clamp
+L      = role_length   = 2 × L_min, snapped
+id/W   (table @ 15,L)  = 8 µA/µm
+W      = 100µ / 8µ     = 12.5 µm    →  GeomResult(W=12.5, L, gm/Id=15, capped=False)</code></pre>
+
+  <p>And a <strong>current source</strong> at the same current takes the other branch: no gm target, so <code>gm/Id = cs_gmid = 10</code>, a longer <code>L = 4×L_min</code>, a higher <code>id/W ≈ 30 µA/µm</code>, giving a much smaller <code>W ≈ 3.3 µm</code>. Same current, very different transistor — because the roles want different physics.</p>
+
+  <h3>The honest edges</h3>
+  <ul>
+    <li><strong>The ceiling clamp.</strong> If the asked-for gm/Id exceeds the table's weak-inversion max, it's clamped and <code>gm_id_capped=True</code> is flagged — the caller is told the design will fall short of its gm rather than being handed a fantasy.</li>
+    <li><strong>The axis floor.</strong> <code>max(gm_id, gm_id_axis[0])</code> keeps the value on-table at the strong-inversion end too.</li>
+    <li><strong><code>gm_id_min</code>.</strong> A floor that raises gm/Id regardless of role — used to cap Vdsat for output swing. Raising a solved signal gm/Id is spec-safe: <code>gm=(gm/Id)·Id</code> only grows.</li>
+    <li><strong>Overrides.</strong> Explicit <code>gm_id</code> / <code>l_um</code> from the block registry let a designer pin a device's region or length; <code>None</code> falls back to policy, so default behaviour is unchanged.</li>
+    <li><strong>The <code>idw <= 0</code> guard.</strong> A pathological table read falls back to <code>width.max</code> rather than dividing by zero.</li>
+  </ul>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;8 names the hidden idea that ties the whole file together — and traces the <em>same</em> gain formula through both backends to prove the socket really is model-independent.</p></blockquote>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · The hidden idea: polymorphism, and one selector</h2>
+
+  <p>The last function is the smallest and does the most:</p>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">build_device_model</span>(tech) -> DeviceModel:
+    <span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"gmid_lut"</span>, <span class="tok-kw">None</span>):
+        <span class="tok-kw">return</span> <span class="tok-fn">GmIdModel</span>(tech, <span class="tok-fn">GmIdLut</span>(tech.gmid_lut))
+    <span class="tok-kw">return</span> <span class="tok-fn">Level1Model</span>(tech)</code></pre>
+
+  <p>One question — "does this tech ship a LUT?" — picks the plug. From that line on, the rest of the sizer holds a <code>DeviceModel</code> and never asks again.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 460 170" role="img" aria-label="build_device_model chooses GmIdModel when a LUT is present, else Level1Model">
+      <polygon points="230,14 330,52 230,90 130,52" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="230" y="49" text-anchor="middle" font-size="11.5">tech.gmid_lut?</text>
+      <text x="230" y="64" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">carries a table?</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="160" y1="74" x2="100" y2="112" marker-end="url(#arrow)"/>
+        <line x1="300" y1="74" x2="360" y2="112" marker-end="url(#arrow)"/>
+      </g>
+      <text x="118" y="100" font-size="11" fill="var(--fig-muted)">no</text>
+      <text x="345" y="100" font-size="11" fill="var(--fig-muted)">yes</text>
+      <rect x="20" y="114" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="138" text-anchor="middle" font-size="12">Level1Model</text>
+      <rect x="290" y="114" width="150" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="365" y="138" text-anchor="middle" font-size="12" fill="var(--fig-accent2)">GmIdModel</text>
+    </svg>
+    <figcaption>The one branch in the whole story. After it, polymorphism carries the rest — no more forks anywhere downstream.</figcaption>
+  </figure>
+
+  <h3>The hidden idea, named</h3>
+  <p>Although the file never writes the word, its entire reason to exist is <strong>polymorphism</strong>: the topology relationships are model-independent, so if the <em>primitives</em> hide behind one interface, a single sizing-and-metrics codebase serves both technologies. The clean way to see it is to run the <em>same</em> single-stage gain formula through each backend and watch only the numbers differ:</p>
+
+  <div class="eq-center"><span class="boxed-eq">A<sub>v</sub>&nbsp;=&nbsp;gm&nbsp;·&nbsp;r<sub>out</sub>&nbsp;=&nbsp;gm&nbsp;/&nbsp;gds</span></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="Same gain formula, two backends: Level-1 gives 63, gm/Id gives 20">
+      <text x="140" y="24" text-anchor="middle" font-size="13" font-weight="600">Level1Model</text>
+      <text x="400" y="24" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">GmIdModel</text>
+      <!-- left column -->
+      <rect x="20" y="36" width="240" height="150" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <g font-size="12">
+        <text x="40" y="62">gm  = √(2·µCox·(W/L)·Id)</text>
+        <text x="40" y="82" fill="var(--fig-muted)">    = 632 µS</text>
+        <text x="40" y="106">gds = λ·Id  = 0.1·100µ</text>
+        <text x="40" y="126" fill="var(--fig-muted)">    = 10 µS</text>
+        <text x="40" y="152" font-weight="600">Aᵥ = 632 / 10</text>
+        <text x="40" y="172" font-weight="600" fill="var(--fig-accent)">   = 63.2</text>
+      </g>
+      <!-- right column -->
+      <rect x="280" y="36" width="240" height="150" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <g font-size="12">
+        <text x="300" y="62">gm  = (gm/Id)·Id = 15·100µ</text>
+        <text x="300" y="82" fill="var(--fig-muted)">    = 1.50 mA/V</text>
+        <text x="300" y="106">gds = gm / (gm/gds)</text>
+        <text x="300" y="126" fill="var(--fig-muted)">    = 1.5m/20 = 75 µS</text>
+        <text x="300" y="152" font-weight="600">Aᵥ = 1.5m / 75µ</text>
+        <text x="300" y="172" font-weight="600" fill="var(--fig-accent2)">   = 20  (= gm/gds)</text>
+      </g>
+    </svg>
+    <figcaption>Identical formula <code>Aᵥ = gm/gds</code>. Level-1's optimistic λ gives 63; the LUT's measured intrinsic gain gives a realistic 20. The sizer's code is byte-identical either way.</figcaption>
+  </figure>
+
+  <p>That is the whole payoff. The gain, GBW, phase-margin, and CMRR code in <code>sizer.py</code> calls <code>model.gm(...)</code> and <code>model.gds(...)</code> and never learns which plug answered — yet the LUT path returns the honest, silicon-calibrated number while the Level-1 path stays regression-identical to the legacy behaviour.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li><code>Level1Model</code>'s <code>gds</code> ignores geometry entirely (<code>λ·Id</code>), and its <code>gm_ceiling</code> is a flat <code>25·Id</code> heuristic — the known price of the square law, kept for regression safety.</li>
+    <li>Only <code>GmIdModel</code> carries <code>geometry_for</code>, <code>role_length</code>, and a policy — Level-1 has no notion of role, because its primitives don't depend on operating point.</li>
+    <li>The gm/Id path is only as good as its committed table; outside the table's <code>(gm/Id, L)</code> range it clamps to the axis edges rather than extrapolating.</li>
+    <li>The primitives are small-signal <em>evaluations</em>; whether a stacked device actually fits under the supply is a separate concern (that's <code>bias.py</code>).</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>One <code>Protocol</code>, one selector, and a strict discipline that the six primitives are the <em>only</em> thing that differs between technologies. Everything model-independent — every op-amp formula worth writing — is written exactly once, against the socket. Adding a third technology model tomorrow means writing a third plug and touching nothing else.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>device_model.py</code> defines a single small-signal <code>DeviceModel</code> socket and two interchangeable plugs — a regression-safe Level-1 square law and a silicon-calibrated gm/Id lookup table (which also knows how to invert a gm target back into a (W, L)) — so that CircuitGenome's model-independent op-amp topology math is written once and serves both technologies through one polymorphic interface.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

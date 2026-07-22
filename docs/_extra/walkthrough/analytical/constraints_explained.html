@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>constraints.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>constraints.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/analytical/constraints.py</code> — how continuous op-amp performance targets become <em>integer linear</em> constraints a CP-SAT solver can actually search.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The discrete grid + square law</a>
+  <a href="#part-3">3 · _coeff() &amp; _SCALE</a>
+  <a href="#part-4">4 · The W and L variables</a>
+  <a href="#part-5">5 · The gm lower bound (centerpiece)</a>
+  <a href="#part-6">6 · The VDS_sat upper bound</a>
+  <a href="#part-7">7 · Matching: symmetry &amp; mirrors</a>
+  <a href="#part-8">8 · Objective, branching &amp; the hidden idea</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> take the fuzzy, continuous demands we place on a transistor — "give me at least this much gain, and don't slip out of saturation" — and rewrite them as <em>integer linear inequalities</em> over discrete width and length, so an off-the-shelf constraint solver can hunt for a geometry that satisfies all of them at once.</p></blockquote>
+
+  <p class="beat">Here is the whole story with no code at all.</p>
+
+  <p>Sizing an analog transistor means choosing two numbers: its width <code>W</code> and length <code>L</code>. But you can't ask for <em>any</em> width — the fabrication process only offers sizes on a fixed grid, like LEGO bricks that come in whole-stud lengths. And the performance you care about (transconductance <code>gm</code>, saturation voltage <code>VDS_sat</code>) depends on <code>W</code> and <code>L</code> through <strong>square-root</strong> physics — nonlinear, curvy, and division-laden.</p>
+
+  <p>A solver like Google OR-Tools' <strong>CP-SAT</strong> is fantastically good at one narrow thing: searching over <em>integer</em> variables subject to <em>linear</em> constraints. It cannot read a <code>√</code>. It cannot divide one variable by another. So this file is a <strong>translator</strong> — a little compiler that turns each analog requirement into the one dialect CP-SAT speaks.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 170" role="img" aria-label="Compiler pipeline: continuous specs become integer linear constraints for CP-SAT">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <rect x="12" y="46" width="150" height="78" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="87" y="70" text-anchor="middle" font-size="12" font-weight="600">continuous specs</text>
+      <text x="87" y="92" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gm ≥ gm_req</text>
+      <text x="87" y="108" text-anchor="middle" font-size="11" fill="var(--fig-muted)">VDS_sat ≤ max</text>
+      <line x1="162" y1="85" x2="212" y2="85" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="212" y="55" width="120" height="60" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="272" y="82" text-anchor="middle" font-size="12" font-weight="600">build_model()</text>
+      <text x="272" y="100" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the translator</text>
+      <line x1="332" y1="85" x2="382" y2="85" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="382" y="46" width="166" height="78" rx="10" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="465" y="70" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-good)">integer linear model</text>
+      <text x="465" y="92" text-anchor="middle" font-size="11" fill="var(--fig-muted)">90·W ≥ 360·L</text>
+      <text x="465" y="108" text-anchor="middle" font-size="11" fill="var(--fig-muted)">W, L ∈ ℤ (grid steps)</text>
+      <text x="465" y="146" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">→ CP-SAT searches this</text>
+    </svg>
+    <figcaption>The file is a compiler: curvy √-physics on the left, a flat integer-linear program on the right that CP-SAT can solve.</figcaption>
+  </figure>
+
+  <p>Why go to this trouble instead of just calling a numerical optimizer? Because CP-SAT gives you something precious for the card-less <code>generic</code> technology used by <code>level1.py</code>: it <strong>simultaneously</strong> honors gain targets, headroom limits, matched-pair symmetry, and current-mirror ratios across an <em>entire</em> op-amp, and it either returns a provably valid integer solution or tells you honestly that none exists. It's a sudoku engine for transistor geometry.</p>
+
+  <h3>The cast of characters</h3>
+  <p>The file is unusually lean: one public builder, one tiny helper, and six constraint-building phases inside the builder. Hover a box to trace where <code>_coeff()</code> is used.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 600 430" role="img" aria-label="Structure of build_model and its six constraint phases">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- header -->
+      <g class="node" data-group="root">
+        <rect x="175" y="12" width="250" height="40" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="37" text-anchor="middle" font-weight="600" font-size="14">build_model(...)</text>
+      </g>
+      <!-- vertical spine arrows -->
+      <line class="edge" x1="165" y1="52" x2="165" y2="68" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" x1="165" y1="108" x2="165" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" x1="165" y1="158" x2="165" y2="168" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" x1="165" y1="208" x2="165" y2="218" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" x1="165" y1="258" x2="165" y2="268" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" x1="165" y1="308" x2="165" y2="318" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" x1="165" y1="358" x2="165" y2="376" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- phases -->
+      <g class="node" data-group="p1">
+        <rect x="40" y="68" width="250" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="86" text-anchor="middle" font-size="12" font-weight="600">1 · decision variables</text>
+        <text x="165" y="101" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W, L as integer grid-step counts</text>
+      </g>
+      <g class="node" data-group="p2">
+        <rect x="40" y="118" width="250" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="136" text-anchor="middle" font-size="12" font-weight="600">2 · gm lower bound</text>
+        <text x="165" y="151" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">2·µCox·IDS·W ≥ gm_req²·L</text>
+      </g>
+      <g class="node" data-group="p3">
+        <rect x="40" y="168" width="250" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="186" text-anchor="middle" font-size="12" font-weight="600">3 · VDS_sat upper bound</text>
+        <text x="165" y="201" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">2·IDS·L ≤ µCox·Vov²·W</text>
+      </g>
+      <g class="node" data-group="p4">
+        <rect x="40" y="218" width="250" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="236" text-anchor="middle" font-size="12" font-weight="600">4 · symmetry constraints</text>
+        <text x="165" y="251" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">matched pairs: equal W, equal L</text>
+      </g>
+      <g class="node" data-group="p5">
+        <rect x="40" y="268" width="250" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="286" text-anchor="middle" font-size="12" font-weight="600">5 · current-mirror ratios</text>
+        <text x="165" y="301" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W ∝ I; matched length</text>
+      </g>
+      <g class="node" data-group="p6">
+        <rect x="40" y="318" width="250" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="336" text-anchor="middle" font-size="12" font-weight="600">6 · objective + branching</text>
+        <text x="165" y="351" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">minimize ΣW; bias first</text>
+      </g>
+      <!-- output -->
+      <g class="node" data-group="out">
+        <rect x="40" y="376" width="250" height="38" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="165" y="400" text-anchor="middle" font-size="12" font-weight="600">returns (model, W_vars, L_vars)</text>
+      </g>
+      <!-- _coeff helper -->
+      <g class="node" data-group="coeff">
+        <rect x="350" y="120" width="230" height="86" rx="9" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="465" y="146" text-anchor="middle" font-size="13" font-weight="600">_coeff(value)</text>
+        <text x="465" y="166" text-anchor="middle" font-size="11" fill="var(--fig-muted)">physical float → scaled int</text>
+        <text x="465" y="184" text-anchor="middle" font-size="11" fill="var(--fig-muted)">round(value · 10¹²)</text>
+      </g>
+      <line class="edge" data-group="coeff" x1="290" y1="138" x2="350" y2="150" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="coeff" x1="290" y1="188" x2="350" y2="176" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
+    </svg>
+    <figcaption>One builder, six phases run top-to-bottom into a single model. The lone helper <code>_coeff()</code> feeds phases 2 and 3 (hover it) — every physical coefficient passes through it.</figcaption>
+  </figure>
+
+  <p>We'll learn it <strong>bottom-up</strong>: first the discrete-grid mindset and the square-law physics (Part 2), then the tiny <code>_coeff()</code> helper (Part 3) and the variables (Part 4). Only then do we reach the centerpiece — the <code>gm</code> linearization (Part 5) — with everything we need to actually feel <em>why</em> squaring is the magic move.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part 2 builds the two ideas the whole file rests on — a <em>discrete grid</em> of allowed sizes, and the <em>square-law</em> that ties geometry to performance.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The discrete grid and the square law</h2>
+
+  <p class="beat">Two ideas. Get these and the rest is bookkeeping.</p>
+
+  <h3>Idea 1 — width and length live on a grid</h3>
+  <p>Analog physics would happily accept <code>W = 2.3847 µm</code>. The <em>fab</em> will not. Layout snaps to a manufacturing grid with a fixed <code>step</code>, so a width is always a whole number of steps:</p>
+  <div class="eq-center"><span class="boxed-eq">W<sub>µm</sub> = W<sub>int</sub> · width.step&nbsp;&nbsp;&nbsp;with&nbsp;&nbsp;W<sub>int</sub> ∈ {5, 6, 7, …}</span></div>
+  <p>Think of choosing LEGO bricks: you can pick a 4-stud or a 5-stud brick, never a 4.7-stud one. The <strong>integer</strong> <code>W_int</code> is "how many studs." This is exactly the shape of variable CP-SAT loves — an integer with a min and a max.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 180" role="img" aria-label="Continuous knob versus a discrete grid of allowed sizes">
+      <text x="120" y="24" text-anchor="middle" font-size="12" font-weight="600">what physics wants</text>
+      <text x="120" y="40" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">a smooth, continuous W/L</text>
+      <line x1="30" y1="120" x2="210" y2="60" stroke="var(--fig-muted)" stroke-width="3"/>
+      <circle cx="150" cy="80" r="6" fill="var(--fig-accent)"/>
+      <text x="150" y="105" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">2.38 µm?</text>
+      <line x1="250" y1="90" x2="300" y2="90" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="275" y="80" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">snap</text>
+      <text x="410" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">what the fab allows</text>
+      <text x="410" y="40" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">only these grid pegs</text>
+      <g fill="var(--fig-accent2)">
+        <circle cx="330" cy="120" r="5"/><circle cx="360" cy="120" r="5"/>
+        <circle cx="390" cy="120" r="5"/><circle cx="420" cy="120" r="5"/>
+        <circle cx="450" cy="120" r="5"/><circle cx="480" cy="120" r="5"/>
+      </g>
+      <g font-size="10" fill="var(--fig-muted)" text-anchor="middle">
+        <text x="330" y="142">5</text><text x="360" y="142">6</text><text x="390" y="142">7</text>
+        <text x="420" y="142">8</text><text x="450" y="142">9</text><text x="480" y="142">10</text>
+      </g>
+      <text x="405" y="162" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W_int (steps)</text>
+    </svg>
+    <figcaption>A continuous ideal collapses onto a discrete lattice of allowed widths. CP-SAT only ever picks a peg.</figcaption>
+  </figure>
+
+  <h3>Idea 2 — the square law ties geometry to performance</h3>
+  <p>In the simple long-channel model, a saturated MOSFET's transconductance and its saturation (overdrive) voltage are:</p>
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>
+        <msub><mi>g</mi><mi>m</mi></msub><mo>=</mo>
+        <msqrt><mrow><mn>2</mn><mo>·</mo><mi>µCox</mi><mo>·</mo>
+          <mfrac><mi>W</mi><mi>L</mi></mfrac><mo>·</mo>
+          <msub><mi>I</mi><mrow><mi>DS</mi></mrow></msub></mrow></msqrt>
+      </mrow></math>
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>
+        <msub><mi>V</mi><mrow><mi>DSsat</mi></mrow></msub><mo>=</mo>
+        <msqrt><mfrac><mrow><mn>2</mn><mo>·</mo><msub><mi>I</mi><mi>DS</mi></msub><mo>·</mo><mi>L</mi></mrow>
+          <mrow><mi>µCox</mi><mo>·</mo><mi>W</mi></mrow></mfrac></msqrt>
+      </mrow></math>
+    </span>
+  </div>
+
+  <p>Two things about these to notice now, because they are the entire reason the file exists:</p>
+  <ul>
+    <li>There's a <strong><code>√</code></strong> around everything. CP-SAT can't express a square root.</li>
+    <li>There's a <strong>ratio <code>W/L</code></strong> — one variable divided by another. CP-SAT can't divide two variables either.</li>
+  </ul>
+  <p>So both formulas, as written, are off-limits. The trick in Parts 5 and 6 is to <em>square</em> and <em>cross-multiply</em> the requirement until every <code>√</code> and every division vanishes, leaving a plain linear inequality. Hold that thought.</p>
+
+  <p>Here are the ingredients we'll plug in throughout, chosen to give tidy numbers (and matching the file's own docstring example):</p>
+
+  <table>
+    <thead><tr><th>Symbol</th><th>Meaning</th><th class="num">Value</th></tr></thead>
+    <tbody>
+      <tr><td><code>µCox</code></td><td>process transconductance parameter</td><td class="num">90 µA/V²</td></tr>
+      <tr><td><code>IDS</code></td><td>the transistor's drain current</td><td class="num">5 µA</td></tr>
+      <tr><td><code>gm_req</code></td><td>required transconductance (a floor)</td><td class="num">60 µA/V</td></tr>
+      <tr><td><code>VDS_sat_max</code></td><td>max allowed overdrive (a ceiling)</td><td class="num">≈ 0.19 V</td></tr>
+      <tr><td><code>width.step</code>, <code>length.step</code></td><td>the fab grid step</td><td class="num">0.1 µm each</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>_coeff()</code> and <code>_SCALE</code> — the warm-up</h2>
+
+  <blockquote><p><strong>The one job:</strong> turn a tiny physical floating-point coefficient (like <code>0.00000000009</code>) into a small, exact integer CP-SAT can hold — by multiplying by a big constant and rounding.</p></blockquote>
+
+  <pre class="code"><code>_SCALE = <span class="tok-num">10</span>**<span class="tok-num">12</span>
+
+<span class="tok-kw">def</span> <span class="tok-fn">_coeff</span>(value: <span class="tok-kw">float</span>) -> <span class="tok-kw">int</span>:
+    <span class="tok-str">"""Round a physical coefficient to its integer CP-SAT representation."""</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">round</span>(value * _SCALE)</code></pre>
+
+  <p>Why is this needed? CP-SAT works with <strong>integer</strong> coefficients. But our physics constants are microscopic — currents in µA (<code>1e-6</code>), <code>µCox</code> in µA/V² (<code>1e-6</code>). Multiply two of them and you get numbers like <code>9e-11</code>. Feed <em>that</em> to an integer solver and it rounds to zero — the constraint evaporates.</p>
+
+  <p>Analogy: a recipe says "0.000009 kg of salt." Useless at that scale. Switch units to <em>micrograms</em> and it becomes "9 µg" — same amount, now a countable whole number. <code>_SCALE = 10¹²</code> is exactly that unit change: it lifts A²/V² products up into a range where they land on tidy integers.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Take the left side of the <code>gm</code> constraint's coefficient, <code>2 · µCox · IDS · width.step</code>:</p>
+  <pre class="code"><code>2 · (90e-6) · (5e-6) · 0.1  =  9e-11       <span class="tok-com"># microscopic float</span>
+_coeff(9e-11) = round(9e-11 · 1e12) = round(90) = 90   <span class="tok-com"># tidy integer ✓</span></code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 130" role="img" aria-label="Scaling a microscopic float up to a small integer">
+      <rect x="20" y="46" width="150" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="66" text-anchor="middle" font-size="12">9 × 10⁻¹¹</text>
+      <text x="95" y="82" text-anchor="middle" font-size="10" fill="var(--fig-muted)">physical float</text>
+      <line x1="170" y1="68" x2="245" y2="68" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="207" y="58" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">× 10¹²</text>
+      <rect x="245" y="46" width="150" height="44" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="320" y="66" text-anchor="middle" font-size="13" font-weight="600">90</text>
+      <text x="320" y="82" text-anchor="middle" font-size="10" fill="var(--fig-muted)">exact integer</text>
+      <text x="440" y="72" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">→ CP-SAT</text>
+    </svg>
+    <figcaption>The same coefficient, rescaled into a range where rounding is safe. Both sides of an inequality scale by the same 10¹², so the <em>truth</em> of the inequality never changes.</figcaption>
+  </figure>
+
+  <p>The last point is the quiet cleverness: because <em>every</em> coefficient in a constraint is multiplied by the same <code>_SCALE</code>, the inequality <code>90·W ≥ 360·L</code> holds exactly when the original physical one does. Scaling both sides of <code>a ≥ b</code> by a positive number can't flip it.</p>
+
+  <blockquote><p><strong>Why I like the name.</strong> <code>_coeff</code> is short for "coefficient" — the number multiplying a variable in the linear model. That's precisely what it returns. The leading underscore whispers "internal helper, don't call me from outside." Good, honest naming.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · The <code>W</code> and <code>L</code> variables</h2>
+
+  <blockquote><p><strong>The one job:</strong> for every transistor, create one integer variable for width and one for length — each counting grid steps, each clamped to the fab's legal min/max.</p></blockquote>
+
+  <pre class="code"><code>w_step = tech.width.step
+l_step = tech.length.step
+w_min_int = <span class="tok-fn">round</span>(tech.width.min / w_step)
+w_max_int = <span class="tok-fn">round</span>(tech.width.max / w_step)
+l_min_int = <span class="tok-fn">round</span>(tech.length.min / l_step)
+l_max_int = <span class="tok-fn">round</span>(tech.length.max / l_step)
+
+W: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, cp_model.IntVar] = {}
+L: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, cp_model.IntVar] = {}
+<span class="tok-kw">for</span> ref <span class="tok-kw">in</span> transistors:
+    W[ref] = model.<span class="tok-fn">new_int_var</span>(w_min_int, w_max_int, <span class="tok-str">f"W_{ref}"</span>)
+    L[ref] = model.<span class="tok-fn">new_int_var</span>(l_min_int, l_max_int, <span class="tok-str">f"L_{ref}"</span>)</code></pre>
+
+  <p>The <strong>single most important lines</strong> are the two <code>new_int_var</code> calls. Everything else in the file exists to constrain <em>these</em>. Each is an integer variable — a dial the solver may turn — but only between <code>min_int</code> and <code>max_int</code> stops.</p>
+
+  <p>Converting µm to grid steps is just division by the step. Say the fab allows widths from <code>0.5 µm</code> to <code>10 µm</code> on a <code>0.1 µm</code> grid:</p>
+  <pre class="code"><code>w_min_int = round(0.5 / 0.1) = 5      <span class="tok-com"># 5 steps = 0.5 µm</span>
+w_max_int = round(10  / 0.1) = 100    <span class="tok-com"># 100 steps = 10 µm</span></code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 120" role="img" aria-label="Mapping micrometre widths onto integer grid steps">
+      <line x1="40" y1="60" x2="480" y2="60" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <g stroke="var(--fig-muted)" stroke-width="1.5">
+        <line x1="60" y1="54" x2="60" y2="66"/><line x1="130" y1="54" x2="130" y2="66"/>
+        <line x1="200" y1="54" x2="200" y2="66"/><line x1="270" y1="54" x2="270" y2="66"/>
+        <line x1="340" y1="54" x2="340" y2="66"/><line x1="410" y1="54" x2="410" y2="66"/>
+      </g>
+      <circle cx="60" cy="60" r="5" fill="var(--fig-accent)"/>
+      <circle cx="410" cy="60" r="5" fill="var(--fig-accent)"/>
+      <text x="60" y="44" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">min</text>
+      <text x="410" y="44" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">max</text>
+      <g font-size="10" fill="var(--fig-muted)" text-anchor="middle">
+        <text x="60" y="84">5</text><text x="130" y="84">6</text><text x="200" y="84">7</text>
+        <text x="270" y="84">…</text><text x="340" y="84">99</text><text x="410" y="84">100</text>
+      </g>
+      <text x="60" y="102" text-anchor="middle" font-size="10" fill="var(--fig-muted)">0.5 µm</text>
+      <text x="410" y="102" text-anchor="middle" font-size="10" fill="var(--fig-muted)">10 µm</text>
+      <text x="250" y="30" text-anchor="middle" font-size="11.5" font-weight="600">W_int ∈ [5, 100]  — the solver's search range</text>
+    </svg>
+    <figcaption>Each transistor gets an integer dial that clicks from 5 to 100. Physical µm live only in the coefficients; the variables are pure counts.</figcaption>
+  </figure>
+
+  <p>Notice the deliberate split of responsibilities: <strong>the variables carry the counts, the coefficients carry the physics.</strong> That separation is what lets a single linear inequality mean something physical while staying pure integers — and it's why each constraint's <code>w_step</code>/<code>l_step</code> gets folded into its coefficient (we saw <code>90</code> being born that way in Part 3).</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · The gm lower bound — the centerpiece</h2>
+
+  <blockquote><p><strong>The one job:</strong> guarantee each transistor delivers at least its required transconductance — by rewriting the curvy requirement <code>gm ≥ gm_req</code> as a single straight-line inequality in the integer variables <code>W</code> and <code>L</code>.</p></blockquote>
+
+  <p>This is the heart of the file, and it's where the <code>√</code> finally dies. Let's do the algebra one honest step at a time, then trace it with numbers, then <em>see</em> it as geometry.</p>
+
+  <h3>The linearization, step by step</h3>
+  <p>We start from the requirement and substitute the square law from Part 2:</p>
+
+  <div class="eq-center">
+    <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>
+      <msub><mi>g</mi><mi>m</mi></msub><mo>&#8805;</mo><msub><mi>g</mi><mrow><mi>m,req</mi></mrow></msub>
+    </mrow></math>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin:-0.6em 0 0.6em;">substitute the square law →</p>
+  <div class="eq-center">
+    <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>
+      <msqrt><mrow><mn>2</mn><mo>·</mo><mi>µCox</mi><mo>·</mo><mfrac><mi>W</mi><mi>L</mi></mfrac><mo>·</mo><msub><mi>I</mi><mi>DS</mi></msub></mrow></msqrt>
+      <mo>&#8805;</mo><msub><mi>g</mi><mrow><mi>m,req</mi></mrow></msub>
+    </mrow></math>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin:-0.6em 0 0.6em;">both sides positive, so square them (kills the √) →</p>
+  <div class="eq-center">
+    <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>
+      <mn>2</mn><mo>·</mo><mi>µCox</mi><mo>·</mo><mfrac><mi>W</mi><mi>L</mi></mfrac><mo>·</mo><msub><mi>I</mi><mi>DS</mi></msub>
+      <mo>&#8805;</mo><msubsup><mi>g</mi><mrow><mi>m,req</mi></mrow><mn>2</mn></msubsup>
+    </mrow></math>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin:-0.6em 0 0.6em;">multiply through by L (kills the division) →</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>
+        <mn>2</mn><mo>·</mo><mi>µCox</mi><mo>·</mo><msub><mi>I</mi><mi>DS</mi></msub><mo>·</mo><mi>W</mi>
+        <mo>&#8805;</mo>
+        <msubsup><mi>g</mi><mrow><mi>m,req</mi></mrow><mn>2</mn></msubsup><mo>·</mo><mi>L</mi>
+      </mrow></math>
+    </span>
+  </div>
+
+  <p>Look at what happened. The left side is a constant times <code>W</code>. The right side is a constant times <code>L</code>. No <code>√</code>, no <code>W/L</code> — it is <strong>linear in the two integer variables</strong>. This is the whole trick of the file, and it is genuinely small once you see it.</p>
+
+  <div class="eq-center"><span class="boxed-eq">squaring removes the √ · cross-multiplying removes the ÷ · what's left is linear</span></div>
+
+  <h3>Where does the sqrt actually "live"?</h3>
+  <p>It helps to see the nonlinearity before we flatten it. Hold <code>L</code> fixed and sweep <code>W</code>: because <code>gm ∝ √W</code>, transconductance rises along a <em>curve</em> that flattens out. The requirement <code>gm ≥ gm_req</code> is a horizontal line. Feasibility is every <code>W</code> to the right of where the curve crosses it.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 240" role="img" aria-label="gm rises as the square root of W; requirement met to the right of the crossing">
+      <!-- axes -->
+      <line x1="60" y1="200" x2="440" y2="200" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="60" y1="200" x2="60" y2="35" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="446" y="204" font-size="11" fill="var(--fig-muted)">W</text>
+      <text x="52" y="32" text-anchor="end" font-size="11" fill="var(--fig-muted)">gm</text>
+      <!-- feasible shading W>=160 -->
+      <rect x="200" y="40" width="235" height="160" fill="var(--fig-good-fill)" opacity="0.6"/>
+      <!-- sqrt curve -->
+      <path d="M60,200 C130,110 210,85 440,60" fill="none" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="360" y="52" font-size="11.5" fill="var(--fig-accent2)">gm ∝ √W</text>
+      <!-- gm_req horizontal -->
+      <line x1="60" y1="120" x2="440" y2="120" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="66" y="113" font-size="11" fill="var(--fig-accent)">gm_req</text>
+      <!-- crossing -->
+      <line x1="200" y1="200" x2="200" y2="120" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <circle cx="200" cy="120" r="5" fill="var(--fig-accent)"/>
+      <text x="200" y="218" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W = 4·L</text>
+      <text x="320" y="150" text-anchor="middle" font-size="11" fill="var(--fig-good)">feasible: W big enough</text>
+    </svg>
+    <figcaption>At fixed L, gm follows a √-curve. The requirement is met from the crossing rightward — and that crossing sits exactly at <code>W = 4·L</code> for our numbers.</figcaption>
+  </figure>
+
+  <h3>Plug in the running numbers</h3>
+  <p>With <code>µCox = 90 µA/V²</code>, <code>IDS = 5 µA</code>, <code>gm_req = 60 µA/V</code> (so <code>gm_req² = 3.6×10⁻⁹</code>), and both grid steps <code>0.1 µm</code>, the code computes the two integer coefficients:</p>
+  <pre class="code"><code>lhs = _coeff(2.0 · µCox · |IDS| · w_step)
+    = _coeff(2 · 90e-6 · 5e-6 · 0.1) = _coeff(9e-11)  = 90    <span class="tok-com"># coeff of W</span>
+rhs = _coeff(gm_req**2 · l_step)
+    = _coeff(3.6e-9 · 0.1)          = _coeff(3.6e-10) = 360   <span class="tok-com"># coeff of L</span></code></pre>
+
+  <p>And the constraint handed to the solver is simply:</p>
+  <div class="eq-center"><span class="boxed-eq">90 · W<sub>int</sub> ≥ 360 · L<sub>int</sub>&nbsp;&nbsp;⟺&nbsp;&nbsp;W<sub>int</sub> ≥ 4 · L<sub>int</sub></span></div>
+
+  <p>Here is the exact code that emits it — note the guard that skips transistors with no <code>gm</code> requirement or no current:</p>
+  <pre class="code"><code><span class="tok-kw">for</span> ref, (device, _slot) <span class="tok-kw">in</span> transistors.items():
+    gm_req = gm_req_map.get(ref, <span class="tok-num">0.0</span>)
+    <span class="tok-kw">if</span> gm_req &lt;= <span class="tok-num">0.0</span>: <span class="tok-kw">continue</span>              <span class="tok-com"># unconstrained → skip</span>
+    ids_a = ids_map.get(ref, <span class="tok-num">0.0</span>)
+    <span class="tok-kw">if</span> ids_a == <span class="tok-num">0.0</span>: <span class="tok-kw">continue</span>
+    params = tech.nmos <span class="tok-kw">if</span> device.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> tech.pmos
+    lhs = <span class="tok-fn">_coeff</span>(<span class="tok-num">2.0</span> * params.mu_cox * <span class="tok-fn">abs</span>(ids_a) * w_step)
+    rhs = <span class="tok-fn">_coeff</span>(gm_req ** <span class="tok-num">2</span> * l_step)
+    <span class="tok-kw">if</span> lhs &gt; <span class="tok-num">0</span> <span class="tok-kw">and</span> rhs &gt; <span class="tok-num">0</span>:
+        model.<span class="tok-fn">add</span>(lhs * W[ref] &gt;= rhs * L[ref])</code></pre>
+
+  <h3>See it as geometry: a linear half-plane over the lattice</h3>
+  <p>Now the payoff. Plot every legal <code>(L_int, W_int)</code> as a dot on a lattice. The constraint <code>W ≥ 4·L</code> is a straight ray from the origin; every dot <em>on or above</em> it satisfies the gain requirement. The solver's job becomes: pick a lattice dot inside the shaded wedge.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 470 330" role="img" aria-label="Feasible half-plane W greater-or-equal 4L over the integer W-L lattice">
+      <!-- feasible wedge -->
+      <polygon points="70,290 340,50 340,40 70,40" fill="var(--fig-good-fill)" opacity="0.65"/>
+      <!-- axes -->
+      <line x1="70" y1="290" x2="410" y2="290" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="70" y1="290" x2="70" y2="35" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="410" y="308" text-anchor="middle" font-size="11" fill="var(--fig-muted)">L (steps)</text>
+      <text x="58" y="34" text-anchor="end" font-size="11" fill="var(--fig-muted)">W (steps)</text>
+      <!-- x ticks -->
+      <g font-size="10" fill="var(--fig-muted)" text-anchor="middle">
+        <text x="160" y="306">1</text><text x="250" y="306">2</text><text x="340" y="306">3</text>
+      </g>
+      <!-- y ticks -->
+      <g font-size="10" fill="var(--fig-muted)" text-anchor="end">
+        <text x="62" y="214">4</text><text x="62" y="134">8</text><text x="62" y="54">12</text>
+      </g>
+      <!-- boundary line W=4L -->
+      <line x1="70" y1="290" x2="340" y2="50" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="300" y="48" font-size="11.5" fill="var(--fig-accent)">W = 4·L</text>
+      <!-- feasible points -->
+      <g>
+        <circle cx="160" cy="210" r="5.5" fill="var(--fig-good)"/>
+        <text x="170" y="206" font-size="10.5" fill="var(--fig-good)">(1,4) ✓</text>
+        <circle cx="160" cy="190" r="5.5" fill="var(--fig-good)"/>
+        <text x="170" y="186" font-size="10.5" fill="var(--fig-good)">(1,5) ✓</text>
+        <circle cx="250" cy="130" r="5.5" fill="var(--fig-good)"/>
+        <text x="260" y="126" font-size="10.5" fill="var(--fig-good)">(2,8) ✓</text>
+        <circle cx="340" cy="50" r="5.5" fill="var(--fig-good)"/>
+        <text x="278" y="38" font-size="10.5" fill="var(--fig-good)">(3,12) ✓</text>
+      </g>
+      <!-- infeasible points -->
+      <g>
+        <circle cx="160" cy="250" r="5.5" fill="var(--fig-bad)"/>
+        <text x="170" y="254" font-size="10.5" fill="var(--fig-bad)">(1,2) ✗</text>
+        <circle cx="250" cy="170" r="5.5" fill="var(--fig-bad)"/>
+        <text x="260" y="174" font-size="10.5" fill="var(--fig-bad)">(2,6) ✗</text>
+      </g>
+    </svg>
+    <figcaption>The squared constraint is a straight ray. Green lattice points meet the gain floor; red ones fall short. The solver only picks green.</figcaption>
+  </figure>
+
+  <p>A quick sanity check by hand. Point <code>(L=2, W=6)</code>: is <code>90·6 ≥ 360·2</code>? That's <code>540 ≥ 720</code> — <strong>false</strong>, so it's red. Point <code>(L=2, W=8)</code>: <code>90·8 = 720 ≥ 720</code> — <strong>true</strong>, sitting right on the boundary, green. The picture and the arithmetic agree.</p>
+
+  <blockquote><p><strong>Why "lower bound"?</strong> <code>gm_req</code> is a <em>floor</em> — the amplifier needs <em>at least</em> this transconductance. More gm is never a spec violation. So the constraint is a <code>≥</code>, carving out a half-plane of "wide enough" geometries, and a slightly-too-strong device is perfectly fine.</p></blockquote>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · The VDS_sat upper bound — same trick, mirrored</h2>
+
+  <blockquote><p><strong>The one job:</strong> keep each transistor's overdrive voltage under a ceiling (so it has room to stay saturated) — again by squaring and cross-multiplying the requirement into a straight line in <code>W</code> and <code>L</code>.</p></blockquote>
+
+  <p>Once you've seen the <code>gm</code> move, this one is déjà vu. Start from the overdrive requirement and the square law:</p>
+
+  <div class="eq-center">
+    <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow>
+      <msqrt><mfrac><mrow><mn>2</mn><mo>·</mo><msub><mi>I</mi><mi>DS</mi></msub><mo>·</mo><mi>L</mi></mrow><mrow><mi>µCox</mi><mo>·</mo><mi>W</mi></mrow></mfrac></msqrt>
+      <mo>&#8804;</mo><msub><mi>V</mi><mrow><mi>DSsat,max</mi></mrow></msub>
+    </mrow></math>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin:-0.6em 0 0.6em;">square both sides, then multiply through by µCox·W →</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>
+        <mn>2</mn><mo>·</mo><msub><mi>I</mi><mi>DS</mi></msub><mo>·</mo><mi>L</mi>
+        <mo>&#8804;</mo>
+        <mi>µCox</mi><mo>·</mo><msubsup><mi>V</mi><mrow><mi>DSsat,max</mi></mrow><mn>2</mn></msubsup><mo>·</mo><mi>W</mi>
+      </mrow></math>
+    </span>
+  </div>
+
+  <p>Linear again. This time <code>L</code> carries the left coefficient and <code>W</code> the right. The code mirrors Part 5 almost line for line:</p>
+  <pre class="code"><code><span class="tok-kw">for</span> ref, (device, _slot) <span class="tok-kw">in</span> transistors.items():
+    vod_max = vod_max_map.get(ref, <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>))
+    <span class="tok-kw">if</span> vod_max == <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>) <span class="tok-kw">or</span> vod_max &lt;= <span class="tok-num">0.0</span>: <span class="tok-kw">continue</span>
+    ids_a = ids_map.get(ref, <span class="tok-num">0.0</span>)
+    <span class="tok-kw">if</span> ids_a == <span class="tok-num">0.0</span>: <span class="tok-kw">continue</span>
+    params = tech.nmos <span class="tok-kw">if</span> device.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> tech.pmos
+    lhs = <span class="tok-fn">_coeff</span>(<span class="tok-num">2.0</span> * <span class="tok-fn">abs</span>(ids_a) * l_step)               <span class="tok-com"># coeff of L</span>
+    rhs = <span class="tok-fn">_coeff</span>(params.mu_cox * vod_max ** <span class="tok-num">2</span> * w_step)   <span class="tok-com"># coeff of W</span>
+    <span class="tok-kw">if</span> lhs &gt; <span class="tok-num">0</span> <span class="tok-kw">and</span> rhs &gt; <span class="tok-num">0</span>:
+        model.<span class="tok-fn">add</span>(lhs * L[ref] &lt;= rhs * W[ref])</code></pre>
+
+  <p>Two guards worth reading like English. An entry equal to <code>float("inf")</code> means "no overdrive ceiling on this device" — skip it. And a device with <code>ids_a == 0</code> carries no current, so there's nothing to constrain.</p>
+
+  <h3>Plug in numbers, and stack it on the gm line</h3>
+  <p>With <code>IDS = 5 µA</code>, <code>VDS_sat_max ≈ 0.19 V</code> (so <code>Vov² ≈ 0.037</code>), the coefficients come out large but exact — a good reminder of what <code>_SCALE</code> buys us:</p>
+  <pre class="code"><code>lhs = _coeff(2 · 5e-6 · 0.1)         = _coeff(1e-6)    = 1_000_000
+rhs = _coeff(90e-6 · 0.037 · 0.1)   = _coeff(3.33e-7) =   333_000
+constraint:  1_000_000 · L ≤ 333_000 · W   ⟺   W ≥ 3 · L</code></pre>
+
+  <p>So this transistor now faces <em>two</em> half-planes at once: <code>gm</code> wants <code>W ≥ 4·L</code>, overdrive wants <code>W ≥ 3·L</code>. Both push <code>W</code> up; the <strong>tighter</strong> one (the steeper ray) wins. Here that's the <code>gm</code> constraint.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 470 330" role="img" aria-label="Two stacked half-planes; the gm ray is tighter than the VDS_sat ray">
+      <!-- feasible wedge above W=4L -->
+      <polygon points="70,290 340,50 340,40 70,40" fill="var(--fig-good-fill)" opacity="0.6"/>
+      <!-- axes -->
+      <line x1="70" y1="290" x2="410" y2="290" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="70" y1="290" x2="70" y2="35" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="410" y="308" text-anchor="middle" font-size="11" fill="var(--fig-muted)">L (steps)</text>
+      <text x="58" y="34" text-anchor="end" font-size="11" fill="var(--fig-muted)">W (steps)</text>
+      <g font-size="10" fill="var(--fig-muted)" text-anchor="middle">
+        <text x="160" y="306">1</text><text x="250" y="306">2</text><text x="340" y="306">3</text>
+      </g>
+      <g font-size="10" fill="var(--fig-muted)" text-anchor="end">
+        <text x="62" y="214">4</text><text x="62" y="134">8</text><text x="62" y="54">12</text>
+      </g>
+      <!-- VDS_sat line W=3L : (70,290)->(340,110) -->
+      <line x1="70" y1="290" x2="340" y2="110" stroke="var(--fig-accent2)" stroke-width="2.5" stroke-dasharray="6 4"/>
+      <text x="345" y="114" font-size="10.5" fill="var(--fig-accent2)">VDS_sat: W = 3·L</text>
+      <!-- gm line W=4L -->
+      <line x1="70" y1="290" x2="340" y2="50" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="300" y="46" font-size="10.5" fill="var(--fig-accent)">gm: W = 4·L</text>
+      <!-- point (2,7): passes VDS (7>=6) fails gm (7<8) -->
+      <circle cx="250" cy="150" r="5.5" fill="var(--fig-bad)"/>
+      <text x="260" y="146" font-size="10.5" fill="var(--fig-bad)">(2,7): meets VDS_sat, fails gm ✗</text>
+      <!-- point (2,8) passes both -->
+      <circle cx="250" cy="130" r="5.5" fill="var(--fig-good)"/>
+      <text x="118" y="120" font-size="10.5" fill="var(--fig-good)">(2,8) ✓ both</text>
+    </svg>
+    <figcaption>Two rays from the origin. A point can clear the shallower VDS_sat line yet still fail the steeper gm line — the binding constraint is whichever demands more width.</figcaption>
+  </figure>
+
+  <p>Point <code>(L=2, W=7)</code> makes the lesson concrete: <code>7 ≥ 3·2 = 6</code> ✓ overdrive, but <code>7 &lt; 4·2 = 8</code> ✗ gain. It sits between the two rays — legal for VDS_sat, rejected by gm. Only <code>(2,8)</code> and above satisfy both.</p>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · Matching — symmetry and current-mirror ratios</h2>
+
+  <blockquote><p><strong>The one job:</strong> tie related transistors together so the circuit is physically self-consistent — identical devices get identical sizes, and a mirror's output width scales with its current ratio.</p></blockquote>
+
+  <p>The gm and VDS_sat constraints size each transistor in <em>isolation</em>. But real op-amps demand that certain devices <strong>match</strong>. Two more families of constraints enforce that — and both are already linear, so they drop straight into CP-SAT with no algebra needed.</p>
+
+  <h3>Symmetry — matched pairs must be twins</h3>
+  <p>Inside designated slots (<code>input_pair</code>, <code>load</code>, <code>tail_current</code>), same-type devices carrying the same current must be the <em>same size</em>. An imbalanced input pair injects offset; mismatched loads skew the mirror. The code groups by <code>(type, IDS)</code> and pins every member equal to the first:</p>
+  <pre class="code"><code><span class="tok-kw">for</span> group <span class="tok-kw">in</span> groups.values():
+    <span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-fn">range</span>(<span class="tok-num">1</span>, <span class="tok-fn">len</span>(group)):
+        model.<span class="tok-fn">add</span>(W[group[i].ref] == W[group[<span class="tok-num">0</span>].ref])
+        model.<span class="tok-fn">add</span>(L[group[i].ref] == L[group[<span class="tok-num">0</span>].ref])</code></pre>
+  <p>Grouping by <em>current too</em>, not just type, is a subtle correctness point the comment calls out: a folded-cascode load's folding sinks and its cascode devices are the same type but carry different currents — forcing them equal would fight the mirror-ratio constraints below. A cross-slot variant does the same for the p↔n halves of fully-differential gain stages, anchoring everything to one device.</p>
+
+  <h3>Current-mirror ratios — the photocopier</h3>
+  <p>A current mirror is a copier: a diode-connected <em>reference</em> transistor sets a current, and each <em>output</em> transistor reproduces a scaled copy. The physics is <code>I_out / I_ref = (W/L)_out / (W/L)_ref</code>. If nothing pins this, an output's <code>W/L</code> is set only by its own gm/VDS_sat target and the mirror sources some arbitrary current. So the code fixes it: match the length, and scale the width by the exact current ratio.</p>
+
+  <pre class="code"><code>frac = Fraction(i_m / i_ref).<span class="tok-fn">limit_denominator</span>(<span class="tok-num">100</span>)
+model.<span class="tok-fn">add</span>(L[m] == L[ref0])
+model.<span class="tok-fn">add</span>(frac.denominator * W[m] == frac.numerator * W[ref0])</code></pre>
+
+  <p>Traced with numbers: reference carries <code>I_ref = 5 µA</code>, an output wants <code>I_out = 10 µA</code>. Then <code>I_out/I_ref = 2</code>, which <code>Fraction(...).limit_denominator(100)</code> renders as <code>2/1</code>. So <code>L</code> is shared and <code>1·W_out = 2·W_ref</code> — the output is <em>twice as wide</em>, doubling the current. Exactly what a 2× mirror should do.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 200" role="img" aria-label="Current mirror as a photocopier: output width scales with the current ratio">
+      <!-- reference -->
+      <rect x="40" y="60" width="130" height="80" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="105" y="52" text-anchor="middle" font-size="11.5" font-weight="600">reference (diode)</text>
+      <text x="105" y="92" text-anchor="middle" font-size="12">W = 4, L = 2</text>
+      <text x="105" y="114" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">I_ref = 5 µA</text>
+      <!-- copier arrow -->
+      <line x1="170" y1="100" x2="300" y2="100" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="235" y="88" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">× 2</text>
+      <text x="235" y="118" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">same L, double W</text>
+      <!-- output -->
+      <rect x="300" y="50" width="160" height="100" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="380" y="42" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-good)">output</text>
+      <text x="380" y="92" text-anchor="middle" font-size="12">W = 8, L = 2</text>
+      <text x="380" y="114" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">I_out = 10 µA</text>
+    </svg>
+    <figcaption>A 2× mirror: identical length, doubled width. <code>1·W_out = 2·W_ref</code> is a plain linear equation — CP-SAT ingests it as-is.</figcaption>
+  </figure>
+
+  <p>Why <code>limit_denominator(100)</code>? A raw float ratio like <code>1.9999998</code> would create a monstrous exact fraction. Capping the denominator at 100 rounds it to the nearest clean ratio (<code>2/1</code>), which is both what the designer meant and what keeps the integer coefficients small. It's an honest approximation — more on that next.</p>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · Objective, branching, and the hidden idea</h2>
+
+  <blockquote><p><strong>The one job:</strong> among all geometries that satisfy every constraint, tell the solver which to prefer, and give it a smart order to search — then hand back the finished model.</p></blockquote>
+
+  <h3>The objective — smallest total width</h3>
+  <pre class="code"><code>model.<span class="tok-fn">minimize</span>(<span class="tok-fn">sum</span>(W.values()))</code></pre>
+  <p>Constraints define what's <em>allowed</em>; the objective picks the <em>best</em> among them. Minimizing total gate width is a cheap, effective proxy for both area and power — narrower devices draw less and take less silicon. The constraints already guarantee "wide enough for gain and headroom," so the objective just refuses to go one grid step wider than necessary.</p>
+
+  <h3>The branching heuristic — bias network first</h3>
+  <pre class="code"><code>bias_refs = [ref <span class="tok-kw">for</span> ref, (_d, slot) <span class="tok-kw">in</span> transistors.items() <span class="tok-kw">if</span> slot == <span class="tok-str">"bias_gen"</span>]
+...
+model.<span class="tok-fn">add_decision_strategy</span>(priority_vars, cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)</code></pre>
+  <p>This doesn't change <em>what</em> is feasible — only how fast the solver gets there. The bias generator sets currents that everything else mirrors, so deciding those variables <em>first</em> (and trying their smallest legal value first) prunes the search dramatically. It's telling the sudoku solver "fill in the cells that constrain the most others before guessing elsewhere."</p>
+
+  <h3>The hidden idea, named out loud</h3>
+  <p>Though it's never written as a headline, this whole file is one act of translation. Every phase converts a slice of continuous analog theory into the canonical form of an <strong>integer linear program</strong>:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow>
+        <munder><mi>min</mi><mrow><mi>W</mi><mo>,</mo><mi>L</mi><mo>&#8712;</mo><mi>&#8484;</mi></mrow></munder>
+        <munder><mo>&#8721;</mo><mi>i</mi></munder><msub><mi>W</mi><mi>i</mi></msub>
+        <mspace width="1em"/><mtext>s.t.</mtext><mspace width="0.4em"/>
+        <mi>A</mi><mo>·</mo><mrow><mo>(</mo><mi>W</mi><mo>,</mo><mi>L</mi><mo>)</mo></mrow><mo>&#8805;</mo><mi>b</mi>
+      </mrow></math>
+    </span>
+  </div>
+
+  <p>Read it aloud: <em>"find the integer widths and lengths that minimize total width, subject to a stack of linear inequalities."</em> The <code>√</code>-and-ratio physics of gm and VDS_sat became rows of that linear system <code>A·(W,L) ≥ b</code>; symmetry and mirror ratios became equality rows. <strong>Squaring is the single move that made those rows linear</strong> — and being linear-over-integers is precisely the definition of a problem CP-SAT can solve.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li><strong>Grid granularity.</strong> The true optimum might sit at <code>W = 6.4</code> steps; the solver can only land on <code>6</code> or <code>7</code>. Finer grids cost search time.</li>
+    <li><strong>Square-law only.</strong> The gm and VDS_sat formulas are the idealized long-channel model — no velocity saturation, no short-channel effects, no <code>λ</code> in these particular rows. It's a first cut, meant for the card-less <code>generic</code> technology, to be refined by a downstream SPICE check.</li>
+    <li><strong>Rational mirror ratios.</strong> <code>limit_denominator(100)</code> means a desired ratio of <code>1.9999998</code> is quietly rounded to <code>2/1</code>. Ratios needing denominators above 100 aren't represented exactly.</li>
+    <li><strong>Guarded skips.</strong> Any device with no gm requirement, no overdrive ceiling, or zero current simply gets no constraint from that phase — the model constrains only what it's told to.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole file rides one insight: <strong>a nonlinear analog requirement, once squared and cross-multiplied, becomes a linear inequality between integer grid-step counts</strong> — and a pile of such inequalities is exactly a constraint-satisfaction problem a general solver can crack, complete with symmetry and mirror ratios handled uniformly. Continuous circuit theory in; a discrete, provable geometry out.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>constraints.py</code> compiles each op-amp performance target into integer-linear form — squaring away the <code>√</code> and cross-multiplying away the <code>W/L</code> ratio so <code>gm ≥ gm_req</code> becomes <code>2·µCox·IDS·W ≥ gm_req²·L</code> (and VDS_sat likewise) — then adds symmetry and current-mirror equalities and a minimize-total-width objective, handing CP-SAT a clean discrete search over transistor geometry.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

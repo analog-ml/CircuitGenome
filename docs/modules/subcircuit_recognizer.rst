@@ -27,6 +27,9 @@ version.  Keeping the structural layer separate lets it be reused for other
 circuit families as they are added.  Constraints that resist a declarative
 pattern are handled by `hooks <Hooks_>`_.
 
+Deep dive: the `recognizer walkthrough <../walkthrough/recognizer/index.html>`__
+is a figure-rich tour of the recognizer code itself (see :doc:`../walkthroughs`).
+
 Entry points
 ------------
 

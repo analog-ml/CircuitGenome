@@ -31,5 +31,8 @@ html_theme_options = {
     "source_directory": "docs/",
 }
 html_static_path = ["_static", "images"]
+# Pre-rendered walkthrough pages, copied verbatim into the build output
+# (served at /walkthrough/) — see docs/adr/0002-walkthroughs-as-raw-html.md.
+html_extra_path = ["_extra"]
 html_css_files = ["custom.css"]
 html_title = "CircuitGenome"

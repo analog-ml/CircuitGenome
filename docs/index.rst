@@ -101,6 +101,12 @@ tour, or jump straight to :doc:`usage/cli` to run the tools.
 
 .. toctree::
    :hidden:
+   :caption: Walkthroughs
+
+   walkthroughs
+
+.. toctree::
+   :hidden:
    :caption: About
 
    extending

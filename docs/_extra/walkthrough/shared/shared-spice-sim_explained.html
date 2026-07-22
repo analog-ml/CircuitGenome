@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spice_sim.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>spice_sim.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/spice_sim.py</code> — a 25-line shim that keeps an old import path working after the real code moved house.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why a facade exists</a>
+  <a href="#part-2">2 · The re-export lines</a>
+  <a href="#part-3">3 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> let old code keep writing <code>from …spice_sim import simulate_metrics</code> even though the actual ngspice code was moved out into a <code>spice/</code> sub-package.</p></blockquote>
+
+  <p class="beat">There is almost no code here to "run." The whole file is a signpost. So the lesson isn't a line of logic — it's a <strong>design pattern</strong>: the <em>facade</em>.</p>
+
+  <p>Picture a company that outgrew a single office. The ngspice verification used to live in one big file, <code>spice_sim.py</code>. It grew — deck building, a testbench rig, a dozen per-metric measurements, DC bias soundness — until it deserved to be split into a proper <code>spice/</code> package with one file per job. But dozens of callers all over the codebase already say:</p>
+
+  <pre class="code"><code><span class="tok-kw">from</span> circuitgenome.sizer.shared.spice_sim <span class="tok-kw">import</span> simulate_metrics</code></pre>
+
+  <p>Move the code and every one of those imports breaks. The facade is the fix: a thin module that <strong>forwards</strong> the old names to their new home. Callers never notice the furniture moved.</p>
+
+  <h3>The switchboard analogy</h3>
+  <p>Think of a company <strong>receptionist</strong>. You call one well-known number and ask for "simulate metrics." The receptionist doesn't do the work — she just connects you to whichever department now handles it. Tomorrow that department could move to a different floor; you still dial the same number. <code>spice_sim.py</code> is that receptionist for the <code>spice/</code> package.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="Callers reach the thin facade module, which forwards to the real spice subpackage">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+
+      <!-- callers -->
+      <rect x="14" y="92" width="118" height="64" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="73" y="118" text-anchor="middle" font-size="13" font-weight="600">callers</text>
+      <text x="73" y="136" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the rest of the</text>
+      <text x="73" y="149" text-anchor="middle" font-size="10" fill="var(--fig-muted)">codebase</text>
+
+      <!-- facade -->
+      <rect x="182" y="84" width="96" height="80" rx="8" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="230" y="118" text-anchor="middle" font-size="12" font-weight="600">spice_sim</text>
+      <text x="230" y="132" text-anchor="middle" font-size="12" font-weight="600">.py</text>
+      <text x="230" y="150" text-anchor="middle" font-size="10" fill="var(--fig-accent)">the facade</text>
+
+      <!-- arrows -->
+      <line x1="132" y1="124" x2="180" y2="124" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="156" y="112" text-anchor="middle" font-size="10" fill="var(--fig-muted)">import</text>
+      <line x1="278" y1="124" x2="326" y2="124" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="302" y="112" text-anchor="middle" font-size="10" fill="var(--fig-accent)">forward</text>
+
+      <!-- subpackage -->
+      <rect x="328" y="20" width="218" height="210" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="437" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">spice/ sub-package</text>
+      <g font-size="10.5">
+        <rect x="342" y="52" width="190" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="352" y="71" font-weight="600">deck</text><text x="392" y="71" fill="var(--fig-muted)">decks, netlists, runners</text>
+        <rect x="342" y="86" width="190" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="352" y="105" font-weight="600">rig</text><text x="392" y="105" fill="var(--fig-muted)">shared testbench rig</text>
+        <rect x="342" y="120" width="190" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="352" y="139" font-weight="600">measure</text><text x="418" y="139" fill="var(--fig-muted)">per-metric tests</text>
+        <rect x="342" y="154" width="190" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="352" y="173" font-weight="600">op</text><text x="392" y="173" fill="var(--fig-muted)">op-point + bias soundness</text>
+        <rect x="342" y="188" width="190" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="352" y="207" font-weight="600">simulate</text><text x="424" y="207" fill="var(--fig-muted)">simulate_metrics()</text>
+      </g>
+    </svg>
+    <figcaption>The receptionist in the middle does no work — it just routes each old name onward to the file that now owns it.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the receptionist's desk and reads the two things she actually contains — an <code>import</code> that pulls names in, and an <code>__all__</code> that hands them back out.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The re-export lines, in full</h2>
+
+  <blockquote><p><strong>The one job:</strong> pull six names <em>in</em> from the sub-package, then declare those same six as this module's public surface so <code>from spice_sim import X</code> resolves for every one of them.</p></blockquote>
+
+  <p>Here is the entire body of the file. Two statements, nothing else.</p>
+
+  <pre class="code"><code><span class="tok-kw">from</span> .spice <span class="tok-kw">import</span> (
+    check_bias_soundness,
+    ngspice_available,
+    pdk_netlist,
+    read_op_operating_point,
+    simulate_metrics,
+    sized_netlist,
+)
+
+__all__ = [
+    <span class="tok-str">"check_bias_soundness"</span>,
+    <span class="tok-str">"ngspice_available"</span>,
+    <span class="tok-str">"pdk_netlist"</span>,
+    <span class="tok-str">"read_op_operating_point"</span>,
+    <span class="tok-str">"simulate_metrics"</span>,
+    <span class="tok-str">"sized_netlist"</span>,
+]</code></pre>
+
+  <h3>Line 1 — the forwarding import</h3>
+  <p>The mailbox analogy is exact. You moved apartments but filed a <strong>change-of-address</strong> so mail to the old address still reaches you. <code>from .spice import (…)</code> is that forwarding card: the <code>.</code> means "the package next to me," and each name listed is a piece of mail redirected from <code>spice/</code> into this module's namespace. After this line runs, <code>simulate_metrics</code> is a real, callable name living inside <code>spice_sim</code> — pointing at the <em>exact same function object</em> defined over in <code>spice/simulate.py</code>.</p>
+
+  <h3>Why is it called <code>__all__</code>?</h3>
+  <p>I like this name. <code>__all__</code> is Python's answer to "when someone does <code>from spice_sim import *</code>, what counts as <em>all</em> of me?" Without it, a wildcard import would also drag along anything else that happened to be in scope. Listing the six names makes the public API <strong>explicit and intentional</strong> — this is the storefront window, and only these six items are on display.</p>
+
+  <p>So the two statements are a matched pair: the <code>import</code> brings the goods into the shop, and <code>__all__</code> puts them in the window.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="Each imported name is forwarded through the facade to the submodule that defines it">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+
+      <text x="105" y="20" text-anchor="middle" font-size="11" fill="var(--fig-muted)">public name</text>
+      <text x="470" y="20" text-anchor="middle" font-size="11" fill="var(--fig-muted)">defined in</text>
+
+      <!-- facade band behind -->
+      <rect x="262" y="30" width="46" height="204" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="285" y="26" text-anchor="middle" font-size="10" fill="var(--fig-accent)">facade</text>
+
+      <g font-size="11">
+        <!-- row 1 -->
+        <rect x="14" y="32" width="200" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="24" y="50">simulate_metrics</text>
+        <rect x="356" y="32" width="120" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="366" y="50">simulate.py</text>
+        <line x1="214" y1="46" x2="354" y2="46" stroke="var(--fig-stroke)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <!-- row 2 -->
+        <rect x="14" y="66" width="200" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="24" y="84">ngspice_available</text>
+        <rect x="356" y="66" width="120" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="366" y="84">deck.py</text>
+        <line x1="214" y1="80" x2="354" y2="80" stroke="var(--fig-stroke)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <!-- row 3 -->
+        <rect x="14" y="100" width="200" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="24" y="118">pdk_netlist</text>
+        <rect x="356" y="100" width="120" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="366" y="118">deck.py</text>
+        <line x1="214" y1="114" x2="354" y2="114" stroke="var(--fig-stroke)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <!-- row 4 -->
+        <rect x="14" y="134" width="200" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="24" y="152">sized_netlist</text>
+        <rect x="356" y="134" width="120" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="366" y="152">deck.py</text>
+        <line x1="214" y1="148" x2="354" y2="148" stroke="var(--fig-stroke)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <!-- row 5 -->
+        <rect x="14" y="168" width="200" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="24" y="186">check_bias_soundness</text>
+        <rect x="356" y="168" width="120" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="366" y="186">op.py</text>
+        <line x1="214" y1="182" x2="354" y2="182" stroke="var(--fig-stroke)" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+        <!-- row 6 -->
+        <rect x="14" y="202" width="200" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="24" y="220">read_op_operating_point</text>
+        <rect x="356" y="202" width="120" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="366" y="220">op.py</text>
+        <line x1="214" y1="216" x2="354" y2="216" stroke="var(--fig-stroke)" stroke-width="1.5" marker-end="url(#ar2)"/>
+      </g>
+    </svg>
+    <figcaption>One flat public list, three different home files — the facade hides that split entirely from callers.</figcaption>
+  </figure>
+
+  <p>Notice what the picture reveals: the six names come from <strong>three</strong> different files (<code>deck</code>, <code>op</code>, <code>simulate</code>), yet callers see one flat menu. That collapsing of internal structure into a single friendly surface <em>is</em> the facade's value.</p>
+
+  <table>
+    <thead><tr><th>Public name</th><th>What it does</th><th>Real home</th></tr></thead>
+    <tbody>
+      <tr><td><code>simulate_metrics</code></td><td>Entry point: re-simulate a sized circuit, measure every metric</td><td><code>spice/simulate.py</code></td></tr>
+      <tr><td><code>ngspice_available</code></td><td>Is the ngspice binary usable at all?</td><td><code>spice/deck.py</code></td></tr>
+      <tr><td><code>pdk_netlist</code></td><td>Emit the base PDK/model netlist</td><td><code>spice/deck.py</code></td></tr>
+      <tr><td><code>sized_netlist</code></td><td>Stamp chosen W/L into the netlist</td><td><code>spice/deck.py</code></td></tr>
+      <tr><td><code>check_bias_soundness</code></td><td>DC bias-soundness verdict from the op point</td><td><code>spice/op.py</code></td></tr>
+      <tr><td><code>read_op_operating_point</code></td><td>Parse ngspice's operating-point dump</td><td><code>spice/op.py</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · The hidden idea, the limits, and one sentence</h2>
+
+  <p>The file never states its purpose as a principle, but this is the idea it quietly implements — the <strong>public API is decoupled from the internal package layout</strong>:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">what callers import&nbsp;&nbsp;≠&nbsp;&nbsp;where the code lives</span>
+  </div>
+
+  <p>Because those two are held apart by the facade, the team is free to reshape <code>spice/</code> — rename files, split <code>deck</code> in two, move <code>check_bias_soundness</code> from <code>op.py</code> to some new <code>bias.py</code> — and <em>not one caller has to change</em>. Only this one 25-line file gets edited. That is the whole payoff, drawn below.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 240" role="img" aria-label="Before and after the refactor, the import line stays identical">
+      <!-- the unchanged import banner -->
+      <rect x="120" y="10" width="320" height="30" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="280" y="29" text-anchor="middle" font-size="11" fill="var(--fig-good)">from …spice_sim import simulate_metrics</text>
+      <text x="280" y="54" text-anchor="middle" font-size="11" fill="var(--fig-good)">↑ identical in both worlds — never changes ↑</text>
+
+      <!-- before -->
+      <text x="130" y="86" text-anchor="middle" font-size="12" fill="var(--fig-muted)" font-weight="600">before</text>
+      <rect x="40" y="96" width="180" height="120" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="130" y="130" text-anchor="middle" font-size="12" font-weight="600">spice_sim.py</text>
+      <text x="130" y="156" text-anchor="middle" font-size="11" fill="var(--fig-muted)">deck + rig + measure</text>
+      <text x="130" y="172" text-anchor="middle" font-size="11" fill="var(--fig-muted)">+ op + simulate</text>
+      <text x="130" y="196" text-anchor="middle" font-size="11" fill="var(--fig-muted)">all in one big file</text>
+
+      <!-- arrow -->
+      <line x1="230" y1="156" x2="286" y2="156" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="258" y="146" text-anchor="middle" font-size="10" fill="var(--fig-accent)">split</text>
+
+      <!-- after -->
+      <text x="418" y="86" text-anchor="middle" font-size="12" fill="var(--fig-muted)" font-weight="600">after</text>
+      <rect x="300" y="96" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="375" y="114" text-anchor="middle" font-size="11" font-weight="600">spice_sim.py</text>
+      <text x="375" y="128" text-anchor="middle" font-size="10" fill="var(--fig-accent)">facade · ~25 lines</text>
+      <line x1="375" y1="136" x2="375" y2="156" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="300" y="158" width="240" height="58" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="420" y="182" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">spice/ package</text>
+      <text x="420" y="202" text-anchor="middle" font-size="10">deck · rig · measure · op · simulate</text>
+    </svg>
+    <figcaption>The big file became a package; the import line on top didn't move a character. That gap is exactly what the facade buys.</figcaption>
+  </figure>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It adds <strong>no behavior</strong> — no logic, no wrapping, no validation. Call <code>simulate_metrics</code> here and you run the identical code as calling it from <code>spice.simulate</code>.</li>
+    <li>It forwards <strong>only these six names</strong>. Anything else in <code>spice/</code> is not reachable through this shim — by design, so the public surface stays small.</li>
+    <li>It does not shield you from <em>signature</em> changes. If <code>simulate_metrics</code> gains a new required argument, the facade forwards that change straight through — it hides <em>location</em>, not <em>contract</em>.</li>
+    <li>It is a compatibility bridge. New code can import from <code>…shared.spice</code> directly; this path exists chiefly to avoid breaking what already works.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The cleverness is in the restraint. A whole subsystem got reorganized, and the blast radius was contained to <strong>one tiny file</strong> that carries no logic to break. Six names in, six names out, and every existing caller sails on unaware. Cheap to write, nearly impossible to get wrong, and it turns a scary cross-cutting refactor into a one-file edit.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>spice_sim.py</code> is a facade that re-exports six names from the <code>spice/</code> sub-package so the historical import path <code>from …spice_sim import simulate_metrics</code> keeps working — decoupling what callers import from where the code actually lives, so the internals can be refactored without breaking a single caller.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

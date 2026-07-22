@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blocks.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>blocks.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/blocks.py</code> — the structural layer that reads a pile of recognised transistors and says <em>which</em> ones form each functional block, and what <em>kind</em> of load and tail they are.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The vocabulary &amp; two detectors</a>
+  <a href="#part-3">3 · classify_load() &amp; cascode refs</a>
+  <a href="#part-4">4 · _looking_in_drain()</a>
+  <a href="#part-5">5 · node_rout()</a>
+  <a href="#part-6">6 · Block — one group</a>
+  <a href="#part-7">7 · OpAmpBlocks — the view</a>
+  <a href="#part-8">8 · build_blocks() &amp; the hidden idea</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> given the raw pile of transistors the recogniser dropped into named slots, decide <em>which</em> devices form the input pair, the load, the tail — and, crucially, what <em>kind</em> of load and tail they are (mirror? cascode? resistor? plain current source?).</p></blockquote>
+
+  <p class="beat">Here is the whole story before a single line of code.</p>
+
+  <p>Upstream, a recogniser matches your netlist against known op-amp topologies and drops each device into a named <strong>FBR slot</strong> — <code>input_pair</code>, <code>load</code>, <code>tail_current</code>, <code>second_stage</code>, and so on. But a slot is just a <em>list of devices</em>. It knows <em>where</em> a transistor sits, not <em>how it behaves</em>.</p>
+
+  <p>Think of the recogniser as an <strong>orchestra roster</strong>: "these eight musicians showed up, here's the section each sits in." <code>blocks.py</code> is the <strong>conductor's chart</strong> laid over that roster: "these two are the first violins (input pair); those two are cellos that play in <em>unison</em> (a current mirror); that one keeps time in the back (the tail)." Same people — but now grouped by role and, more importantly, <em>labelled by how they combine</em>.</p>
+
+  <p>Why does the label matter so much? Because the downstream <strong>Analyze</strong> phase can't compute anything without it:</p>
+
+  <ul>
+    <li>A <strong>mirror</strong> load recombines <em>both</em> halves of the differential signal at the output — full first-stage gain. A pair of <strong>plain current sources</strong> passes only one half — <em>half</em> the gain. Same two PMOS devices; a 2&times; difference in the answer.</li>
+    <li>A <strong>cascode</strong> tail is two transistors stacked in series — it needs the <em>sum</em> of two saturation voltages of DC headroom. Miss the stack and <a href="#part-8">bias.py</a> budgets for one device and silently overruns the supply.</li>
+    <li>The evaluate phase needs a <strong>cascode-aware output resistance</strong> at the gain node — and cascoding multiplies <code>ro</code> by ~100&times;.</li>
+  </ul>
+
+  <figure class="fig">
+    <svg viewBox="0 0 580 210" role="img" aria-label="Raw slot device lists flow into build_blocks and come out as typed, classified blocks">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="95" y="26" text-anchor="middle" font-size="12" fill="var(--fig-muted)">FBR slots (raw lists)</text>
+      <rect x="20" y="36" width="150" height="150" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <g font-size="11">
+        <text x="34" y="62">input_pair: [m1, m2]</text>
+        <text x="34" y="88">load: [m3, m4]</text>
+        <text x="34" y="114">tail_current: [m5]</text>
+        <text x="34" y="140" fill="var(--fig-muted)">second_stage: [m6]</text>
+        <text x="34" y="166" fill="var(--fig-muted)">…</text>
+      </g>
+      <line x1="170" y1="111" x2="230" y2="111" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="232" y="90" width="118" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="291" y="116" text-anchor="middle" font-size="12.5" font-weight="600">build_blocks()</text>
+      <line x1="350" y1="111" x2="410" y2="111" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="495" y="26" text-anchor="middle" font-size="12" fill="var(--fig-accent2)">OpAmpBlocks (typed)</text>
+      <rect x="412" y="36" width="150" height="150" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <g font-size="11">
+        <text x="426" y="60">Block "input_pair"</text>
+        <text x="426" y="84">Block "load"</text>
+        <text x="440" y="100" fill="var(--fig-accent2)" font-weight="600">kind = MIRROR</text>
+        <text x="426" y="124">Block "tail_current"</text>
+        <text x="426" y="150" fill="var(--fig-muted)">is_diff = False</text>
+        <text x="426" y="172" fill="var(--fig-muted)">n_stages = 2</text>
+      </g>
+    </svg>
+    <figcaption>Same devices in, structural meaning out. The word <code>MIRROR</code> on the load block is the whole reason this file is worth writing.</figcaption>
+  </figure>
+
+  <p>So <code>blocks.py</code> never simulates anything. It reads only <strong>connectivity</strong> — which terminal touches which net — and infers topology from it. That is the entire trick, and we'll name it explicitly in Part&nbsp;8.</p>
+
+  <h3>The cast of characters</h3>
+  <p>The file has <strong>three independent entry points</strong>, each with its own little family of helpers. Hover any box to trace who it calls.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 640 300" role="img" aria-label="Call graph of blocks.py with three entry points">
+      <!-- edges (drawn first) -->
+      <line class="edge" data-group="classify" x1="112" y1="64"  x2="112" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+      <line class="edge" data-group="product"  x1="185" y1="64"  x2="320" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+      <line class="edge" data-group="hascasc"  x1="97"  y1="158" x2="97"  y2="210" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+      <line class="edge" data-group="hasdiode" x1="140" y1="158" x2="258" y2="210" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+      <path class="edge" data-group="hascasc"  d="M300,158 C220,182 175,188 130,210" fill="none" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+      <line class="edge" data-group="looking"  x1="532" y1="64"  x2="534" y2="110" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+      <path class="edge" data-group="looking"  d="M630,128 C668,120 668,166 636,150" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="672" y="120" font-size="10" fill="var(--fig-muted)">recurses</text>
+
+      <!-- entry point A: build_blocks -->
+      <g class="node" data-group="build">
+        <rect x="30" y="18" width="205" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="132" y="38" text-anchor="middle" font-weight="600" font-size="13">build_blocks()</text>
+        <text x="132" y="54" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">assemble the whole block view</text>
+      </g>
+      <!-- classify_load -->
+      <g class="node" data-group="classify">
+        <rect x="25" y="112" width="175" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="112" y="132" text-anchor="middle" font-weight="600" font-size="13">classify_load()</text>
+        <text x="112" y="148" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">name the load kind</text>
+      </g>
+      <!-- product -->
+      <g class="node" data-group="product">
+        <rect x="250" y="112" width="200" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="350" y="132" text-anchor="middle" font-weight="600" font-size="13">Block / OpAmpBlocks</text>
+        <text x="350" y="148" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the typed data model</text>
+      </g>
+      <!-- _has_cascode -->
+      <g class="node" data-group="hascasc">
+        <rect x="20" y="212" width="160" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="100" y="232" text-anchor="middle" font-weight="600" font-size="12.5">_has_cascode()</text>
+        <text x="100" y="248" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">series-stacked?</text>
+      </g>
+      <!-- _has_diode -->
+      <g class="node" data-group="hasdiode">
+        <rect x="195" y="212" width="155" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="272" y="232" text-anchor="middle" font-weight="600" font-size="12.5">_has_diode()</text>
+        <text x="272" y="248" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">diode-connected?</text>
+      </g>
+      <!-- entry point B: node_rout -->
+      <g class="node" data-group="rout">
+        <rect x="440" y="18" width="185" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="532" y="38" text-anchor="middle" font-weight="600" font-size="13">node_rout()</text>
+        <text x="532" y="54" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">cascode-aware output R</text>
+      </g>
+      <!-- _looking_in_drain -->
+      <g class="node" data-group="looking">
+        <rect x="440" y="112" width="195" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="537" y="132" text-anchor="middle" font-weight="600" font-size="12.5">_looking_in_drain()</text>
+        <text x="537" y="148" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">R into one drain (recursive)</text>
+      </g>
+      <!-- entry point C: cascode_device_refs -->
+      <g class="node" data-group="refs">
+        <rect x="440" y="212" width="195" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="537" y="232" text-anchor="middle" font-weight="600" font-size="12.5">cascode_device_refs()</text>
+        <text x="537" y="248" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">refs of the stacked devices</text>
+      </g>
+    </svg>
+    <figcaption>Three entry points (accent), each with helpers. We learn them bottom-up: the two detectors first, then classification, then the resistance recursion, then the data model, and the orchestrator last.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 builds the vocabulary — the five <code>LoadKind</code> labels and the two tiny detectors (<code>_has_diode</code>, <code>_has_cascode</code>) that read raw terminals to tell diode-connection from series-stacking.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The vocabulary and the two detectors</h2>
+
+  <blockquote><p><strong>The one job:</strong> from a bag of devices and their terminal wiring, answer two yes/no questions — "is any device <em>diode-connected</em>?" and "are any two devices <em>series-stacked</em>?" — because those two facts decide everything.</p></blockquote>
+
+  <h3>First, the five labels</h3>
+  <p>A "load" is whatever the input pair pushes its current into at the output node. <em>How</em> it turns that current into a voltage sets the gain and how much supply room it eats. The file names five possibilities:</p>
+
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">LoadKind</span>(Enum):
+    MIRROR = <span class="tok-str">"mirror"</span>               <span class="tok-com"># active current-mirror (has a diode-connected member)</span>
+    CASCODE = <span class="tok-str">"cascode"</span>             <span class="tok-com"># series-stacked devices</span>
+    RESISTOR = <span class="tok-str">"resistor"</span>           <span class="tok-com"># resistor load</span>
+    CURRENT_SOURCE = <span class="tok-str">"current_source"</span> <span class="tok-com"># plain (non-mirror) current-source load</span>
+    NONE = <span class="tok-str">"none"</span></code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 178" role="img" aria-label="The four active load kinds and their consequences">
+      <g font-size="12" text-anchor="middle">
+        <!-- MIRROR -->
+        <rect x="12" y="20" width="140" height="120" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="82" y="42" font-weight="600" fill="var(--fig-accent2)">MIRROR</text>
+        <text x="82" y="66" font-size="11">a member has</text>
+        <text x="82" y="82" font-size="11" font-weight="600">g == d</text>
+        <text x="82" y="106" font-size="10.5" fill="var(--fig-muted)">recombines both</text>
+        <text x="82" y="120" font-size="10.5" fill="var(--fig-muted)">halves → full gain</text>
+        <!-- CASCODE -->
+        <rect x="164" y="20" width="140" height="120" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="234" y="42" font-weight="600" fill="var(--fig-accent)">CASCODE</text>
+        <text x="234" y="66" font-size="11">one dev's source</text>
+        <text x="234" y="82" font-size="11" font-weight="600">s == another d</text>
+        <text x="234" y="106" font-size="10.5" fill="var(--fig-muted)">huge rout, but</text>
+        <text x="234" y="120" font-size="10.5" fill="var(--fig-muted)">eats headroom</text>
+        <!-- RESISTOR -->
+        <rect x="316" y="20" width="140" height="120" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="386" y="42" font-weight="600">RESISTOR</text>
+        <text x="386" y="66" font-size="11">no mosfets,</text>
+        <text x="386" y="82" font-size="11" font-weight="600">resistors present</text>
+        <text x="386" y="106" font-size="10.5" fill="var(--fig-muted)">low gain,</text>
+        <text x="386" y="120" font-size="10.5" fill="var(--fig-muted)">wide swing</text>
+        <!-- CURRENT_SOURCE -->
+        <rect x="468" y="20" width="140" height="120" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="538" y="42" font-weight="600">CURRENT_SOURCE</text>
+        <text x="538" y="66" font-size="11">plain mos,</text>
+        <text x="538" y="82" font-size="11" font-weight="600">no diode, no stack</text>
+        <text x="538" y="106" font-size="10.5" fill="var(--fig-muted)">single-ended →</text>
+        <text x="538" y="120" font-size="10.5" fill="var(--fig-muted)">half gain</text>
+      </g>
+      <text x="310" y="164" text-anchor="middle" font-size="11" fill="var(--fig-muted)">(a fifth label, NONE, means "no load devices at all")</text>
+    </svg>
+    <figcaption>Every distinction reduces to a terminal equality: <code>g == d</code> (mirror) or one device's <code>s ==</code> another's <code>d</code> (cascode). No simulation — just wiring.</figcaption>
+  </figure>
+
+  <h3>Detector 1 — <code>_has_diode</code>: is anyone wired gate-to-drain?</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_has_diode</span>(devs: <span class="tok-fn">list</span>[Device]) -> <span class="tok-kw">bool</span>:
+    <span class="tok-kw">return</span> <span class="tok-fn">any</span>(d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>) <span class="tok-kw">and</span> d.terminals.get(<span class="tok-str">"g"</span>) == d.terminals.get(<span class="tok-str">"d"</span>)
+               <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs)</code></pre>
+
+  <p>A transistor whose <strong>gate is soldered to its own drain</strong> is <em>diode-connected</em>. That is the tell-tale of a current mirror's reference leg: it converts the incoming current into exactly the gate voltage needed to mirror it into its partner. So the test is one line — does any MOS have <code>g</code> and <code>d</code> on the <em>same net</em>?</p>
+
+  <h3>Detector 2 — <code>_has_cascode</code>: is anyone standing on someone's shoulders?</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_has_cascode</span>(devs: <span class="tok-fn">list</span>[Device]) -> <span class="tok-kw">bool</span>:
+    mos = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
+    drains = {d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mos}
+    <span class="tok-kw">return</span> <span class="tok-fn">any</span>(d.terminals.get(<span class="tok-str">"s"</span>) <span class="tok-kw">in</span> drains <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mos)</code></pre>
+
+  <p>Two devices are <strong>series-stacked</strong> when the upper one's <em>source</em> lands on the lower one's <em>drain</em> — the drain of the bottom transistor <em>is</em> the source node of the one above it. So: collect the set of every drain net, then ask whether <em>any</em> device's source is one of those nets. If yes, someone is standing on someone else's shoulders — a cascode.</p>
+
+  <h3>Traced with real nets</h3>
+  <p>Take a classic PMOS current-mirror load, <code>load = [m3, m4]</code>, with this wiring:</p>
+
+  <table>
+    <thead><tr><th>device</th><th>type</th><th><code>g</code></th><th><code>d</code></th><th><code>s</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>m3</code></td><td>pmos</td><td><code>n1</code></td><td><code>n1</code></td><td><code>vdd!</code></td></tr>
+      <tr><td><code>m4</code></td><td>pmos</td><td><code>n1</code></td><td><code>out</code></td><td><code>vdd!</code></td></tr>
+    </tbody>
+  </table>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 190" role="img" aria-label="Diode test finds m3 g equals d; cascode test finds no source landing on a drain">
+      <!-- diode panel -->
+      <text x="140" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">_has_diode → True</text>
+      <rect x="60" y="40" width="160" height="60" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="140" y="64" text-anchor="middle" font-size="12" font-weight="600">m3</text>
+      <text x="140" y="86" text-anchor="middle" font-size="12">g = n1  ==  d = n1</text>
+      <path d="M60,52 C30,52 30,88 60,88" fill="none" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="140" y="122" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gate wired back to its own drain</text>
+      <text x="140" y="138" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">→ mirror reference leg</text>
+      <!-- cascode panel -->
+      <text x="400" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-muted)">_has_cascode → False</text>
+      <rect x="300" y="40" width="200" height="60" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="400" y="60" text-anchor="middle" font-size="11">drains = { n1, out }</text>
+      <text x="400" y="80" text-anchor="middle" font-size="11">sources = { vdd!, vdd! }</text>
+      <text x="400" y="122" text-anchor="middle" font-size="11" fill="var(--fig-muted)">no source sits on a drain</text>
+      <text x="400" y="138" text-anchor="middle" font-size="11" fill="var(--fig-muted)">(both sources are the rail)</text>
+    </svg>
+    <figcaption>For a mirror load: the diode test fires on <code>m3</code>, the cascode test doesn't (both sources are the <code>vdd!</code> rail). That pair of answers is exactly what Part&nbsp;3 turns into a label.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 chains these two booleans into <code>classify_load()</code> — a priority ladder that turns "diode? stacked?" into one <code>LoadKind</code> — and meets its cousin <code>cascode_device_refs()</code>.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>classify_load()</code> and <code>cascode_device_refs()</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> collapse the two detector answers (plus "any resistors? any mosfets?") into a single <code>LoadKind</code>, checking the possibilities in the right priority order.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">classify_load</span>(mosfets, resistors) -> LoadKind:
+    <span class="tok-kw">if</span> <span class="tok-fn">_has_cascode</span>(mosfets):
+        <span class="tok-kw">return</span> LoadKind.CASCODE
+    <span class="tok-kw">if</span> <span class="tok-fn">_has_diode</span>(mosfets):
+        <span class="tok-kw">return</span> LoadKind.MIRROR
+    <span class="tok-kw">if</span> resistors:
+        <span class="tok-kw">return</span> LoadKind.RESISTOR
+    <span class="tok-kw">if</span> mosfets:
+        <span class="tok-kw">return</span> LoadKind.CURRENT_SOURCE
+    <span class="tok-kw">return</span> LoadKind.NONE</code></pre>
+
+  <p>It's a <strong>waterfall of guards</strong>: the first one that fires wins and the rest never run. Read top to bottom like a triage nurse asking the most consequential question first.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="classify_load priority ladder">
+      <g font-size="12">
+        <!-- q1 -->
+        <rect x="20" y="16" width="200" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="120" y="39" text-anchor="middle">_has_cascode?</text>
+        <line x1="220" y1="34" x2="360" y2="34" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="290" y="26" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+        <rect x="362" y="16" width="180" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="452" y="39" text-anchor="middle" font-weight="600" fill="var(--fig-accent)">CASCODE</text>
+        <line x1="120" y1="52" x2="120" y2="68" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="132" y="65" font-size="10.5" fill="var(--fig-muted)">no</text>
+        <!-- q2 -->
+        <rect x="20" y="70" width="200" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="120" y="93" text-anchor="middle">_has_diode?</text>
+        <line x1="220" y1="88" x2="360" y2="88" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="290" y="80" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+        <rect x="362" y="70" width="180" height="36" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="452" y="93" text-anchor="middle" font-weight="600" fill="var(--fig-accent2)">MIRROR</text>
+        <line x1="120" y1="106" x2="120" y2="122" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="132" y="119" font-size="10.5" fill="var(--fig-muted)">no</text>
+        <!-- q3 -->
+        <rect x="20" y="124" width="200" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="120" y="147" text-anchor="middle">resistors present?</text>
+        <line x1="220" y1="142" x2="360" y2="142" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="290" y="134" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+        <rect x="362" y="124" width="180" height="36" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="452" y="147" text-anchor="middle" font-weight="600">RESISTOR</text>
+        <line x1="120" y1="160" x2="120" y2="176" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="132" y="173" font-size="10.5" fill="var(--fig-muted)">no</text>
+        <!-- q4 -->
+        <rect x="20" y="178" width="200" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="120" y="201" text-anchor="middle">any mosfets?</text>
+        <line x1="220" y1="196" x2="360" y2="196" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="290" y="188" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+        <rect x="362" y="178" width="180" height="36" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="452" y="201" text-anchor="middle" font-weight="600">CURRENT_SOURCE</text>
+        <line x1="120" y1="214" x2="120" y2="230" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="132" y="227" font-size="10.5" fill="var(--fig-muted)">no</text>
+        <rect x="20" y="230" width="200" height="18" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/>
+        <text x="120" y="243" text-anchor="middle" font-size="11" fill="var(--fig-muted)">NONE</text>
+      </g>
+    </svg>
+    <figcaption>First match wins. Cascode is asked <em>before</em> mirror because a cascoded mirror is still fundamentally a stack — the extra device is what matters for headroom.</figcaption>
+  </figure>
+
+  <p>Run our mirror example through it: <code>_has_cascode([m3,m4])</code> is <code>False</code> (Part&nbsp;2), <code>_has_diode([m3,m4])</code> is <code>True</code> → it stops at the second rung and returns <span class="keyline">LoadKind.MIRROR</span>. Exactly the label on the block in the Part&nbsp;1 pipeline figure.</p>
+
+  <h3>Why cascode outranks mirror</h3>
+  <p>Order is not arbitrary. A wide-swing cascode mirror <em>also</em> has a diode-connected device, so it would pass the mirror test too. But its defining structural fact — the extra stacked transistor that eats a whole <code>Vdsat</code> of headroom — is what the DC budget must know about. So the more consequential label wins the tie. That's the single most important design decision in this tiny function.</p>
+
+  <h3>The cousin: <code>cascode_device_refs()</code></h3>
+  <p><code>_has_cascode</code> answers "<em>is</em> there a stack?" (a boolean). Sometimes callers need "<em>which</em> devices are the stacked ones?" (a set of refs). That's this function — same idea, but it names names:</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">cascode_device_refs</span>(slot_transistors) -> <span class="tok-fn">set</span>[<span class="tok-kw">str</span>]:
+    out = <span class="tok-fn">set</span>()
+    <span class="tok-kw">for</span> devs <span class="tok-kw">in</span> slot_transistors.values():
+        mos = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
+        drains = {d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mos}
+        <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mos:
+            src = d.terminals.get(<span class="tok-str">"s"</span>)
+            <span class="tok-kw">if</span> src <span class="tok-kw">not in</span> RAILS <span class="tok-kw">and</span> src <span class="tok-kw">in</span> drains <span class="tok-kw">and not</span> <span class="tok-fn">is_signal_device</span>(d):
+                out.<span class="tok-fn">add</span>(d.ref)
+    <span class="tok-kw">return</span> out</code></pre>
+
+  <p>Three conditions must all hold for a device to count as a cascode (upper) device:</p>
+  <ul>
+    <li><code>src not in RAILS</code> — its source is <em>not</em> a supply rail (a rail-source device sits at the bottom, not on top of anyone).</li>
+    <li><code>src in drains</code> — its source <em>is</em> some sibling's drain (it's standing on that device).</li>
+    <li><code>not is_signal_device(d)</code> — its gate is a <em>bias</em> net, not a signal net. The signal transistor of a stage isn't the cascode; the quiet, bias-gated one sitting above it is.</li>
+  </ul>
+
+  <p>So where <code>_has_cascode</code> returns a yes/no for one slot, <code>cascode_device_refs</code> sweeps <em>every</em> slot and hands back the exact refs of the wide-swing cascode devices, so other passes can single them out.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> a cascode is worth detecting because it multiplies output resistance. Part&nbsp;4 shows the recursion that actually computes that boost, <code>_looking_in_drain()</code>.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>_looking_in_drain()</code> — resistance into one drain</h2>
+
+  <blockquote><p><strong>The one job:</strong> stand at a transistor's drain and ask "how many ohms do I see looking in?" — and if that transistor is cascoded (its source sits on another device below), multiply its own <code>ro</code> by the cascode-boost factor.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_looking_in_drain</span>(device, by_drain, model, sizing, stop) -> <span class="tok-kw">float</span>:
+    s = sizing.get(device.ref)
+    <span class="tok-kw">if</span> s <span class="tok-kw">is None</span>: <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)
+    gds = model.<span class="tok-fn">gds</span>(device.type, s.w_um, s.l_um, s.ids_a)
+    ro = <span class="tok-num">1.0</span> / gds <span class="tok-kw">if</span> gds &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)
+    src = device.terminals.get(<span class="tok-str">"s"</span>)
+    <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS <span class="tok-kw">or</span> src <span class="tok-kw">in</span> stop <span class="tok-kw">or</span> src <span class="tok-kw">is None</span>:
+        <span class="tok-kw">return</span> ro                                <span class="tok-com"># bottom of the stack: just ro</span>
+    below = by_drain.get(src)
+    <span class="tok-kw">if</span> below <span class="tok-kw">is not None and</span> below.ref != device.ref <span class="tok-kw">and</span> below.type == device.type:
+        gm = model.<span class="tok-fn">gm</span>(device.type, s.w_um, s.l_um, s.ids_a)
+        r_src = <span class="tok-fn">_looking_in_drain</span>(below, by_drain, model, sizing, stop)   <span class="tok-com"># recurse down</span>
+        <span class="tok-kw">return</span> ro * (<span class="tok-num">1.0</span> + gm * r_src) <span class="tok-kw">if</span> r_src != <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>) <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)
+    <span class="tok-kw">return</span> ro</code></pre>
+
+  <h3>The intuition, no notation</h3>
+  <p>A lone transistor acting as a current source has some output resistance <code>ro</code> — call it "leakiness." Higher <code>ro</code> is better (stiffer current, more gain). A <strong>cascode</strong> stacks a second transistor on top and produces a near-magical improvement: the top device <em>watches</em> its own source node and pushes back against any change, so the stack looks vastly stiffer than either device alone.</p>
+
+  <p>The analogy is a <strong>staircase</strong>. To know the resistance at the top step, you first need the resistance of the step below — and that step needs the one below <em>it</em>. You can only answer the top by climbing all the way down to solid ground (a rail), then multiplying your way back up. That "you need the step below first" is exactly why this is recursive.</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>R</mi><mi>in</mi></msub><mo>=</mo>
+          <msub><mi>r</mi><mi>o</mi></msub>
+          <mo>&#8901;</mo>
+          <mo>(</mo><mn>1</mn><mo>+</mo>
+          <msub><mi>g</mi><mi>m</mi></msub>
+          <msub><mi>R</mi><mi>src</mi></msub><mo>)</mo>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Read it plainly: your resistance is your own <code>ro</code>, amplified by <code>(1 + gm &middot; R_below)</code>. When there's nothing below you but a rail, <code>R_below = 0</code> in effect, the factor is 1, and you contribute just <code>ro</code>.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Two NMOS in a telescopic stack, both sized so <code>gds = 10 µS</code> (so <code>ro = 100 kΩ</code>) and <code>gm = 1 mS</code>:</p>
+
+  <table>
+    <thead><tr><th>device</th><th>role</th><th><code>d</code></th><th><code>s</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>m_casc</code></td><td>cascode (upper)</td><td><code>out</code></td><td><code>nmid</code></td></tr>
+      <tr><td><code>m_bot</code></td><td>bottom</td><td><code>nmid</code></td><td><code>vss!</code></td></tr>
+    </tbody>
+  </table>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 240" role="img" aria-label="Recursion trace of looking_in_drain descending to the rail and multiplying back up">
+      <!-- descending -->
+      <rect x="20" y="24" width="250" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="145" y="42" text-anchor="middle" font-size="12">look in m_casc (s = nmid)</text>
+      <text x="145" y="57" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">nmid is a drain below → must recurse</text>
+      <line x1="145" y1="64" x2="145" y2="86" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="60" y="88" width="250" height="42" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="185" y="106" text-anchor="middle" font-size="12">look in m_bot (s = vss!)</text>
+      <text x="185" y="121" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">source is a RAIL → base case, return ro</text>
+      <!-- returns climbing -->
+      <path d="M320,109 C400,109 400,45 275,45" fill="none" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="410" y="90" font-size="11" fill="var(--fig-accent)">R_src = 100 kΩ</text>
+      <!-- results -->
+      <g font-size="11.5">
+        <text x="30" y="164" fill="var(--fig-muted)">base: R(m_bot) = ro = 100 kΩ</text>
+        <text x="30" y="188">boost: R(m_casc) = ro · (1 + gm · R_src)</text>
+        <text x="30" y="210">= 100k · (1 + 1m · 100k) = 100k · 101</text>
+      </g>
+      <rect x="300" y="176" width="215" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="407" y="201" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent)">R_in = 10.1 MΩ</text>
+    </svg>
+    <figcaption>Descend until a rail (the base case flips it), then multiply back up. One cascode turns 100 kΩ into 10.1 MΩ — a ~101&times; boost, exactly <code>(1 + gm·ro)</code>.</figcaption>
+  </figure>
+
+  <h3>The three guards worth naming</h3>
+  <ul>
+    <li><code>src in stop</code> — <code>stop</code> lists nets to treat as <strong>AC ground</strong> (typically the input-pair tail node). A device sourcing into an AC ground contributes plain <code>ro</code>, not a degenerated cascode. This is how the differential half-circuit is modelled correctly.</li>
+    <li><code>below.type == device.type</code> — the boost only applies between <em>same-type</em> stacked devices. A different-type neighbour isn't a cascode partner; the device falls back to <code>ro</code>.</li>
+    <li><code>below.ref != device.ref</code> — a device can't be its own cascode below; guards a self-reference.</li>
+  </ul>
+
+  <p>And the honest limitation: an infinite <code>ro</code> anywhere (a device with <code>gds = 0</code>, or unsized and missing from <code>sizing</code>) short-circuits to <code>inf</code> rather than pretending — the caller will treat that branch as open.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> one drain is only half the story. Part&nbsp;5's <code>node_rout()</code> collects <em>every</em> device pulling on an output node and combines them in parallel.</p></blockquote>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>node_rout()</code> — parallel-combine at the output</h2>
+
+  <blockquote><p><strong>The one job:</strong> at a given output net, find every transistor whose drain lands there, ask each one its cascode-boosted resistance, and combine them all in parallel into one output resistance.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">node_rout</span>(out_net, mosfets, model, sizing, stop=<span class="tok-fn">frozenset</span>()) -> <span class="tok-kw">float</span>:
+    by_drain = {}
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets:
+        <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>):
+            by_drain.setdefault(d.terminals.get(<span class="tok-str">"d"</span>), d)
+    g = <span class="tok-num">0.0</span>
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets:
+        <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>) <span class="tok-kw">and</span> d.terminals.get(<span class="tok-str">"d"</span>) == out_net:
+            r = <span class="tok-fn">_looking_in_drain</span>(d, by_drain, model, sizing, stop)
+            <span class="tok-kw">if</span> r &gt; <span class="tok-num">0</span>:
+                g += <span class="tok-num">1.0</span> / r
+    <span class="tok-kw">return</span> <span class="tok-num">1.0</span> / g <span class="tok-kw">if</span> g &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)</code></pre>
+
+  <h3>Why work in conductances?</h3>
+  <p>Resistors <em>in parallel</em> are annoying to add directly, but their <strong>conductances</strong> (<code>g = 1/R</code>) simply <em>sum</em>. So the function converts each branch's resistance to a conductance, adds them into one running total <code>g</code>, and flips back to a resistance at the very end. Same trick you'd use to add three pipes draining one tank — add the flow rates, not the "restrictions."</p>
+
+  <p>The first loop builds <code>by_drain</code> — a map from each net to the device that drives it — so <code>_looking_in_drain</code> can walk the stack. The second loop is the real work: keep only devices whose <em>drain is the output node</em> (those are the ones connected to the node we care about), and sum their conductances.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>At <code>out</code>, two branches pull: the NMOS cascode from Part&nbsp;4 (<code>10.1 MΩ</code>) and a PMOS mirror load contributing plain <code>ro = 400 kΩ</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 190" role="img" aria-label="Two branches into the output node combine in parallel">
+      <!-- node -->
+      <circle cx="270" cy="40" r="6" fill="var(--fig-accent)"/>
+      <text x="270" y="26" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">out</text>
+      <!-- branch left -->
+      <line x1="270" y1="46" x2="120" y2="86" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="40" y="86" width="160" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="106" text-anchor="middle" font-size="12">NMOS cascode</text>
+      <text x="120" y="123" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">R = 10.1 MΩ</text>
+      <!-- branch right -->
+      <line x1="270" y1="46" x2="420" y2="86" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="340" y="86" width="160" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="420" y="106" text-anchor="middle" font-size="12">PMOS load</text>
+      <text x="420" y="123" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">R = 400 kΩ</text>
+      <!-- math -->
+      <g font-size="11.5">
+        <text x="270" y="158" text-anchor="middle">g = 1/10.1M + 1/0.4M = 0.099 µS + 2.5 µS = 2.599 µS</text>
+        <text x="270" y="180" text-anchor="middle" font-weight="600" fill="var(--fig-accent)">R_out = 1/g ≈ 385 kΩ</text>
+      </g>
+    </svg>
+    <figcaption>The 10.1 MΩ cascode branch is so stiff it barely leaks; the 400 kΩ load dominates, so the parallel total lands just under 385 kΩ. Add conductances, invert once.</figcaption>
+  </figure>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>R</mi><mi>out</mi></msub><mo>=</mo>
+          <mfrac>
+            <mn>1</mn>
+            <mrow>
+              <munder><mo>&#8721;</mo><mi>i</mi></munder>
+              <mfrac><mn>1</mn><msub><mi>R</mi><mi>i</mi></msub></mfrac>
+            </mrow>
+          </mfrac>
+          <mo>,</mo><mspace width="0.6em"/>
+          <msub><mi>R</mi><mi>i</mi></msub><mo>=</mo>
+          <msub><mi>r</mi><mrow><mi>o</mi><mo>,</mo><mi>i</mi></mrow></msub>
+          <munder><mo>&#8719;</mo><mi>k</mi></munder>
+          <mo>(</mo><mn>1</mn><mo>+</mo><msub><mi>g</mi><mi>m</mi></msub><msub><mi>R</mi><mi>k</mi></msub><mo>)</mo>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>That boxed pair <em>is</em> the whole cascode-aware output-resistance calculation: Part&nbsp;4 supplies each stiff <code>R_i</code>, Part&nbsp;5 parallels them. The evaluate phase reads this to turn a topology into a gain number.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> we've covered every free function. Part&nbsp;6 turns to the data model — <code>Block</code>, the typed container these labels attach to.</p></blockquote>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>Block</code> — one functional group</h2>
+
+  <blockquote><p><strong>The one job:</strong> bundle the devices of one slot together with their computed <code>LoadKind</code>, and offer two convenience lookups: "which device carries the signal?" and "is this a cascode?"</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">Block</span>:
+    name: <span class="tok-kw">str</span>                        <span class="tok-com"># "input_pair", "load", "second_stage", ...</span>
+    mosfets: <span class="tok-fn">list</span>[Device] = field(default_factory=<span class="tok-fn">list</span>)
+    resistors: <span class="tok-fn">list</span>[Device] = field(default_factory=<span class="tok-fn">list</span>)
+    load_kind: LoadKind = LoadKind.NONE
+
+    <span class="tok-kw">@property</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">signal_device</span>(self) -> Device | <span class="tok-kw">None</span>:
+        <span class="tok-kw">return</span> <span class="tok-fn">next</span>((d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> self.mosfets <span class="tok-kw">if</span> <span class="tok-fn">is_signal_device</span>(d)), <span class="tok-kw">None</span>)
+
+    <span class="tok-kw">@property</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">is_cascode</span>(self) -> <span class="tok-kw">bool</span>:
+        <span class="tok-kw">return</span> self.load_kind == LoadKind.CASCODE <span class="tok-kw">or</span> <span class="tok-fn">_has_cascode</span>(self.mosfets)</code></pre>
+
+  <p>A <code>Block</code> is just a labelled folder: a <em>name</em>, its mosfets, its resistors, and the one classification verdict. The two properties are shortcuts callers reach for constantly.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 180" role="img" aria-label="A Block bundles devices with its computed properties">
+      <rect x="20" y="20" width="230" height="140" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="135" y="44" text-anchor="middle" font-size="13" font-weight="600">Block  name = "load"</text>
+      <rect x="40" y="58" width="90" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="85" y="80" text-anchor="middle" font-size="11">m3 (diode)</text>
+      <rect x="140" y="58" width="90" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="185" y="80" text-anchor="middle" font-size="11">m4</text>
+      <text x="135" y="112" text-anchor="middle" font-size="11" fill="var(--fig-muted)">resistors = [ ]</text>
+      <text x="135" y="134" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">load_kind = MIRROR</text>
+      <!-- properties -->
+      <line x1="250" y1="70" x2="310" y2="70" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="312" y="52" width="210" height="36" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="417" y="68" text-anchor="middle" font-size="11.5">.signal_device</text>
+      <text x="417" y="82" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">first mos gated by a signal net</text>
+      <line x1="250" y1="118" x2="310" y2="118" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="312" y="100" width="210" height="36" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="417" y="116" text-anchor="middle" font-size="11.5">.is_cascode</text>
+      <text x="417" y="130" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">kind==CASCODE OR structural fallback</text>
+    </svg>
+    <figcaption>Devices plus one verdict, with two derived views. <code>is_cascode</code> has a belt-and-braces design worth a closer look.</figcaption>
+  </figure>
+
+  <h3>Why <code>is_cascode</code> checks <em>two</em> things</h3>
+  <p>Look at the <code>or</code>. It returns true if the stored <code>load_kind</code> already says <code>CASCODE</code>, <em>or</em> if a fresh structural <code>_has_cascode</code> scan finds a stack right now. Why both?</p>
+
+  <p>Because <strong>only the <code>load</code> slot is ever run through <code>classify_load</code></strong> (we'll see that in Part&nbsp;8). Every other block — the tail especially — is created with <code>load_kind = NONE</code>. So for a cascoded <em>tail</em>, the stored kind is useless; the only way to know it's a cascode is the live structural scan. The <code>or</code> makes one property honest for both cases.</p>
+
+  <h3>Why <code>signal_device</code> uses <code>is_signal_device</code></h3>
+  <p>A gain stage has two transistors that look alike but do opposite jobs: one is driven by the previous stage's <em>signal</em> (the gm-contributor), the other's gate sits on a quiet <em>bias</em> net (the current-source load). <code>is_signal_device</code> tells them apart by the gate net — and it works regardless of NMOS/PMOS polarity. <code>next(...)</code> returns the first signal device, or <code>None</code> if there isn't one. Clean, polarity-agnostic, and reused all over Part&nbsp;7.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> a single block isn't an op-amp. Part&nbsp;7 assembles all of them into <code>OpAmpBlocks</code> and derives the gain factor, headroom flags, and node names the analyzer wants.</p></blockquote>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>OpAmpBlocks</code> — the whole-circuit view</h2>
+
+  <blockquote><p><strong>The one job:</strong> hold every <code>Block</code> plus two global facts (fully-differential? how many stages?), and expose the handful of derived quantities the Analyze phase actually consumes.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">OpAmpBlocks</span>:
+    blocks: <span class="tok-fn">dict</span>[<span class="tok-kw">str</span>, Block]
+    is_fully_differential: <span class="tok-kw">bool</span>
+    n_stages: <span class="tok-kw">int</span>
+
+    <span class="tok-kw">@property</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">input_pair</span>(self): <span class="tok-kw">return</span> self.blocks.get(<span class="tok-str">"input_pair"</span>)
+    <span class="tok-kw">@property</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">load</span>(self): <span class="tok-kw">return</span> self.blocks.get(<span class="tok-str">"load"</span>)
+    <span class="tok-kw">@property</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">tail</span>(self): <span class="tok-kw">return</span> self.blocks.get(<span class="tok-str">"tail_current"</span>)</code></pre>
+
+  <p>The three properties are just friendly names over dictionary lookups — <code>opamp.load</code> reads better than <code>opamp.blocks.get("load")</code> and returns <code>None</code> gracefully if the slot is absent. The interesting methods sit on top of them.</p>
+
+  <h3>The star: <code>first_stage_gain_factor()</code></h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">first_stage_gain_factor</span>(self) -> <span class="tok-kw">float</span>:
+    <span class="tok-kw">if</span> self.is_fully_differential:
+        <span class="tok-kw">return</span> <span class="tok-num">1.0</span>
+    ld = self.load
+    <span class="tok-kw">if</span> ld <span class="tok-kw">and</span> ld.load_kind <span class="tok-kw">in</span> (LoadKind.MIRROR, LoadKind.CASCODE):
+        <span class="tok-kw">return</span> <span class="tok-num">1.0</span>
+    <span class="tok-kw">return</span> <span class="tok-num">0.5</span></code></pre>
+
+  <p>This is where every label we computed <em>pays off</em>. Call it <code>k_fs</code>. A differential pair splits its signal current into two halves. Whether the output sees the full current or just one half depends entirely on the load:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 210" role="img" aria-label="Gain factor decision: full 1.0 for differential or mirror or cascode load, else half 0.5">
+      <rect x="180" y="14" width="200" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="37" text-anchor="middle" font-size="12">fully differential?</text>
+      <line x1="380" y1="32" x2="470" y2="32" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="420" y="24" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+      <rect x="472" y="14" width="76" height="36" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="510" y="37" text-anchor="middle" font-weight="600" fill="var(--fig-good)">1.0</text>
+      <line x1="280" y1="50" x2="280" y2="70" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="292" y="67" font-size="10.5" fill="var(--fig-muted)">no</text>
+      <rect x="150" y="72" width="260" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="95" text-anchor="middle" font-size="12">load kind is MIRROR or CASCODE?</text>
+      <line x1="410" y1="90" x2="470" y2="90" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="440" y="82" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+      <rect x="472" y="72" width="76" height="36" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="510" y="95" text-anchor="middle" font-weight="600" fill="var(--fig-good)">1.0</text>
+      <line x1="280" y1="108" x2="280" y2="128" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="292" y="125" font-size="10.5" fill="var(--fig-muted)">no</text>
+      <rect x="150" y="130" width="260" height="40" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="280" y="150" text-anchor="middle" font-size="12">single-ended, non-mirror load</text>
+      <text x="280" y="164" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">only one half reaches the output</text>
+      <line x1="410" y1="150" x2="470" y2="150" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="472" y="132" width="76" height="36" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="510" y="155" text-anchor="middle" font-weight="600" fill="var(--fig-bad)">0.5</text>
+      <text x="280" y="196" text-anchor="middle" font-size="11" fill="var(--fig-muted)">k_fs multiplies the first-stage gm — a factor-of-two swing on the whole gain estimate</text>
+    </svg>
+    <figcaption>A mirror actively folds the "wasted" half back to the output (full 1.0); a plain current-source load throws it away (0.5). The label we computed in Part&nbsp;3 <em>is</em> this branch.</figcaption>
+  </figure>
+
+  <h3>Two flags and two node-finders</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">has_cascode_load</span>(self) -> <span class="tok-kw">bool</span>:
+    ld = self.load
+    <span class="tok-kw">return</span> <span class="tok-fn">bool</span>(ld <span class="tok-kw">and</span> ld.load_kind == LoadKind.CASCODE)
+
+<span class="tok-kw">def</span> <span class="tok-fn">has_cascode_tail</span>(self) -> <span class="tok-kw">bool</span>:
+    tail = self.tail
+    <span class="tok-kw">return</span> <span class="tok-fn">bool</span>(tail <span class="tok-kw">and</span> tail.is_cascode)   <span class="tok-com"># structural fallback, not load_kind!</span></code></pre>
+
+  <p>These two look symmetric but aren't. <code>has_cascode_load</code> trusts the stored <code>load_kind</code> — safe, because the load slot <em>was</em> classified. <code>has_cascode_tail</code> can't, because the tail slot was <strong>never</strong> run through <code>classify_load</code>; it leans on <code>Block.is_cascode</code>'s structural <code>_has_cascode</code> fallback from Part&nbsp;6. That asymmetry is exactly why <code>is_cascode</code> was built with an <code>or</code>.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">first_stage_out_net</span>(self) -> <span class="tok-kw">str</span> | <span class="tok-kw">None</span>:
+    <span class="tok-kw">for</span> slot <span class="tok-kw">in</span> (<span class="tok-str">"second_stage"</span>, <span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>,
+                 <span class="tok-str">"third_stage"</span>, <span class="tok-str">"third_stage_p"</span>, <span class="tok-str">"third_stage_n"</span>):
+        b = self.blocks.get(slot)
+        sig = b.signal_device <span class="tok-kw">if</span> b <span class="tok-kw">else</span> <span class="tok-kw">None</span>
+        <span class="tok-kw">if</span> sig <span class="tok-kw">is not None</span>:
+            <span class="tok-kw">return</span> sig.terminals.get(<span class="tok-str">"g"</span>)
+    <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+
+<span class="tok-kw">def</span> <span class="tok-fn">tail_net</span>(self) -> <span class="tok-kw">str</span> | <span class="tok-kw">None</span>:
+    ip = self.input_pair
+    <span class="tok-kw">return</span> ip.mosfets[<span class="tok-num">0</span>].terminals.get(<span class="tok-str">"s"</span>) <span class="tok-kw">if</span> ip <span class="tok-kw">and</span> ip.mosfets <span class="tok-kw">else</span> <span class="tok-kw">None</span></code></pre>
+
+  <p><code>first_stage_out_net</code> asks a clever question sideways: "where does the first stage dump its output?" is the same as "what net drives the <em>next</em> stage's signal transistor?" So it finds the next stage's signal device and returns <em>its gate</em>. It returns <code>None</code> for a one-stage op-amp — there's no downstream gate to read, an honest "I can't know."</p>
+
+  <p><code>tail_net</code> is the simplest: the tail node is just the input pair's shared source, so it grabs <code>input_pair.mosfets[0].terminals["s"]</code>. That net is exactly what Part&nbsp;4's <code>stop</code> set holds to model the half-circuit.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> everything is now in place. Part&nbsp;8 is the factory, <code>build_blocks()</code>, that stitches raw slots into this <code>OpAmpBlocks</code> — plus the one idea the whole file quietly implements.</p></blockquote>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · <code>build_blocks()</code>, the hidden idea, and limits</h2>
+
+  <blockquote><p><strong>The one job:</strong> walk the raw slot device-lists, wrap each into a <code>Block</code> (classifying only the load slot), and stamp the two global facts — differential? stage count? — onto a finished <code>OpAmpBlocks</code>.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">build_blocks</span>(slot_transistors, slot_resistors) -> OpAmpBlocks:
+    blocks = {}
+    <span class="tok-kw">for</span> slot, mosfets <span class="tok-kw">in</span> slot_transistors.items():
+        rs = slot_resistors.get(slot, [])
+        kind = <span class="tok-fn">classify_load</span>(mosfets, rs) <span class="tok-kw">if</span> slot <span class="tok-kw">in</span> (<span class="tok-str">"load"</span>,) <span class="tok-kw">else</span> LoadKind.NONE
+        blocks[slot] = <span class="tok-fn">Block</span>(name=slot, mosfets=<span class="tok-fn">list</span>(mosfets), resistors=<span class="tok-fn">list</span>(rs), load_kind=kind)
+    <span class="tok-kw">for</span> slot, rs <span class="tok-kw">in</span> slot_resistors.items():        <span class="tok-com"># resistor-only slots still need a block</span>
+        <span class="tok-kw">if</span> slot <span class="tok-kw">not in</span> blocks:
+            blocks[slot] = <span class="tok-fn">Block</span>(name=slot, resistors=<span class="tok-fn">list</span>(rs),
+                                 load_kind=<span class="tok-fn">classify_load</span>([], rs) <span class="tok-kw">if</span> slot == <span class="tok-str">"load"</span> <span class="tok-kw">else</span> LoadKind.NONE)
+    fd = <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span> (<span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>,
+                                             <span class="tok-str">"third_stage_p"</span>, <span class="tok-str">"third_stage_n"</span>))
+    has_2 = <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span> SECOND_STAGE_SLOTS)
+    has_3 = <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span> THIRD_STAGE_SLOTS)
+    n_stages = <span class="tok-num">1</span> + (<span class="tok-num">1</span> <span class="tok-kw">if</span> has_2 <span class="tok-kw">else</span> <span class="tok-num">0</span>) + (<span class="tok-num">1</span> <span class="tok-kw">if</span> has_3 <span class="tok-kw">else</span> <span class="tok-num">0</span>)
+    <span class="tok-kw">return</span> <span class="tok-fn">OpAmpBlocks</span>(blocks=blocks, is_fully_differential=fd, n_stages=n_stages)</code></pre>
+
+  <p>Three moves, in order:</p>
+  <ul>
+    <li><strong>Wrap every transistor slot</strong> — but call <code>classify_load</code> <em>only</em> for <code>"load"</code>. That single <code>if slot in ("load",)</code> is the reason the tail carries <code>NONE</code> and needs the structural fallback we kept meeting.</li>
+    <li><strong>Catch resistor-only slots</strong> — a resistor load has no mosfets, so it never appeared in the first loop; this second pass gives it a block (and still classifies it if it's the load).</li>
+    <li><strong>Compute the two globals</strong> — "fully differential" is inferred purely from the <em>presence of <code>_p</code>/<code>_n</code> split-stage slots</em>; the stage count is a plain <code>1 + has_2 + has_3</code>.</li>
+  </ul>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 150" role="img" aria-label="build_blocks three-step assembly pipeline">
+      <g text-anchor="middle" font-size="12">
+        <rect x="14" y="44" width="150" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="89" y="68">wrap each slot</text>
+        <text x="89" y="86" font-size="10.5" fill="var(--fig-muted)">classify "load" only</text>
+        <rect x="205" y="44" width="150" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="280" y="68">add resistor-only</text>
+        <text x="280" y="86" font-size="10.5" fill="var(--fig-muted)">slots not seen yet</text>
+        <rect x="396" y="44" width="150" height="56" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="471" y="64">stamp globals</text>
+        <text x="471" y="80" font-size="10.5" fill="var(--fig-muted)">is_diff, n_stages</text>
+        <text x="471" y="94" font-size="10.5" fill="var(--fig-accent2)">→ OpAmpBlocks</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="164" y1="72" x2="205" y2="72" marker-end="url(#arrow)"/>
+        <line x1="355" y1="72" x2="396" y2="72" marker-end="url(#arrow)"/>
+      </g>
+    </svg>
+    <figcaption>Raw slot dicts in, one finished <code>OpAmpBlocks</code> out — the object every method in Part&nbsp;7 hangs off.</figcaption>
+  </figure>
+
+  <h3>The hidden idea</h3>
+  <p>The file never writes it down, but every function here is one assertion:</p>
+
+  <div class="eq-center"><span class="boxed-eq"><strong>connectivity is destiny</strong></span></div>
+
+  <p>It never solves a circuit equation. It reads only which terminal touches which net — <code>g == d</code>, <code>s ∈ drains</code>, "is this gate a signal or a bias net" — and from that pure <em>graph topology</em> it derives the three things the whole sizer downstream depends on:</p>
+
+  <table>
+    <thead><tr><th>Topological fact</th><th>Read by</th><th>Drives</th></tr></thead>
+    <tbody>
+      <tr><td>diode-connected member (mirror)</td><td><code>_has_diode</code></td><td>first-stage gain factor <code>k_fs</code></td></tr>
+      <tr><td>series-stacked devices (cascode)</td><td><code>_has_cascode</code></td><td>DC headroom budget (<code>bias.py</code>)</td></tr>
+      <tr><td>drains sharing an output net</td><td><code>node_rout</code></td><td>cascode-aware output resistance (evaluate)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>Only the <code>load</code> slot is classified. Every other block — including the tail — carries <code>load_kind = NONE</code> and relies on the structural <code>is_cascode</code> fallback.</li>
+    <li>The detectors are <em>heuristics</em> on connectivity: <code>_has_cascode</code> fires on <em>any</em> same-type series stack, and the cascode boost in <code>_looking_in_drain</code> only chains <em>same-type</em> neighbours — a mixed or exotic stack degrades gracefully to plain <code>ro</code> rather than modelling it exactly.</li>
+    <li><code>first_stage_out_net</code> returns <code>None</code> for a one-stage op-amp (no downstream gate to read), and <code>tail_net</code> returns <code>None</code> if there's no input pair.</li>
+    <li>The gain factor is a coarse two-value model — exactly <code>0.5</code> or <code>1.0</code>, not a continuum.</li>
+    <li>Nothing is simulated. This is a <em>structural</em> layer; SPICE has the final word downstream.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole file rides one insight: <strong>you can read an amplifier's electrical behaviour off its wiring graph alone</strong>. Two one-line terminal tests (<code>g==d</code>, <code>s∈drains</code>) plus a shallow recursion recover the gain factor, the headroom demand, and the output resistance — no matrices, no simulation — giving the Analyze phase a fast, cheap, honest structural read of what it's holding.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>blocks.py</code> reads only the terminal-connectivity of a recognised op-amp — <code>g==d</code> for mirrors, one device's source on another's drain for cascodes — to group devices into typed <code>Block</code>s and derive the first-stage gain factor, cascode headroom flags, and a cascode-aware output resistance, forming the structural layer the Analyze, bias, and evaluate phases all build on.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

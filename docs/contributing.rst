@@ -16,6 +16,13 @@ Ways to contribute
 - **Documentation.** Fixes, clarifications, worked examples, or new theory pages.
   Docs are as important as code here — this project aims to be well-documented for
   practitioners, and that only holds if readers help keep it honest.
+
+  The :doc:`walkthroughs <walkthroughs>` are **living documents**: if your PR
+  materially changes behavior that a walkthrough describes, update the
+  walkthrough (and the module page) in the same PR.  Cosmetic refactors are
+  exempt.  You are welcome to use an LLM to generate or update a walkthrough —
+  but you take responsibility for its correctness, exactly as you would for
+  code.
 - **Ideas and insights.** Design-space suggestions, references, methodology
   feedback, or proposals for new circuit types on the :ref:`roadmap <roadmap>`.
 - **"This is electrically wrong" reports.** The most valuable feedback of all.

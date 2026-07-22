@@ -21,6 +21,9 @@ connectivity scoring.  It runs in two modes:
 Together, SR + FBR support round-trip recognition of every topology template
 the synthesizer produces.
 
+Deep dive: the `recognizer walkthrough <../walkthrough/recognizer/index.html>`__
+is a figure-rich tour of the recognizer code itself (see :doc:`../walkthroughs`).
+
 Entry points
 ------------
 

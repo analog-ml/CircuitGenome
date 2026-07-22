@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>analyze.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>analyze.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/analyze.py</code> — Phase 1: survey the recognised circuit once, hand every later phase a frozen structural clipboard.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The CircuitView</a>
+  <a href="#part-3">3 · _adopt_orphan_mosfets()</a>
+  <a href="#part-4">4 · analyze_circuit()</a>
+  <a href="#part-5">5 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> once the recogniser has decided what the circuit <em>is</em>, take a single, careful inventory of its <em>structure</em> — who lives in which slot, a duplicate-free master roster, a typed floor-plan, the stacked devices, and any red flags — and freeze it so every later phase can just read it.</p></blockquote>
+
+  <p class="beat">Here is the whole story without a line of code.</p>
+
+  <p>Upstream, a <strong>recogniser</strong> looked at a raw netlist and figured out its role: "this is a two-stage Miller op-amp, here is the input pair, here is the tail, here is the load." That result — a <code>FunctionalBlockRecognitionResult</code> (FBR) — is rich but messy. It is organised around <em>pattern-matching</em>, not around the questions the <strong>sizer</strong> is about to ask.</p>
+
+  <p>The sizer's later phases each need to know something about <em>structure</em>: how many gain stages are there? Is the load a current mirror or a cascode? Which devices are stacked on top of each other? Which transistors even exist, each counted exactly once? Computing all of that fresh, in every phase, would be wasteful and — worse — a chance for two phases to disagree.</p>
+
+  <p>Think of <code>analyze.py</code> as the <strong>intake desk of a building</strong>. When a recognised circuit "checks in," one clerk walks the whole place <em>once</em> and fills a clipboard: a room-by-room guest list, a master roster with no double-counting, a typed floor-plan, a note of who is standing on whose shoulders, and any "this doesn't look right" flags. From then on, nobody re-surveys the building — <strong>every later phase just reads the clipboard.</strong> That clipboard is the <code>CircuitView</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 210" role="img" aria-label="Analyze is Phase 1: it turns the FBR into a read-only CircuitView that all later phases consume">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- upstream -->
+      <rect x="14" y="70" width="120" height="60" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="74" y="95" text-anchor="middle" font-size="12" font-weight="600">recogniser</text>
+      <text x="74" y="112" text-anchor="middle" font-size="10" fill="var(--fig-muted)">FBR + topology</text>
+      <line x1="134" y1="100" x2="182" y2="100" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- analyze -->
+      <rect x="182" y="66" width="128" height="68" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="246" y="90" text-anchor="middle" font-size="12" font-weight="600">Phase 1</text>
+      <text x="246" y="107" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">Analyze</text>
+      <text x="246" y="123" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">this file — runs once</text>
+      <line x1="310" y1="100" x2="358" y2="100" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- CircuitView artifact -->
+      <rect x="358" y="60" width="118" height="80" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="417" y="88" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">CircuitView</text>
+      <text x="417" y="106" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">the clipboard</text>
+      <text x="417" y="122" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">read-only</text>
+      <!-- downstream readers -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="516" y="24" width="92" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="562" y="43">Size</text>
+        <rect x="516" y="86" width="92" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="562" y="105">Bias</text>
+        <rect x="516" y="148" width="92" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="562" y="167">Evaluate</text>
+      </g>
+      <g stroke="var(--fig-muted)" stroke-width="1.8" fill="none">
+        <path d="M476,90 C498,90 498,40 514,40" marker-end="url(#ar)"/>
+        <line x1="476" y1="100" x2="514" y2="100" marker-end="url(#ar)"/>
+        <path d="M476,110 C498,110 498,162 514,162" marker-end="url(#ar)"/>
+      </g>
+    </svg>
+    <figcaption>The recogniser says <em>what</em> the circuit is; Analyze surveys <em>how it is built</em>, once, into a frozen record every later phase reads but never rewrites.</figcaption>
+  </figure>
+
+  <h3>The cast of characters</h3>
+  <p>The file itself is tiny — one dataclass and two functions. But <code>analyze_circuit()</code> is a <em>conductor</em>: it calls seven helpers (six imported from neighbouring modules, one local). Hover any box to trace who calls it.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 680 350" role="img" aria-label="Call graph of analyze_circuit and its seven helpers">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges from root -->
+      <line class="edge" data-group="est"   x1="300" y1="62" x2="110" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="adopt" x1="340" y1="62" x2="340" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="esr"   x1="380" y1="62" x2="570" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="dedup" x1="300" y1="62" x2="90"  y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="blocks" x1="325" y1="62" x2="270" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="casc"  x1="355" y1="62" x2="440" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="warn"  x1="380" y1="62" x2="595" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="250" y="20" width="180" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="340" y="46" text-anchor="middle" font-weight="600" font-size="13">analyze_circuit()</text>
+      </g>
+      <!-- row 1 -->
+      <g class="node" data-group="est">
+        <rect x="16" y="118" width="188" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="110" y="138" text-anchor="middle" font-weight="600" font-size="11">extract_slot_transistors()</text>
+        <text x="110" y="153" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">slot → MOSFETs (from FBR)</text>
+      </g>
+      <g class="node" data-group="adopt">
+        <rect x="246" y="118" width="188" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2.5"/>
+        <text x="340" y="138" text-anchor="middle" font-weight="600" font-size="11">_adopt_orphan_mosfets()</text>
+        <text x="340" y="153" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">local — rescue the strays</text>
+      </g>
+      <g class="node" data-group="esr">
+        <rect x="476" y="118" width="188" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="570" y="138" text-anchor="middle" font-weight="600" font-size="11">extract_slot_resistors()</text>
+        <text x="570" y="153" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">slot → resistors</text>
+      </g>
+      <!-- row 2 -->
+      <g class="node" data-group="dedup">
+        <rect x="6" y="238" width="164" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="88" y="258" text-anchor="middle" font-weight="600" font-size="11">deduplicate_devices()</text>
+        <text x="88" y="273" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">ref → (Device, slot)</text>
+      </g>
+      <g class="node" data-group="blocks">
+        <rect x="182" y="238" width="164" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="264" y="258" text-anchor="middle" font-weight="600" font-size="11">build_blocks()</text>
+        <text x="264" y="273" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">typed floor-plan</text>
+      </g>
+      <g class="node" data-group="casc">
+        <rect x="358" y="238" width="164" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="440" y="258" text-anchor="middle" font-weight="600" font-size="11">cascode_device_refs()</text>
+        <text x="440" y="273" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">who is stacked</text>
+      </g>
+      <g class="node" data-group="warn">
+        <rect x="534" y="238" width="164" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="616" y="258" text-anchor="middle" font-weight="600" font-size="11">check_topology_match()</text>
+        <text x="616" y="273" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">red-flag warnings</text>
+      </g>
+      <text x="340" y="315" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the boxed helper is the only one defined in this file; the rest are imported from <tspan font-style="italic">preprocess.py</tspan> and <tspan font-style="italic">blocks.py</tspan></text>
+    </svg>
+    <figcaption>One conductor, seven players. We'll learn the local helper (<code>_adopt_orphan_mosfets</code>) first, then watch the conductor call the whole set in order.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the clipboard itself — the six fields of a <code>CircuitView</code> and who downstream reads each one.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The <code>CircuitView</code> — what Analyze hands over</h2>
+
+  <blockquote><p><strong>The one job:</strong> be the single, read-only record of everything structural the later phases could ask about the circuit — so no phase has to recompute it, and no two phases can disagree.</p></blockquote>
+
+  <p>Before we see how it's <em>built</em>, let's see what it <em>is</em>. It's a plain dataclass — six fields, no behaviour. That plainness is the point: it's a data container, a clipboard, not a machine.</p>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">CircuitView</span>:
+    slot_transistors: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">list</span>[Device]]           <span class="tok-com"># slot → its MOSFETs</span>
+    slot_resistors:   <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">list</span>[Device]]           <span class="tok-com"># slot → its resistors</span>
+    all_transistors:  <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">tuple</span>[Device, <span class="tok-kw">str</span>]]    <span class="tok-com"># ref → (Device, owning slot)</span>
+    blocks:           OpAmpBlocks                       <span class="tok-com"># typed decomposition</span>
+    cascode_refs:     <span class="tok-kw">set</span>[<span class="tok-kw">str</span>]                          <span class="tok-com"># refs of stacked devices</span>
+    warnings:         <span class="tok-kw">list</span>[<span class="tok-kw">str</span>]                         <span class="tok-com"># topology-mismatch advisories</span></code></pre>
+
+  <p>Read the fields as answers to six questions a later phase will ask. Each answer flows to a specific downstream reader:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 330" role="img" aria-label="The six fields of CircuitView, each fanning out to a downstream consumer">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- container -->
+      <rect x="16" y="18" width="266" height="296" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="149" y="40" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--fig-accent2)">CircuitView</text>
+      <!-- field cells -->
+      <g font-size="11">
+        <rect x="30" y="52"  width="238" height="38" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="42" y="75">slot_transistors</text>
+        <rect x="30" y="96"  width="238" height="38" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="42" y="119">slot_resistors</text>
+        <rect x="30" y="140" width="238" height="38" rx="6" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="42" y="163">all_transistors</text>
+        <rect x="30" y="184" width="238" height="38" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="42" y="207">blocks</text>
+        <rect x="30" y="228" width="238" height="38" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="42" y="251">cascode_refs</text>
+        <rect x="30" y="272" width="238" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="42" y="293">warnings</text>
+      </g>
+      <!-- arrows to consumers -->
+      <g stroke="var(--fig-muted)" stroke-width="1.8">
+        <line x1="268" y1="71"  x2="392" y2="71"  marker-end="url(#ar3)"/>
+        <line x1="268" y1="115" x2="392" y2="115" marker-end="url(#ar3)"/>
+        <line x1="268" y1="159" x2="392" y2="159" marker-end="url(#ar3)"/>
+        <line x1="268" y1="203" x2="392" y2="203" marker-end="url(#ar3)"/>
+        <line x1="268" y1="247" x2="392" y2="247" marker-end="url(#ar3)"/>
+        <line x1="268" y1="289" x2="392" y2="289" marker-end="url(#ar3)"/>
+      </g>
+      <!-- consumers -->
+      <g font-size="10.5">
+        <text x="398" y="68"  fill="var(--fig-muted)">per-slot sizing input</text>
+        <text x="398" y="112" fill="var(--fig-muted)">resistor-load sizing</text>
+        <text x="398" y="156" fill="var(--fig-accent)">iDS assigned once per ref</text>
+        <text x="398" y="200" fill="var(--fig-muted)">gain factor / stage count</text>
+        <text x="398" y="244" fill="var(--fig-muted)">DC headroom budget (bias)</text>
+        <text x="398" y="286" fill="var(--fig-muted)">honest metric de-rating</text>
+      </g>
+    </svg>
+    <figcaption>Six fields, six readers. The highlighted one, <code>all_transistors</code>, is the deduplicated master roster — the reason it exists is the subject of Part&nbsp;5.</figcaption>
+  </figure>
+
+  <p>Notice the shape of <code>all_transistors</code>: <code>ref → (Device, slot)</code>. It's not just a list of devices — it also records <em>which slot each device belongs to</em>, and it guarantees <strong>each ref appears exactly once</strong>. Why that matters (a transistor can legitimately show up in two slots) is a subtle idea we'll save for the end.</p>
+
+  <table>
+    <thead><tr><th>Field</th><th>Answers the question…</th><th>Who reads it</th></tr></thead>
+    <tbody>
+      <tr><td><code>slot_transistors</code></td><td>Which MOSFETs are in each slot?</td><td>the sizer's iDS/width assignment</td></tr>
+      <tr><td><code>slot_resistors</code></td><td>Which resistors are in each slot?</td><td>resistor-load sizing</td></tr>
+      <tr><td><code>all_transistors</code></td><td>What is the full, de-duplicated device roster?</td><td>per-ref current assignment</td></tr>
+      <tr><td><code>blocks</code></td><td>Load kind? Stage count? Fully differential?</td><td>gain factor, headroom, evaluation</td></tr>
+      <tr><td><code>cascode_refs</code></td><td>Which devices are series-stacked?</td><td>DC headroom budget (<code>bias.py</code>)</td></tr>
+      <tr><td><code>warnings</code></td><td>Does the netlist actually match the topology?</td><td>honest metric de-rating</td></tr>
+    </tbody>
+  </table>
+
+  <blockquote><p><strong>Looking ahead:</strong> five of those fields come straight from imported helpers. The one piece of real logic in this file is the quiet fix that runs <em>before</em> the roster is built — Part&nbsp;3.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>_adopt_orphan_mosfets()</code> — rescuing the strays</h2>
+
+  <blockquote><p><strong>The one job:</strong> find MOSFETs the recogniser left in no slot at all, and — using the slot name baked into their <code>ref</code> — walk each one into the slot it belongs to, so it doesn't silently go unsized.</p></blockquote>
+
+  <p class="beat">This is the only function in the file with genuine logic, so it earns the most attention.</p>
+
+  <h3>The problem, in plain words</h3>
+  <p>Pattern matching is imperfect. Sometimes the recogniser can't confidently place a device in any slot — maybe there are <em>two identical parallel diodes</em> on one net and it can't tell them apart, or maybe a bias leg's expected partner lives in a different slot. That device ends up an <strong>orphan</strong>: it's in the netlist, but in none of the slot lists.</p>
+
+  <p>Why is that dangerous? Because the sizer only sizes devices it can see in a slot. An orphan is <strong>invisible to sizing</strong> — so it would silently run at the simulator's default W/L, quietly corrupting the whole circuit's behaviour. Nobody would get an error; the numbers would just be wrong.</p>
+
+  <blockquote><p><strong>The rescue trick:</strong> synthesized netlists name every device <code>{ref}_{slot_name}</code>. The slot is stamped right into the name — like a coat-check tag. So even if the recogniser dropped a device, its own name tells us where it belongs.</p></blockquote>
+
+  <p>Analogy: a guest wanders out of the party into the hallway, unlisted. But their <strong>name badge</strong> reads <code>Alice_ballroom</code>. We read "ballroom" off the badge and walk them back in. A guest whose badge is a foreign name with no matching room (an <em>external</em>, hand-written netlist) is left alone — we don't force strangers into rooms.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_adopt_orphan_mosfets</span>(slot_transistors, fbr_result, topology) -> <span class="tok-kw">None</span>:
+    assigned = {d.ref <span class="tok-kw">for</span> devs <span class="tok-kw">in</span> slot_transistors.values() <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs}
+    slot_names = <span class="tok-fn">sorted</span>((s.name <span class="tok-kw">for</span> s <span class="tok-kw">in</span> topology.slots), key=<span class="tok-fn">len</span>, reverse=<span class="tok-kw">True</span>)
+    candidates = [d <span class="tok-kw">for</span> s <span class="tok-kw">in</span> fbr_result.unassigned_structures <span class="tok-kw">for</span> d <span class="tok-kw">in</span> s.devices]
+    candidates += <span class="tok-fn">list</span>(fbr_result.unrecognized_devices)
+    <span class="tok-kw">for</span> dev <span class="tok-kw">in</span> candidates:
+        <span class="tok-kw">if</span> dev.type <span class="tok-kw">not in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>) <span class="tok-kw">or</span> dev.ref <span class="tok-kw">in</span> assigned:
+            <span class="tok-kw">continue</span>
+        slot = <span class="tok-fn">next</span>((s <span class="tok-kw">for</span> s <span class="tok-kw">in</span> slot_names <span class="tok-kw">if</span> dev.ref.<span class="tok-fn">endswith</span>(<span class="tok-str">"_"</span> + s)), <span class="tok-kw">None</span>)
+        <span class="tok-kw">if</span> slot <span class="tok-kw">is not None</span>:
+            assigned.<span class="tok-fn">add</span>(dev.ref)
+            slot_transistors.<span class="tok-fn">setdefault</span>(slot, []).<span class="tok-fn">append</span>(dev)</code></pre>
+
+  <p>Five beats:</p>
+  <ul>
+    <li><code>assigned</code> — collect every ref already placed, so we never adopt a device twice.</li>
+    <li><code>slot_names</code> — the topology's slot names, <strong>sorted longest-first</strong> (this matters — see below).</li>
+    <li><code>candidates</code> — everything the recogniser <em>couldn't</em> place: leftovers from <code>unassigned_structures</code> plus fully <code>unrecognized_devices</code>.</li>
+    <li>the <code>continue</code> guard — skip anything that isn't a MOSFET, or is already placed.</li>
+    <li>the match — take the <strong>first</strong> slot name the ref ends with, and slot the device there.</li>
+  </ul>
+
+  <h3>Why sort slot names longest-first?</h3>
+  <p>This is the single subtlest line. Suppose two slots are named <code>stage</code> and <code>second_stage</code>. A ref like <code>M9_second_stage</code> ends with <em>both</em> <code>"_stage"</code> and <code>"_second_stage"</code>. If we tested <code>stage</code> first we'd mis-file it. Sorting <strong>longest-first</strong> makes the most specific match win — <code>second_stage</code> is checked before <code>stage</code>. I really like this: one <code>sorted(..., key=len, reverse=True)</code> quietly removes a whole class of prefix-collision bugs.</p>
+
+  <h3>Traced with real names</h3>
+  <p>Say the topology has slots <code>{input_pair, tail_current, load, bias_gen}</code>, and after extraction the slots already hold <code>{M1, M2, M3, M4}</code>. Four candidates arrive in the hallway:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 300" role="img" aria-label="Before and after: two orphan MOSFETs adopted by ref suffix, a resistor and a foreign device left alone">
+      <text x="150" y="20" text-anchor="middle" font-size="12" fill="var(--fig-muted)">hallway — orphan candidates</text>
+      <!-- candidates -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="40" y="32" width="220" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="150" y="51">M7_tail_current (nmos)</text>
+        <rect x="40" y="70" width="220" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="150" y="89">M8_load (pmos)</text>
+        <rect x="40" y="108" width="220" height="30" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+        <text x="150" y="127">R1 (resistor)</text>
+        <rect x="40" y="146" width="220" height="30" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+        <text x="150" y="165">Mext (nmos, foreign ref)</text>
+      </g>
+      <!-- decisions -->
+      <g stroke-width="1.8">
+        <line x1="260" y1="47"  x2="330" y2="47"  stroke="var(--fig-good)" marker-end="url(#ar3)"/>
+        <line x1="260" y1="85"  x2="330" y2="85"  stroke="var(--fig-good)" marker-end="url(#ar3)"/>
+        <line x1="260" y1="123" x2="330" y2="123" stroke="var(--fig-bad)" marker-end="url(#ar3)"/>
+        <line x1="260" y1="161" x2="330" y2="161" stroke="var(--fig-bad)" marker-end="url(#ar3)"/>
+      </g>
+      <g font-size="9.5" text-anchor="middle">
+        <text x="295" y="40" fill="var(--fig-good)">ends _tail_current</text>
+        <text x="295" y="78" fill="var(--fig-good)">ends _load</text>
+        <text x="295" y="116" fill="var(--fig-bad)">not a MOSFET</text>
+        <text x="295" y="154" fill="var(--fig-bad)">no slot suffix</text>
+      </g>
+      <!-- result slots -->
+      <text x="470" y="20" text-anchor="middle" font-size="12" fill="var(--fig-muted)">slot_transistors — after</text>
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="340" y="32" width="250" height="36" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+        <text x="465" y="54">tail_current = [M3, <tspan font-weight="600">M7</tspan>]</text>
+        <rect x="340" y="76" width="250" height="36" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+        <text x="465" y="98">load = [M4, <tspan font-weight="600">M8</tspan>]</text>
+        <rect x="340" y="120" width="250" height="36" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/>
+        <text x="465" y="142" fill="var(--fig-muted)">R1 → handled elsewhere</text>
+        <rect x="340" y="164" width="250" height="36" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/>
+        <text x="465" y="186" fill="var(--fig-muted)">Mext → left untouched</text>
+      </g>
+      <text x="310" y="240" text-anchor="middle" font-size="11">slot names checked longest-first:</text>
+      <text x="310" y="260" text-anchor="middle" font-size="11" fill="var(--fig-accent)">tail_current (12) · input_pair (10) · bias_gen (8) · load (4)</text>
+      <text x="310" y="282" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">so the most specific suffix always wins the match</text>
+    </svg>
+    <figcaption>Two strays walk home by their name badge; a resistor (wrong type) and a foreign-named device (no matching slot) are correctly left alone.</figcaption>
+  </figure>
+
+  <p>Trace the loop by hand:</p>
+  <pre class="code"><code>M7_tail_current : nmos ✓, unassigned ✓, ends "_tail_current" ✓  → adopt into tail_current
+M8_load         : pmos ✓, unassigned ✓, ends "_load" ✓          → adopt into load
+R1              : type "resistor" ✗                             → skip (continue)
+Mext            : nmos ✓, but ends no slot name                 → slot = None, skip</code></pre>
+
+  <p>Two subtle safety features worth naming. First, the function <strong>mutates <code>slot_transistors</code> in place</strong> and returns <code>None</code> — it's a surgical patch on an existing dict, not a rebuild. Second, adopting <code>M7</code> immediately adds its ref to <code>assigned</code>, so the same device can never be double-adopted even if it appears in both candidate lists.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> now that every device is in a slot, Part&nbsp;4 watches the conductor assemble the full <code>CircuitView</code> in seven calls.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>analyze_circuit()</code> — the assembly line</h2>
+
+  <blockquote><p><strong>The one job:</strong> run the seven helpers in the right order and pack their outputs into one <code>CircuitView</code>. It holds no logic of its own — it's pure orchestration.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">analyze_circuit</span>(fbr_result, topology) -> CircuitView:
+    slot_transistors = <span class="tok-fn">extract_slot_transistors</span>(fbr_result)
+    <span class="tok-fn">_adopt_orphan_mosfets</span>(slot_transistors, fbr_result, topology)   <span class="tok-com"># patch strays first!</span>
+    slot_resistors = <span class="tok-fn">extract_slot_resistors</span>(fbr_result)
+    <span class="tok-kw">return</span> <span class="tok-fn">CircuitView</span>(
+        slot_transistors=slot_transistors,
+        slot_resistors=slot_resistors,
+        all_transistors=<span class="tok-fn">deduplicate_devices</span>(slot_transistors),
+        blocks=<span class="tok-fn">build_blocks</span>(slot_transistors, slot_resistors),
+        cascode_refs=<span class="tok-fn">cascode_device_refs</span>(slot_transistors),
+        warnings=<span class="tok-fn">check_topology_match</span>(slot_transistors, topology.name),
+    )</code></pre>
+
+  <h3>The single most important line</h3>
+  <p>It's the <em>order</em> of the first two statements. <code>extract_slot_transistors()</code> builds the raw slot map; then <code>_adopt_orphan_mosfets()</code> patches it <strong>before anything else reads it</strong>. Every downstream call — dedup, blocks, cascode, warnings — takes <code>slot_transistors</code> as input, so the orphans must be adopted <em>first</em> or they'd be missing from all four derived views at once. Get this order wrong and an orphan silently vanishes from the roster, the floor-plan, the cascode set, and the warnings.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 300" role="img" aria-label="Assembly line: FBR and topology in, seven stations, one CircuitView out">
+      <!-- inputs -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="14" y="120" width="96" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="62" y="140">fbr_result</text>
+        <rect x="14" y="160" width="96" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="62" y="180">topology</text>
+      </g>
+      <!-- serial stations -->
+      <g font-size="10" text-anchor="middle">
+        <rect x="140" y="128" width="118" height="56" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="199" y="150">extract_slot_</text><text x="199" y="163">transistors</text><text x="199" y="178" font-size="9" fill="var(--fig-muted)">raw slot map</text>
+        <rect x="278" y="128" width="118" height="56" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="337" y="150">_adopt_orphan_</text><text x="337" y="163">mosfets</text><text x="337" y="178" font-size="9" fill="var(--fig-accent)">patch in place</text>
+      </g>
+      <line x1="110" y1="156" x2="138" y2="156" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar3)"/>
+      <line x1="258" y1="156" x2="276" y2="156" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar3)"/>
+      <!-- fan-out to 4 derived views -->
+      <g stroke="var(--fig-muted)" stroke-width="1.8" fill="none">
+        <path d="M396,142 C430,142 430,44 464,44" marker-end="url(#ar3)"/>
+        <path d="M396,150 C430,150 430,100 464,100" marker-end="url(#ar3)"/>
+        <path d="M396,162 C430,162 430,212 464,212" marker-end="url(#ar3)"/>
+        <path d="M396,170 C430,170 430,268 464,268" marker-end="url(#ar3)"/>
+      </g>
+      <g font-size="9.5" text-anchor="middle">
+        <rect x="464" y="28"  width="150" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="539" y="49">deduplicate_devices</text>
+        <rect x="464" y="84"  width="150" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="539" y="105">build_blocks</text>
+        <rect x="464" y="196" width="150" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="539" y="217">cascode_device_refs</text>
+        <rect x="464" y="252" width="150" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="539" y="273">check_topology_match</text>
+      </g>
+      <!-- resistor side note -->
+      <text x="199" y="210" text-anchor="middle" font-size="9" fill="var(--fig-muted)">(extract_slot_resistors runs alongside, feeding blocks)</text>
+      <!-- output collector -->
+      <text x="539" y="150" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--fig-accent2)">↑ all packed into ↓</text>
+      <text x="539" y="166" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">CircuitView</text>
+    </svg>
+    <figcaption>Two serial stations (extract, then patch), then a fan-out of four derived views — all reading the <em>already-patched</em> slot map, all collected into one record.</figcaption>
+  </figure>
+
+  <p>The four derived helpers each read the patched <code>slot_transistors</code> and answer one question:</p>
+  <table>
+    <thead><tr><th>Call</th><th>Produces</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td><code>deduplicate_devices</code></td><td><code>all_transistors</code></td><td>ref → (Device, slot), highest-priority slot wins ties</td></tr>
+      <tr><td><code>build_blocks</code></td><td><code>blocks</code></td><td>typed groups + load kind, stage count, differential flag</td></tr>
+      <tr><td><code>cascode_device_refs</code></td><td><code>cascode_refs</code></td><td>devices whose source sits on another's drain</td></tr>
+      <tr><td><code>check_topology_match</code></td><td><code>warnings</code></td><td>a stage slot with no signal device → mismatch advisory</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · The hidden idea, the limits, and one sentence</h2>
+
+  <h3>The hidden idea: derive-once, read-many</h3>
+  <p>The file never says it, but it is implementing a classic pattern — a <strong>single source of structural truth</strong>. Compute every structural fact <em>once</em>, from one patched input, into one immutable record; then let every later phase read that record instead of re-deriving. The payoff isn't just speed. It's <strong>consistency</strong>: because <code>blocks</code>, <code>cascode_refs</code>, and <code>all_transistors</code> all descend from the same <code>slot_transistors</code> (patched at exactly one point), no two phases can ever disagree about what the circuit contains.</p>
+
+  <h3>The subtle reason <code>all_transistors</code> is deduplicated</h3>
+  <p>A single transistor can honestly belong to two slots. The classic case: a tail mirror's <em>reference</em> diode appears in both <code>tail_current</code> and <code>bias_gen</code> — it's one physical device wearing two hats. If we assigned it a current twice, we'd double-count. So <code>deduplicate_devices</code> keeps each ref once, attributing it to the <strong>highest-priority</strong> slot.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 600 200" role="img" aria-label="A device appearing in two slots is attributed once, to the higher-priority slot">
+      <!-- two slots holding same device -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="20" y="30" width="180" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="110" y="49">tail_current</text><text x="110" y="65" font-size="9.5" fill="var(--fig-muted)">[..., Mref]</text>
+        <rect x="20" y="120" width="180" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="110" y="139">bias_gen</text><text x="110" y="155" font-size="9.5" fill="var(--fig-muted)">[..., Mref]</text>
+      </g>
+      <!-- priority note -->
+      <text x="110" y="188" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">priority: tail_current (2) &lt; bias_gen (12)</text>
+      <!-- arrows -->
+      <g stroke-width="1.8">
+        <line x1="200" y1="52"  x2="330" y2="90" stroke="var(--fig-good)" marker-end="url(#ar3)"/>
+        <line x1="200" y1="142" x2="330" y2="98" stroke="var(--fig-bad)" stroke-dasharray="4 3" marker-end="url(#ar3)"/>
+      </g>
+      <text x="250" y="60" font-size="9.5" fill="var(--fig-good)">wins</text>
+      <text x="250" y="140" font-size="9.5" fill="var(--fig-bad)">dropped</text>
+      <!-- result -->
+      <rect x="330" y="72" width="250" height="44" rx="7" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="455" y="91" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">all_transistors</text>
+      <text x="455" y="107" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">Mref → (Device, "tail_current")</text>
+    </svg>
+    <figcaption>One physical device, two slots, counted once — attributed to the higher-priority <code>tail_current</code> so its current is assigned exactly once.</figcaption>
+  </figure>
+
+  <h3>What this file honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It computes <strong>no electrical values</strong> — no currents, no widths, no voltages. It is purely structural; sizing happens in later phases.</li>
+    <li>Orphan adoption only works on <strong>synthesized</strong> netlists (the <code>{ref}_{slot}</code> convention). External, hand-written netlists whose refs match no slot are deliberately left untouched.</li>
+    <li>It only adopts <strong>MOSFETs</strong> (<code>nmos</code>/<code>pmos</code>); orphan resistors are handled elsewhere.</li>
+    <li>The topology check only flags one failure mode — a gain-stage slot with no signal transistor. It <em>warns</em>; it never blocks. The final say belongs to the downstream simulator.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole file is a study in doing <strong>one thing at one place</strong>. All the messy reconciliation — orphan rescue, deduplication, typing, cascode detection — is concentrated here, once, so that everything downstream can be written as if the circuit were already perfectly structured. The 12 lines of <code>analyze_circuit()</code> read like a table of contents precisely because each helper does its job in isolation and the conductor just sequences them.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>analyze.py</code> is Phase&nbsp;1 of the gm/Id sizer — it takes the recogniser's messy result, quietly adopts any MOSFETs left orphaned (by the slot name baked into their ref), and then derives, once and read-only, the six structural facts every later phase needs — per-slot device lists, a deduplicated ref→(device,&nbsp;slot) roster, the typed block view, the cascode set, and topology-mismatch warnings — packaged as one immutable <code>CircuitView</code>.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>
