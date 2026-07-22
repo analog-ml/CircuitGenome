@@ -26,6 +26,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Docs
 
+- 📝 Code walkthroughs — 34 hand-authored, figure-rich HTML deep dives into the sizer and recognizer internals, shipped verbatim alongside the Sphinx docs (`html_extra_path`, ADR 0002) with a searchable landing page and module-page deep-dive links ([#173](https://github.com/analog-ml/CircuitGenome/pull/173)).
 - 📝 Restructure this changelog to the Keep a Changelog + SemVer format (one line per PR).
 - 📝 Clarify the overview template table and buffered op-amps ([#154](https://github.com/analog-ml/CircuitGenome/pull/154)).
 
