@@ -40,9 +40,9 @@ Design-intent table (defaults):
    * - Gain stage
      - solved
      - Increase voltage gain while keeping stability
-   * - Output stage
-     - solved
-     - Drive load capacitance and provide slew current
+   * - Output stage (source-follower buffer)
+     - 15 (moderate)
+     - Isolate the last gain stage from the load: low output impedance, swing headroom
    * - Active / stage load
      - 10 (strong-ish)
      - Mirror current accurately with high output resistance
@@ -60,7 +60,10 @@ Design-intent table (defaults):
      - Increase output resistance with a small Vdsat
 
 "solved" = gm/Id is not a free knob for signal devices; it is set to
-``gm_required / Id`` to meet the spec (see :meth:`GmIdModel.geometry_for`).
+``gm_required / Id`` to meet the spec (see :meth:`GmIdModel.geometry_for`).  The
+source-follower output stage is the exception: it is a signal device (its gate is
+the signal) but carries a *fixed* gm/Id, because it never gets a gm requirement —
+its job is buffering, not gain.
 """
 from __future__ import annotations
 
@@ -73,11 +76,13 @@ from ..shared.taxonomy import is_signal_device
 _MODERATE = 14.0        # signal nominal (pre-geometry estimate); real gm/Id is solved
 _STRONG = 10.0          # current source: headroom + output resistance
 _STRONG_CASCODE = 8.0   # cascode: small Vdsat to preserve stacked headroom
+_FOLLOWER = 15.0        # follower buffer: low R_out (1/gm) + small V_ov to preserve output swing
 
 # --- channel length as a multiple of L_min -----------------------------------
 _L_SIGNAL = 2.0         # signal: balance gain and ft
 _L_CS = 4.0             # current source: longer L → higher output resistance
 _L_CASCODE = 3.0        # cascode
+_L_FOLLOWER = 1.0       # follower: no gain to protect → short L for ft / output-pole speed
 
 
 @dataclass(frozen=True)
@@ -127,9 +132,10 @@ DEFAULT_BLOCK_INTENTS: dict[str, BlockIntent] = {
         "Increase voltage gain while maintaining stability. gm/Id is solved "
         "from the required gm; L favours a gain/ft balance."),
     "output_stage": BlockIntent(
-        SIGNAL, None, _L_SIGNAL,
-        "Drive the load capacitance and provide slew current. gm/Id is solved "
-        "from the required gm."),
+        SIGNAL, _FOLLOWER, _L_FOLLOWER,
+        "Source-follower output buffer (gain ~ 1): isolate the last gain stage "
+        "from the load. Moderate gm/Id for low output impedance (1/gm) and a "
+        "small V_ov to preserve output swing; short L for ft / output-pole speed."),
     "active_load": BlockIntent(
         CURRENT_SOURCE, _STRONG, _L_CS,
         "First-stage active current-mirror load: replicate current accurately "
@@ -168,9 +174,10 @@ _SIGNAL_BLOCK = {
     "input_pair": "input_stage",
     "second_stage": "gain_stage", "second_stage_p": "gain_stage",
     "second_stage_n": "gain_stage",
-    "third_stage": "output_stage", "third_stage_p": "output_stage",
-    "third_stage_n": "output_stage",
-    # Source-follower output-buffer slots (the *_buffered_* topologies).
+    "third_stage": "gain_stage", "third_stage_p": "gain_stage",
+    "third_stage_n": "gain_stage",
+    # Source-follower output-buffer slots (the *_buffered_* topologies) — the
+    # only slots mapping to the output_stage (follower) block.
     "output_stage": "output_stage", "output_stage_p": "output_stage",
     "output_stage_n": "output_stage",
 }

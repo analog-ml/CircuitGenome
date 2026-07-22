@@ -43,7 +43,10 @@ def test_functional_block_mapping():
     # Signal precedence + stage split; non-signal → current-source blocks.
     assert functional_block("input_pair", is_signal=True, is_cascode=False) == "input_stage"
     assert functional_block("second_stage", True, False) == "gain_stage"
-    assert functional_block("third_stage", True, False) == "output_stage"
+    # Numbered gain stages are all gain stages; only the follower slot is the
+    # output_stage (buffer) block.
+    assert functional_block("third_stage", True, False) == "gain_stage"
+    assert functional_block("output_stage", True, False) == "output_stage"
     # Same slot, non-signal device → a current-source load, not a gain stage.
     assert functional_block("second_stage", False, False) == "stage_load"
     assert functional_block("load", False, False) == "active_load"
@@ -58,8 +61,10 @@ def test_registry_is_complete_and_documented():
     for name, bi in DEFAULT_BLOCK_INTENTS.items():
         assert bi.role in (SIGNAL, CURRENT_SOURCE, CASCODE), name
         assert bi.rationale.strip(), name
-        # Signal blocks solve gm/Id from the spec (no fixed region); others fix it.
-        if bi.role == SIGNAL:
+        # Signal blocks solve gm/Id from the spec (no fixed region); others fix
+        # it.  The source-follower output stage is the one exception: a signal
+        # device with a fixed region, since it never gets a gm requirement.
+        if bi.role == SIGNAL and name != "output_stage":
             assert bi.gm_id is None, name
         else:
             assert bi.gm_id and bi.gm_id > 0, name
