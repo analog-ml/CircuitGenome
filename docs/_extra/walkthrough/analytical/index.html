@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytical (Level-1) Sizer — package walkthrough</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .container { max-width:900px; margin:0 auto; padding:44px 24px 120px; }
+  h1 { font-size:2.2rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.08rem; margin-bottom:0.5em; }
+  h2 { font-size:1.4rem; margin:2em 0 0.6em; padding-top:14px; border-top:1px solid var(--border); }
+  p,li { max-width:70ch; }
+  a { color:var(--link); }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.88em; }
+  figure.fig { margin:1.8em 0; padding:22px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  svg a { cursor:pointer; }
+  svg a:hover rect, svg a:hover polygon { stroke:var(--fig-accent); stroke-width:3; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px;
+    margin:1.4em 0; }
+  .card { display:block; padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; text-decoration:none; color:var(--text); transition:border-color .12s; }
+  .card:hover { border-color:var(--accent); }
+  .card .fn { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-weight:600;
+    color:var(--accent); font-size:0.95rem; }
+  .card .role { color:var(--muted); font-size:0.88rem; margin-top:4px; }
+  .card .phase { display:inline-block; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px;
+    color:var(--fig-accent2); margin-top:8px; }
+  .xlink { display:inline-block; margin-top:0.4em; font-size:0.92rem; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="container">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<h1>The Analytical (Level-1) Sizer — a package walkthrough</h1>
+<div class="subtitle"><code>circuitgenome/sizer/analytical/</code> — the square-law sizer that searches for discrete transistor geometry with a CP-SAT solver.</div>
+
+<p>For the card-less <code>generic</code> technology there is no measured lookup table, so this sizer falls back on the <strong>Level-1 square law</strong> and turns sizing into a <strong>discrete search</strong>: pick integer multiples of the grid step for every <code>W</code> and <code>L</code> such that the performance requirements are met. It reuses the shared preprocessing and metric code — the <em>only</em> thing that differs from the gm/Id path is how geometry is chosen.</p>
+
+<p><a class="xlink" href="../index.html">↑ Up to the full sizer overview</a> &nbsp;·&nbsp; <a class="xlink" href="../gmid/index.html">gm/Id pipeline</a> &nbsp;·&nbsp; <a class="xlink" href="../shared/index.html">shared core</a></p>
+
+<h2>The pipeline — reuse shared, then solve</h2>
+
+<figure class="fig">
+  <svg viewBox="0 0 840 210" role="img" aria-label="The Level-1 analytical sizing pipeline">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+    </defs>
+    <!-- shared preprocess -->
+    <rect x="20" y="70" width="140" height="60" rx="9" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+    <text x="90" y="96" text-anchor="middle" font-weight="600" font-size="12.5">preprocess</text>
+    <text x="90" y="113" text-anchor="middle" font-size="10" fill="var(--fig-muted)">shared (KCL, reqs)</text>
+    <line x1="160" y1="100" x2="200" y2="100" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <!-- build model -->
+    <a href="constraints_explained.html">
+      <rect x="200" y="65" width="170" height="70" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="285" y="90" text-anchor="middle" font-weight="600" font-size="12.5">constraints.py</text>
+      <text x="285" y="107" text-anchor="middle" font-size="10" fill="var(--fig-muted)">build CP-SAT model</text>
+      <text x="285" y="121" text-anchor="middle" font-size="10" fill="var(--fig-muted)">(linearize gm, Vdsat)</text>
+    </a>
+    <line x1="370" y1="100" x2="410" y2="100" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <!-- solve -->
+    <rect x="410" y="70" width="130" height="60" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <text x="475" y="96" text-anchor="middle" font-weight="600" font-size="12.5">CP-SAT solve</text>
+    <text x="475" y="113" text-anchor="middle" font-size="10" fill="var(--fig-muted)">discrete W, L</text>
+    <line x1="540" y1="100" x2="580" y2="100" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <!-- evaluate -->
+    <rect x="580" y="70" width="140" height="60" rx="9" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+    <text x="650" y="96" text-anchor="middle" font-weight="600" font-size="12.5">metrics</text>
+    <text x="650" y="113" text-anchor="middle" font-size="10" fill="var(--fig-muted)">shared eval</text>
+    <line x1="720" y1="100" x2="760" y2="100" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <rect x="760" y="78" width="70" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="795" y="104" text-anchor="middle" font-size="11">Result</text>
+    <!-- level1 wrapper -->
+    <a href="level1_explained.html">
+      <rect x="10" y="30" width="720" height="120" rx="12" fill="none" stroke="var(--fig-accent)" stroke-width="1.5" stroke-dasharray="7 5"/>
+    </a>
+    <text x="30" y="24" font-size="11.5" fill="var(--fig-accent)" font-weight="600">level1.py — the pipeline (click the frame)</text>
+  </svg>
+  <figcaption>Level-1 reuses the shared <code>preprocess</code>/<code>metrics</code> stations (teal); only the discrete geometry search — building &amp; solving the CP-SAT model — is its own (accent). Click a box to open its walkthrough.</figcaption>
+</figure>
+
+<h2>All pages</h2>
+<div class="cards">
+  <a class="card" href="level1_explained.html"><span class="fn">level1.py</span><div class="role">The Level-1 pipeline — reuse shared, build/solve CP-SAT, evaluate</div><span class="phase">pipeline</span></a>
+  <a class="card" href="constraints_explained.html"><span class="fn">constraints.py</span><div class="role">CP-SAT model builder — linearize gm≥gm_req into integer constraints</div><span class="phase">solver model</span></a>
+</div>
+
+<p style="color:var(--muted);font-size:0.9rem;margin-top:2em;">Generated by the <code>explain-code-with-fig</code> skill · intuition-first walkthroughs with hand-authored SVG figures · light/dark toggle top-right.</p>
+
+</div>
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+</script>
+</body>
+</html>

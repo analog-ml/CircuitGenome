@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>taxonomy.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>taxonomy.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/taxonomy.py</code> — the one place that names every slot and net convention the sizer assumes, so a new topology needs no sizer changes.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · Slots → bias &amp; stage groups</a>
+  <a href="#part-3">3 · Nets → bias rails</a>
+  <a href="#part-4">4 · is_signal_device() &amp; the one lever</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> be the <em>single dictionary</em> of naming conventions — which slot names exist, which bias-current group each belongs to, and which net names are rails — so the sizer can recognize any topology that speaks this vocabulary without a single line of new code.</p></blockquote>
+
+  <p class="beat">Here is the whole story without reading the function at the bottom.</p>
+
+  <p>Two sizers — the Level-1 analytical sizer and the gm/Id pipeline — both need to look at a circuit template and answer questions like <em>"does this device carry the full tail current or half of it?"</em> and <em>"is this gate tied to a supply rail?"</em> Every one of those answers depends on a <strong>naming convention</strong>: a differential input transistor is always in a slot called <code>input_pair</code>, a supply is always a net called <code>vdd!</code>, and so on.</p>
+
+  <p>Think of it like a <strong>library catalog</strong> — or the standardized part numbers in an electronics warehouse. The books (transistors) live all over the building, but the catalog says exactly which shelf (bias group) each call-number prefix belongs to. Nobody re-invents the shelving scheme per book; they look it up in one place.</p>
+
+  <p>Without such a catalog, every function that reasons about currents or rails would hard-code its own list of magic strings. Add a new topology with a new second-stage naming scheme, and you'd be hunting those magic strings across the whole sizer. <strong>This file is that catalog</strong> — the frozensets below <em>are</em> the shelving scheme, gathered so a new topology is supported by extending groups <em>here, and only here.</em></p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 300" role="img" aria-label="Slot names grouped into bias-current groups, and net names grouped into rails">
+      <!-- top label -->
+      <text x="20" y="20" font-size="13" font-weight="600">Slots → bias-current groups</text>
+      <!-- HALF bucket -->
+      <rect x="20" y="32" width="255" height="100" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="32" y="54" font-size="13" font-weight="600">HALF_BIAS_SLOTS</text>
+      <text x="32" y="72" font-size="10.5" fill="var(--fig-muted)">each device carries iBias / 2</text>
+      <rect x="32" y="86" width="100" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="82" y="105" text-anchor="middle" font-size="11">input_pair</text>
+      <rect x="142" y="86" width="66" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="175" y="105" text-anchor="middle" font-size="11">load</text>
+      <!-- FULL bucket -->
+      <rect x="290" y="32" width="250" height="100" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="302" y="54" font-size="13" font-weight="600">FULL_BIAS_SLOTS</text>
+      <text x="302" y="72" font-size="10.5" fill="var(--fig-muted)">each device carries full iBias</text>
+      <rect x="302" y="86" width="108" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="356" y="105" text-anchor="middle" font-size="11">tail_current</text>
+      <rect x="420" y="86" width="90" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="465" y="105" text-anchor="middle" font-size="11">bias_gen</text>
+      <!-- bottom label -->
+      <text x="20" y="170" font-size="13" font-weight="600">Nets → rails</text>
+      <!-- BIAS_NETS bucket -->
+      <rect x="20" y="182" width="255" height="100" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="32" y="204" font-size="13" font-weight="600">BIAS_NETS</text>
+      <text x="32" y="222" font-size="10.5" fill="var(--fig-muted)">gate here → current-source load</text>
+      <rect x="32" y="236" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="57" y="255" text-anchor="middle" font-size="11">vdd!</text>
+      <rect x="90" y="236" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="115" y="255" text-anchor="middle" font-size="11">vss!</text>
+      <rect x="148" y="236" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="173" y="255" text-anchor="middle" font-size="11">gnd!</text>
+      <rect x="206" y="236" width="56" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="234" y="255" text-anchor="middle" font-size="11">ibias</text>
+      <!-- RAILS bucket -->
+      <rect x="290" y="182" width="250" height="100" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="302" y="204" font-size="13" font-weight="600">RAILS</text>
+      <text x="302" y="222" font-size="10.5" fill="var(--fig-muted)">AC grounds for rout walks</text>
+      <rect x="302" y="236" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="327" y="255" text-anchor="middle" font-size="11">vdd!</text>
+      <rect x="360" y="236" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="385" y="255" text-anchor="middle" font-size="11">vss!</text>
+      <rect x="418" y="236" width="50" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="443" y="255" text-anchor="middle" font-size="11">gnd!</text>
+      <rect x="476" y="236" width="40" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="496" y="255" text-anchor="middle" font-size="11">0</text>
+    </svg>
+    <figcaption>The entire file at a glance: four named buckets of slot strings, two named buckets of net strings. That is the whole vocabulary the sizer trusts.</figcaption>
+  </figure>
+
+  <p>The file has three moving parts, and we'll take them in learning order: the <strong>slot groups</strong> (Part 2) that classify transistors by how much current they carry and what stage they belong to, the <strong>net names</strong> (Part 3) that mark supply and bias rails, and the single tiny <strong>function</strong> (Part 4), <code>is_signal_device()</code>, that leans on those net names to tell a signal transistor from a current-source load.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part 2 opens the two current-group buckets and shows <em>why</em> a differential pair carries half the tail current while the tail carries all of it.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · Slots → bias &amp; stage groups</h2>
+
+  <blockquote><p><strong>The one job:</strong> sort every FBR slot name into the group that tells the sizer how much current the device carries and whether it counts as a gain stage.</p></blockquote>
+
+  <h3>The two bias-current groups</h3>
+  <pre class="code"><code><span class="tok-com"># Slots that carry iBias/2 per transistor (both sides of the differential pair).</span>
+HALF_BIAS_SLOTS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"input_pair"</span>, <span class="tok-str">"load"</span>})
+<span class="tok-com"># Slots whose transistors each carry the full iBias.</span>
+FULL_BIAS_SLOTS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"tail_current"</span>, <span class="tok-str">"bias_gen"</span>})</code></pre>
+
+  <p>Why two groups? Because Kirchhoff's current law splits the tail. A differential pair is a <strong>fork in a river</strong>: one tail source pushes a current <code>iBias</code> up into the pair, and it divides evenly down the two branches. Each branch device — and the load stacked above it — therefore sees only <code>iBias/2</code>. The tail transistor and the bias generator that mirrors it, sitting on the un-forked trunk, each carry the whole <code>iBias</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 460 250" role="img" aria-label="Differential pair: loads and input pair carry iBias/2, tail carries full iBias">
+      <!-- vdd rail -->
+      <line x1="40" y1="28" x2="420" y2="28" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="424" y="32" font-size="11" fill="var(--fig-muted)">vdd!</text>
+      <!-- loads -->
+      <rect x="90" y="45" width="80" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="130" y="61" text-anchor="middle" font-size="11">load</text>
+      <text x="130" y="74" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">iBias/2</text>
+      <rect x="290" y="45" width="80" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="330" y="61" text-anchor="middle" font-size="11">load</text>
+      <text x="330" y="74" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">iBias/2</text>
+      <!-- input pair -->
+      <rect x="90" y="100" width="80" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="130" y="116" text-anchor="middle" font-size="10.5">input_pair</text>
+      <text x="130" y="129" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">iBias/2</text>
+      <rect x="290" y="100" width="80" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="330" y="116" text-anchor="middle" font-size="10.5">input_pair</text>
+      <text x="330" y="129" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">iBias/2</text>
+      <!-- connect to tail node -->
+      <line x1="130" y1="79" x2="130" y2="100" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="330" y1="79" x2="330" y2="100" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="130" y1="134" x2="230" y2="164" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="330" y1="134" x2="230" y2="164" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="230" cy="164" r="3.5" fill="var(--fig-stroke)"/>
+      <text x="248" y="162" font-size="9.5" fill="var(--fig-muted)">net_tail</text>
+      <!-- tail current -->
+      <rect x="180" y="172" width="100" height="38" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="230" y="190" text-anchor="middle" font-size="10.5">tail_current</text>
+      <text x="230" y="204" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">iBias (full)</text>
+      <line x1="230" y1="164" x2="230" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="230" y1="210" x2="230" y2="222" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- vss rail -->
+      <line x1="40" y1="222" x2="420" y2="222" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="424" y="226" font-size="11" fill="var(--fig-muted)">vss!</text>
+      <!-- legend -->
+      <rect x="40" y="232" width="14" height="14" rx="3" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="1.5"/>
+      <text x="60" y="243" font-size="10">HALF_BIAS_SLOTS · iBias/2</text>
+      <rect x="270" y="232" width="14" height="14" rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+      <text x="290" y="243" font-size="10">FULL_BIAS_SLOTS · iBias</text>
+    </svg>
+    <figcaption>The tail's full iBias forks evenly into the two branches; loads and pair devices each see iBias/2, so they live in a different group than the tail.</figcaption>
+  </figure>
+
+  <p><strong>A concrete lookup.</strong> The sizer holds a device in slot <code>"input_pair"</code> and asks "what current?" It checks:</p>
+  <pre class="code"><code><span class="tok-str">"input_pair"</span> <span class="tok-kw">in</span> HALF_BIAS_SLOTS   <span class="tok-com"># True  → iBias / 2</span>
+<span class="tok-str">"tail_current"</span> <span class="tok-kw">in</span> FULL_BIAS_SLOTS <span class="tok-com"># True  → iBias</span></code></pre>
+  <p>No arithmetic lives here — just membership. The <em>meaning</em> ("halve it" / "don't") lives in the sizer; this file only supplies the sorted set.</p>
+
+  <h3>The stage groups — and one deliberately-excluded set</h3>
+  <pre class="code"><code>SECOND_STAGE_SLOTS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"second_stage"</span>, <span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>})
+THIRD_STAGE_SLOTS  = <span class="tok-fn">frozenset</span>({<span class="tok-str">"third_stage"</span>, <span class="tok-str">"third_stage_p"</span>, <span class="tok-str">"third_stage_n"</span>})
+OUTPUT_STAGE_SLOTS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"output_stage"</span>, <span class="tok-str">"output_stage_p"</span>, <span class="tok-str">"output_stage_n"</span>})
+<span class="tok-com"># All gain-stage slot names (used by the topology-mismatch guard).</span>
+STAGE_SLOTS = SECOND_STAGE_SLOTS | THIRD_STAGE_SLOTS</code></pre>
+
+  <p>Each stage has one single-ended name (<code>second_stage</code>) plus two fully-differential names (<code>second_stage_p</code> / <code>_n</code>). Grouping all three under one frozenset means the sizer says <code>slot in SECOND_STAGE_SLOTS</code> once and works for both SE and FD topologies — a tidy example of the catalog absorbing a naming variation so callers don't have to.</p>
+
+  <p>Now the <strong>hidden idea, drawn</strong>. <code>STAGE_SLOTS</code> is the <em>union</em> of the second- and third-stage sets — and <code>OUTPUT_STAGE_SLOTS</code> is pointedly <em>left out</em>:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="STAGE_SLOTS is the union of second and third stage slots; output stage is excluded">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- SECOND -->
+      <rect x="20" y="18" width="215" height="96" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="30" y="40" font-size="12" font-weight="600">SECOND_STAGE_SLOTS</text>
+      <text x="30" y="62" font-size="10">second_stage</text>
+      <text x="30" y="80" font-size="10">second_stage_p</text>
+      <text x="30" y="98" font-size="10">second_stage_n</text>
+      <!-- THIRD -->
+      <rect x="20" y="126" width="215" height="96" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="30" y="148" font-size="12" font-weight="600">THIRD_STAGE_SLOTS</text>
+      <text x="30" y="170" font-size="10">third_stage</text>
+      <text x="30" y="188" font-size="10">third_stage_p</text>
+      <text x="30" y="206" font-size="10">third_stage_n</text>
+      <!-- union arrows -->
+      <line x1="235" y1="66" x2="330" y2="84" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar3)"/>
+      <line x1="235" y1="174" x2="330" y2="112" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar3)"/>
+      <text x="288" y="102" font-size="18" fill="var(--fig-accent2)">∪</text>
+      <!-- STAGE_SLOTS -->
+      <rect x="330" y="60" width="210" height="76" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="435" y="86" text-anchor="middle" font-size="13" font-weight="600">STAGE_SLOTS</text>
+      <text x="435" y="104" text-anchor="middle" font-size="11">= SECOND ∪ THIRD</text>
+      <text x="435" y="120" text-anchor="middle" font-size="10" fill="var(--fig-muted)">topology-mismatch guard</text>
+      <!-- excluded label -->
+      <text x="435" y="150" text-anchor="middle" font-size="10" fill="var(--fig-bad)">deliberately excluded ✗</text>
+      <!-- OUTPUT -->
+      <rect x="330" y="158" width="210" height="72" rx="10" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="5 3"/>
+      <text x="435" y="180" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-muted)">OUTPUT_STAGE_SLOTS</text>
+      <text x="435" y="198" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gain ≈ 1 → NOT a gain stage</text>
+      <text x="435" y="214" text-anchor="middle" font-size="10" fill="var(--fig-muted)">output_stage / _p / _n</text>
+    </svg>
+    <figcaption>Gain stages fold into STAGE_SLOTS by union. The source-follower output buffers stay outside it on purpose — a follower has gain ≈ 1.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Why is OUTPUT_STAGE_SLOTS kept out of STAGE_SLOTS?</strong> A source-follower output buffer has gain ≈ 1. If it were counted as a gain stage, the gain / phase-margin / topology-mismatch machinery would multiply an extra ≈1 factor into the gain product and mis-classify the topology. Leaving it out keeps the follower <em>invisible</em> to that machinery — its devices are still sized (via their per-transistor intent) but never counted as a stage. I like this: the exclusion is a one-line design decision made loud by its own comment.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · Nets → bias rails</h2>
+
+  <blockquote><p><strong>The one job:</strong> name the special nets — the ones that mean "this gate is tied to a fixed supply/bias" or "this node is an AC ground" — so downstream code recognizes them without hard-coding strings.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-com"># External supply / bias net names — gate connected to these → current-source load.</span>
+BIAS_NETS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</span>, <span class="tok-str">"vss!"</span>, <span class="tok-str">"gnd!"</span>, <span class="tok-str">"ibias"</span>})
+<span class="tok-com"># Supply-rail net names (AC grounds for output-resistance walks).</span>
+RAILS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</span>, <span class="tok-str">"vss!"</span>, <span class="tok-str">"gnd!"</span>, <span class="tok-str">"0"</span>})</code></pre>
+
+  <p>These two sets look almost the same but answer different questions, and the difference is the whole point. They <strong>share</strong> the three physical supplies <code>vdd!</code>, <code>vss!</code>, <code>gnd!</code> — but each keeps one member the other doesn't:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 220" role="img" aria-label="Venn diagram: BIAS_NETS and RAILS share vdd, vss, gnd but differ on ibias and 0">
+      <ellipse cx="175" cy="115" rx="140" ry="75" fill="var(--fig-fill)" fill-opacity="0.55" stroke="var(--fig-accent)" stroke-width="2"/>
+      <ellipse cx="305" cy="115" rx="140" ry="75" fill="var(--fig-fill2)" fill-opacity="0.55" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="95" y="40" font-size="12" font-weight="600" fill="var(--fig-accent)">BIAS_NETS</text>
+      <text x="385" y="40" font-size="12" font-weight="600" fill="var(--fig-accent2)">RAILS</text>
+      <!-- left only -->
+      <text x="100" y="115" text-anchor="middle" font-size="13" font-weight="600">ibias</text>
+      <text x="100" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">bias input, not a rail</text>
+      <!-- overlap -->
+      <text x="240" y="98" text-anchor="middle" font-size="11">vdd!</text>
+      <text x="240" y="116" text-anchor="middle" font-size="11">vss!</text>
+      <text x="240" y="134" text-anchor="middle" font-size="11">gnd!</text>
+      <!-- right only -->
+      <text x="382" y="115" text-anchor="middle" font-size="13" font-weight="600">0</text>
+      <text x="382" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">SPICE global gnd</text>
+      <text x="240" y="205" text-anchor="middle" font-size="10" fill="var(--fig-muted)">shared: { vdd!, vss!, gnd! }</text>
+    </svg>
+    <figcaption>Same three supplies in the middle. BIAS_NETS adds ibias (a bias input you'd gate onto); RAILS adds "0" (SPICE's global ground node) as an AC ground.</figcaption>
+  </figure>
+
+  <p><strong>Why the split?</strong> The two sets are consulted in different walks:</p>
+  <ul>
+    <li><code>BIAS_NETS</code> answers <em>"is this transistor's gate held at a fixed potential?"</em> A gate on <code>ibias</code> means a mirror reference — a current-source load, not a signal device. But <code>ibias</code> is <em>not</em> a supply rail you'd treat as an AC ground.</li>
+    <li><code>RAILS</code> answers <em>"is this node an AC ground?"</em> for output-resistance walks. SPICE's universal ground <code>"0"</code> counts as a rail there, but you'd never say a gate on <code>"0"</code> makes a bias mirror.</li>
+  </ul>
+
+  <table>
+    <thead><tr><th>Question being asked</th><th>Set to check</th><th>The odd member</th></tr></thead>
+    <tbody>
+      <tr><td>Gate on a fixed bias → current-source load?</td><td><code>BIAS_NETS</code></td><td><code>ibias</code></td></tr>
+      <tr><td>Node is an AC ground for r<sub>out</sub> walks?</td><td><code>RAILS</code></td><td><code>0</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>is_signal_device()</code> &amp; the one lever</h2>
+
+  <blockquote><p><strong>The one job:</strong> of the two transistors in a gain stage, decide which one carries the <em>signal</em> (its gate is driven by the previous stage's output) versus the one that's just a current-source load (its gate sits on a bias net).</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">is_signal_device</span>(device: Device) -> <span class="tok-kw">bool</span>:
+    gate = device.terminals.<span class="tok-fn">get</span>(<span class="tok-str">"g"</span>, <span class="tok-str">""</span>)
+    <span class="tok-kw">return</span> (<span class="tok-fn">bool</span>(gate) <span class="tok-kw">and</span> gate <span class="tok-kw">not in</span> BIAS_NETS
+            <span class="tok-kw">and not</span> gate.<span class="tok-fn">startswith</span>(<span class="tok-str">"net_bias"</span>) <span class="tok-kw">and not</span> gate.<span class="tok-fn">endswith</span>(<span class="tok-str">"_pref"</span>)
+            <span class="tok-kw">and not</span> gate.<span class="tok-fn">endswith</span>(<span class="tok-str">"_ncasc"</span>))</code></pre>
+
+  <p>Analogy: you're sorting mail. A letter is "real correspondence" (signal) unless it matches one of a few junk-mail patterns (bias). The function is a chain of <code>and</code>s — the device is a signal device only if the gate net passes <em>every</em> filter. Fail any one and it's a bias device. The neat part is it works <strong>regardless of NMOS/PMOS polarity</strong>: it never looks at the transistor type, only at where the gate is wired.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 230" role="img" aria-label="Five gate-net tests, all must pass for a signal device, else bias device">
+      <defs>
+        <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- condition chips -->
+      <rect x="20" y="14" width="250" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="30" y="34" font-size="11">gate is non-empty</text>
+      <rect x="20" y="54" width="250" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="30" y="74" font-size="11">gate ∉ BIAS_NETS</text>
+      <rect x="20" y="94" width="250" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="30" y="114" font-size="11">gate not startswith 'net_bias'</text>
+      <rect x="20" y="134" width="250" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="30" y="154" font-size="11">gate not endswith '_pref'</text>
+      <rect x="20" y="174" width="250" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="30" y="194" font-size="11">gate not endswith '_ncasc'</text>
+      <!-- arrows to AND -->
+      <line x1="270" y1="30" x2="330" y2="98" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#ar5)"/>
+      <line x1="270" y1="70" x2="330" y2="106" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#ar5)"/>
+      <line x1="270" y1="110" x2="330" y2="112" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#ar5)"/>
+      <line x1="270" y1="150" x2="330" y2="118" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#ar5)"/>
+      <line x1="270" y1="190" x2="330" y2="126" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#ar5)"/>
+      <!-- AND node -->
+      <rect x="330" y="82" width="70" height="60" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="365" y="108" text-anchor="middle" font-size="12" font-weight="600">ALL</text>
+      <text x="365" y="126" text-anchor="middle" font-size="12" font-weight="600">true?</text>
+      <!-- outcomes -->
+      <line x1="400" y1="100" x2="430" y2="78" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar5)"/>
+      <line x1="400" y1="126" x2="430" y2="168" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar5)"/>
+      <text x="404" y="92" font-size="9" fill="var(--fig-accent2)">all true</text>
+      <text x="402" y="160" font-size="9" fill="var(--fig-muted)">any false</text>
+      <rect x="430" y="56" width="120" height="46" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="490" y="78" text-anchor="middle" font-size="11" font-weight="600">signal device</text>
+      <text x="490" y="94" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">gm contributor</text>
+      <rect x="430" y="154" width="120" height="46" rx="10" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+      <text x="490" y="176" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-muted)">bias device</text>
+      <text x="490" y="192" text-anchor="middle" font-size="9" fill="var(--fig-muted)">current-source load</text>
+    </svg>
+    <figcaption>A five-way AND. Pass every gate-net test → the signal (gm-contributing) device. Trip any one → a bias / current-source device.</figcaption>
+  </figure>
+
+  <h3>Traced on four real gate nets</h3>
+  <table>
+    <thead><tr><th>Gate net</th><th>Which filter fires</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td><code>net_out1</code></td><td>passes all five</td><td><strong>signal device</strong> ✓</td></tr>
+      <tr><td><code>vdd!</code></td><td>in <code>BIAS_NETS</code></td><td>bias (current-source load)</td></tr>
+      <tr><td><code>net_bias3</code></td><td>starts with <code>net_bias</code></td><td>bias (internal ref)</td></tr>
+      <tr><td><code>bias_gen_pref</code></td><td>ends with <code>_pref</code></td><td>bias (mirror reference)</td></tr>
+    </tbody>
+  </table>
+
+  <p>The last two patterns catch the constructed bias generator's <em>internal</em> reference gates — <code>*_pref</code> (the PMOS-side mirror reference) and <code>*_ncasc</code> (the wide-swing cascode level). Those come from <code>synthesizer/config/bias_legs.yaml</code>, slot-prefixed on assembly to names like <code>bias_gen_pref</code>. Devices gated by them are bias plumbing, not signal — hence the two <code>endswith</code> guards.</p>
+
+  <h3>The hidden idea: extend in exactly one place</h3>
+  <p>Step back and the whole file has a single organizing principle:</p>
+
+  <div class="eq-center"><span class="boxed-eq">new topology &nbsp;⟹&nbsp; extend a set <em>here</em>, and <strong>only</strong> here</span></div>
+
+  <p>Every sizer function reasons through these sets, never through inline string literals. So a new topology that introduces, say, a fourth-stage slot or a new bias-net convention is supported by adding one member to a frozenset in this module — and every downstream walk picks it up for free. That's the payoff the docstring promises: a conforming topology needs <strong>no sizer changes</strong>, and a non-conforming one is onboarded by editing this catalog alone.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It stores <strong>no behavior</strong> — no currents are computed, no rails resolved to volts. It only classifies names; the meaning lives in the callers.</li>
+    <li>The bias-reference detection is <strong>string-pattern based</strong> (<code>net_bias*</code>, <code>*_pref</code>, <code>*_ncasc</code>). A topology that names an internal reference differently would slip past <code>is_signal_device()</code> until its convention is added here.</li>
+    <li>The groups are curated by hand. Nothing enforces that a template actually uses these slot names — a typo'd slot simply falls into none of the sets and is silently un-classified.</li>
+  </ul>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>taxonomy.py</code> is the sizer's single source of truth for naming — four slot groups that say how much current a device carries and whether it's a gain stage (with source-follower buffers deliberately excluded), two net sets that mark bias rails versus AC grounds, and one small polarity-agnostic function that reads those net sets to separate signal transistors from current-source loads — so a new topology is supported by extending a set here, and only here.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

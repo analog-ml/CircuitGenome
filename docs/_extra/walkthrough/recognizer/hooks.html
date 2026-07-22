@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hooks.py — accept-and-extend escape hatches</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px; max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{ grid-template-columns:1fr; } #toc{ position:static; } }
+  header { grid-column:1 / -1; padding:36px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:12px; border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p, li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent); background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem; max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem; color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none; border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  .pkgnav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:18px; }
+  .pkgnav .layer { color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-size:0.68rem; margin-right:2px; }
+  .pkgnav a { text-decoration:none; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:4px 12px; font-size:0.8rem; }
+  .pkgnav a:hover { border-color:var(--accent); color:var(--accent); }
+  .pkgnav a.current { background:var(--accent-sf); color:var(--accent); border-color:var(--accent); font-weight:600; }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted); font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg); padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{ color:var(--tok-kw); font-weight:600; } .tok-str{ color:var(--tok-str); } .tok-num{ color:var(--tok-num); }
+  .tok-com{ color:var(--tok-com); font-style:italic; } .tok-fn{ color:var(--tok-fn); }
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.93rem; }
+  th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-sf); }
+  .mono { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:0.86rem; }
+  .boxed-eq { display:inline-block; margin:1.2em auto; padding:12px 22px; border:2px solid var(--accent); border-radius:10px; background:var(--surface); font-size:1.05rem; }
+  .eq-center { text-align:center; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px; border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px; cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+  <header>
+    <h1>hooks.py <span style="color:var(--muted);font-weight:400;font-size:1.2rem">— Layer 1 escape hatches</span></h1>
+    <div class="subtitle">When a fixed-size template can't describe a variable-size structure, a hook runs at match time to accept-and-extend (or reject) it.</div>
+    <nav class="pkgnav">
+      <span class="layer">recognizer/</span>
+      <a href="index.html">Overview</a>
+      <a href="models.html">1 · models</a>
+      <a href="netlist_parser.html">2 · parser · L0</a>
+      <a href="subcircuit_recognizer.html">3 · SR · L1</a>
+      <a href="hooks.html" class="current">4 · hooks · L1</a>
+      <a href="functional_block_recognizer.html">5 · FBR · L2</a>
+      <a href="__init__.html">6 · API</a>
+    </nav>
+  </header>
+
+  <nav id="toc">
+    <div class="label">Contents</div>
+    <a href="#part-1">1 · Why hooks exist</a>
+    <a href="#part-2">2 · The hook contract</a>
+    <a href="#part-3">3 · The "legs" idea</a>
+    <a href="#part-4">4 · A bias leg, traced</a>
+    <a href="#part-5">5 · The three leg-hunters</a>
+    <a href="#part-6">6 · Guard hooks & rejection</a>
+    <a href="#part-7">7 · The hidden idea</a>
+  </nav>
+
+  <main>
+
+    <section class="part" id="part-1">
+      <h2>Part 1 · Why do hooks exist at all?</h2>
+      <blockquote><p><strong>The one job:</strong> "A pattern's template has a fixed number of devices. But some real structures have a <em>variable</em> number. How do we match those?"</p></blockquote>
+
+      <p class="beat">A <a href="subcircuit_recognizer.html#part-4"><code>same_net</code> template</a> is rigid: it says "exactly two nmos, sources tied." Perfect for a differential pair.</p>
+      <p class="beat">But a <strong>bias generator</strong> is not fixed-size. It has one master reference and then <em>however many output "legs"</em> the circuit happens to need — anywhere from 1 to 7. You can't write a template for "1 to 7 of something."</p>
+
+      <p>So the recognizer offers an escape hatch. A pattern can name a <code>hook</code> — a <code>"module:function"</code> path. After the base template matches, <code>recognize()</code> calls the hook, handing it the match, and lets the hook <em>discover the rest</em> by walking the netlist directly.</p>
+
+      <h3>The analogy: a building inspector's clipboard</h3>
+      <p>The template finds the front door (the master reference). The hook is the inspector who then walks the whole house counting rooms, and either signs off with the full room list attached — or condemns the building (returns <code>None</code>).</p>
+    </section>
+
+    <section class="part" id="part-2">
+      <h2>Part 2 · The hook contract</h2>
+      <p>Every hook has the identical signature and one of two possible outcomes:</p>
+
+      <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">hook</span>(assignment, pins, netlist) -> HookMatch | <span class="tok-kw">None</span></code></pre>
+
+      <figure class="fig">
+        <svg viewBox="0 0 520 210" role="img" aria-label="Hook accept-or-reject flow">
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="150" y="14" width="220" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="260" y="32" text-anchor="middle" font-size="12" font-weight="600">base template matched</text>
+          <text x="260" y="48" text-anchor="middle" font-size="10" fill="var(--fig-muted)">(assignment, pins, netlist)</text>
+          <line x1="260" y1="54" x2="260" y2="80" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ah)"/>
+          <polygon points="260,82 350,118 260,154 170,118" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="260" y="122" text-anchor="middle" font-size="12">hook decides</text>
+          <line x1="200" y1="140" x2="90" y2="175" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ah)"/>
+          <line x1="320" y1="140" x2="430" y2="175" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ah)"/>
+          <rect x="10" y="177" width="170" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="95" y="197" text-anchor="middle" font-size="11">HookMatch → accept + extend</text>
+          <rect x="355" y="177" width="150" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="430" y="197" text-anchor="middle" font-size="11">None → drop the match</text>
+        </svg>
+        <figcaption>A hook is a veto with a bonus: it can kill a match, or accept it and staple extra devices/pins on.</figcaption>
+      </figure>
+
+      <p>A returned <a href="models.html#part-5"><code>HookMatch</code></a> carries two lists that get <em>merged</em> into the final structure:</p>
+      <ul>
+        <li><code>extra_devices</code> — appended to <code>RecognizedStructure.devices</code>.</li>
+        <li><code>extra_pins</code> — merged into <code>RecognizedStructure.pins</code> (e.g. <code>leg1_out</code>, <code>leg2_out</code>, <code>vdd</code>).</li>
+      </ul>
+
+      <p>Recall from the <a href="subcircuit_recognizer.html#part-7">recognizer</a> exactly where this fires:</p>
+      <pre class="code"><code><span class="tok-kw">if</span> pattern.hook:
+    result = _resolve_hook(pattern.hook)(assignment, pins, netlist)
+    <span class="tok-kw">if</span> result <span class="tok-kw">is</span> <span class="tok-kw">None</span>:
+        <span class="tok-kw">continue</span>                       <span class="tok-com"># hook rejected → skip this match</span>
+    devices_list = devices_list + result.extra_devices
+    pins = {**pins, **result.extra_pins}</code></pre>
+    </section>
+
+    <section class="part" id="part-3">
+      <h2>Part 3 · The "legs" idea — the motivating case</h2>
+      <blockquote><p><strong>The one job:</strong> "Starting from one diode-connected master reference, find every output leg that mirrors it."</p></blockquote>
+
+      <p>A current-mirror bias generator looks like a comb: one master reference tooth, then many parallel legs, each mirroring the reference current out to a different rail.</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 520 200" role="img" aria-label="A bias reference fanning out to legs">
+          <!-- master -->
+          <rect x="30" y="30" width="90" height="130" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+          <text x="75" y="24" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">master (mref)</text>
+          <text x="75" y="100" text-anchor="middle" font-size="11">diode nmos</text>
+          <text x="75" y="118" text-anchor="middle" font-size="10" fill="var(--fig-muted)">g=d=ibias</text>
+          <!-- ibias rail -->
+          <line x1="120" y1="70" x2="490" y2="70" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="5 3"/>
+          <text x="300" y="62" text-anchor="middle" font-size="11" fill="var(--fig-accent)">ibias net (shared gate line)</text>
+          <!-- legs -->
+          <g>
+            <rect x="170" y="95" width="90" height="70" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="215" y="118" text-anchor="middle" font-size="11">leg 1</text>
+            <text x="215" y="135" text-anchor="middle" font-size="9" fill="var(--fig-muted)">nmos + pmos</text>
+            <text x="215" y="150" text-anchor="middle" font-size="9" fill="var(--fig-muted)">→ leg1_out</text>
+          </g>
+          <g>
+            <rect x="280" y="95" width="90" height="70" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="325" y="118" text-anchor="middle" font-size="11">leg 2</text>
+            <text x="325" y="150" text-anchor="middle" font-size="9" fill="var(--fig-muted)">→ leg2_out</text>
+          </g>
+          <g>
+            <rect x="390" y="95" width="100" height="70" rx="8" fill="none" stroke="var(--fig-muted)" stroke-dasharray="4 3" stroke-width="2"/>
+            <text x="440" y="128" text-anchor="middle" font-size="11" fill="var(--fig-muted)">… up to 7</text>
+          </g>
+          <line x1="215" y1="70" x2="215" y2="95" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <line x1="325" y1="70" x2="325" y2="95" stroke="var(--fig-stroke)" stroke-width="2"/>
+        </svg>
+        <figcaption>The template matches only the master. The hook walks the ibias rail and discovers each leg gated off it.</figcaption>
+      </figure>
+
+      <p>A "leg" is a self-contained little group: an nmos whose gate ties to the master's <code>ibias</code> node and source to gnd (so it <em>mirrors</em> the reference current), paired with whatever delivers its output — a diode-connected pmos, or a resistor, depending on the flavor.</p>
+    </section>
+
+    <section class="part" id="part-4">
+      <h2>Part 4 · One leg, traced by hand</h2>
+      <p>Take <code>diode_connected_mosfet_bias_legs</code>. The master reference is <code>mref</code> with:</p>
+      <pre class="code"><code>mref.terminals = {d:<span class="tok-str">"ibias"</span>, g:<span class="tok-str">"ibias"</span>, s:<span class="tok-str">"gnd!"</span>, b:<span class="tok-str">"gnd!"</span>}
+ibias_net = <span class="tok-str">"ibias"</span>   gnd_net = <span class="tok-str">"gnd!"</span></code></pre>
+
+      <p>The hook scans every device looking for an nmos leg. Consider candidate <code>mL</code>:</p>
+      <table>
+        <tr><th>Check</th><th>mL</th><th>Pass?</th></tr>
+        <tr><td>type == nmos</td><td class="mono">nmos</td><td>✓</td></tr>
+        <tr><td>gate == ibias_net</td><td class="mono">g = "ibias"</td><td>✓</td></tr>
+        <tr><td>source == gnd_net</td><td class="mono">s = "gnd!"</td><td>✓</td></tr>
+      </table>
+      <p>It mirrors the master! Its drain net (say <code>"n_leg1"</code>) becomes the leg's output. Now find the pmos sitting on that drain, diode-connected:</p>
+      <pre class="code"><code>pmos_leg: p.type==<span class="tok-str">"pmos"</span> <span class="tok-kw">and</span> p.d==out_net <span class="tok-kw">and</span> p.g==out_net <span class="tok-kw">and</span> p.s==p.b</code></pre>
+      <p>Found <code>pL</code> with <code>d=g="n_leg1"</code>, <code>s=b="vdd!"</code>. The leg is complete:</p>
+      <pre class="code"><code>leg_count = <span class="tok-num">1</span>
+extra_devices += [mL, pL]
+extra_pins[<span class="tok-str">"leg1_out"</span>] = <span class="tok-str">"n_leg1"</span>
+extra_pins.setdefault(<span class="tok-str">"vdd"</span>, <span class="tok-str">"vdd!"</span>)   <span class="tok-com"># first leg records the supply</span>
+claimed.add(mL.ref); claimed.add(pL.ref)</code></pre>
+
+      <p class="beat">The <span class="keyline">claimed</span> set is the quiet hero here.</p>
+      <p>It stops a device being counted into two legs. Every candidate loop begins with <code>if …ref in claimed: continue</code>, so the scan naturally partitions the netlist into disjoint legs.</p>
+    </section>
+
+    <section class="part" id="part-5">
+      <h2>Part 5 · The three leg-hunters — same skeleton, different legs</h2>
+      <p>Three hooks share the exact same shape (find mirrors of a reference, pair each with its output device) and differ only in what a "leg" is made of:</p>
+
+      <table>
+        <tr><th>Hook</th><th>Reference (mref)</th><th>A leg is…</th><th>Records</th></tr>
+        <tr><td class="mono">diode_connected_mosfet_bias_legs</td><td>diode nmos on gnd</td><td>(nmos mirror, diode pmos)</td><td class="mono">vdd</td></tr>
+        <tr><td class="mono">magic_battery_bias_legs</td><td>diode pmos on vdd</td><td>(pmos mirror, diode nmos)</td><td class="mono">gnd</td></tr>
+        <tr><td class="mono">resistor_bias_legs</td><td>diode pmos on vdd</td><td>(pmos mirror, resistor)</td><td class="mono">gnd</td></tr>
+      </table>
+
+      <p>They're mirror images with the polarity flipped — the "why" behind writing three near-identical functions instead of one generic one is readability: each reads top-to-bottom as the physical story of that specific bias style.</p>
+
+      <h3>The fourth, richer one: <code>constructed_bias_legs</code></h3>
+      <p>This is the heavyweight. It handles a <em>constructed</em> multi-reference generator with a two-pass sweep:</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 540 190" role="img" aria-label="constructed_bias two-pass discovery">
+          <defs><marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="20" y="30" width="230" height="130" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="135" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">Pass 1 — NMOS-referenced</text>
+          <text x="135" y="76" text-anchor="middle" font-size="10" fill="var(--fig-muted)">nmos mirrors of master; each drain hosts</text>
+          <text x="135" y="92" text-anchor="middle" font-size="10" fill="var(--fig-muted)">• a plain pmos diode (a pnode), or</text>
+          <text x="135" y="108" text-anchor="middle" font-size="10" fill="var(--fig-muted)">• a riding diode + floor resistor (cascode_vdd), or</text>
+          <text x="135" y="124" text-anchor="middle" font-size="10" fill="var(--fig-muted)">• an nmos cascode + top diode (pref branch), or</text>
+          <text x="135" y="140" text-anchor="middle" font-size="10" fill="var(--fig-muted)">• nothing (bare mirror)</text>
+
+          <rect x="290" y="30" width="230" height="130" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="405" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">Pass 2 — PMOS-referenced</text>
+          <text x="405" y="80" text-anchor="middle" font-size="10" fill="var(--fig-muted)">for each pnode found in pass 1,</text>
+          <text x="405" y="96" text-anchor="middle" font-size="10" fill="var(--fig-muted)">find pmos legs gated on it whose drain</text>
+          <text x="405" y="112" text-anchor="middle" font-size="10" fill="var(--fig-muted)">hosts a diode nmos or a gnd resistor</text>
+
+          <line x1="250" y1="95" x2="290" y2="95" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ac)"/>
+          <text x="270" y="86" text-anchor="middle" font-size="10" fill="var(--fig-muted)">pnodes</text>
+        </svg>
+        <figcaption>Pass 1 discovers PMOS reference gates (pnodes); Pass 2 follows each to its PMOS-referenced legs.</figcaption>
+      </figure>
+
+      <p>The drain condition in Pass 2 ("its drain must host a diode or a resistor to gnd") is what keeps <em>consumer</em> devices out — a second-stage pmos gated by a bias rail has neither on its drain, so it's correctly ignored.</p>
+    </section>
+
+    <section class="part" id="part-6">
+      <h2>Part 6 · Guard hooks — rejection as the whole point</h2>
+      <p>Not every hook extends a match. Some exist purely to <em>reject</em> false matches. These are the simplest hooks in the file:</p>
+
+      <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">resistor_tail_vdd_check</span>(assignment, pins, netlist):
+    <span class="tok-kw">if</span> assignment[<span class="tok-str">"r1"</span>].terminals[<span class="tok-str">"t1"</span>] != <span class="tok-str">"vdd!"</span>:
+        <span class="tok-kw">return</span> <span class="tok-kw">None</span>                      <span class="tok-com"># not a tail resistor → reject</span>
+    <span class="tok-kw">return</span> HookMatch(extra_devices=[], extra_pins={})</code></pre>
+
+      <p>Why needed? The <code>resistor_tail_vdd</code> pattern's template is just "one resistor" — with <em>no</em> constraints it would match <em>every</em> resistor in the netlist (load resistors, degeneration resistors, bias resistors). The guard says "only if one end is the global <code>vdd!</code> rail," pinning it to the actual tail resistor.</p>
+
+      <p>Four such guards exist (<code>tail_vdd</code>, <code>tail_gnd</code>, <code>load_vdd</code>, <code>load_gnd</code>) — each a one-line rail check that a template alone can't express.</p>
+
+      <h3>The tricky rejection contract between hooks</h3>
+      <p>Notice the interplay: <code>constructed_bias_legs</code> returns <code>None</code> when it finds only the plain NMOS-referenced shape, deliberately <em>ceding</em> that match to <code>diode_connected_mosfet_bias_legs</code> (listed after it). This keeps legacy single-flavor netlists recognized under their historical names. The rejection isn't a failure — it's a handoff.</p>
+    </section>
+
+    <section class="part" id="part-7">
+      <h2>Part 7 · The hidden idea</h2>
+      <p>Hooks turn the recognizer from a fixed-template matcher into something strictly more powerful:</p>
+
+      <div class="eq-center"><div class="boxed-eq">fixed template&nbsp;+&nbsp;runtime graph-walk&nbsp;=&nbsp;variable-arity pattern</div></div>
+
+      <p>The template supplies the <em>anchor</em> — the one device the search can hang onto. The hook supplies the <em>unbounded exploration</em> — following nets outward from that anchor to discover however many devices are actually there. It's the same trick a regex engine uses when it hands off to a callback for a match that plain regex syntax can't express.</p>
+
+      <p>And the design keeps hooks <em>pure and total</em> in the same spirit as the rest of Layer 1: a hook only ever reads the netlist and returns a value. It never mutates anything, never picks between competing structures — it just says "yes, and here's the rest" or "no." All the disambiguation still waits for Layer 2.</p>
+
+      <hr>
+      <p><strong>In one sentence:</strong> <code>hooks.py</code> is a set of building inspectors that start from one anchor device a template found, walk the netlist to discover a variable number of extra devices (a bias generator's legs), and either sign off with the full list attached or reject the match outright.</p>
+
+      <blockquote><p><strong>Looking ahead →</strong> <a href="functional_block_recognizer.html">Part 5 · functional_block_recognizer.py</a> is Layer 2 — where all those overlapping SR candidates finally get resolved into named functional slots.</p></blockquote>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  })();
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {}; links.forEach(function (a){ map[a.getAttribute('href').slice(1)] = a; });
+    var obs = new IntersectionObserver(function (entries){
+      entries.forEach(function (e){
+        if (e.isIntersecting && map[e.target.id]) {
+          links.forEach(function (l){ l.classList.remove('active'); });
+          map[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin:'-20% 0px -70% 0px' });
+    document.querySelectorAll('section.part').forEach(function (s){ obs.observe(s); });
+  })();
+</script>
+</body>
+</html>

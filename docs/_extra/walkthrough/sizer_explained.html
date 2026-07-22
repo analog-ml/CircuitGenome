@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sizer.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>sizer.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/sizer.py</code> — the front door of Initial Sizing: one entry point that routes each circuit to the right sizer for its technology.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · What comes in, what goes out</a>
+  <a href="#part-3">3 · The three routes</a>
+  <a href="#part-4">4 · The honest refusal</a>
+  <a href="#part-5">5 · The hidden idea</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> given a circuit and the technology it will be built in, decide <em>which</em> sizer should compute its transistor W/L values — and hand the work off to that one.</p></blockquote>
+
+  <p class="beat">Here is the whole story without a line of code.</p>
+
+  <p>CircuitGenome does not have <em>one</em> way to size a circuit — it has <strong>several</strong>, and which one is correct depends entirely on the fabrication technology. A modern node characterized with a <strong>gm/Id lookup table</strong> deserves the accurate, block-based gm/Id pipeline. An idealized <code>generic</code> technology, which has no such table, can only use the fast analytical <strong>Level-1</strong> sizer built on square-law equations. And a real <strong>PTM/SPICE</strong> node that has <em>not yet</em> been characterized deserves neither — running square-law math on it would produce numbers that look plausible and are quietly wrong.</p>
+
+  <p>Imagine walking into a hospital. You do not pick your own specialist — you meet a <strong>triage nurse</strong> at the front desk. She reads your chart, and in one glance sends you to cardiology, or to the general ward, or tells you honestly "we cannot treat this here yet." That is exactly what <code>size_circuit</code> is: a <strong>triage desk</strong> for sizing. It reads one field on the technology chart and points you at the right specialist — no more, no less.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 356" role="img" aria-label="size_circuit routing a circuit three ways based on its technology">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- root -->
+      <rect x="175" y="14" width="230" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="290" y="34" text-anchor="middle" font-weight="600" font-size="13">size_circuit(…, tech, spec)</text>
+      <text x="290" y="49" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the dispatcher — reads the tech chart</text>
+      <line x1="290" y1="56" x2="290" y2="74" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+
+      <!-- diamond 1: gmid_lut? -->
+      <polygon points="290,76 384,112 290,148 196,112" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="290" y="108" text-anchor="middle" font-size="12">has a</text>
+      <text x="290" y="123" text-anchor="middle" font-size="12">gm/Id LUT?</text>
+      <!-- yes to size_gmid -->
+      <line x1="384" y1="112" x2="438" y2="112" stroke="var(--fig-good)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="410" y="104" text-anchor="middle" font-size="10.5" fill="var(--fig-good)">yes</text>
+      <rect x="440" y="90" width="188" height="44" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="534" y="110" text-anchor="middle" font-weight="600" font-size="12.5">size_gmid</text>
+      <text x="534" y="125" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">block-based gm/Id pipeline</text>
+      <!-- no down -->
+      <line x1="290" y1="148" x2="290" y2="168" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="304" y="163" font-size="10.5" fill="var(--fig-muted)">no</text>
+
+      <!-- diamond 2: spice_model? -->
+      <polygon points="290,170 384,206 290,242 196,206" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="290" y="202" text-anchor="middle" font-size="12">a PTM/SPICE</text>
+      <text x="290" y="217" text-anchor="middle" font-size="12">node?</text>
+      <!-- yes to error -->
+      <line x1="384" y1="206" x2="438" y2="206" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="410" y="198" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">yes</text>
+      <rect x="440" y="184" width="188" height="44" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="534" y="204" text-anchor="middle" font-weight="600" font-size="12">UnsupportedTechError</text>
+      <text x="534" y="219" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">refuse — no valid sizer</text>
+      <!-- no down -->
+      <line x1="290" y1="242" x2="290" y2="264" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="304" y="258" font-size="10.5" fill="var(--fig-muted)">no</text>
+
+      <!-- bottom: size_level1 -->
+      <rect x="196" y="266" width="188" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="290" y="286" text-anchor="middle" font-weight="600" font-size="12.5">size_level1</text>
+      <text x="290" y="301" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 CP-SAT sizer</text>
+      <text x="290" y="332" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">reached only by the card-less &#8220;generic&#8221; tech</text>
+    </svg>
+    <figcaption>One question at a time, top to bottom. The first &#8220;yes&#8221; wins; falling all the way through means the plain analytical sizer.</figcaption>
+  </figure>
+
+  <h3>The cast of characters</h3>
+  <p>The file itself is tiny — one function. But it stands in front of three destinations. Hover any box to trace its link.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 600 250" role="img" aria-label="Call graph of size_circuit and its three destinations">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="gmid"  x1="250" y1="64" x2="120" y2="150" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="lvl1"  x1="300" y1="64" x2="300" y2="150" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="err"   x1="350" y1="64" x2="480" y2="150" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar2)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="200" y="22" width="200" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="42" text-anchor="middle" font-weight="600" font-size="13">size_circuit()</text>
+        <text x="300" y="57" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the dispatcher</text>
+      </g>
+      <!-- gmid -->
+      <g class="node" data-group="gmid">
+        <rect x="20" y="150" width="200" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="120" y="170" text-anchor="middle" font-weight="600" font-size="12.5">size_gmid()</text>
+        <text x="120" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id block pipeline</text>
+      </g>
+      <!-- level1 -->
+      <g class="node" data-group="lvl1">
+        <rect x="240" y="150" width="200" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="340" y="170" text-anchor="middle" font-weight="600" font-size="12.5">size_level1()</text>
+        <text x="340" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 CP-SAT sizer</text>
+      </g>
+      <!-- error -->
+      <g class="node" data-group="err">
+        <rect x="410" y="205" width="180" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="500" y="223" text-anchor="middle" font-weight="600" font-size="11.5">UnsupportedTechError</text>
+        <text x="500" y="238" text-anchor="middle" font-size="10" fill="var(--fig-muted)">raised, not called</text>
+      </g>
+    </svg>
+    <figcaption>One caller, three exits. Two are function calls (solid); the third is a raised exception (dashed) — a refusal, not a hand-off.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the door and looks at what flows through it — the six inputs the dispatcher receives and the single <code>SizingResult</code> it promises back.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · What comes in, what goes out</h2>
+
+  <blockquote><p><strong>The one job of the signature:</strong> gather everything the pipeline has learned about a circuit so far, so the dispatcher has enough on the chart to pick a sizer.</p></blockquote>
+
+  <p>Think of a <strong>maître d'</strong> at a restaurant. Before seating you, he reads a few things off your reservation: the party size, any allergies, the time. He does not cook — he just has enough information to route you to the right table and the right waiter. <code>size_circuit</code> reads six such fields.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">size_circuit</span>(
+    parsed: ParsedNetlist,                 <span class="tok-com"># Layer-0 — the raw circuit</span>
+    sr_result: SubcircuitRecognitionResult,<span class="tok-com"># Layer-1 — kept for API symmetry</span>
+    fbr_result: FunctionalBlockRecognitionResult,  <span class="tok-com"># Layer-2 — the slot map</span>
+    topology: TopologyTemplate,            <span class="tok-com"># which template matched</span>
+    tech: TechParams,                      <span class="tok-com"># THE routing field lives here</span>
+    spec: SizingSpec,                      <span class="tok-com"># performance targets</span>
+    *,
+    time_limit_s: <span class="tok-kw">float</span> = <span class="tok-num">30.0</span>,             <span class="tok-com"># Level-1 solver budget only</span>
+) -> SizingResult:</code></pre>
+
+  <p>Most of these are passed straight through to whichever sizer runs. The one that <em>decides</em> the route is <code>tech</code>. The dispatcher only ever inspects two attributes on it — <code>tech.gmid_lut</code> and <code>tech.spice_model</code> — and everything else rides along untouched.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 600 210" role="img" aria-label="Six inputs flow into size_circuit which returns one SizingResult">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- inputs -->
+      <g font-size="11.5" text-anchor="middle">
+        <rect x="14" y="18"  width="150" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="89" y="38">parsed netlist</text>
+        <rect x="14" y="56"  width="150" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="89" y="76">FBR result (L2)</text>
+        <rect x="14" y="94"  width="150" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="89" y="114">topology + spec</text>
+        <rect x="14" y="132" width="150" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="89" y="152" font-weight="600">tech</text>
+      </g>
+      <text x="89" y="178" text-anchor="middle" font-size="10" fill="var(--fig-accent)">the routing field</text>
+      <!-- arrows converge -->
+      <g stroke="var(--fig-muted)" stroke-width="1.8">
+        <line x1="164" y1="33"  x2="250" y2="82"  marker-end="url(#ar3)"/>
+        <line x1="164" y1="71"  x2="250" y2="88"  marker-end="url(#ar3)"/>
+        <line x1="164" y1="109" x2="250" y2="94"  marker-end="url(#ar3)"/>
+        <line x1="164" y1="147" x2="250" y2="100" marker-end="url(#ar3)"/>
+      </g>
+      <!-- dispatcher -->
+      <rect x="252" y="60" width="128" height="64" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="316" y="88" text-anchor="middle" font-size="12.5" font-weight="600">size_circuit</text>
+      <text x="316" y="106" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">route + hand off</text>
+      <!-- output -->
+      <line x1="380" y1="92" x2="446" y2="92" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar3)"/>
+      <rect x="448" y="62" width="140" height="60" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="518" y="88" text-anchor="middle" font-size="12.5" font-weight="600">SizingResult</text>
+      <text x="518" y="106" text-anchor="middle" font-size="10" fill="var(--fig-muted)">W/L, cap, metrics</text>
+    </svg>
+    <figcaption>Six things in, one <code>SizingResult</code> out. Only <code>tech</code> changes <em>who</em> does the work — the rest just rides along.</figcaption>
+  </figure>
+
+  <p>Whatever route is chosen, the promise on the way out is identical: a single <code>SizingResult</code> holding per-transistor sizing, the compensation cap, computed metrics, and safety margins. The caller never has to know which sizer produced it — which is the whole point, and the idea we return to in Part&nbsp;5.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · The three routes</h2>
+
+  <blockquote><p><strong>The one job:</strong> ask two yes/no questions of <code>tech</code>, in order, and take the first branch that fires.</p></blockquote>
+
+  <p>This is the entire body of the function, and it reads like a <strong>railway switch</strong>. A train arrives on one track; the points are thrown based on a single reading, sending it down exactly one of three lines. The order of the questions <em>is</em> the logic — the second question is only ever asked if the first was &#8220;no.&#8221;</p>
+
+  <pre class="code"><code><span class="tok-com"># Route 1 — gm/Id technologies (LUT present) use the block pipeline.</span>
+<span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"gmid_lut"</span>, <span class="tok-kw">None</span>):
+    <span class="tok-kw">from</span> .gmid <span class="tok-kw">import</span> size_gmid
+    <span class="tok-kw">return</span> <span class="tok-fn">size_gmid</span>(parsed, sr_result, fbr_result, topology, tech, spec)
+
+<span class="tok-com"># Route 2 — a PTM/SPICE node WITHOUT a LUT must not fall through.</span>
+<span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"spice_model"</span>, <span class="tok-kw">None</span>):
+    <span class="tok-kw">raise</span> <span class="tok-fn">UnsupportedTechError</span>(...)
+
+<span class="tok-com"># Route 3 — only the card-less 'generic' tech reaches here.</span>
+<span class="tok-kw">from</span> .analytical.level1 <span class="tok-kw">import</span> size_level1
+<span class="tok-kw">return</span> <span class="tok-fn">size_level1</span>(parsed, sr_result, fbr_result, topology, tech, spec,
+                   time_limit_s=time_limit_s)</code></pre>
+
+  <p>Notice there is no explicit <code>elif</code> or <code>else</code>. Each branch <code>return</code>s (or <code>raise</code>s), so control never reaches the next question unless the current one failed. The bare code at the bottom is the <strong>default</strong> — the track the train coasts onto when both switches were left open.</p>
+
+  <h3>Why <code>getattr(tech, "gmid_lut", None)</code> and not <code>tech.gmid_lut</code>?</h3>
+  <p>The <code>getattr(..., None)</code> form asks &#8220;does this tech carry a LUT, and is it non-empty?&#8221; in one safe move. If the attribute is missing entirely, or is <code>None</code>, or is an empty container, the whole expression is falsy and the switch stays open. It is a <em>truthiness</em> test, not just an existence test — a deliberately forgiving reading of the chart.</p>
+
+  <h3>Two techs, traced by hand</h3>
+  <p>Let us walk three concrete technologies through the switch and watch where each lands.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 250" role="img" aria-label="Three technologies traced through the two-question switch">
+      <defs>
+        <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- header labels -->
+      <text x="72"  y="18" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">technology</text>
+      <text x="315" y="18" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">questions asked</text>
+      <text x="545" y="18" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">lands at</text>
+
+      <!-- ROW 1 -->
+      <rect x="12" y="30" width="120" height="44" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="72" y="50" text-anchor="middle" font-size="12" font-weight="600">ptm130_lut</text>
+      <text x="72" y="66" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">PTM + a LUT</text>
+      <line x1="132" y1="52" x2="188" y2="52" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
+      <text x="315" y="49" text-anchor="middle" font-size="11" fill="var(--fig-good)">gm/Id LUT? &#10003; yes</text>
+      <text x="315" y="65" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">stops at question 1</text>
+      <line x1="442" y1="52" x2="452" y2="52" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
+      <rect x="454" y="30" width="156" height="44" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="532" y="57" text-anchor="middle" font-size="12" font-weight="600">size_gmid</text>
+
+      <!-- ROW 2 -->
+      <rect x="12" y="98" width="120" height="44" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="72" y="118" text-anchor="middle" font-size="12" font-weight="600">generic</text>
+      <text x="72" y="134" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">card-less</text>
+      <line x1="132" y1="120" x2="188" y2="120" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
+      <text x="315" y="117" text-anchor="middle" font-size="11">LUT? &#10007; &#183; SPICE? &#10007;</text>
+      <text x="315" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">falls through both</text>
+      <line x1="442" y1="120" x2="452" y2="120" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
+      <rect x="454" y="98" width="156" height="44" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="532" y="125" text-anchor="middle" font-size="12" font-weight="600">size_level1</text>
+
+      <!-- ROW 3 -->
+      <rect x="12" y="166" width="120" height="44" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="72" y="186" text-anchor="middle" font-size="12" font-weight="600">ptm130</text>
+      <text x="72" y="202" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">PTM, no LUT</text>
+      <line x1="132" y1="188" x2="188" y2="188" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
+      <text x="315" y="185" text-anchor="middle" font-size="11">LUT? &#10007; &#183; <tspan fill="var(--fig-bad)">SPICE? &#10003;</tspan></text>
+      <text x="315" y="201" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">caught by question 2</text>
+      <line x1="442" y1="188" x2="452" y2="188" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
+      <rect x="454" y="166" width="156" height="44" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="532" y="185" text-anchor="middle" font-size="10.5" font-weight="600">Unsupported</text>
+      <text x="532" y="200" text-anchor="middle" font-size="10.5" font-weight="600">TechError</text>
+    </svg>
+    <figcaption>Same two questions, three destinations. A LUT wins immediately; no LUT plus a SPICE model is refused; neither means the plain generic path.</figcaption>
+  </figure>
+
+  <table>
+    <thead><tr><th>Technology</th><th>gmid_lut</th><th>spice_model</th><th>Route taken</th></tr></thead>
+    <tbody>
+      <tr><td><code>ptm130_lut</code></td><td>present</td><td>&mdash;</td><td><code>size_gmid</code></td></tr>
+      <tr><td><code>generic</code></td><td>absent</td><td>absent</td><td><code>size_level1</code></td></tr>
+      <tr><td><code>ptm130</code></td><td>absent</td><td>present</td><td><code>UnsupportedTechError</code></td></tr>
+    </tbody>
+  </table>
+
+  <blockquote><p><strong>Looking ahead:</strong> that third row — the deliberate refusal — is the most interesting line in the file. Part&nbsp;4 asks why the dispatcher <em>chooses</em> to fail there instead of quietly sizing.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · The honest refusal</h2>
+
+  <blockquote><p><strong>The one job:</strong> when a PTM/SPICE node has no gm/Id LUT, refuse loudly instead of running the analytical sizer — because its numbers would be silently wrong there.</p></blockquote>
+
+  <p>Here is the whole limitation of the file, stated on purpose. The Level-1 analytical sizer is built on <strong>square-law</strong> equations — the textbook <code>I<sub>D</sub> &prop; (V<sub>GS</sub> &minus; V<sub>th</sub>)&sup2;</code> model. That model is a fine <em>idealization</em>, which is exactly why the <code>generic</code> technology is defined to obey it. But a real 130&nbsp;nm PTM node does <em>not</em> obey square-law; short-channel effects bend those curves badly. Feed a real node's parameters into square-law math and you get transistor sizes that look reasonable and are quantitatively wrong.</p>
+
+  <pre class="code"><code><span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"spice_model"</span>, <span class="tok-kw">None</span>):
+    <span class="tok-kw">raise</span> <span class="tok-fn">UnsupportedTechError</span>(
+        <span class="tok-str">f"Technology '{tech.name}' is a PTM/SPICE-model node without a gm/Id "</span>
+        <span class="tok-str">f"LUT. The analytical (Level-1) sizer is not valid for PTM nodes — "</span>
+        <span class="tok-str">f"characterize a gm/Id LUT first (see issue #73). Only the 'generic' "</span>
+        <span class="tok-str">f"technology uses the analytical sizer."</span>)</code></pre>
+
+  <p>Analogy: this is the triage nurse saying &#8220;we cannot treat this here yet&#8221; instead of guessing. A wrong-but-confident answer is worse than an honest stop, because a downstream user would trust the sizes and build on sand. The exception message even points the way forward — <em>characterize a LUT first</em> — so the failure is a signpost, not a dead end.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 600 210" role="img" aria-label="Why the PTM-without-LUT branch refuses instead of falling through" >
+      <defs>
+        <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- source -->
+      <rect x="200" y="16" width="200" height="40" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="300" y="34" text-anchor="middle" font-size="12" font-weight="600">PTM node, no gm/Id LUT</text>
+      <text x="300" y="49" text-anchor="middle" font-size="10" fill="var(--fig-muted)">real curves, not square-law</text>
+
+      <!-- forbidden fall-through (left) -->
+      <line x1="250" y1="56" x2="140" y2="104" stroke="var(--fig-muted)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#ar5)"/>
+      <rect x="30" y="106" width="210" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="5 4"/>
+      <text x="135" y="128" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">if it fell through to Level-1…</text>
+      <text x="135" y="146" text-anchor="middle" font-size="11" fill="var(--fig-bad)">plausible but wrong sizes &#10007;</text>
+      <text x="135" y="180" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the silent bug gm/Id exists to avoid</text>
+
+      <!-- chosen refusal (right) -->
+      <line x1="350" y1="56" x2="460" y2="104" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar5)"/>
+      <rect x="360" y="106" width="210" height="52" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="465" y="128" text-anchor="middle" font-size="11.5" font-weight="600">raise UnsupportedTechError</text>
+      <text x="465" y="146" text-anchor="middle" font-size="11" fill="var(--fig-good)">honest stop &#10003;</text>
+      <text x="465" y="180" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">&#8220;characterize a LUT first&#8221;</text>
+    </svg>
+    <figcaption>The dashed path is the tempting mistake — falling through to a sizer whose math does not apply. The file deliberately takes the solid path instead.</figcaption>
+  </figure>
+
+  <p>One subtlety in the ordering: this refusal sits <em>after</em> the LUT check. So a PTM node that <em>does</em> have a LUT (like <code>ptm130_lut</code> in our trace) never reaches this branch — it was already routed to <code>size_gmid</code>. The <code>spice_model</code> question only fires for a PTM node that is <em>missing</em> its LUT. That is the whole reason Route&nbsp;1 must come first.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · The hidden idea</h2>
+
+  <p>Although the file never names it, this dispatcher is a textbook <strong>Strategy pattern</strong> — a single boundary that chooses an interchangeable algorithm at runtime and hides that choice from everyone above it.</p>
+
+  <p>The payoff is <em>caller ignorance</em>, in the good sense. Every layer above sizing calls one function, <code>size_circuit</code>, and receives one <code>SizingResult</code>. It never imports <code>size_gmid</code> or <code>size_level1</code>, never branches on the technology, never learns that three different sizers even exist. Add a fourth sizer tomorrow and not a single caller changes.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 580 260" role="img" aria-label="size_circuit as the single dispatch boundary hiding three sizers from callers">
+      <defs>
+        <marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- caller -->
+      <rect x="200" y="14" width="180" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="290" y="34" text-anchor="middle" font-size="12.5" font-weight="600">caller (Layer-3 API)</text>
+      <text x="290" y="49" text-anchor="middle" font-size="10" fill="var(--fig-muted)">knows only one function</text>
+      <line x1="290" y1="56" x2="290" y2="78" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar6)"/>
+
+      <!-- boundary bar -->
+      <rect x="110" y="80" width="360" height="42" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="290" y="106" text-anchor="middle" font-size="13" font-weight="600">size_circuit() — the only door</text>
+
+      <!-- dashed wall -->
+      <line x1="30" y1="140" x2="550" y2="140" stroke="var(--fig-muted)" stroke-width="1.6" stroke-dasharray="6 5"/>
+      <text x="290" y="156" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">below the line: callers never see any of these</text>
+
+      <!-- hidden sizers -->
+      <g stroke="var(--fig-muted)" stroke-width="1.8">
+        <line x1="200" y1="122" x2="115" y2="176" marker-end="url(#ar6)"/>
+        <line x1="290" y1="122" x2="290" y2="176" marker-end="url(#ar6)"/>
+        <line x1="380" y1="122" x2="465" y2="176" marker-end="url(#ar6)"/>
+      </g>
+      <g opacity="0.75">
+        <rect x="30" y="178" width="160" height="40" rx="7" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.8"/>
+        <text x="110" y="203" text-anchor="middle" font-size="11.5">size_gmid</text>
+        <rect x="210" y="178" width="160" height="40" rx="7" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.8"/>
+        <text x="290" y="203" text-anchor="middle" font-size="11.5">size_level1</text>
+        <rect x="390" y="178" width="160" height="40" rx="7" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.8" stroke-dasharray="5 3"/>
+        <text x="470" y="203" text-anchor="middle" font-size="10.5">UnsupportedTechError</text>
+      </g>
+      <text x="290" y="242" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">swap or add a sizer here — no caller changes</text>
+    </svg>
+    <figcaption>One door, three rooms behind it. The dispatch boundary is the whole value: it lets the &#8220;how&#8221; change without disturbing the &#8220;what.&#8221;</figcaption>
+  </figure>
+
+  <p>And there is a pleasing rhyme here. One layer down, CircuitGenome already uses a <code>DeviceModel</code> strategy — a gm/Id model versus a square-law model, chosen per technology, behind one interface. <code>size_circuit</code> mirrors that same shape one level up: the <em>sizer</em> is chosen the same way the <em>device model</em> is chosen, on the same signal (does this tech have a LUT?). The dispatch at the top and the strategy underneath are the same idea wearing two hats.</p>
+
+  <h3>What it honestly does not do</h3>
+  <ul>
+    <li>It does no sizing itself — every route either delegates or refuses. If a bug appears in the numbers, it lives in <code>size_gmid</code> or <code>size_level1</code>, not here.</li>
+    <li>It reads exactly two fields of <code>tech</code>. A technology with, say, both a LUT and a SPICE model is routed to gm/Id and never reaches the refusal — the <em>order</em> encodes the priority.</li>
+    <li>It trusts that <code>fbr_result</code> is in topology mode; it does not re-validate that here.</li>
+    <li><code>time_limit_s</code> matters only on the Level-1 path — it is quietly ignored by the gm/Id route.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The cleverness is restraint. A less disciplined dispatcher might try to be helpful and size the PTM node anyway. This one draws a hard line: <strong>route when a valid sizer exists, refuse honestly when none does, and never let a caller learn which sizer ran.</strong> Seventy lines, one job, done cleanly.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>sizer.py</code> is the single front door of Initial Sizing — it reads one technology field, routes a circuit to the gm/Id pipeline (if a LUT exists) or the Level-1 analytical sizer (for the card-less generic tech), refuses PTM nodes that lack a LUT rather than fabricate wrong numbers, and hands every caller back one identical <code>SizingResult</code> without ever revealing which sizer produced it.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

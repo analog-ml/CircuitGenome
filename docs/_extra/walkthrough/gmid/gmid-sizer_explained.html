@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gmid_sizer.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>gmid_sizer.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/gmid_sizer.py</code> — the conductor that runs the whole gm/Id op-amp sizing pipeline as five phases with typed hand-offs.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The signature &amp; the assembly line</a>
+  <a href="#part-3">3 · Phase 1 &amp; 2 — Analyze, Bias currents</a>
+  <a href="#part-4">4 · Phase 3 — Plan</a>
+  <a href="#part-5">5 · Phase 4 — Size</a>
+  <a href="#part-6">6 · Phase 5, the hand-off insight &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> take a recognised circuit plus a spec and turn it into a fully sized, self-graded design — by running five specialist stages in order and handing a clearly-typed parcel from each one to the next.</p></blockquote>
+
+  <p class="beat">Here is the whole story without a line of code.</p>
+
+  <p>Sizing an analog op-amp is not one calculation — it is a <em>sequence</em> of very different calculations. First you have to understand the circuit's <strong>shape</strong> (which transistor is the tail, which pair is the input, what's a cascode). Then you have to decide how much <strong>current</strong> flows in each branch. Only then can you work out each device's <strong>gm target</strong>, turn that into an actual <strong>width and length</strong>, and finally <strong>grade</strong> the result. Each of those steps needs different knowledge and different math.</p>
+
+  <p>If you tried to do all five in one giant function, you'd get a thousand-line tangle where a change to the current math could silently corrupt the geometry math. So <code>gmid_sizer.py</code> does the opposite: it is a <strong>conductor</strong>. It plays no instrument itself. It only decides <em>who goes when</em>, and carries the output of one player to the next.</p>
+
+  <p>Think of it as a five-station <strong>assembly line</strong>. A raw chassis enters at station 1; each station bolts on its part and slides the car to the next; a finished, inspected car rolls off station 5. Crucially, the thing sliding down the line is not a loose pile of parts — it's a <strong>labelled crate</strong>: a <code>CircuitView</code>, then a <code>CurrentPlan</code>, then a <code>SizingPlan</code>. Those typed hand-offs are the whole trick, and this hero figure is the spine of the entire package:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 360" role="img" aria-label="The five-phase gm/Id sizing pipeline with typed hand-offs between stages">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+
+      <!-- inputs feeding station 1 -->
+      <text x="70" y="30" text-anchor="middle" font-size="11" fill="var(--fig-muted)">parsed · recogniser</text>
+      <text x="70" y="45" text-anchor="middle" font-size="11" fill="var(--fig-muted)">topology · tech · spec</text>
+      <line x1="70" y1="52" x2="70" y2="86" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+
+      <!-- five phase boxes, y = 90..150 -->
+      <!-- Phase 1 -->
+      <g>
+        <rect x="12" y="90" width="120" height="62" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="72" y="112" text-anchor="middle" font-size="12" font-weight="600">1 · Analyze</text>
+        <text x="72" y="130" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">find the shape:</text>
+        <text x="72" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">slots, cascodes</text>
+        <text x="72" y="170" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">analyze.py</text>
+      </g>
+      <!-- Phase 2 -->
+      <g>
+        <rect x="162" y="90" width="120" height="62" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="222" y="112" text-anchor="middle" font-size="12" font-weight="600">2 · Bias I</text>
+        <text x="222" y="130" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">KCL + ibias →</text>
+        <text x="222" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">per-branch I</text>
+        <text x="222" y="170" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">plan.py</text>
+      </g>
+      <!-- Phase 3 -->
+      <g>
+        <rect x="312" y="90" width="120" height="62" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="372" y="112" text-anchor="middle" font-size="12" font-weight="600">3 · Plan</text>
+        <text x="372" y="130" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm targets +</text>
+        <text x="372" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">comp caps</text>
+        <text x="372" y="170" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">plan.py</text>
+      </g>
+      <!-- Phase 4 -->
+      <g>
+        <rect x="462" y="90" width="120" height="62" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="522" y="112" text-anchor="middle" font-size="12" font-weight="600">4 · Size</text>
+        <text x="522" y="130" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">LUT geometry,</text>
+        <text x="522" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">check + repair</text>
+        <text x="522" y="170" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">geometry/bias/…</text>
+      </g>
+      <!-- Phase 5 -->
+      <g>
+        <rect x="612" y="90" width="120" height="62" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="672" y="112" text-anchor="middle" font-size="12" font-weight="600">5 · Evaluate</text>
+        <text x="672" y="130" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">analytical</text>
+        <text x="672" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">metrics</text>
+        <text x="672" y="170" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">evaluate.py</text>
+      </g>
+
+      <!-- arrows with typed hand-off pills, y ~ 121 -->
+      <!-- 1->2 : CircuitView -->
+      <line x1="132" y1="121" x2="162" y2="121" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- 2->3 : CurrentPlan -->
+      <line x1="282" y1="121" x2="312" y2="121" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- 3->4 : SizingPlan -->
+      <line x1="432" y1="121" x2="462" y2="121" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- 4->5 : sizing -->
+      <line x1="582" y1="121" x2="612" y2="121" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+
+      <!-- typed hand-off pills, sitting on the hand-off lane y ~ 220 -->
+      <text x="384" y="205" text-anchor="middle" font-size="11" fill="var(--fig-muted)">the typed crate that slides between stations</text>
+      <!-- CircuitView -->
+      <rect x="20" y="216" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="80" y="235" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">CircuitView</text>
+      <path d="M72,152 C72,185 80,190 80,216" fill="none" stroke="var(--fig-accent2)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <!-- CurrentPlan -->
+      <rect x="168" y="216" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="228" y="235" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">CurrentPlan</text>
+      <path d="M222,152 C222,185 228,190 228,216" fill="none" stroke="var(--fig-accent2)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <!-- SizingPlan -->
+      <rect x="316" y="216" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="376" y="235" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">SizingPlan</text>
+      <path d="M372,152 C372,185 376,190 376,216" fill="none" stroke="var(--fig-accent2)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <!-- sizing dict -->
+      <rect x="466" y="216" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="526" y="235" text-anchor="middle" font-size="11" font-weight="600">sizing {ref→W/L}</text>
+      <path d="M522,152 C522,185 526,190 526,216" fill="none" stroke="var(--fig-stroke)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+
+      <!-- final output -->
+      <line x1="672" y1="152" x2="672" y2="290" stroke="var(--fig-good)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="576" y="292" width="192" height="46" rx="10" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="672" y="313" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-good)">SizingResult</text>
+      <text x="672" y="329" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">sizes · metrics · bias_feasible</text>
+    </svg>
+    <figcaption>Five stations, left to right. Each one produces a labelled crate — <code>CircuitView → CurrentPlan → SizingPlan → sizing</code> — and the finished, self-graded <code>SizingResult</code> rolls off the end.</figcaption>
+  </figure>
+
+  <p>Notice this is a <strong>separate line</strong> from the Level-1 CP-SAT sizer. The gm/Id path is its own factory. And the model-independent topology math (KCL, mirror ratios) is <em>borrowed</em> from <code>circuitgenome.sizer.shared</code> rather than re-built here — the conductor reuses the orchestra's shared sheet music.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 reads the function's signature and one-line body-per-phase, then names the analogy that makes the rest obvious — an assembly line whose stations you can test one at a time.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The signature &amp; the assembly line</h2>
+
+  <blockquote><p><strong>The one job of <code>size_gmid</code>:</strong> accept everything the recogniser and synthesiser already know about the circuit, plus the design spec, and drive the five phases to a <code>SizingResult</code>.</p></blockquote>
+
+  <p>The scary-looking part is just the <em>ingredients list</em>. Every argument is something an earlier tool already produced; <code>size_gmid</code> does not compute any of them, it only consumes them:</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">size_gmid</span>(
+    parsed: ParsedNetlist,                 <span class="tok-com"># the raw SPICE netlist</span>
+    sr_result: SubcircuitRecognitionResult,<span class="tok-com"># which sub-blocks were found</span>
+    fbr_result: FunctionalBlockRecognitionResult, <span class="tok-com"># functional-block labels</span>
+    topology: TopologyTemplate,            <span class="tok-com"># the intended op-amp topology</span>
+    tech: TechParams,                      <span class="tok-com"># the PDK + the gm/Id LUT</span>
+    spec: SizingSpec,                      <span class="tok-com"># gain / GBW / ibias targets</span>
+    intent: GmIdIntent = DEFAULT_INTENT,   <span class="tok-com"># L &amp; region design policy</span>
+) -> SizingResult:</code></pre>
+
+  <p>The docstring's one warning is the load-bearing precondition: <em>"Requires <code>tech.gmid_lut</code>."</em> The whole path reads device physics from a lookup table baked into <code>tech</code>. No table, no gm/Id sizing.</p>
+
+  <h3>Why an assembly line is exactly the right picture</h3>
+
+  <p>On a real assembly line, the paint station does not need to know how the engine was bolted in. It only needs a <strong>car body of the agreed shape</strong> to arrive. That agreement — "what shape shows up at my station" — is the typed hand-off. It buys three things at once:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 210" role="img" aria-label="Three benefits of typed hand-offs between assembly-line stations">
+      <defs></defs>
+      <!-- station A -->
+      <rect x="30" y="70" width="130" height="56" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="95" y="94" text-anchor="middle" font-size="12" font-weight="600">station N</text>
+      <text x="95" y="112" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">emits a crate</text>
+      <!-- crate -->
+      <line x1="160" y1="98" x2="230" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="232" y="82" width="96" height="32" rx="16" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="280" y="102" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">typed crate</text>
+      <line x1="328" y1="98" x2="398" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- station B -->
+      <rect x="400" y="70" width="130" height="56" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="465" y="94" text-anchor="middle" font-size="12" font-weight="600">station N+1</text>
+      <text x="465" y="112" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">consumes it</text>
+      <!-- benefit callouts -->
+      <text x="320" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">the contract at the seam buys you…</text>
+      <text x="130" y="165" text-anchor="middle" font-size="11">① test a station alone</text>
+      <text x="130" y="182" text-anchor="middle" font-size="10" fill="var(--fig-muted)">feed a fake crate in</text>
+      <text x="320" y="165" text-anchor="middle" font-size="11">② swap a station out</text>
+      <text x="320" y="182" text-anchor="middle" font-size="10" fill="var(--fig-muted)">same crate, new maths</text>
+      <text x="510" y="165" text-anchor="middle" font-size="11">③ localize a bug</text>
+      <text x="510" y="182" text-anchor="middle" font-size="10" fill="var(--fig-muted)">inspect the crate at the seam</text>
+    </svg>
+    <figcaption>Because each seam is a named type, a station can be tested, replaced, or debugged in isolation — the crate is the contract.</figcaption>
+  </figure>
+
+  <p>Hold onto benefit&nbsp;①. It is the hidden idea of the whole file, and we return to it in Part&nbsp;6. For now, let's follow one real circuit down the line.</p>
+
+  <h3>Our running example — a two-stage Miller op-amp</h3>
+  <p>We'll trace a classic textbook op-amp through all five stations, carrying real numbers the whole way:</p>
+  <ul>
+    <li>Input pair <code>M1, M2</code> (PMOS), tail source <code>M5</code>, mirror load <code>M3, M4</code>.</li>
+    <li>Second stage <code>M6</code> with current source <code>M7</code>, Miller cap <code>Cc</code>.</li>
+    <li>Spec: <code>ibias</code> sets the tail, target <code>GBW = 10 MHz</code>, <code>gain ≥ 60 dB</code>.</li>
+  </ul>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · Phases 1 &amp; 2 — Analyze, then Bias currents</h2>
+
+  <blockquote><p><strong>The one job of these two lines:</strong> first learn <em>what the circuit is</em> (which device plays which role), then decide <em>how much current</em> runs through each device.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-com"># Phase 1 — Analyze: structural view of the recognised circuit.</span>
+view = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)
+
+<span class="tok-com"># Phase 2 — Bias currents: IDS from KCL, rail-referenced load resistors.</span>
+currents = <span class="tok-fn">assign_currents</span>(view, spec, tech)</code></pre>
+
+  <h3>Phase 1 → <code>CircuitView</code></h3>
+  <p>Analogy: before an electrician touches a house, they walk it and <strong>label every wire</strong> — "this is the main, this is the kitchen ring." <code>analyze_circuit</code> does exactly that: it takes the functional-block recognition result and the intended topology and produces a <code>CircuitView</code>, the labelled map everyone downstream reads:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 200" role="img" aria-label="Fields of the CircuitView hand-off">
+      <rect x="18" y="20" width="140" height="30" rx="15" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="88" y="39" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">CircuitView</text>
+      <line x1="88" y1="50" x2="88" y2="70" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <g font-size="10.5">
+        <!-- row 1 -->
+        <rect x="18" y="70" width="185" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="110" y="88" text-anchor="middle" font-size="11" font-weight="600">slot_transistors</text>
+        <text x="110" y="103" text-anchor="middle" fill="var(--fig-muted)">"input_pair" → [M1,M2]</text>
+        <rect x="215" y="70" width="185" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="307" y="88" text-anchor="middle" font-size="11" font-weight="600">all_transistors</text>
+        <text x="307" y="103" text-anchor="middle" fill="var(--fig-muted)">ref → (Device, slot)</text>
+        <rect x="412" y="70" width="190" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="507" y="88" text-anchor="middle" font-size="11" font-weight="600">blocks : OpAmpBlocks</text>
+        <text x="507" y="103" text-anchor="middle" fill="var(--fig-muted)">typed stage decomposition</text>
+        <!-- row 2 -->
+        <rect x="18" y="120" width="185" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="110" y="138" text-anchor="middle" font-size="11" font-weight="600">slot_resistors</text>
+        <text x="110" y="153" text-anchor="middle" fill="var(--fig-muted)">slot → [resistors]</text>
+        <rect x="215" y="120" width="185" height="42" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="1.5"/>
+        <text x="307" y="138" text-anchor="middle" font-size="11" font-weight="600">cascode_refs</text>
+        <text x="307" y="153" text-anchor="middle" fill="var(--fig-accent)">the stacked devices</text>
+        <rect x="412" y="120" width="190" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="507" y="138" text-anchor="middle" font-size="11" font-weight="600">warnings</text>
+        <text x="507" y="153" text-anchor="middle" fill="var(--fig-muted)">topology-mismatch notes</text>
+      </g>
+    </svg>
+    <figcaption>The <code>CircuitView</code> is a pure description — no sizes yet, just "who is who." Every later phase reads from it.</figcaption>
+  </figure>
+
+  <p>For our op-amp, Phase 1 concludes: <code>slot_transistors["input_pair"] = [M1, M2]</code>, <code>["tail_current"] = [M5]</code>, <code>["mirror"] = [M3, M4]</code>, and it records no cascodes. Nothing has been sized — this is pure structure.</p>
+
+  <h3>Phase 2 → <code>CurrentPlan</code></h3>
+  <p>Now the current. This is <strong>Kirchhoff's current law</strong> as bookkeeping: <code>spec.ibias</code> fixes the tail, and every other branch current follows from the wiring. The tail current splits evenly between the two matched input branches — like a river of known flow forking into two equal streams:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 210" role="img" aria-label="KCL current split from the tail into the two input branches">
+      <!-- tail node -->
+      <rect x="200" y="20" width="120" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="260" y="42" text-anchor="middle" font-size="12" font-weight="600">M5 tail = 20 µA</text>
+      <text x="335" y="41" font-size="10.5" fill="var(--fig-muted)">← spec.ibias</text>
+      <!-- split -->
+      <line x1="230" y1="54" x2="120" y2="96" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="290" y1="54" x2="400" y2="96" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="150" y="82" font-size="10.5" fill="var(--fig-muted)">½</text>
+      <text x="370" y="82" font-size="10.5" fill="var(--fig-muted)">½</text>
+      <!-- branches -->
+      <rect x="60" y="98" width="120" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="120" text-anchor="middle" font-size="11">M1 = 10 µA</text>
+      <rect x="340" y="98" width="120" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="400" y="120" text-anchor="middle" font-size="11">M2 = 10 µA</text>
+      <!-- into mirrors -->
+      <line x1="120" y1="132" x2="120" y2="164" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="400" y1="132" x2="400" y2="164" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="60" y="166" width="120" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="186" text-anchor="middle" font-size="11">M3 = 10 µA</text>
+      <rect x="340" y="166" width="120" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="400" y="186" text-anchor="middle" font-size="11">M4 = 10 µA</text>
+    </svg>
+    <figcaption>KCL bookkeeping: 20 µA in the tail forks into two 10 µA legs, and each mirror device inherits its leg's current. No physics yet — just conservation of charge.</figcaption>
+  </figure>
+
+  <p>Phase 2 also sizes the <strong>rail-referenced load resistors</strong> (if the load is passive) and records their conductance. The result is a <code>CurrentPlan</code> with three fields: <code>ids_map</code> (ref → current), <code>load_resistors</code> (ref → Ω), and <code>gd_load_r</code>. For us:</p>
+
+  <table>
+    <thead><tr><th>ref</th><th>M1</th><th>M2</th><th>M3</th><th>M4</th><th>M5</th><th>M6</th><th>M7</th></tr></thead>
+    <tbody><tr><td><code>ids_map</code> (µA)</td><td class="num">10</td><td class="num">10</td><td class="num">10</td><td class="num">10</td><td class="num">20</td><td class="num">40</td><td class="num">40</td></tr></tbody>
+  </table>
+
+  <p>Still <strong>no widths</strong>. Phases 1 and 2 answer "who" and "how much current" — the geometry comes later, and that separation is deliberate.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · Phase 3 — Plan</h2>
+
+  <blockquote><p><strong>The one job:</strong> turn the spec and the currents into per-device <em>targets</em> — how much gm each signal device must deliver, what compensation caps are needed, and each device's design intent — without yet choosing a single width.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-com"># Phase 3 — Plan: gm requirements + compensation caps + per-device intent.</span>
+plan = <span class="tok-fn">plan_devices</span>(view, currents, spec, tech, intent)</code></pre>
+
+  <p>Analogy: the current plan told us <em>how much water</em> flows in each pipe. Phase 3 is the <strong>architect's spec sheet</strong>: it says how <em>strong</em> each amplifying device has to be to hit the customer's requirements, and reads each device's role-specific intent (its L, its inversion region) from the functional-block registry.</p>
+
+  <p>The single most important target is the input pair's <strong>transconductance</strong>. For a Miller op-amp the gain-bandwidth is set almost entirely by <code>gm1</code> and the compensation cap:</p>
+
+  <div class="eq-center"><span class="boxed-eq">gm<sub>1</sub>&nbsp;=&nbsp;2π · GBW · C<sub>c</sub></span></div>
+
+  <p>Plug in our numbers — <code>GBW = 10 MHz</code>, <code>Cc = 2 pF</code>:</p>
+  <pre class="code"><code>gm1 = 2π × 10e6 × 2e-12  =  6.283 × 20e-6  ≈  126 µA/V</code></pre>
+
+  <p>So Phase 3 writes <code>gm_req_map["M1"] ≈ 126 µA/V</code>. That single number is what Phase 4 will chase when it picks M1's width. The output of Phase 3 is the richest crate on the line:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 210" role="img" aria-label="Fields of the SizingPlan hand-off">
+      <rect x="18" y="18" width="130" height="30" rx="15" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="83" y="37" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">SizingPlan</text>
+      <line x1="83" y1="48" x2="83" y2="66" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <g font-size="10.5">
+        <rect x="18" y="66" width="185" height="42" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="1.5"/>
+        <text x="110" y="84" text-anchor="middle" font-size="11" font-weight="600">gm_req_map</text>
+        <text x="110" y="99" text-anchor="middle" fill="var(--fig-accent)">M1 → 126 µA/V</text>
+        <rect x="215" y="66" width="185" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="307" y="84" text-anchor="middle" font-size="11" font-weight="600">vod_max_map</text>
+        <text x="307" y="99" text-anchor="middle" fill="var(--fig-muted)">max VDS_sat from swing</text>
+        <rect x="412" y="66" width="190" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="507" y="84" text-anchor="middle" font-size="11" font-weight="600">model : GmIdModel</text>
+        <text x="507" y="99" text-anchor="middle" fill="var(--fig-muted)">the LUT + region policy</text>
+        <rect x="18" y="116" width="185" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="110" y="134" text-anchor="middle" font-size="11" font-weight="600">cc_pf / cc2_pf</text>
+        <text x="110" y="149" text-anchor="middle" fill="var(--fig-muted)">compensation caps (pF)</text>
+        <rect x="215" y="116" width="185" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="307" y="134" text-anchor="middle" font-size="11" font-weight="600">tintents</text>
+        <text x="307" y="149" text-anchor="middle" fill="var(--fig-muted)">ref → TransistorIntent</text>
+        <rect x="412" y="116" width="190" height="42" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="507" y="134" text-anchor="middle" font-size="11" font-weight="600">warnings</text>
+        <text x="507" y="149" text-anchor="middle" fill="var(--fig-muted)">gm-ceiling advisories</text>
+      </g>
+    </svg>
+    <figcaption>The <code>SizingPlan</code> is all targets and policy — the "what to aim for," carried into Phase 4 which decides the "how."</figcaption>
+  </figure>
+
+  <p>One honest subtlety lives in <code>warnings</code>: if the spec demands more gm than a device can physically deliver at its assigned current, Phase 3 doesn't crash — it records a <strong>gm-ceiling advisory</strong> and carries on. The plan is allowed to be ambitious; later phases and the final verdict decide whether ambition was met.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · Phase 4 — Size (where targets become widths)</h2>
+
+  <blockquote><p><strong>The one job:</strong> turn every target into a real, manufacturable width — then run three physical sanity checks (geometry, DC bias, stage interface), repairing where possible, and fold their verdicts into one feasibility flag.</p></blockquote>
+
+  <p>This is the busiest phase — five helper calls, one after another. But it's still just an assembly sub-line. The crate (<code>sizing</code>, a <code>ref → W/L</code> dict) enters, and each step either fills it in or repairs it:</p>
+
+  <pre class="code"><code>sizing, geom_warnings, geom_feasible = <span class="tok-fn">assign_geometry_gmid</span>(
+    plan.model, view.all_transistors, view.slot_transistors,
+    currents.ids_map, plan.tintents, plan.gm_req_map, tech,
+    vod_max_map=plan.vod_max_map)
+sizing, dc_warnings, bias_feasible = <span class="tok-fn">check_dc_operating_point</span>(...)
+sizing, si_warnings, si_feasible   = <span class="tok-fn">check_stage_interface</span>(...)
+bias_feasible = bias_feasible <span class="tok-kw">and</span> si_feasible <span class="tok-kw">and</span> geom_feasible
+extra_r, modifiers = <span class="tok-fn">size_resistors</span>(...)
+sizing, level_r    = <span class="tok-fn">tune_bias_levels</span>(...)
+extra_r = {**extra_r, **level_r}</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 150" role="img" aria-label="The five sizing sub-steps of Phase 4 in sequence">
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="8" y="40" width="118" height="52" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="67" y="62" font-size="11" font-weight="600">geometry</text>
+        <text x="67" y="78" fill="var(--fig-muted)">LUT → W/L</text>
+        <text x="67" y="108" fill="var(--fig-accent2)">geometry.py</text>
+        <rect x="146" y="40" width="118" height="52" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="205" y="62" font-size="11" font-weight="600">DC bias</text>
+        <text x="205" y="78" fill="var(--fig-muted)">check + repair</text>
+        <text x="205" y="108" fill="var(--fig-accent2)">bias.py</text>
+        <rect x="284" y="40" width="118" height="52" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="343" y="62" font-size="11" font-weight="600">stage interface</text>
+        <text x="343" y="78" fill="var(--fig-muted)">window check</text>
+        <text x="343" y="108" fill="var(--fig-accent2)">stage_interface.py</text>
+        <rect x="422" y="40" width="118" height="52" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="481" y="62" font-size="11" font-weight="600">resistors</text>
+        <text x="481" y="78" fill="var(--fig-muted)">non-load net</text>
+        <text x="481" y="108" fill="var(--fig-accent2)">resistors.py</text>
+        <rect x="560" y="40" width="118" height="52" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="619" y="62" font-size="11" font-weight="600">bias levels</text>
+        <text x="619" y="78" fill="var(--fig-muted)">tune constructed</text>
+        <text x="619" y="108" fill="var(--fig-accent2)">bias_levels.py</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="126" y1="66" x2="146" y2="66" marker-end="url(#ar)"/>
+        <line x1="264" y1="66" x2="284" y2="66" marker-end="url(#ar)"/>
+        <line x1="402" y1="66" x2="422" y2="66" marker-end="url(#ar)"/>
+        <line x1="540" y1="66" x2="560" y2="66" marker-end="url(#ar)"/>
+      </g>
+    </svg>
+    <figcaption>Phase 4 is itself a little five-station line inside the big one: pick widths, then check bias, check interfaces, add resistors, tune levels.</figcaption>
+  </figure>
+
+  <h3>The single most important line in Phase 4</h3>
+  <p>It's this one:</p>
+  <pre class="code"><code>bias_feasible = bias_feasible <span class="tok-kw">and</span> si_feasible <span class="tok-kw">and</span> geom_feasible</code></pre>
+  <p>Three independent checks each return a boolean verdict. The conductor <code>AND</code>s them into <strong>one</strong> feasibility flag. It's an <em>all-must-pass</em> gate: a design is only trustworthy if the geometry fit the LUT <em>and</em> the DC operating point held <em>and</em> the inter-stage windows lined up. One failure poisons the verdict — exactly as it should.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 170" role="img" aria-label="Three feasibility booleans combined by logical AND into one verdict">
+      <g font-size="11" text-anchor="middle">
+        <rect x="20" y="24" width="150" height="30" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+        <text x="95" y="44">geom_feasible = ✓</text>
+        <rect x="20" y="66" width="150" height="30" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+        <text x="95" y="86">bias_feasible = ✓</text>
+        <rect x="20" y="108" width="150" height="30" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+        <text x="95" y="128">si_feasible = ✗</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="170" y1="39" x2="300" y2="70" marker-end="url(#ar)"/>
+        <line x1="170" y1="81" x2="300" y2="81" marker-end="url(#ar)"/>
+        <line x1="170" y1="123" x2="300" y2="92" marker-end="url(#ar)"/>
+      </g>
+      <circle cx="330" cy="81" r="26" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="330" y="86" text-anchor="middle" font-size="13" font-weight="600">AND</text>
+      <line x1="356" y1="81" x2="396" y2="81" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="398" y="64" width="110" height="34" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="453" y="86" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-bad)">= False</text>
+    </svg>
+    <figcaption>All-must-pass: any single ✗ makes the whole design infeasible. Here the stage-interface check fails, so the honest verdict is <code>False</code>.</figcaption>
+  </figure>
+
+  <p>Two of these steps don't just judge — they <strong>repair</strong>. <code>check_dc_operating_point</code> can turn up gm/Id to un-squash a tail; <code>check_stage_interface</code> can nudge a stage-interface window. The conductor threads the (possibly repaired) <code>sizing</code> through each call, so later steps always see the newest widths. The two resistor steps (<code>size_resistors</code>, <code>tune_bias_levels</code>) contribute extra resistors, merged with <code>{**extra_r, **level_r}</code>.</p>
+
+  <p>For our op-amp, Phase 4 reads the LUT to give M1 a width that hits <code>gm1 ≈ 126 µA/V</code> at 10 µA, all three checks pass, and <code>bias_feasible = True</code>.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · Phase 5, the hidden idea &amp; the honest limits</h2>
+
+  <blockquote><p><strong>The one job of Phase 5:</strong> grade the finished design analytically — gain, bandwidth, phase margin — without ever launching ngspice, then package everything into one <code>SizingResult</code>.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-com"># Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.</span>
+metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
+    view, currents, plan, sizing, modifiers, spec, tech)
+
+<span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
+    transistors=sizing, cc_pf=plan.cc_pf, metrics=metrics, margins=margins,
+    solver_status=<span class="tok-str">"GMID"</span>, cc2_pf=plan.cc2_pf,
+    warnings=(view.warnings + plan.warnings + geom_warnings + dc_warnings
+              + si_warnings + eval_notes),
+    resistors={**currents.load_resistors, **extra_r},
+    bias_feasible=bias_feasible,
+    transistor_intents=plan.tintents)</code></pre>
+
+  <p>Notice the <code>return</code> is a <strong>gathering</strong> step. It reaches back into every crate that came down the line — <code>plan.cc_pf</code>, <code>currents.load_resistors</code>, <code>plan.tintents</code> — and the running <code>bias_feasible</code> flag. Because each hand-off was kept as a named object, the final assembly is just picking the right field off each one:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 230" role="img" aria-label="Assembling the final SizingResult from every upstream crate">
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="20" y="20" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="80" y="39" font-size="11">CurrentPlan</text>
+        <rect x="20" y="66" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="1.5"/>
+        <text x="80" y="85" font-size="11">SizingPlan</text>
+        <rect x="20" y="112" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="80" y="131" font-size="11">sizing dict</text>
+        <rect x="20" y="158" width="120" height="30" rx="15" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="80" y="177" font-size="11">metrics + flag</text>
+      </g>
+      <g stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3">
+        <line x1="140" y1="35"  x2="360" y2="90"  marker-end="url(#ar)"/>
+        <line x1="140" y1="81"  x2="360" y2="100" marker-end="url(#ar)"/>
+        <line x1="140" y1="127" x2="360" y2="110" marker-end="url(#ar)"/>
+        <line x1="140" y1="173" x2="360" y2="120" marker-end="url(#ar)"/>
+      </g>
+      <rect x="362" y="60" width="240" height="110" rx="12" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="482" y="84" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-good)">SizingResult</text>
+      <g font-size="10.5" text-anchor="start">
+        <text x="380" y="104">transistors, resistors, cc_pf</text>
+        <text x="380" y="122">metrics, margins</text>
+        <text x="380" y="140">warnings (all six sources merged)</text>
+        <text x="380" y="158">bias_feasible, transistor_intents</text>
+      </g>
+    </svg>
+    <figcaption>The final crate is assembled by field-picking from every earlier crate — the payoff of never flattening the hand-offs into loose variables.</figcaption>
+  </figure>
+
+  <p>Look at the <code>warnings</code> line: it concatenates advisories from <em>all six</em> stages — <code>view</code>, <code>plan</code>, geometry, DC, stage-interface, and eval. Nothing is swallowed. A reader of the result can see exactly which station raised each concern.</p>
+
+  <h3>The complete walk, all five phases, one op-amp</h3>
+  <p>Here is our Miller op-amp riding the whole line, with numbers at every seam:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 250" role="img" aria-label="One op-amp traced through all five phases with concrete values">
+      <g font-size="10.5">
+        <!-- phase rows -->
+        <rect x="14" y="16" width="120" height="34" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="74" y="37" text-anchor="middle" font-size="11" font-weight="600">1 · Analyze</text>
+        <text x="150" y="30" font-size="10.5">M1,M2 = input pair · M5 = tail · M3,M4 = mirror</text>
+        <text x="150" y="45" font-size="10.5" fill="var(--fig-accent2)">→ CircuitView (no cascodes)</text>
+
+        <rect x="14" y="62" width="120" height="34" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="74" y="83" text-anchor="middle" font-size="11" font-weight="600">2 · Bias I</text>
+        <text x="150" y="76" font-size="10.5">tail 20 µA → 10 µA/leg; M6,M7 = 40 µA</text>
+        <text x="150" y="91" font-size="10.5" fill="var(--fig-accent2)">→ CurrentPlan.ids_map</text>
+
+        <rect x="14" y="108" width="120" height="34" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="74" y="129" text-anchor="middle" font-size="11" font-weight="600">3 · Plan</text>
+        <text x="150" y="122" font-size="10.5">gm1 = 2π·10MHz·2pF ≈ 126 µA/V; Cc = 2 pF</text>
+        <text x="150" y="137" font-size="10.5" fill="var(--fig-accent2)">→ SizingPlan.gm_req_map</text>
+
+        <rect x="14" y="154" width="120" height="34" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="74" y="175" text-anchor="middle" font-size="11" font-weight="600">4 · Size</text>
+        <text x="150" y="168" font-size="10.5">LUT → W(M1) to hit 126 µA/V @ 10 µA; checks pass</text>
+        <text x="150" y="183" font-size="10.5" fill="var(--fig-good)">→ sizing, bias_feasible = True</text>
+
+        <rect x="14" y="200" width="120" height="34" rx="7" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="74" y="221" text-anchor="middle" font-size="11" font-weight="600">5 · Evaluate</text>
+        <text x="150" y="214" font-size="10.5">gain ≈ 62 dB, GBW ≈ 10 MHz, PM ≈ 60°</text>
+        <text x="150" y="229" font-size="10.5" fill="var(--fig-good)">→ SizingResult ✓</text>
+      </g>
+      <g stroke="var(--fig-muted)" stroke-width="2">
+        <line x1="74" y1="50" x2="74" y2="62" marker-end="url(#ar)"/>
+        <line x1="74" y1="96" x2="74" y2="108" marker-end="url(#ar)"/>
+        <line x1="74" y1="142" x2="74" y2="154" marker-end="url(#ar)"/>
+        <line x1="74" y1="188" x2="74" y2="200" marker-end="url(#ar)"/>
+      </g>
+    </svg>
+    <figcaption>The same circuit, one phase per row — each seam carries a concrete, named artifact from the phase above to the phase below.</figcaption>
+  </figure>
+
+  <h3>The hidden idea: typed seams make the phases independently testable</h3>
+  <p>Here's what the code never writes down but is really <em>about</em>. Because each phase's output is a named, self-contained type, you can test any phase <strong>in isolation</strong> — hand-build a fake <code>CircuitView</code>, call <code>assign_currents</code>, and assert on the <code>CurrentPlan</code>, with no netlist, no LUT, no evaluation in sight:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <mtext>Phase</mtext><mo>:</mo>
+          <msub><mi>T</mi><mrow><mi>in</mi></mrow></msub>
+          <mo>&#8594;</mo>
+          <msub><mi>T</mi><mrow><mi>out</mi></mrow></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Every phase is a <strong>pure function from one type to the next</strong>: <code>CircuitView → CurrentPlan → SizingPlan → sizing → SizingResult</code>. That is why the orchestrator can stay a flat 97 lines with no branching cleverness — all the intelligence lives behind the typed seams, and the conductor just carries crates. Flatten those hand-offs into a bag of loose dictionaries and you lose the whole property: nothing would be testable alone, and a bug could no longer be pinned to a single seam.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It is the <strong>gm/Id path only</strong> — a totally separate line from the Level-1 CP-SAT sizer, chosen upstream.</li>
+    <li>It <strong>requires <code>tech.gmid_lut</code></strong>; without the lookup table there is no device physics to read and the path can't run.</li>
+    <li>Phase 5 is <strong>analytical, not SPICE</strong> — the metrics are first-order estimates. A <code>bias_feasible = True</code> is a green light for a real simulator, not a substitute for one.</li>
+    <li>It <strong>orchestrates but does not compute</strong> — every hard decision lives in a specialist module; a wrong number here is almost always a bug in <code>analyze.py</code>, <code>plan.py</code>, <code>geometry.py</code>, <code>bias.py</code> or <code>evaluate.py</code>, not in the conductor.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole 97-line file rides one design decision: <strong>make every hand-off an explicit, named type</strong>. That single choice turns a five-way tangle into five independent, testable stages a reader can follow top-to-bottom in one sitting — and lets a bug be traced to one seam instead of hunted through a monolith.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>gmid_sizer.py</code> is the conductor of the gm/Id sizing orchestra — it runs Analyze → Bias currents → Plan → Size → Evaluate in order, carrying an explicitly-typed crate (<code>CircuitView</code>, <code>CurrentPlan</code>, <code>SizingPlan</code>, <code>sizing</code>) across each seam, and returns one self-graded <code>SizingResult</code> whose <code>bias_feasible</code> flag is the honest <code>AND</code> of every check along the way.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

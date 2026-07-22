@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plan.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>plan.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/plan.py</code> — before drawing a single transistor, pin down the current each device is forced to carry and the target each device must hit.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · Three words, one pipeline</a>
+  <a href="#part-3">3 · assign_currents() — Phase 2</a>
+  <a href="#part-4">4 · _model_for() — the oracle</a>
+  <a href="#part-5">5 · plan_devices() — Phase 3</a>
+  <a href="#part-6">6 · The hidden separation</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> before any transistor gets a width or a length, pin down two things for every device — the <em>current</em> it is forced to carry, and the <em>performance target</em> it must meet. No geometry yet, just derivations.</p></blockquote>
+
+  <p class="beat">Here is the whole story without reading a line of code.</p>
+
+  <p>Sizing an op-amp is like <strong>casting and budgeting a play before you build the set</strong>. You cannot start hammering scenery together until you know who is in each role and how much money each scene gets. <code>plan.py</code> is that pre-production meeting. It runs in two acts — the sizer's <strong>Phase 2</strong> and <strong>Phase 3</strong> — and both produce nothing but <em>plans</em>. Not one micron of transistor is drawn here.</p>
+
+  <p>Why split it out? Because two very different kinds of number get decided, and confusing them is how sizers go wrong:</p>
+
+  <ul>
+    <li><strong>What cannot be chosen.</strong> Every device's quiescent current is <em>dictated</em> — by the bias reference <code>spec.ibias</code> and by Kirchhoff's current law. You do not get to pick it; physics already did.</li>
+    <li><strong>What must be achieved, and what is chosen.</strong> The performance spec <em>demands</em> a certain gain-bandwidth, swing, phase margin — which translate into a required <code>gm</code> per stage and compensation caps. And a design-intent registry <em>chooses</em> each device's role, its gm/Id operating region, and its channel length.</li>
+  </ul>
+
+  <p>Do this carefully up front and the geometry solver that follows has a clean, KCL-consistent target sheet. Skip it, and the solver invents currents ad-hoc, quietly violates KCL at some node, and chases gain targets that the bias current can never physically deliver.</p>
+
+  <h3>The cast of characters</h3>
+  <p>Two orchestrators, five helpers. Phase 2 on the left, Phase 3 on the right; the currents computed on the left flow into the right. Hover any box to trace its link.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 645 270" role="img" aria-label="Call graph of plan.py: assign_currents and plan_devices with their helpers">
+      <defs>
+        <marker id="arCG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+
+      <!-- data-dependency arrow (always visible) -->
+      <line x1="270" y1="39" x2="356" y2="39" stroke="var(--fig-accent2)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arCG)"/>
+      <text x="313" y="31" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">currents</text>
+
+      <!-- Phase 2 spine + stubs -->
+      <line class="edge" data-group="aid" x1="60" y1="62" x2="60" y2="109" stroke="var(--fig-muted)" stroke-width="2"/>
+      <line class="edge" data-group="aid" x1="60" y1="109" x2="88" y2="109" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arCG)"/>
+      <line class="edge" data-group="slr" x1="60" y1="62" x2="60" y2="173" stroke="var(--fig-muted)" stroke-width="2"/>
+      <line class="edge" data-group="slr" x1="60" y1="173" x2="88" y2="173" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arCG)"/>
+
+      <!-- Phase 3 spine + stubs -->
+      <line class="edge" data-group="mf"  x1="400" y1="62" x2="400" y2="102" stroke="var(--fig-muted)" stroke-width="2"/>
+      <line class="edge" data-group="mf"  x1="400" y1="102" x2="428" y2="102" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arCG)"/>
+      <line class="edge" data-group="cr"  x1="400" y1="62" x2="400" y2="162" stroke="var(--fig-muted)" stroke-width="2"/>
+      <line class="edge" data-group="cr"  x1="400" y1="162" x2="428" y2="162" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arCG)"/>
+      <line class="edge" data-group="rti" x1="400" y1="62" x2="400" y2="224" stroke="var(--fig-muted)" stroke-width="2"/>
+      <line class="edge" data-group="rti" x1="400" y1="224" x2="428" y2="224" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arCG)"/>
+
+      <!-- Phase 2 root -->
+      <g class="node" data-group="ac">
+        <rect x="20" y="16" width="250" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="145" y="38" text-anchor="middle" font-weight="600" font-size="13">assign_currents()</text>
+        <text x="145" y="54" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Phase 2 — bias currents</text>
+      </g>
+      <!-- Phase 3 root -->
+      <g class="node" data-group="pd">
+        <rect x="360" y="16" width="250" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="485" y="38" text-anchor="middle" font-weight="600" font-size="13">plan_devices()</text>
+        <text x="485" y="54" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Phase 3 — sizing plan</text>
+      </g>
+
+      <!-- Phase 2 children -->
+      <g class="node" data-group="aid">
+        <rect x="88" y="86" width="205" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="190" y="107" text-anchor="middle" font-weight="600" font-size="12.5">assign_ids()</text>
+        <text x="190" y="123" text-anchor="middle" font-size="10" fill="var(--fig-muted)">KCL + spec.ibias → per-device IDS</text>
+      </g>
+      <g class="node" data-group="slr">
+        <rect x="88" y="150" width="205" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="190" y="171" text-anchor="middle" font-weight="600" font-size="12.5">size_load_resistors()</text>
+        <text x="190" y="187" text-anchor="middle" font-size="10" fill="var(--fig-muted)">branch current → load Ω</text>
+      </g>
+
+      <!-- Phase 3 children -->
+      <g class="node" data-group="mf">
+        <rect x="428" y="80" width="205" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="530" y="99" text-anchor="middle" font-weight="600" font-size="12.5">_model_for()</text>
+        <text x="530" y="115" text-anchor="middle" font-size="10" fill="var(--fig-muted)">intent knobs → GmIdModel</text>
+      </g>
+      <g class="node" data-group="cr">
+        <rect x="428" y="138" width="205" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="530" y="160" text-anchor="middle" font-weight="600" font-size="12.5">compute_requirements()</text>
+        <text x="530" y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">spec → gm req, caps, warnings</text>
+      </g>
+      <g class="node" data-group="rti">
+        <rect x="428" y="200" width="205" height="48" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="530" y="222" text-anchor="middle" font-weight="600" font-size="12">resolve_transistor_intents()</text>
+        <text x="530" y="238" text-anchor="middle" font-size="10" fill="var(--fig-muted)">registry → role · region · L</text>
+      </g>
+    </svg>
+    <figcaption>Two acts. Phase 2 fixes what physics dictates; Phase 3 derives what the spec demands and what the designer chooses. We learn them left-to-right, helpers first.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> before touching a function, Part&nbsp;2 builds the three words the whole file leans on — <code>quiescent current</code>, <code>KCL</code>, and the <code>gm/Id</code> knob — and draws the two-phase pipeline as one picture.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · Three words, one pipeline</h2>
+
+  <p class="beat">You need exactly three ideas. None are as scary as they sound.</p>
+
+  <h3>Quiescent current — the idle flow through each pipe</h3>
+  <p>A transistor at rest, with no signal wiggling it, still passes a steady <strong>quiescent current</strong> — its DC operating point. Picture the whole amplifier as a network of water pipes: even when nobody turns a tap, there is a baseline flow humming through each one. Phase 2's entire job is to write down that baseline flow for every device.</p>
+
+  <h3>KCL — water in equals water out</h3>
+  <p>At any junction of pipes, the water flowing in must equal the water flowing out. That is <strong>Kirchhoff's current law</strong>. It is why the currents <em>cannot be freely chosen</em>: fix the tail current and the two branches of a differential pair are forced to split it. There is no room to negotiate.</p>
+
+  <h3>gm/Id — the efficiency dial</h3>
+  <p>Every transistor has a dial called <code>gm/Id</code> — how much transconductance (gain-per-volt) you extract per amp of current you spend. Turn it up and the device runs in <em>weak inversion</em>: more gain-efficiency, smaller <code>Vgs</code> and <code>Vdsat</code>, but slower. Turn it down and it runs <em>strong</em>: fast, but current-hungry. Phase 3 uses a lookup-table model to convert between this dial and real volts and amps.</p>
+
+  <p>One more character: the <strong>intent registry</strong> — a per-functional-block table that says "the input pair is a signal device at gm/Id ≈ 15, length 2×min; the tail is a current source at gm/Id ≈ 10, length 4×min," and so on. It is where the <em>chosen</em> design decisions live.</p>
+
+  <h3>The whole file as one pipeline</h3>
+
+  <figure class="fig">
+    <svg viewBox="0 0 655 205" role="img" aria-label="Two-phase pipeline from inputs through Phase 2 and Phase 3 to the two plan objects">
+      <defs>
+        <marker id="arPP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="53" y="18" text-anchor="middle" font-size="11" fill="var(--fig-muted)">inputs</text>
+      <g text-anchor="middle" font-size="11">
+        <rect x="10" y="26"  width="86" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="53" y="43">view</text>
+        <rect x="10" y="58"  width="86" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="53" y="75">spec</text>
+        <rect x="10" y="90"  width="86" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="53" y="107">tech</text>
+        <rect x="10" y="122" width="86" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="53" y="139">intent</text>
+      </g>
+      <line x1="100" y1="39" x2="100" y2="135" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <line x1="100" y1="87" x2="132" y2="87" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arPP)"/>
+
+      <rect x="135" y="59" width="115" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="192" y="83" text-anchor="middle" font-size="12" font-weight="600">Phase 2</text>
+      <text x="192" y="101" text-anchor="middle" font-size="10" fill="var(--fig-muted)">assign_currents</text>
+
+      <line x1="250" y1="87" x2="284" y2="87" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arPP)"/>
+
+      <rect x="284" y="63" width="116" height="48" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="342" y="83" text-anchor="middle" font-size="11.5" font-weight="600">CurrentPlan</text>
+      <text x="342" y="99" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">ids · load R · gd</text>
+
+      <line x1="400" y1="87" x2="434" y2="87" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arPP)"/>
+
+      <rect x="434" y="59" width="115" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="491" y="83" text-anchor="middle" font-size="12" font-weight="600">Phase 3</text>
+      <text x="491" y="101" text-anchor="middle" font-size="10" fill="var(--fig-muted)">plan_devices</text>
+      <text x="491" y="132" text-anchor="middle" font-size="9" fill="var(--fig-muted)">(also reads spec, tech, intent)</text>
+
+      <line x1="549" y1="87" x2="583" y2="87" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arPP)"/>
+
+      <rect x="565" y="63" width="80" height="48" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="605" y="90" text-anchor="middle" font-size="11" font-weight="600">SizingPlan</text>
+    </svg>
+    <figcaption>Two pure functions in series. Phase 2's <code>CurrentPlan</code> becomes an input to Phase 3, which emits the <code>SizingPlan</code>. Nothing here has a width.</figcaption>
+  </figure>
+
+  <p>Both boxes are <strong>pure derivations</strong>: same inputs in, same plan out, no hidden state, no geometry. Keep that in mind — it is the punchline we will unpack in Part&nbsp;6.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>assign_currents()</code> — Phase 2, the currents you don't get to pick</h2>
+
+  <blockquote><p><strong>The one job:</strong> hand every device its quiescent current from <code>spec.ibias</code> and KCL, and size the rail-referenced load resistors from the first-stage branch current.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">assign_currents</span>(view, spec, tech) -> CurrentPlan:
+    ids_map = <span class="tok-fn">assign_ids</span>(view.slot_transistors, view.all_transistors, spec)
+    load_resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors, spec, tech)
+    gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(load_resistors.values())) <span class="tok-kw">if</span> load_resistors <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">CurrentPlan</span>(ids_map=ids_map, load_resistors=load_resistors,
+                       gd_load_r=gd_load_r)</code></pre>
+
+  <p>Three short lines, three jobs: assign the currents, size the resistors, and compute one conductance the next phase will need. Let's trace each with real numbers.</p>
+
+  <h3>The current split, traced by hand</h3>
+  <p><code>assign_ids</code> reads each transistor's <em>slot</em> (its functional role) and stamps a current on it. The rules that matter here:</p>
+  <ul>
+    <li>The <strong>tail</strong> (a full-bias slot) carries the whole reference: <code>ids = spec.ibias</code>.</li>
+    <li>Each <strong>input-pair</strong> transistor (a half-bias slot of two devices) carries <code>spec.ibias / 2</code>.</li>
+  </ul>
+  <p>Say <code>spec.ibias = 40 µA</code>. The tail current source sets a 40 µA branch. That current arrives at the pair's common node and, by KCL, must split into the two matched input transistors:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="Tail current of 40 microamps splitting by KCL into two 20-microamp input branches">
+      <defs>
+        <marker id="arKC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <rect x="195" y="12" width="170" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="31" text-anchor="middle" font-size="12.5" font-weight="600">spec.ibias = 40 µA</text>
+      <text x="280" y="47" text-anchor="middle" font-size="10" fill="var(--fig-muted)">sets the tail branch</text>
+
+      <line x1="280" y1="54" x2="280" y2="84" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arKC)"/>
+      <text x="292" y="74" font-size="10.5" fill="var(--fig-accent)">tail carries full ibias</text>
+
+      <rect x="200" y="86" width="160" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="280" y="112" text-anchor="middle" font-size="13" font-weight="600">I_tail = 40 µA</text>
+
+      <line x1="248" y1="128" x2="170" y2="174" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arKC)"/>
+      <line x1="312" y1="128" x2="390" y2="174" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arKC)"/>
+
+      <rect x="82" y="176" width="166" height="48" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="165" y="197" text-anchor="middle" font-size="12" font-weight="600">input M1</text>
+      <text x="165" y="214" text-anchor="middle" font-size="11">ibias/2 = 20 µA</text>
+
+      <rect x="312" y="176" width="166" height="48" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="395" y="197" text-anchor="middle" font-size="12" font-weight="600">input M2</text>
+      <text x="395" y="214" text-anchor="middle" font-size="11">ibias/2 = 20 µA</text>
+
+      <text x="280" y="244" text-anchor="middle" font-size="12" fill="var(--fig-accent2)" font-weight="600">KCL at the pair node:  40 µA = 20 µA + 20 µA</text>
+    </svg>
+    <figcaption>The tail current is set by the reference; the split is not a choice — KCL forces 40 = 20 + 20. That is the whole meaning of "what cannot be chosen."</figcaption>
+  </figure>
+
+  <p>Second-stage and third-stage devices scale off the same reference through fixed ratios (<code>ibias · second_stage_current_ratio</code>, etc.), so every current in the amplifier traces back to that one number.</p>
+
+  <h3>Sizing the load resistors</h3>
+  <p>When the first stage uses a plain resistor load (rather than an active mirror), <code>size_load_resistors</code> picks each <code>R</code> so the DC drop lands the output node at a sensible level. For a PMOS-input stage the resistor ties to ground and must set:</p>
+  <div class="eq-center"><span class="boxed-eq">V<sub>node</sub>&nbsp;=&nbsp;V<sub>th,n</sub>&nbsp;+&nbsp;V<sub>ov</sub>&nbsp;&nbsp;⇒&nbsp;&nbsp;R&nbsp;=&nbsp;V<sub>node</sub>&nbsp;/&nbsp;(ibias/2)</span></div>
+  <p>With <code>V<sub>th,n</sub> = 0.4 V</code>, an overdrive <code>V<sub>ov</sub> = 0.2 V</code>, and the branch current we just derived (20 µA):</p>
+  <pre class="code"><code>V_node = 0.4 + 0.2 = 0.6 V
+R      = 0.6 V / 20 µA = 30 kΩ</code></pre>
+
+  <p>The last line of the function then turns the <em>smallest</em> load resistor into a conductance the next phase will fold into its gain math:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 120" role="img" aria-label="Smallest load resistor converted to a conductance gd_load_r">
+      <defs>
+        <marker id="arLR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <rect x="20" y="38" width="210" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="125" y="66" text-anchor="middle" font-size="12">min load R = 30 kΩ</text>
+      <line x1="230" y1="61" x2="298" y2="61" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arLR)"/>
+      <text x="264" y="52" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">gd = 1 / R</text>
+      <rect x="300" y="38" width="180" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="390" y="66" text-anchor="middle" font-size="12" font-weight="600">gd_load_r ≈ 33 µS</text>
+      <text x="250" y="106" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gd_load_r = 0.0 when the load is an active current mirror (no resistor)</text>
+    </svg>
+    <figcaption>The resistor's conductance <code>1/R</code> is the extra load it hangs on the first-stage output node — Phase 3 needs it to compute the true gain, so Phase 2 hands it over pre-computed.</figcaption>
+  </figure>
+
+  <h3>What comes back — <code>CurrentPlan</code></h3>
+  <table>
+    <thead><tr><th>Field</th><th>Meaning</th><th>Where it goes</th></tr></thead>
+    <tbody>
+      <tr><td><code>ids_map</code></td><td>ref → quiescent IDS (A), from KCL + <code>ibias</code></td><td>Phase 3's gm math</td></tr>
+      <tr><td><code>load_resistors</code></td><td>ref → Ω for the rail-referenced loads</td><td>the final netlist</td></tr>
+      <tr><td><code>gd_load_r</code></td><td>conductance the loads add at the output node</td><td>Phase 3's gain calc</td></tr>
+    </tbody>
+  </table>
+  <p>Every number in it was <em>forced</em>, not chosen. That is Phase 2 in one sentence.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>_model_for()</code> — the oracle Phase 3 asks</h2>
+
+  <blockquote><p><strong>The one job:</strong> pack the design intent's length and gm/Id choices into a single <code>GmIdModel</code> — the object that converts a gm/Id dial into real volts and amps.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_model_for</span>(tech, intent) -> GmIdModel:
+    policy = <span class="tok-fn">GmIdPolicy</span>(
+        signal_l_mult=intent.signal_l_mult,
+        cs_l_mult=intent.current_source_l_mult,
+        cs_gmid=intent.current_source_gm_id,
+        signal_nominal_gmid=intent.signal_gm_id,
+        cascode_l_mult=intent.cascode_l_mult,
+        cascode_gmid=intent.cascode_gm_id,
+    )
+    <span class="tok-kw">return</span> <span class="tok-fn">GmIdModel</span>(tech, <span class="tok-fn">GmIdLut</span>(tech.gmid_lut), policy)</code></pre>
+
+  <p>This little helper does no physics of its own — it is pure <strong>assembly</strong>. Think of it as filling out a settings form and then handing that form, together with the process characterization, to a calculator that knows how to answer questions like "at gm/Id = 12 and length 2×min, what is <code>Vgs</code>?"</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 580 250" role="img" aria-label="Intent knobs packed into a GmIdPolicy and combined with tech and LUT into a GmIdModel">
+      <defs>
+        <marker id="arMF" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <g text-anchor="middle" font-size="10.5">
+        <rect x="12" y="14"  width="155" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="89" y="31">signal_l_mult</text>
+        <rect x="12" y="46"  width="155" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="89" y="63">signal_gm_id</text>
+        <rect x="12" y="78"  width="155" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="89" y="95">cs_l_mult</text>
+        <rect x="12" y="110" width="155" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="89" y="127">cs_gm_id</text>
+        <rect x="12" y="142" width="155" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="89" y="159">cascode_l_mult</text>
+        <rect x="12" y="174" width="155" height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="89" y="191">cascode_gm_id</text>
+      </g>
+      <text x="89" y="216" text-anchor="middle" font-size="11" fill="var(--fig-muted)">intent knobs</text>
+
+      <line x1="170" y1="105" x2="212" y2="105" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arMF)"/>
+
+      <rect x="214" y="62" width="132" height="90" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="92" text-anchor="middle" font-size="12" font-weight="600">GmIdPolicy</text>
+      <text x="280" y="112" text-anchor="middle" font-size="10" fill="var(--fig-muted)">L multipliers +</text>
+      <text x="280" y="127" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gm/Id regions</text>
+
+      <g text-anchor="middle" font-size="10.5">
+        <rect x="214" y="18" width="60"  height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="244" y="35">tech</text>
+        <rect x="286" y="18" width="90"  height="26" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="331" y="35">GmIdLut</text>
+      </g>
+
+      <line x1="346" y1="107" x2="416" y2="107" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arMF)"/>
+      <line x1="331" y1="44" x2="420" y2="80" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#arMF)"/>
+      <line x1="244" y1="44" x2="424" y2="76" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#arMF)"/>
+
+      <rect x="420" y="55" width="145" height="98" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="492" y="88" text-anchor="middle" font-size="12.5" font-weight="600">GmIdModel</text>
+      <text x="492" y="110" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gm/Id ↔ Vgs,</text>
+      <text x="492" y="125" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Vdsat, gm</text>
+    </svg>
+    <figcaption>Six intent knobs become a <code>GmIdPolicy</code>; wrapped with the process (<code>tech</code>) and its lookup table, they form the model that every requirement calc in Phase 3 will query.</figcaption>
+  </figure>
+
+  <p>Why give this its own function? Because <strong>the model must be born from the intent</strong>. The same silicon behaves differently depending on which gm/Id region and length you commit to, so the calculator has to be pre-loaded with those choices before anyone asks it a question. Isolating that wiring keeps <code>plan_devices</code> readable — its first line just says "build my oracle," and moves on.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>plan_devices()</code> — Phase 3, targets and intent</h2>
+
+  <blockquote><p><strong>The one job:</strong> from the spec (via the device model) derive what <em>must be achieved</em> — gm per stage, compensation caps — and from the registry resolve what <em>is chosen</em> — each device's role, gm/Id region, and length.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">plan_devices</span>(view, currents, spec, tech, intent) -> SizingPlan:
+    model = <span class="tok-fn">_model_for</span>(tech, intent)
+    gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = <span class="tok-fn">compute_requirements</span>(
+        view.slot_transistors, view.all_transistors, currents.ids_map,
+        tech, spec, model, currents.gd_load_r,
+    )
+    tintents = <span class="tok-fn">resolve_transistor_intents</span>(
+        view.all_transistors, view.cascode_refs, intent.block_intents)
+    <span class="tok-kw">return</span> <span class="tok-fn">SizingPlan</span>(model=model, gm_req_map=gm_req_map,
+                      vod_max_map=vod_max_map, cc_pf=cc_pf,
+                      cc2_pf=cc2_pf, tintents=tintents, warnings=ceil_warnings)</code></pre>
+
+  <p>Four beats: build the oracle (Part&nbsp;4), ask it for the performance requirements, resolve the per-device design intent, and pack it all into a <code>SizingPlan</code>. The two derivations are independent branches that both feed the same output object.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 280" role="img" aria-label="compute_requirements and resolve_transistor_intents feeding the SizingPlan">
+      <defs>
+        <marker id="arPD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="310" y="20" text-anchor="middle" font-size="11" fill="var(--fig-muted)">model · ids_map · gd_load_r · spec · tech</text>
+
+      <rect x="25" y="34" width="275" height="118" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="162" y="58" text-anchor="middle" font-size="12.5" font-weight="600">compute_requirements()</text>
+      <g font-size="10.5" fill="var(--fig-muted)">
+        <text x="45" y="80">gm_req_map — required gm (A/V)</text>
+        <text x="45" y="99">vod_max_map — max Vdsat (V)</text>
+        <text x="45" y="118">cc_pf, cc2_pf — comp caps (pF)</text>
+        <text x="45" y="137">warnings — gm-ceiling advisories</text>
+      </g>
+
+      <rect x="325" y="34" width="270" height="118" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="460" y="58" text-anchor="middle" font-size="12.5" font-weight="600">resolve_transistor_intents()</text>
+      <g font-size="10.5" fill="var(--fig-muted)">
+        <text x="345" y="84">block registry → for each device:</text>
+        <text x="345" y="106">role · gm/Id region · length L</text>
+      </g>
+      <text x="460" y="132" text-anchor="middle" font-size="11" fill="var(--fig-accent2)" font-weight="600">tintents map</text>
+
+      <line x1="162" y1="152" x2="255" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arPD)"/>
+      <line x1="460" y1="152" x2="365" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arPD)"/>
+
+      <rect x="200" y="214" width="220" height="54" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="310" y="240" text-anchor="middle" font-size="13" font-weight="600">SizingPlan</text>
+      <text x="310" y="257" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the Phase 3 output object</text>
+    </svg>
+    <figcaption>Two independent derivations converge: the spec-driven <em>requirements</em> on the left, the registry-driven <em>intent</em> on the right, both sealed into one plan.</figcaption>
+  </figure>
+
+  <h3>Where the gm requirement comes from — with numbers</h3>
+  <p>The performance spec is really a demand on the first-stage transconductance. To hit a gain-bandwidth <code>GBW</code> driving a load capacitance <code>C<sub>L</sub></code>, the amplifier needs roughly:</p>
+  <div class="eq-center"><span class="boxed-eq">gm<sub>1</sub>&nbsp;≈&nbsp;2π&nbsp;·&nbsp;GBW&nbsp;·&nbsp;C<sub>L</sub></span></div>
+  <p>For <code>GBW = 10 MHz</code> and <code>C<sub>L</sub> = 2 pF</code>:</p>
+  <pre class="code"><code>gm_req = 2π · 10e6 · 2e-12 ≈ 1.26e-4 A/V = 126 µS</code></pre>
+  <p>That number goes into <code>gm_req_map</code> for the input pair. <code>compute_requirements</code> does the same for later stages, and derives the Miller compensation caps <code>cc_pf</code> / <code>cc2_pf</code> that keep the loop stable (<code>None</code> when a topology needs none).</p>
+
+  <h3>The honest limit — the gm ceiling</h3>
+  <p>Here is the reveal that makes this file trustworthy. A device can only deliver so much gm at a given current. The most efficient setting, deep weak inversion, tops out around <code>gm/Id ≈ 25 /V</code>. With our branch current of 20 µA:</p>
+  <pre class="code"><code>gm_max = (gm/Id)_max · Ids = 25 · 20 µA = 500 µS</code></pre>
+  <p>Our 126 µS request fits comfortably — good. But suppose the spec demanded <code>gm_req = 600 µS</code> at the same 20 µA. That is <em>physically impossible</em> at this current, no matter the width. Rather than lie, <code>compute_requirements</code> clamps to the ceiling and appends a <strong>warning</strong>:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 150" role="img" aria-label="Required gm compared against the weak-inversion gm ceiling at 20 microamps">
+      <text x="120" y="26" text-anchor="middle" font-size="12" font-weight="600">the ceiling</text>
+      <rect x="40" y="36" width="160" height="30" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="56" text-anchor="middle" font-size="12">gm_max = 500 µS</text>
+
+      <rect x="40" y="76" width="126" height="30" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="103" y="96" text-anchor="middle" font-size="11">need 126 µS ✓</text>
+
+      <text x="360" y="26" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-bad)">a spec that overreaches</text>
+      <rect x="270" y="76" width="190" height="30" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="365" y="96" text-anchor="middle" font-size="11">need 600 µS ✗ &gt; 500</text>
+      <text x="365" y="128" text-anchor="middle" font-size="11" fill="var(--fig-bad)">clamp to 500 µS + emit warning</text>
+      <line x1="270" y1="91" x2="205" y2="51" stroke="var(--fig-bad)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    </svg>
+    <figcaption>A requirement below the ceiling is achievable; one above it cannot be met at this bias current, so the code caps it and warns instead of pretending.</figcaption>
+  </figure>
+
+  <h3>What comes back — <code>SizingPlan</code></h3>
+  <table>
+    <thead><tr><th>Field</th><th>Meaning</th><th>Kind</th></tr></thead>
+    <tbody>
+      <tr><td><code>model</code></td><td>the gm/Id oracle (LUT + policy)</td><td>tool</td></tr>
+      <tr><td><code>gm_req_map</code></td><td>ref → required gm (A/V)</td><td>must achieve</td></tr>
+      <tr><td><code>vod_max_map</code></td><td>ref → max Vdsat from output swing</td><td>must achieve</td></tr>
+      <tr><td><code>cc_pf</code> / <code>cc2_pf</code></td><td>compensation cap(s), pF (or <code>None</code>)</td><td>must achieve</td></tr>
+      <tr><td><code>tintents</code></td><td>ref → role · region · L</td><td>is chosen</td></tr>
+      <tr><td><code>warnings</code></td><td>gm-ceiling advisories</td><td>honesty</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · The hidden separation, limits, and the one line</h2>
+
+  <p>Step back and the whole file is answering <strong>three different questions</strong>, and its cleverness is refusing to blur them. Each maps to a specific piece of code:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 630 210" role="img" aria-label="Three questions: what cannot be chosen, what must be achieved, what is chosen">
+      <text x="110" y="24" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--fig-muted)">cannot be chosen</text>
+      <rect x="12" y="34" width="196" height="158" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <g font-size="11.5">
+        <text x="30" y="66">quiescent currents</text>
+        <text x="30" y="88" fill="var(--fig-muted)" font-size="10.5">(KCL + spec.ibias)</text>
+        <text x="30" y="116">load resistor values</text>
+        <text x="30" y="164" fill="var(--fig-stroke)" font-weight="600">→ Phase 2</text>
+      </g>
+
+      <text x="316" y="24" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--fig-accent)">must be achieved</text>
+      <rect x="218" y="34" width="196" height="158" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <g font-size="11.5">
+        <text x="236" y="66">gm requirements</text>
+        <text x="236" y="94">max Vdsat (swing)</text>
+        <text x="236" y="122">compensation caps</text>
+        <text x="236" y="164" fill="var(--fig-accent)" font-weight="600">→ compute_requirements</text>
+      </g>
+
+      <text x="522" y="24" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--fig-accent2)">is chosen</text>
+      <rect x="424" y="34" width="196" height="158" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <g font-size="11.5">
+        <text x="442" y="66">device role</text>
+        <text x="442" y="94">gm/Id region</text>
+        <text x="442" y="122">channel length L</text>
+        <text x="442" y="164" fill="var(--fig-accent2)" font-weight="600">→ resolve_intents</text>
+      </g>
+    </svg>
+    <figcaption>The file's real structure: three categories of decision, never mixed. Confusing "forced" with "chosen" is exactly the bug this separation prevents.</figcaption>
+  </figure>
+
+  <h3>The hidden equation</h3>
+  <p>Although the file never writes it as one formula, everything Phase 3 derives is anchored to a single relationship between the spec and the bias current — the gm the design must reach, given what physics allows at that current:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <mn>2</mn><mi>&#960;</mi><mo>&#183;</mo><mtext>GBW</mtext><mo>&#183;</mo>
+          <msub><mi>C</mi><mi>L</mi></msub>
+          <mo>&#8804;</mo>
+          <msub><mrow><mo>(</mo><mi>gm</mi><mo>/</mo><mi>Id</mi><mo>)</mo></mrow><mi>max</mi></msub>
+          <mo>&#183;</mo>
+          <msub><mi>I</mi><mi>ds</mi></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Read it aloud: <em>"the gm the spec asks for must not exceed the gm the device can physically deliver at the current KCL forced on it."</em> The left side is Phase 3's demand; the right side is the ceiling set by Phase 2's current. When the inequality fails, that is precisely the warning we traced.</p>
+
+  <h3>What this file honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It computes <strong>no geometry</strong> — no widths, no fingers, no layout. Those come later, guided by this plan.</li>
+    <li>It does not <em>fix</em> an over-reaching spec; it clamps to the ceiling and warns, leaving the verdict to downstream checks.</li>
+    <li>The currents are only as right as the slot classification (which device is "tail," which is "input pair") handed to <code>assign_ids</code>.</li>
+    <li>Both functions are pure — they never mutate <code>view</code>, <code>spec</code>, or <code>intent</code>; each returns a fresh plan object.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole design rides one discipline: <strong>separate what physics dictates from what the spec demands from what the designer chooses, and resolve each with its own function.</strong> Currents fall out of KCL, targets fall out of the spec through the gm/Id model, and intent is looked up from a registry — three clean derivations, zero geometry, so the hard geometric search that follows starts from a target sheet it can trust.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>plan.py</code> runs the sizer's two derivation phases — Phase 2 assigns every device's quiescent current from <code>spec.ibias</code> and KCL and sizes the load resistors, and Phase 3 turns the performance spec (through a gm/Id device model) into per-stage gm requirements and compensation caps while resolving each device's chosen role, region, and length — emitting two pure plan objects and never drawing a single transistor.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

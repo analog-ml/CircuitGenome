@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loader.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>loader.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/loader.py</code> — the one door that turns human-written YAML config into typed, validated Python objects the sizer can trust.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · load_spec() — the lenient parser</a>
+  <a href="#part-3">3 · load_tech() — finding the file</a>
+  <a href="#part-4">4 · load_tech() — building the object</a>
+  <a href="#part-5">5 · The hidden boundary &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> take a human-friendly YAML config file and hand back a typed, validated Python object — so the rest of the sizer never has to touch a raw dictionary or guess whether a value is a string or a number.</p></blockquote>
+
+  <p class="beat">Here is the whole story without a line of code.</p>
+
+  <p>The sizer needs process facts — threshold voltages, width grids, capacitor ranges, file paths to SPICE models. Those live in <code>.yaml</code> files that a <em>human</em> writes and edits: with comments, extra annotation keys, numbers typed as <code>270.0e-6</code>, and paths written <em>relative</em> to the config folder. That is the messy outside world.</p>
+
+  <p>The sizer's inside world is the opposite: strict, typed <code>@dataclass</code> objects (<code>TechParams</code>, <code>SizingSpec</code>, <code>GridSpec</code> …) where <code>vth</code> is guaranteed to be a <code>float</code> and a path is guaranteed to be absolute. Everything downstream leans on that guarantee.</p>
+
+  <p>Think of <code>loader.py</code> as a <strong>customs officer at a border</strong>. Travellers (YAML documents) arrive with paperwork in every format. The officer reads each document, converts every value into the country's official currency (<code>float()</code>, <code>str()</code>), stamps the required fields, waves through the harmless extras, and hands the sizer a clean, typed passport. Nothing gets past this desk untyped.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 130" role="img" aria-label="Data flow: YAML file parsed, coerced and validated, into a typed dataclass">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="65"  y="20" text-anchor="middle" font-size="11" fill="var(--fig-muted)">messy outside</text>
+      <text x="505" y="20" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">clean inside</text>
+      <rect x="10"  y="32" width="110" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="65"  y="56" text-anchor="middle" font-size="12">config.yaml</text>
+      <text x="65"  y="72" text-anchor="middle" font-size="10" fill="var(--fig-muted)">human-written</text>
+      <rect x="160" y="32" width="120" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="220" y="56" text-anchor="middle" font-size="12">yaml.safe_load</text>
+      <text x="220" y="72" text-anchor="middle" font-size="10" fill="var(--fig-muted)">→ raw dict</text>
+      <rect x="320" y="32" width="120" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="380" y="56" text-anchor="middle" font-size="12">coerce + check</text>
+      <text x="380" y="72" text-anchor="middle" font-size="10" fill="var(--fig-muted)">float(), keys</text>
+      <rect x="450" y="32" width="100" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="500" y="56" text-anchor="middle" font-size="12">TechParams</text>
+      <text x="500" y="72" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">typed ✓</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="120" y1="58" x2="160" y2="58" marker-end="url(#ar)"/>
+        <line x1="280" y1="58" x2="320" y2="58" marker-end="url(#ar)"/>
+        <line x1="440" y1="58" x2="450" y2="58" marker-end="url(#ar)"/>
+      </g>
+      <line x1="300" y1="100" x2="300" y2="100" stroke="none"/>
+      <line x1="145" y1="28" x2="145" y2="98" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="3 4"/>
+      <text x="145" y="114" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the border desk</text>
+    </svg>
+    <figcaption>One direction, one desk: a human YAML file goes in, a typed dataclass comes out — validated on the way through.</figcaption>
+  </figure>
+
+  <p>What breaks without this file? The sizer would reach into a raw dict, guess key names, and eventually feed a <em>string</em> <code>"0.5"</code> into a numeric routine ten stack-frames deep — a crash with no hint of the real cause (a typo in a config file). The loader pulls all of that risk to <strong>one place</strong>, at the moment the config is read.</p>
+
+  <h3>The cast of characters</h3>
+  <p>Two public front doors, three tiny private helpers. Hover any box to trace who it calls.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 560 250" role="img" aria-label="Call graph of loader.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges from load_tech to its three helpers -->
+      <line class="edge" data-group="mosfet"  x1="410" y1="74" x2="240" y2="150" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="grid"    x1="410" y1="74" x2="360" y2="150" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="resolve" x1="410" y1="74" x2="490" y2="150" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- root: load_spec -->
+      <g class="node" data-group="spec">
+        <rect x="30" y="30" width="180" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="120" y="50" text-anchor="middle" font-weight="600" font-size="13">load_spec()</text>
+        <text x="120" y="66" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">YAML → SizingSpec (lenient)</text>
+      </g>
+      <!-- root: load_tech -->
+      <g class="node" data-group="tech">
+        <rect x="310" y="30" width="200" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="410" y="50" text-anchor="middle" font-weight="600" font-size="13">load_tech()</text>
+        <text x="410" y="66" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">YAML → TechParams (strict)</text>
+      </g>
+      <!-- helper: _mosfet -->
+      <g class="node" data-group="mosfet">
+        <rect x="165" y="150" width="150" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="240" y="170" text-anchor="middle" font-weight="600" font-size="12">_mosfet()</text>
+        <text x="240" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">dict → MosfetParams</text>
+      </g>
+      <!-- helper: _grid -->
+      <g class="node" data-group="grid">
+        <rect x="330" y="150" width="120" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="390" y="170" text-anchor="middle" font-weight="600" font-size="12">_grid()</text>
+        <text x="390" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">dict → GridSpec</text>
+      </g>
+      <!-- helper: _resolve -->
+      <g class="node" data-group="resolve">
+        <rect x="425" y="150" width="130" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="490" y="170" text-anchor="middle" font-weight="600" font-size="12">_resolve()</text>
+        <text x="490" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">rel path → absolute</text>
+      </g>
+    </svg>
+    <figcaption>Two independent entry points. <code>load_spec()</code> stands alone; <code>load_tech()</code> leans on three one-line coercion helpers. We'll learn the leaves as they appear.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 takes the smaller door first — <code>load_spec()</code> — whose whole trick is a single lenient one-liner.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · <code>load_spec()</code> — the lenient parser</h2>
+
+  <blockquote><p><strong>The one job:</strong> read a spec YAML file and build a <code>SizingSpec</code> from it, quietly ignoring any keys that aren't real <code>SizingSpec</code> fields.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">load_spec</span>(path):
+    <span class="tok-kw">with</span> <span class="tok-fn">open</span>(path) <span class="tok-kw">as</span> f:
+        data = yaml.<span class="tok-fn">safe_load</span>(f)
+    <span class="tok-kw">return</span> <span class="tok-fn">SizingSpec</span>(
+        **{k: v <span class="tok-kw">for</span> k, v <span class="tok-kw">in</span> data.<span class="tok-fn">items</span>()
+           <span class="tok-kw">if</span> k <span class="tok-kw">in</span> SizingSpec.__dataclass_fields__})</code></pre>
+
+  <p>Analogy: a <strong>form-parser that skips blank lines it doesn't recognise.</strong> You hand it a form with the four required boxes filled in — plus some scribbled notes in the margin. It copies the boxes it knows about and simply doesn't read your margin notes. No error, no fuss.</p>
+
+  <h3>The single most important line</h3>
+  <p>Everything happens in that dict comprehension. <code>SizingSpec.__dataclass_fields__</code> is a dict Python auto-generates for every <code>@dataclass</code> — its keys are the legal field names. So <span class="keyline">if k in SizingSpec.__dataclass_fields__</span> is a <em>sieve</em>: a YAML key survives only if it names a real field. Unknown keys fall through the holes and vanish before they ever reach the constructor.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="A sieve keeping known SizingSpec fields and dropping unknown keys">
+      <text x="80"  y="18" text-anchor="middle" font-size="11" fill="var(--fig-muted)">YAML keys</text>
+      <text x="470" y="18" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">SizingSpec</text>
+      <!-- keys -->
+      <g font-size="12" text-anchor="middle">
+        <rect x="20" y="30"  width="120" height="26" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="80" y="47">vdd</text>
+        <rect x="20" y="64"  width="120" height="26" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="80" y="81">ibias</text>
+        <rect x="20" y="98"  width="120" height="26" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="80" y="115">cl</text>
+        <rect x="20" y="132" width="120" height="26" rx="5" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/><text x="80" y="149">provenance</text>
+        <rect x="20" y="166" width="120" height="26" rx="5" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/><text x="80" y="183">author</text>
+      </g>
+      <!-- sieve bar -->
+      <line x1="235" y1="24" x2="235" y2="198" stroke="var(--fig-accent)" stroke-width="2.5" stroke-dasharray="6 5"/>
+      <text x="235" y="18" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">k in fields?</text>
+      <!-- SizingSpec box -->
+      <rect x="400" y="30" width="130" height="94" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="465" y="52" text-anchor="middle" font-size="12">vdd</text>
+      <text x="465" y="72" text-anchor="middle" font-size="12">ibias</text>
+      <text x="465" y="92" text-anchor="middle" font-size="12">cl</text>
+      <text x="465" y="112" text-anchor="middle" font-size="10" fill="var(--fig-muted)">…</text>
+      <!-- kept arrows -->
+      <g stroke="var(--fig-accent2)" stroke-width="2">
+        <line x1="140" y1="43"  x2="400" y2="55" marker-end="url(#ar)"/>
+        <line x1="140" y1="77"  x2="400" y2="73" marker-end="url(#ar)"/>
+        <line x1="140" y1="111" x2="400" y2="91" marker-end="url(#ar)"/>
+      </g>
+      <!-- dropped -->
+      <text x="270" y="150" font-size="14" fill="var(--fig-bad)">✗</text>
+      <text x="270" y="184" font-size="14" fill="var(--fig-bad)">✗</text>
+      <text x="320" y="150" font-size="10" fill="var(--fig-bad)">dropped</text>
+      <text x="320" y="184" font-size="10" fill="var(--fig-bad)">dropped</text>
+    </svg>
+    <figcaption>Known field names pass into the constructor; extras like <code>provenance</code> hit the sieve and are silently discarded.</figcaption>
+  </figure>
+
+  <h3>Traced with a real file</h3>
+  <p>Say the spec YAML is:</p>
+  <pre class="code"><code>vdd: <span class="tok-num">5.0</span>
+vss: <span class="tok-num">0.0</span>
+ibias: <span class="tok-num">1.0e-5</span>
+cl: <span class="tok-num">10.0e-12</span>
+provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-com"># not a SizingSpec field</span></code></pre>
+  <p>After <code>yaml.safe_load</code> that's a dict of five keys. The comprehension keeps the four that name fields and drops <code>provenance</code>, so the call is effectively:</p>
+  <pre class="code"><code><span class="tok-fn">SizingSpec</span>(vdd=<span class="tok-num">5.0</span>, vss=<span class="tok-num">0.0</span>, ibias=<span class="tok-num">1e-05</span>, cl=<span class="tok-num">1e-11</span>)
+<span class="tok-com"># every other SizingSpec field takes its dataclass default (None / 2.0 …)</span></code></pre>
+  <p>Why be lenient here? A spec file is something an <em>engineer</em> annotates by hand — dropping in comments, provenance, a scratch note. Leniency means those annotations never break loading. The cost: a <strong>typo</strong> in a real field name (say <code>vddd</code>) is silently ignored too — we'll flag that honestly in Part&nbsp;5.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>load_tech()</code> — first, find the file</h2>
+
+  <blockquote><p><strong>The one job:</strong> before parsing anything, decide <em>which</em> file to actually open — a built-in default, a real path the user gave, or the short name of a bundled config.</p></blockquote>
+
+  <p><code>load_tech()</code> accepts <code>path=None</code>, a real filesystem path, <em>or</em> a friendly short name like <code>"ptm45"</code>. That convenience means it has to resolve three cases up front:</p>
+
+  <pre class="code"><code><span class="tok-kw">if</span> path <span class="tok-kw">is None</span>:
+    path = _BUILTIN_DIR / <span class="tok-str">"tech_generic.yaml"</span>
+<span class="tok-kw">elif not</span> <span class="tok-fn">Path</span>(path).<span class="tok-fn">exists</span>():
+    <span class="tok-com"># not a real path → treat as a built-in name ("ptm45" → tech_ptm45.yaml)</span>
+    builtin = _BUILTIN_DIR / <span class="tok-fn">f"tech_{Path(path).name}.yaml"</span>
+    <span class="tok-kw">if</span> builtin.<span class="tok-fn">exists</span>():
+        path = builtin</code></pre>
+
+  <p>Analogy: you walk up to the officer and either say nothing (they hand you the <strong>standard form</strong>), show a real document (they take it as-is), or say a nickname like "the 45-nanometre one" — and they walk to the shelf and pull <code>tech_ptm45.yaml</code> for you.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 220" role="img" aria-label="Three-way path resolution in load_tech">
+      <rect x="200" y="15" width="160" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="280" y="40" text-anchor="middle" font-size="13" font-weight="600">load_tech(path)</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="230" y1="55" x2="90"  y2="135" marker-end="url(#ar)"/>
+        <line x1="280" y1="55" x2="280" y2="135" marker-end="url(#ar)"/>
+        <line x1="330" y1="55" x2="470" y2="135" marker-end="url(#ar)"/>
+      </g>
+      <text x="120" y="98"  text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">path is None</text>
+      <text x="298" y="98"  text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">path exists</text>
+      <text x="452" y="98"  text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">neither</text>
+      <rect x="10"  y="135" width="160" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="90"  y="158" text-anchor="middle" font-size="12">tech_generic.yaml</text>
+      <text x="90"  y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the default form</text>
+      <rect x="200" y="135" width="160" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="158" text-anchor="middle" font-size="12">open path as-is</text>
+      <text x="280" y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">your document</text>
+      <rect x="390" y="135" width="160" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="470" y="158" text-anchor="middle" font-size="12">tech_{name}.yaml</text>
+      <text x="470" y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">bundled by nickname</text>
+    </svg>
+    <figcaption>Three ways in, one file out. The middle branch fires when the string really is a file on disk; the right branch is the "nickname" convenience.</figcaption>
+  </figure>
+
+  <h3>The three tiny helpers it defines</h3>
+  <p>Once the file is open and parsed, <code>load_tech</code> defines three closures. Each is a one-liner whose only job is <strong>type coercion</strong> — turning a YAML sub-dict into a typed dataclass, forcing every number through <code>float()</code>.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_mosfet</span>(d):
+    <span class="tok-kw">return</span> <span class="tok-fn">MosfetParams</span>(
+        mu_cox=<span class="tok-fn">float</span>(d[<span class="tok-str">"mu_cox"</span>]),
+        vth=<span class="tok-fn">float</span>(d[<span class="tok-str">"vth"</span>]),
+        lam=<span class="tok-fn">float</span>(d[<span class="tok-str">"lam"</span>]))
+
+<span class="tok-kw">def</span> <span class="tok-fn">_grid</span>(d, min_key=<span class="tok-str">"min"</span>, max_key=<span class="tok-str">"max"</span>):
+    <span class="tok-kw">return</span> <span class="tok-fn">GridSpec</span>(
+        min=<span class="tok-fn">float</span>(d[min_key]),
+        max=<span class="tok-fn">float</span>(d[max_key]),
+        step=<span class="tok-fn">float</span>(d[<span class="tok-str">"step"</span>]))</code></pre>
+
+  <p>Why wrap <code>float()</code> around values YAML already parsed? Because you can't <em>trust</em> that YAML gave you a number. Write <code>vth: 0.5</code> and you get a float; write <code>vth: "0.5"</code> or <code>vth: 5e-1</code> in a way the parser reads as a string, and you'd get a <code>str</code>. The explicit <code>float()</code> is the officer converting <em>every</em> value to the official currency, no exceptions. Note <code>d["mu_cox"]</code> uses <code>[]</code>, not <code>.get()</code> — these fields are <strong>required</strong>, so a missing one <em>should</em> raise loudly.</p>
+
+  <p>The third helper resolves relative paths against the config file's own directory:</p>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_resolve</span>(rel):
+    <span class="tok-kw">if not</span> rel:
+        <span class="tok-kw">return None</span>
+    p = <span class="tok-fn">Path</span>(rel)
+    <span class="tok-kw">if not</span> p.<span class="tok-fn">is_absolute</span>():
+        p = <span class="tok-fn">Path</span>(path).parent / p
+    <span class="tok-kw">return</span> <span class="tok-fn">str</span>(p)</code></pre>
+  <p>A config writes <code>gmid_lut: models/gf180mcu_gmid.npz</code> — relative to <em>where the config lives</em>, not to wherever you happened to run the program. <code>_resolve</code> glues that onto <code>Path(path).parent</code> so the sizer always gets an absolute path that works no matter the current directory. Absolute paths are passed through untouched; empty/None comes back as <code>None</code>.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>load_tech()</code> — building the object</h2>
+
+  <blockquote><p><strong>The one job:</strong> assemble one big typed <code>TechParams</code> — every required field coerced through a helper, every optional block filled in only if the YAML provides it.</p></blockquote>
+
+  <p>With the file open and the helpers defined, the payoff is one large constructor call. Here is the shape of it, trimmed to the essentials:</p>
+
+  <pre class="code"><code><span class="tok-kw">return</span> <span class="tok-fn">TechParams</span>(
+    name=<span class="tok-fn">str</span>(data[<span class="tok-str">"name"</span>]),
+    nmos=<span class="tok-fn">_mosfet</span>(data[<span class="tok-str">"nmos"</span>]),
+    pmos=<span class="tok-fn">_mosfet</span>(data[<span class="tok-str">"pmos"</span>]),
+    width=<span class="tok-fn">_grid</span>(data[<span class="tok-str">"width"</span>]),
+    length=<span class="tok-fn">_grid</span>(data[<span class="tok-str">"length"</span>]),
+    cap=<span class="tok-fn">GridSpec</span>(
+        min=<span class="tok-fn">float</span>(cap_d[<span class="tok-str">"min_pf"</span>]),   <span class="tok-com"># note the rename!</span>
+        max=<span class="tok-fn">float</span>(cap_d[<span class="tok-str">"max_pf"</span>]),
+        step=<span class="tok-fn">float</span>(cap_d[<span class="tok-str">"step_pf"</span>])),
+    spice_model=spice_model,       <span class="tok-com"># resolved path or None</span>
+    gmid_lut=gmid_lut,
+    spice_lib=spice_lib,
+    wl_units=<span class="tok-fn">str</span>(data.<span class="tok-fn">get</span>(<span class="tok-str">"wl_units"</span>, <span class="tok-str">"m"</span>)))</code></pre>
+
+  <p>Notice the <strong>one place a name is remapped</strong>. The YAML writes the cap grid as <code>min_pf / max_pf / step_pf</code> (units baked into the key, friendly for humans), but <code>GridSpec</code> just wants <code>min / max / step</code>. That's why <code>cap</code> is built by hand instead of via <code>_grid</code> — its keys don't match the helper's defaults. Everything else lines up one-to-one.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="Field-by-field mapping from YAML into TechParams">
+      <text x="90"  y="18" text-anchor="middle" font-size="11" fill="var(--fig-muted)">YAML dict</text>
+      <text x="470" y="18" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">TechParams</text>
+      <!-- left column -->
+      <g font-size="11.5" text-anchor="middle">
+        <rect x="20" y="30"  width="150" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="95" y="49">name: generic…</text>
+        <rect x="20" y="72"  width="150" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="95" y="91">nmos: {…}</text>
+        <rect x="20" y="114" width="150" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="95" y="133">width: {…}</text>
+        <rect x="20" y="156" width="150" height="30" rx="5" fill="var(--fig-bad-fill)" stroke="var(--fig-accent)" stroke-width="1.5"/><text x="95" y="175">cap: {min_pf…}</text>
+        <rect x="20" y="198" width="150" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="95" y="217" fill="var(--fig-muted)">(no spice_model)</text>
+      </g>
+      <!-- middle coercion labels -->
+      <g font-size="10.5" text-anchor="middle" fill="var(--fig-accent2)">
+        <text x="280" y="41">str()</text>
+        <text x="280" y="83">_mosfet()</text>
+        <text x="280" y="125">_grid()</text>
+        <text x="280" y="167" fill="var(--fig-accent)">rename + float()</text>
+        <text x="280" y="209" fill="var(--fig-muted)">default None</text>
+      </g>
+      <!-- arrows -->
+      <g stroke="var(--fig-stroke)" stroke-width="1.8">
+        <line x1="170" y1="45"  x2="390" y2="45"  marker-end="url(#ar)"/>
+        <line x1="170" y1="87"  x2="390" y2="87"  marker-end="url(#ar)"/>
+        <line x1="170" y1="129" x2="390" y2="129" marker-end="url(#ar)"/>
+        <line x1="170" y1="171" x2="390" y2="171" stroke="var(--fig-accent)" marker-end="url(#ar)"/>
+        <line x1="170" y1="213" x2="390" y2="213" stroke="var(--fig-muted)" marker-end="url(#ar)"/>
+      </g>
+      <!-- right column -->
+      <g font-size="11.5" text-anchor="middle">
+        <rect x="390" y="30"  width="150" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/><text x="465" y="49">.name (str)</text>
+        <rect x="390" y="72"  width="150" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/><text x="465" y="91">.nmos</text>
+        <rect x="390" y="114" width="150" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="1.5"/><text x="465" y="133">.width</text>
+        <rect x="390" y="156" width="150" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent)" stroke-width="1.5"/><text x="465" y="175">.cap (min/max)</text>
+        <rect x="390" y="198" width="150" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="465" y="217" fill="var(--fig-muted)">.spice_model=None</text>
+      </g>
+    </svg>
+    <figcaption>Mostly one-to-one, coerced in flight. The accent row is the single renamed field; the muted row is an absent optional falling back to <code>None</code>.</figcaption>
+  </figure>
+
+  <h3>Optional blocks: fill only if present</h3>
+  <p>Required fields use <code>data["x"]</code> (crash if absent). Optional blocks use <code>data.get("x")</code> and a guard, so a config that doesn't need them simply leaves them <code>None</code>:</p>
+  <pre class="code"><code>spice_lib = <span class="tok-kw">None</span>
+lib_d = data.<span class="tok-fn">get</span>(<span class="tok-str">"spice_lib"</span>)
+<span class="tok-kw">if</span> lib_d:
+    spice_lib = <span class="tok-fn">SpiceLib</span>(
+        file=<span class="tok-fn">_resolve</span>(lib_d[<span class="tok-str">"file"</span>]),
+        corner=<span class="tok-fn">str</span>(lib_d.<span class="tok-fn">get</span>(<span class="tok-str">"corner"</span>, <span class="tok-str">"typical"</span>)),
+        design=<span class="tok-fn">_resolve</span>(lib_d.<span class="tok-fn">get</span>(<span class="tok-str">"design"</span>)),
+        corners=[<span class="tok-fn">str</span>(c) <span class="tok-kw">for</span> c <span class="tok-kw">in</span> lib_d.<span class="tok-fn">get</span>(<span class="tok-str">"corners"</span>, [])])</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 150" role="img" aria-label="Optional spice_lib block present or absent">
+      <polygon points="150,20 240,55 150,90 60,55" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="150" y="59" text-anchor="middle" font-size="12">spice_lib in YAML?</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="200" y1="78" x2="300" y2="115" marker-end="url(#ar)"/>
+        <line x1="100" y1="78" x2="60"  y2="115" marker-end="url(#ar)"/>
+      </g>
+      <text x="255" y="100" font-size="10.5" fill="var(--fig-muted)">yes</text>
+      <text x="70"  y="100" font-size="10.5" fill="var(--fig-muted)">no</text>
+      <rect x="10"  y="115" width="120" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+      <text x="70"  y="135" text-anchor="middle" font-size="12" fill="var(--fig-muted)">spice_lib = None</text>
+      <rect x="270" y="115" width="240" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="390" y="135" text-anchor="middle" font-size="12">SpiceLib(...) with resolved paths</text>
+    </svg>
+    <figcaption>The PDK block is optional: a PTM-style config skips it and gets <code>None</code>; a foundry config builds a full <code>SpiceLib</code>.</figcaption>
+  </figure>
+
+  <h3>Traced with a real file: <code>tech_generic.yaml</code></h3>
+  <p>Feed in the bundled generic config and watch the fields populate:</p>
+  <table>
+    <thead><tr><th>YAML in</th><th>Coercion</th><th>TechParams field</th></tr></thead>
+    <tbody>
+      <tr><td><code>name: generic_parameterized</code></td><td class="num"><code>str()</code></td><td><code>name = "generic_parameterized"</code></td></tr>
+      <tr><td><code>nmos: {mu_cox: 270.0e-6, vth: 0.5, lam: 0.04}</code></td><td class="num"><code>_mosfet</code></td><td><code>MosfetParams(0.00027, 0.5, 0.04)</code></td></tr>
+      <tr><td><code>width: {min: 1.0, max: 600.0, step: 1.0}</code></td><td class="num"><code>_grid</code></td><td><code>GridSpec(1.0, 600.0, 1.0)</code></td></tr>
+      <tr><td><code>cap: {min_pf: 0.1, max_pf: 50.0, step_pf: 0.1}</code></td><td class="num">rename</td><td><code>GridSpec(0.1, 50.0, 0.1)</code></td></tr>
+      <tr><td><em>(no spice_model / gmid_lut / spice_lib)</em></td><td class="num">default</td><td><code>None, None, None</code></td></tr>
+      <tr><td><em>(no wl_units)</em></td><td class="num"><code>.get</code></td><td><code>wl_units = "m"</code></td></tr>
+    </tbody>
+  </table>
+  <p>Out comes a fully typed <code>TechParams</code> — every number a genuine <code>float</code>, every path absolute, every absent option a clean <code>None</code>. The sizer can now trust it completely.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · The hidden boundary, limits, and the one line</h2>
+
+  <p>Although the file never names it, <code>loader.py</code> implements one classic idea: a <strong>single validated boundary</strong> — the anti-corruption layer — between the messy config world and the clean typed core.</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">messy YAML&nbsp;&nbsp;──( one door )──▶&nbsp;&nbsp;typed, trusted dataclasses</span>
+  </div>
+
+  <p>Every guarantee the sizer relies on is established <em>here</em> and nowhere else. Downstream code never re-checks types, never resolves a path, never guesses a key — because it can't receive anything that wasn't already coerced and validated at this desk.</p>
+
+  <h3>The lenient/strict split</h3>
+  <p>The two doors deliberately behave differently, and it's worth naming why:</p>
+  <table>
+    <thead><tr><th>Door</th><th>Unknown key</th><th>Missing required</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>load_spec</code></td><td>silently dropped</td><td><code>TypeError</code> from the constructor</td><td>hand-annotated specs must tolerate extra notes</td></tr>
+      <tr><td><code>load_tech</code></td><td>silently ignored</td><td><code>KeyError</code> from <code>data["x"]</code></td><td>a broken process file must fail loudly, early</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li><strong>Missing required field</strong> → a raw <code>KeyError</code> (e.g. <code>data["name"]</code>) or <code>TypeError</code>. Loud and immediate — which is the point.</li>
+    <li><strong>Invalid value</strong> → <code>float("abc")</code> raises <code>ValueError</code>. No custom message; you get Python's.</li>
+    <li><strong>An unknown nickname</strong> → if <code>tech_foo.yaml</code> doesn't exist, resolution falls through and <code>open(path)</code> raises <code>FileNotFoundError</code> on the original string.</li>
+    <li><strong>A typo in an optional key</strong> (e.g. <code>vddd</code>, <code>spicemodel</code>) is <em>silently dropped</em> — no schema validation catches it. This is the price of leniency.</li>
+    <li>No range or physical-sanity checks — a negative width or <code>vth</code> of 900 V loads happily. Sanity is someone else's job.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole file rides one discipline: <strong>convert and validate exactly once, at the edge.</strong> Required fields crash loudly, optional fields default quietly, paths resolve relative to their own config, and every number is forced through <code>float()</code> — so the hundreds of lines of sizing code behind this desk can assume perfect, typed inputs and never look back.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>loader.py</code> is the single validated border between human-written YAML and the sizer's typed core — <code>load_spec()</code> leniently builds a <code>SizingSpec</code>, <code>load_tech()</code> strictly builds a <code>TechParams</code> (resolving built-in names and relative paths, coercing every value through <code>float()</code>/<code>str()</code>, and filling optional blocks only when present) — so that everything downstream can trust its inputs completely.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

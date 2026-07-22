@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bias_levels.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>bias_levels.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/bias_levels.py</code> — the bias generator has a few devices whose operating point is an absolute <em>voltage level</em>, not a mirror ratio. Here is how they get sized.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · What a rail "level" is</a>
+  <a href="#part-3">3 · _snap_w()</a>
+  <a href="#part-4">4 · Picking a diode width</a>
+  <a href="#part-5">5 · _tune_cascode_legs() — the heart</a>
+  <a href="#part-6">6 · _tune_pref_cascode()</a>
+  <a href="#part-7">7 · tune_bias_levels()</a>
+  <a href="#part-8">8 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> after the geometry pass has sized every <em>mirror</em> in the bias generator by ratio, a handful of devices aren't mirrors at all — their job is to set an absolute <em>rail voltage</em>. This file re-sizes exactly those, and nothing else.</p></blockquote>
+
+  <p class="beat">Here is the whole story before a single line of code.</p>
+
+  <p>The gm/Id sizer builds the bias generator from an <strong>intent table</strong>. Most of its transistors are <em>current mirrors</em>: each one copies the reference current scaled by a ratio, so its width follows a clean rule — <code>W ∝ I</code>. Hand the geometry pass a target current and a ratio, and it sizes the device. Done.</p>
+
+  <p>But a bias generator also contains <strong>level devices</strong>, whose reason for existing is to <em>pin a node at a chosen voltage</em>. You can't size those by a current ratio, because their spec is a voltage, not a mirror factor. Think of a tailor who sizes every suit as a scaled copy of one reference suit. That works beautifully — until someone hands him a <strong>doorframe</strong> and asks him to make it exactly 2.03&nbsp;m tall. "Scaled copy of what?" There is no ratio; there is only an absolute target. This file is the specialist called in for the doorframes.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 210" role="img" aria-label="A mirror device is sized by ratio; a level device needs an absolute voltage target">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- MIRROR (geometry pass handles it) -->
+      <text x="140" y="24" text-anchor="middle" font-size="13" fill="var(--fig-good)" font-weight="600">mirror device — geometry pass sizes it</text>
+      <rect x="40" y="44" width="200" height="120" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="140" y="74" text-anchor="middle" font-size="12">spec = a ratio to Iref</text>
+      <text x="140" y="100" text-anchor="middle" font-size="13" font-weight="600">W ∝ I</text>
+      <text x="140" y="126" text-anchor="middle" font-size="11" fill="var(--fig-muted)">current in → width out</text>
+      <text x="140" y="148" text-anchor="middle" font-size="11" fill="var(--fig-good)">ratio rule works ✓</text>
+      <!-- LEVEL (this file handles it) -->
+      <text x="420" y="24" text-anchor="middle" font-size="13" fill="var(--fig-accent)" font-weight="600">level device — ratio rule can't</text>
+      <rect x="320" y="44" width="200" height="120" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="420" y="74" text-anchor="middle" font-size="12">spec = an absolute rail voltage</text>
+      <text x="420" y="100" text-anchor="middle" font-size="13" font-weight="600">V_rail = a target</text>
+      <text x="420" y="126" text-anchor="middle" font-size="11" fill="var(--fig-muted)">no ratio to scale from</text>
+      <text x="420" y="148" text-anchor="middle" font-size="11" fill="var(--fig-accent)">needs this file ✦</text>
+    </svg>
+    <figcaption>Same wardrobe, two kinds of garment. The geometry pass tailors mirrors by ratio; level devices have no ratio, only an absolute voltage they must hit.</figcaption>
+  </figure>
+
+  <p>There are exactly <strong>two</strong> level structures the file knows how to spot, and it finds each one <em>structurally</em> — by the actual shape of device terminals, so a foreign netlist without these shapes passes straight through untouched:</p>
+  <ul>
+    <li><strong>Cascode-leg level diodes</strong> — a diode-connected device riding a resistor to a supply. The rail it produces must sit at a downstream cascode's <code>V_GS</code> plus a small saturation floor. This is the bulk of the file, and the whole of Parts 2 and 5.</li>
+    <li><strong>The pref branch's wide-swing cascode level</strong> (<code>ncasc</code>) — a mirror-drain cascode topped by a diode, tuned so the mirror's <code>Vds</code> sits as close to the master reference's as headroom allows. Part 6.</li>
+  </ul>
+
+  <h3>The cast of characters</h3>
+  <p>Eight small functions. The two <code>_tune_*</code> routines do the real work; the rest are leaves they lean on. Hover any box to trace who it calls.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 580 340" role="img" aria-label="Call graph of bias_levels.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="legs"  x1="230" y1="60"  x2="170" y2="104" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="pref"  x1="360" y1="60"  x2="420" y2="104" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="szd"   x1="160" y1="146" x2="150" y2="196" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="cands" x1="250" y1="230" x2="330" y2="230" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="snap"  x1="415" y1="255" x2="430" y2="290" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="pref2" x1="430" y1="146" x2="215" y2="212" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)" stroke-dasharray="4 3"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="200" y="20" width="190" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="295" y="45" text-anchor="middle" font-weight="600" font-size="13">tune_bias_levels()</text>
+      </g>
+      <!-- tune_cascode_legs -->
+      <g class="node" data-group="legs">
+        <rect x="55" y="104" width="220" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="165" y="124" text-anchor="middle" font-weight="600" font-size="13">_tune_cascode_legs()</text>
+        <text x="165" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">size each leg's diode + floor R</text>
+      </g>
+      <!-- tune_pref_cascode -->
+      <g class="node" data-group="pref">
+        <rect x="330" y="104" width="220" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="440" y="124" text-anchor="middle" font-weight="600" font-size="13">_tune_pref_cascode()</text>
+        <text x="440" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">pin the wide-swing level</text>
+      </g>
+      <!-- size_diode_for_vgs -->
+      <g class="node" data-group="cands">
+        <rect x="60" y="210" width="190" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="155" y="230" text-anchor="middle" font-weight="600" font-size="12">_size_diode_for_vgs()</text>
+        <text x="155" y="245" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">width whose |Vgs| ≈ target</text>
+      </g>
+      <!-- diode_candidates -->
+      <g class="node" data-group="szd">
+        <rect x="330" y="210" width="180" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="420" y="230" text-anchor="middle" font-weight="600" font-size="12">_diode_candidates()</text>
+        <text x="420" y="245" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">(w, |Vgs|) per LUT point</text>
+      </g>
+      <!-- _sized -->
+      <g class="node" data-group="szd">
+        <rect x="55" y="290" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="130" y="309" text-anchor="middle" font-weight="600" font-size="12">_sized()</text>
+        <text x="130" y="323" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">build a TransistorSizing</text>
+      </g>
+      <!-- _snap_w -->
+      <g class="node" data-group="snap">
+        <rect x="360" y="290" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="435" y="309" text-anchor="middle" font-weight="600" font-size="12">_snap_w()</text>
+        <text x="435" y="323" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">width → grid</text>
+      </g>
+    </svg>
+    <figcaption>The orchestrator on top; the two tuners below it; the shared width/level helpers at the bottom. We learn it bottom-up so the tuners read easily.</figcaption>
+  </figure>
+
+  <p>One more fact about where this runs: it fires <strong>after</strong> the geometry pass and the DC operating-point check, and its resistor values <em>override</em> the generic fallback that <code>size_resistors</code> assigns to nets it can't derive a level for. It is the last, most-informed word on these specific nets.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part 2 builds the one picture the whole file is drawing — a rail voltage split into a <code>V_GS</code> part carried by a diode and a small <em>floor</em> part carried by a resistor.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · What a rail "level" actually is (one picture)</h2>
+
+  <p class="beat">Everything the cascode-leg tuner does serves one target voltage. Let's build it.</p>
+
+  <h3>The demand: a downstream cascode needs its gate at a certain height</h3>
+  <p>Somewhere out in the op-amp, a <strong>cascode transistor</strong> sits on top of a device. For it to work, its gate must be held at a specific voltage: enough to give the cascode its own <code>V_GS</code>, <em>plus</em> enough to keep the device stacked beneath it in saturation. That second piece — the minimum voltage the stack underneath needs — is the <strong>saturation floor</strong>. So the rail that feeds this gate must sit at:</p>
+  <div class="eq-center"><span class="boxed-eq">V<sub>rail</sub>&nbsp;=&nbsp;V<sub>GS,consumer</sub>&nbsp;+&nbsp;floor</span></div>
+  <p>This is exactly the number <code>_bias_rail_target_v()</code> returns — the mean voltage the rail's consumers demand. Call it <code>target_abs</code>.</p>
+
+  <h3>The supply: build that height out of two stacked pieces</h3>
+  <p>Now, how do you <em>make</em> a rail sit at, say, <code>0.75 V</code> above ground? The cascode leg does it with a two-storey stack between the supply and the rail:</p>
+  <ul>
+    <li>a <strong>resistor</strong> sitting on the supply, dropping the small <em>floor</em> across the leg current, and</li>
+    <li>a <strong>diode-connected transistor</strong> on top of it, dropping its own <code>V_GS</code> — and the diode's drain <em>is</em> the rail.</li>
+  </ul>
+  <p>The genius is in the pairing: the <em>diode</em> supplies the big <code>V_GS</code> part, and the <em>resistor</em> supplies the small floor part. Add them and you land on the target.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 260" role="img" aria-label="A cascode-leg builds the rail voltage as a resistor floor plus a diode Vgs">
+      <!-- y axis: y=230 is vss(0V), y=30 is 1.0V; 200px per volt -->
+      <line x1="70" y1="30" x2="70" y2="230" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <!-- vss rail bottom -->
+      <line x1="70" y1="230" x2="330" y2="230" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="336" y="234" font-size="12" fill="var(--fig-muted)">vss = 0 V (supply)</text>
+      <!-- mid at 0.104V -> y = 230 - 0.104*200 = 209 -->
+      <line x1="70" y1="209" x2="330" y2="209" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="336" y="213" font-size="12" fill="var(--fig-muted)">mid = 0.104 V</text>
+      <!-- rail at 0.75V -> y = 230 - 0.75*200 = 80 -->
+      <line x1="70" y1="80" x2="330" y2="80" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="336" y="84" font-size="12" fill="var(--fig-accent)">rail = 0.75 V = target</text>
+      <!-- resistor block: vss(230) to mid(209) -->
+      <rect x="110" y="209" width="70" height="21" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="215" y="223" font-size="11" fill="var(--fig-accent2)">resistor → floor</text>
+      <!-- floor bracket -->
+      <path d="M100,209 L100,230" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <path d="M95,209 L105,209 M95,230 L105,230" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <!-- diode block: mid(209) to rail(80) -->
+      <rect x="110" y="80" width="70" height="129" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="145" y="150" text-anchor="middle" font-size="12">diode</text>
+      <!-- Vgs bracket -->
+      <path d="M195,80 L195,209" stroke="var(--fig-accent)" stroke-width="2"/>
+      <path d="M190,80 L200,80 M190,209 L200,209" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="205" y="148" font-size="11" fill="var(--fig-accent)">|Vgs| = 0.646 V</text>
+      <text x="215" y="203" font-size="11" fill="var(--fig-accent2)">= 0.104 V</text>
+    </svg>
+    <figcaption>The rail is a sum: a resistor drops the small floor (0.104 V), a diode drops its own V_GS (0.646 V), and their drain lands the rail at the 0.75 V target.</figcaption>
+  </figure>
+
+  <h3>The one knob on the diode: gm/Id</h3>
+  <p>How do we set the diode's <code>V_GS</code> to whatever value we want? By choosing its <strong>width</strong> — through the gm/Id lookup table. A <em>narrow</em> diode runs in strong inversion with a <strong>large</strong> <code>V_GS</code>; a <em>wide</em> diode runs in weak inversion with a <strong>small</strong> <code>V_GS</code>. Sweep the width and you sweep <code>V_GS</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 150" role="img" aria-label="A narrow diode gives a large Vgs; a wide diode gives a small Vgs">
+      <text x="120" y="24" text-anchor="middle" font-size="13" font-weight="600">narrow (strong)</text>
+      <rect x="70" y="36" width="100" height="70" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="66" text-anchor="middle" font-size="12">small W</text>
+      <text x="120" y="88" text-anchor="middle" font-size="12">|Vgs| big</text>
+      <line x1="185" y1="71" x2="285" y2="71" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="235" y="60" text-anchor="middle" font-size="11" fill="var(--fig-accent)">widen device</text>
+      <text x="365" y="24" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">wide (weak)</text>
+      <rect x="310" y="44" width="110" height="56" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="365" y="68" text-anchor="middle" font-size="12">big W</text>
+      <text x="365" y="88" text-anchor="middle" font-size="11">|Vgs| small</text>
+    </svg>
+    <figcaption>Width is the dial for V_GS. The whole file is "pick the width whose V_GS lands where I need it."</figcaption>
+  </figure>
+
+  <blockquote><p><strong>The reveal, planted early:</strong> the leg's diode is the <em>same transistor type</em> as the consumer cascode it feeds. So when we size the diode to reproduce the consumer's <code>V_GS</code>, the rail automatically <em>tracks Vth</em> — over process and temperature both voltages drift together. We'll cash this out in Part 8.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>_snap_w()</code> — the warm-up</h2>
+
+  <blockquote><p><strong>The one job:</strong> round a computed width to the nearest value the manufacturing grid allows, then clamp it into the legal range.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_snap_w</span>(tech: TechParams, w_um: <span class="tok-kw">float</span>) -> <span class="tok-kw">float</span>:
+    g = tech.width
+    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(<span class="tok-fn">round</span>(w_um / g.step) * g.step, g.min), g.max))</code></pre>
+
+  <p>Analogy: you can order lumber only in whole inches. Ask for 23.4 inches and the yard hands you 23. That is all this does — snap to the grid, then refuse anything below <code>min</code> or above <code>max</code>.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Say <code>step = 0.1 µm</code>, <code>min = 0.5</code>, <code>max = 100</code>, and the tuner computed <code>w_um = 4.27</code>:</p>
+  <pre class="code"><code>round(4.27 / 0.1) * 0.1  =  round(42.7) * 0.1  =  43 * 0.1  =  4.3 µm
+max(4.3, 0.5) = 4.3       min(4.3, 100) = 4.3   ->  4.3 µm</code></pre>
+  <p>Every width the two tuners invent is passed through this, so whatever <code>V_GS</code> they aim for, the device they actually place is manufacturable. Keep it in your pocket — it shows up inside both tuners.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · Picking a diode width — <code>_diode_candidates()</code>, <code>_size_diode_for_vgs()</code>, <code>_sized()</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> given a target <code>V_GS</code>, find the diode width whose <code>|V_GS|</code> lands closest to it — optionally never exceeding a cap.</p></blockquote>
+
+  <p>This is the shared engine both tuners call to turn a <em>voltage wish</em> into a <em>width</em>. It comes in two small steps: enumerate the candidates, then pick the closest.</p>
+
+  <h3>Step 1 — enumerate one width per LUT point</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_diode_candidates</span>(model, tech, dtype, l_um, ids_a) -> <span class="tok-kw">list</span>:
+    out = []
+    <span class="tok-kw">for</span> gm_id <span class="tok-kw">in</span> model.lut.gm_id_axis:
+        idw = model.lut.<span class="tok-fn">id_per_w</span>(dtype, <span class="tok-fn">float</span>(gm_id), l_um)  <span class="tok-com"># current density</span>
+        <span class="tok-kw">if</span> idw &lt;= <span class="tok-num">0</span>: <span class="tok-kw">continue</span>
+        w = <span class="tok-fn">_snap_w</span>(tech, <span class="tok-fn">abs</span>(ids_a) / idw)             <span class="tok-com"># width to carry this current</span>
+        out.<span class="tok-fn">append</span>((w, <span class="tok-fn">abs</span>(model.<span class="tok-fn">vgs</span>(dtype, w, l_um, ids_a))))
+    <span class="tok-kw">return</span> out</code></pre>
+
+  <p>For each gm/Id point in the table, it asks "at this operating point, how much current does a 1&nbsp;µm-wide device carry?" (<code>id_per_w</code>), then back-solves the width that carries <em>our</em> fixed current <code>ids_a</code>, snaps it to the grid, and records the pair <code>(width, |V_GS|)</code>. The axis runs weak-to-strong, so the list runs from <strong>small</strong> <code>|V_GS|</code> to <strong>large</strong>.</p>
+
+  <h3>Step 2 — pick the width closest to the target</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_size_diode_for_vgs</span>(model, tech, dtype, l_um, ids_a, target_vgs,
+                        cap_vgs=<span class="tok-kw">None</span>) -> <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
+    cands = <span class="tok-fn">_diode_candidates</span>(model, tech, dtype, l_um, ids_a)
+    <span class="tok-kw">if</span> cap_vgs <span class="tok-kw">is not None</span>:
+        cands = [c <span class="tok-kw">for</span> c <span class="tok-kw">in</span> cands <span class="tok-kw">if</span> c[<span class="tok-num">1</span>] &lt;= cap_vgs] <span class="tok-kw">or</span> []
+    <span class="tok-kw">if not</span> cands: <span class="tok-kw">return</span> <span class="tok-kw">None</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">min</span>(cands, key=<span class="tok-kw">lambda</span> c: <span class="tok-fn">abs</span>(c[<span class="tok-num">1</span>] - target_vgs))[<span class="tok-num">0</span>]</code></pre>
+
+  <p>Analogy: you want a paint shade of "0.65". You're handed a fan deck of chips, each a real available shade. You throw out any chip darker than your ceiling (<code>cap_vgs</code>), then pick the remaining chip closest to 0.65. If the cap threw out <em>every</em> chip, you return <code>None</code> and the caller leaves the device alone.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 160" role="img" aria-label="Scanning LUT candidates for the |Vgs| closest to the target">
+      <text x="20" y="28" font-size="12" fill="var(--fig-muted)">|Vgs| per width →</text>
+      <g font-size="12" text-anchor="middle">
+        <rect x="20"  y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="65"  y="60">wide</text><text x="65"  y="78" fill="var(--fig-muted)">Vgs 0.58</text>
+        <rect x="115" y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="160" y="60">—</text><text x="160" y="78" fill="var(--fig-muted)">Vgs 0.62</text>
+        <rect x="210" y="40" width="90" height="46" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="3"/>
+        <text x="255" y="60" font-weight="600">—</text><text x="255" y="78" fill="var(--fig-accent)">Vgs 0.646 ✓</text>
+        <rect x="305" y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="350" y="60" fill="var(--fig-muted)">—</text><text x="350" y="78" fill="var(--fig-muted)">Vgs 0.71</text>
+        <rect x="400" y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="445" y="60" fill="var(--fig-muted)">narrow</text><text x="445" y="78" fill="var(--fig-muted)">Vgs 0.79</text>
+      </g>
+      <line x1="255" y1="100" x2="255" y2="120" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="255" y="140" text-anchor="middle" font-size="11" fill="var(--fig-accent)">closest to target 0.65 → pick this width</text>
+    </svg>
+    <figcaption>Not a threshold scan — a nearest-match. The chip whose V_GS is closest to the wished target wins (here 0.646, nearest to 0.65).</figcaption>
+  </figure>
+
+  <h3>And <code>_sized()</code> — the little constructor</h3>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_sized</span>(model, ref, dtype, w_um, l_um, ids_a) -> TransistorSizing:
+    <span class="tok-kw">return</span> <span class="tok-fn">TransistorSizing</span>(ref=ref, w_um=w_um, l_um=l_um, ids_a=ids_a,
+        vgs_v=model.<span class="tok-fn">vgs</span>(dtype, w_um, l_um, ids_a),
+        vds_sat_v=model.<span class="tok-fn">vds_sat</span>(dtype, w_um, l_um, ids_a))</code></pre>
+  <p>Once a width is chosen, this packages it back into a full <code>TransistorSizing</code> record — re-reading the model for the <em>actual</em> <code>V_GS</code> and <code>Vdsat</code> that width produces. That "actual, after snapping" <code>V_GS</code> is what the tuner reads next; it won't be exactly the target, and the code is honest about that.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> now we have the engine. Part 5 wires it into the cascode-leg tuner and traces a full rail voltage — diode plus floor — with real numbers.</p></blockquote>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>_tune_cascode_legs()</code> — the heart</h2>
+
+  <blockquote><p><strong>The one job:</strong> for each cascode leg, re-size its diode so <code>V_GS</code> matches what the leg's consumers actually need, then set the floor resistor to make up the remaining rail voltage.</p></blockquote>
+
+  <p>This is the most important function in the file. Take it in four beats.</p>
+
+  <h3>Beat 1 — find the leg, structurally</h3>
+  <pre class="code"><code><span class="tok-kw">for</span> r <span class="tok-kw">in</span> bg.resistors:
+    t1, t2 = r.terminals.get(<span class="tok-str">"t1"</span>), r.terminals.get(<span class="tok-str">"t2"</span>)
+    supply = <span class="tok-fn">next</span>((t <span class="tok-kw">for</span> t <span class="tok-kw">in</span> (t1, t2) <span class="tok-kw">if</span> t <span class="tok-kw">in</span> RAILS), <span class="tok-kw">None</span>)
+    mid    = <span class="tok-fn">next</span>((t <span class="tok-kw">for</span> t <span class="tok-kw">in</span> (t1, t2) <span class="tok-kw">if</span> t <span class="tok-kw">and</span> t <span class="tok-kw">not in</span> RAILS), <span class="tok-kw">None</span>)
+    <span class="tok-kw">if</span> supply <span class="tok-kw">is None or</span> mid <span class="tok-kw">is None</span>: <span class="tok-kw">continue</span>
+    diode = <span class="tok-fn">next</span>((d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> bg.mosfets
+                  <span class="tok-kw">if</span> d.terminals.get(<span class="tok-str">"s"</span>) == mid
+                  <span class="tok-kw">and</span> d.terminals.get(<span class="tok-str">"d"</span>) == d.terminals.get(<span class="tok-str">"g"</span>)), <span class="tok-kw">None</span>)
+    <span class="tok-kw">if</span> diode <span class="tok-kw">is None</span>: <span class="tok-kw">continue</span>  <span class="tok-com"># plain rail resistor — size_resistors owns it</span>
+    rail = diode.terminals[<span class="tok-str">"d"</span>]</code></pre>
+
+  <p>A leg is recognized by its <em>shape</em>: a resistor with one end on a supply and the other on an internal node <code>mid</code>, with a diode-connected device (drain = gate) whose <em>source</em> sits on that same <code>mid</code>. The diode's drain is the rail. No <code>mid</code>-riding diode? Then it's just an ordinary rail resistor, and the generic sizer keeps it.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 180" role="img" aria-label="The structural shape of a cascode leg: supply, resistor, mid, diode, rail">
+      <!-- supply rail -->
+      <line x1="40" y1="150" x2="150" y2="150" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="95" y="170" text-anchor="middle" font-size="11" fill="var(--fig-muted)">supply (in RAILS)</text>
+      <!-- resistor -->
+      <rect x="70" y="98" width="50" height="40" rx="4" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="95" y="122" text-anchor="middle" font-size="12">R</text>
+      <line x1="95" y1="138" x2="95" y2="150" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- mid node -->
+      <line x1="95" y1="98" x2="95" y2="80" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="95" cy="80" r="4" fill="var(--fig-accent)"/>
+      <text x="95" y="70" text-anchor="middle" font-size="11" fill="var(--fig-accent)">mid</text>
+      <!-- diode -->
+      <rect x="70" y="30" width="50" height="40" rx="4" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="95" y="47" text-anchor="middle" font-size="11">diode</text>
+      <text x="95" y="61" text-anchor="middle" font-size="9" fill="var(--fig-muted)">d = g</text>
+      <line x1="95" y1="30" x2="95" y2="16" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="12" text-anchor="middle" font-size="11" fill="var(--fig-accent)">rail (= drain)</text>
+      <!-- arrow to consumers -->
+      <line x1="120" y1="23" x2="300" y2="23" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="210" y="15" text-anchor="middle" font-size="11" fill="var(--fig-muted)">feeds consumer gates</text>
+      <!-- consumer -->
+      <rect x="300" y="30" width="150" height="120" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="375" y="70" text-anchor="middle" font-size="12">consumer</text>
+      <text x="375" y="90" text-anchor="middle" font-size="12">cascode(s)</text>
+      <text x="375" y="118" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gate on rail,</text>
+      <text x="375" y="134" text-anchor="middle" font-size="11" fill="var(--fig-muted)">drain ≠ rail</text>
+    </svg>
+    <figcaption>The exact terminal pattern the loop hunts for. Miss the diode-on-mid and the leg is skipped — this is why foreign netlists pass through untouched.</figcaption>
+  </figure>
+
+  <h3>Beat 2 — read what the consumers demand</h3>
+  <pre class="code"><code>target_abs = <span class="tok-fn">_bias_rail_target_v</span>(rail, consumers, sizing, spec)  <span class="tok-com"># rail voltage</span>
+vgs_targets = [<span class="tok-fn">abs</span>(cs.vgs_v) <span class="tok-kw">for</span> dev <span class="tok-kw">in</span> consumers
+    <span class="tok-kw">if</span> dev.terminals.get(<span class="tok-str">"g"</span>) == rail                <span class="tok-com"># gated by this rail</span>
+    <span class="tok-kw">and</span> dev.terminals.get(<span class="tok-str">"d"</span>) != rail               <span class="tok-com"># not the diode itself</span>
+    <span class="tok-kw">and</span> (cs := sizing.get(dev.ref)) <span class="tok-kw">is not None and</span> cs.vgs_v]
+<span class="tok-kw">if not</span> vgs_targets: <span class="tok-kw">continue</span>
+target_vgs = <span class="tok-fn">sum</span>(vgs_targets) / <span class="tok-fn">len</span>(vgs_targets)  <span class="tok-com"># mean consumer |Vgs|</span>
+i_leg = <span class="tok-fn">abs</span>(ids_map.get(diode.ref, spec.ibias)) <span class="tok-kw">or</span> spec.ibias</code></pre>
+
+  <p>Two demands come out of the consumers. <code>target_abs</code> is the <em>absolute</em> rail voltage they need (<code>V_GS + floor</code>, from Part 2). <code>target_vgs</code> is the <em>mean planned <code>V_GS</code></em> of the actual consumer cascodes gated by this rail — this is the number the diode will be re-sized to reproduce. If several consumers share one rail with conflicting wishes, the mean is the compromise a single leg can offer.</p>
+
+  <h3>Beat 3 — re-size the diode to the consumers' V_GS</h3>
+  <pre class="code"><code>w = <span class="tok-fn">_size_diode_for_vgs</span>(model, tech, diode.type, s.l_um, s.ids_a, target_vgs)
+<span class="tok-kw">if</span> w <span class="tok-kw">is not None</span>:
+    sizing[diode.ref] = <span class="tok-fn">_sized</span>(model, diode.ref, diode.type, w, s.l_um, s.ids_a)
+vgs_actual = <span class="tok-fn">abs</span>(sizing[diode.ref].vgs_v)</code></pre>
+  <p>Straight into the Part 4 engine: pick the width whose <code>V_GS</code> is closest to <code>target_vgs</code>, rebuild the record, then read back the <strong>actual</strong> <code>V_GS</code> the grid gave us. <em>This is the line that makes the rail track Vth</em> — the diode now carries the same <code>V_GS</code> as the consumer, and it's the same device type.</p>
+
+  <h3>Beat 4 — the resistor makes up the difference</h3>
+  <pre class="code"><code>span  = (target_abs - spec.vss) <span class="tok-kw">if</span> supply != <span class="tok-str">"vdd!"</span> \
+        <span class="tok-kw">else</span> (spec.vdd - target_abs)
+floor = <span class="tok-fn">max</span>(span - vgs_actual, <span class="tok-num">0.0</span>)
+out_r[r.ref] = floor / i_leg <span class="tok-kw">if</span> floor &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-num">1.0</span></code></pre>
+  <p>The diode already covers <code>vgs_actual</code> of the rail. Whatever is <em>left</em> between the supply and the target is the <strong>floor</strong>, and a resistor drops exactly that across the leg current: <code>R = floor / I_leg</code> (Ohm's law, solved for R). If the diode alone already overshoots, <code>floor</code> clamps to 0 and the resistor becomes a nominal <code>1.0 Ω</code> — a near-short, since no drop is needed.</p>
+
+  <h3>Why is it called <code>floor</code>?</h3>
+  <blockquote><p>The consumer cascode needs its own <code>V_GS</code>, plus just enough extra to keep the device stacked beneath it in saturation — the <em>minimum voltage floor</em> that stack sits on. That is precisely the small piece the resistor supplies. I really like this name: it says the physics out loud.</p></blockquote>
+
+  <h3>The whole leg, traced by hand</h3>
+  <p>Take a <code>cascode_gnd</code> leg (supply = <code>vss = 0</code>). The consumers want <code>V_GS = 0.65 V</code> and their stack needs a floor, giving a rail target <code>target_abs = 0.75 V</code>. The leg carries <code>I_leg = 10 µA</code>.</p>
+
+  <table>
+    <thead><tr><th>Step</th><th>Computation</th><th class="num">Result</th></tr></thead>
+    <tbody>
+      <tr><td><code>target_vgs</code> (mean consumer V_GS)</td><td>given by consumers</td><td class="num">0.650 V</td></tr>
+      <tr><td>diode re-sized, actual V_GS</td><td>nearest LUT chip to 0.65</td><td class="num">0.646 V</td></tr>
+      <tr><td><code>span</code></td><td>0.75 − 0 (vss supply)</td><td class="num">0.750 V</td></tr>
+      <tr><td><code>floor</code></td><td>max(0.750 − 0.646, 0)</td><td class="num">0.104 V</td></tr>
+      <tr><td><code>R = floor / I_leg</code></td><td>0.104 / 10 µA</td><td class="num">10.4 kΩ</td></tr>
+      <tr><td><strong>rail produced</strong></td><td>0.646 (diode) + 0.104 (R·I)</td><td class="num"><strong>0.750 V</strong></td></tr>
+    </tbody>
+  </table>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="Hand-traced rail: diode Vgs plus resistor floor equals the target">
+      <!-- diode contribution bar -->
+      <text x="30" y="30" font-size="12" font-weight="600">what the diode gives</text>
+      <rect x="30" y="42" width="260" height="30" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="160" y="62" text-anchor="middle" font-size="12">|Vgs| = 0.646 V (tracks Vth)</text>
+      <!-- plus -->
+      <text x="310" y="63" font-size="16" fill="var(--fig-muted)">+</text>
+      <!-- resistor contribution bar -->
+      <rect x="330" y="42" width="70" height="30" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="365" y="62" text-anchor="middle" font-size="11">floor 0.104</text>
+      <!-- equals -->
+      <text x="420" y="63" font-size="16" fill="var(--fig-muted)">=</text>
+      <rect x="440" y="42" width="80" height="30" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="480" y="62" text-anchor="middle" font-size="12" fill="var(--fig-good)">0.750 V ✓</text>
+      <!-- resistor computation -->
+      <text x="30" y="110" font-size="12" font-weight="600">what the resistor is set to</text>
+      <rect x="30" y="122" width="490" height="60" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="275" y="148" text-anchor="middle" font-size="13">R = floor / I_leg = 0.104 V / 10 µA = 10.4 kΩ</text>
+      <text x="275" y="170" text-anchor="middle" font-size="11" fill="var(--fig-muted)">the resistor's whole purpose: turn the leftover voltage into a value size_resistors couldn't derive</text>
+    </svg>
+    <figcaption>Diode plus floor equals target, exactly. The diode carries the large, Vth-tracking part; the resistor carries the small, deliberate margin.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>_tune_pref_cascode()</code> — the wide-swing level</h2>
+
+  <blockquote><p><strong>The one job:</strong> in the pref branch, push the mirror's drain voltage (<code>Vds</code>) as close to the master reference's <code>V_GS</code> as headroom allows — by making the cascode as "short" as possible and the <code>ncasc</code> diode as "tall" as the ceiling permits.</p></blockquote>
+
+  <p>Why bother? A plain NMOS mirror in this branch would run at <code>Vds = vdd − |V_GSP|</code>, far from the master's operating point — the ~4% extra-mirror-hop error from issue&nbsp;#103. Cascoding the mirror lets us <em>pin</em> its <code>Vds</code> wherever we choose. We choose "as near the master as we can reach."</p>
+
+  <h3>Beat 1 — find the chain, structurally</h3>
+  <pre class="code"><code>master  = diode-connected nmos with source on a rail  <span class="tok-com"># names ibias net</span>
+mirror  = another nmos, gate on ibias, source on a rail
+cascode = nmos, source on the mirror's drain, gate NOT ibias
+ncasc_diode = diode-connected nmos whose d=g = the cascode's gate
+pref_diode  = pmos diode on the cascode's drain</code></pre>
+  <p>The whole chain is recovered from terminals alone: the master names the <code>ibias</code> net, the mirror hangs off it, the mirror's drain carries a cascode, the cascode's gate names the <code>ncasc</code> net, and a pref PMOS diode caps the top.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="The pref branch chain: master, mirror, cascode topped by pref diode, with ncasc diode on the cascode gate">
+      <!-- master -->
+      <rect x="30" y="80" width="80" height="46" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="70" y="100" text-anchor="middle" font-size="12">master</text>
+      <text x="70" y="116" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">d=g=ibias</text>
+      <!-- ibias net line -->
+      <line x1="110" y1="103" x2="170" y2="103" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="140" y="95" text-anchor="middle" font-size="10" fill="var(--fig-accent)">ibias</text>
+      <!-- mirror -->
+      <rect x="170" y="120" width="80" height="46" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="210" y="140" text-anchor="middle" font-size="12">mirror</text>
+      <text x="210" y="156" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">g=ibias</text>
+      <!-- mirror drain up to cascode -->
+      <line x1="210" y1="120" x2="210" y2="96" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="238" y="112" text-anchor="middle" font-size="9.5" fill="var(--fig-accent)">n1 (pinned Vds)</text>
+      <!-- cascode -->
+      <rect x="170" y="50" width="80" height="46" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="210" y="70" text-anchor="middle" font-size="12">cascode</text>
+      <text x="210" y="86" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">weak-inversion</text>
+      <!-- ncasc diode gating the cascode -->
+      <line x1="170" y1="73" x2="120" y2="73" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="30" y="30" width="80" height="46" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="70" y="50" text-anchor="middle" font-size="12">ncasc</text>
+      <text x="70" y="66" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">diode, sets gate</text>
+      <!-- pref diode on cascode drain -->
+      <line x1="210" y1="50" x2="210" y2="34" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="300" y="20" width="90" height="46" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="345" y="40" text-anchor="middle" font-size="12">pref diode</text>
+      <text x="345" y="56" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">pmos, from vdd</text>
+      <line x1="300" y1="43" x2="234" y2="34" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="345" y="12" text-anchor="middle" font-size="10" fill="var(--fig-muted)">v_pref = vdd − |Vgs_p|</text>
+    </svg>
+    <figcaption>Master → mirror → cascode → pref diode, with the ncasc diode setting the cascode's gate. The knob is the pinned node n1 between mirror and cascode.</figcaption>
+  </figure>
+
+  <h3>Beat 2 — make the cascode as short as possible</h3>
+  <pre class="code"><code>gm_id_weak = <span class="tok-fn">float</span>(model.lut.gm_id_axis[-<span class="tok-num">1</span>])   <span class="tok-com"># weakest inversion</span>
+idw = model.lut.<span class="tok-fn">id_per_w</span>(<span class="tok-str">"nmos"</span>, gm_id_weak, s_c.l_um)
+<span class="tok-kw">if</span> idw &gt; <span class="tok-num">0</span>:
+    w_c = <span class="tok-fn">_snap_w</span>(tech, <span class="tok-fn">abs</span>(s_c.ids_a) / idw)
+    sizing[cascode.ref] = <span class="tok-fn">_sized</span>(model, cascode.ref, <span class="tok-str">"nmos"</span>, w_c, s_c.l_um, s_c.ids_a)</code></pre>
+  <p>Push the cascode to the <strong>weak-inversion end</strong> of the table — the last axis point. That gives it the lowest <code>V_GS</code> and lowest <code>Vdsat</code>. A shorter cascode leaves more of the ceiling for the <code>ncasc</code> diode to push the pinned node upward. It is the same "widen the device to shrink its V_GS" trick from Part 2, dialed to the extreme.</p>
+
+  <h3>Beat 3 — aim the ncasc diode at the master, under the ceiling</h3>
+  <pre class="code"><code>v_pref     = spec.vdd - <span class="tok-fn">abs</span>(s_p.vgs_v)              <span class="tok-com"># pref node headroom</span>
+vgs_master = <span class="tok-fn">abs</span>(sizing.get(master.ref, s_m).vgs_v)
+n1_max     = v_pref - <span class="tok-fn">abs</span>(s_c.vds_sat_v) - _MARGIN_V - spec.vss
+target = vgs_master + <span class="tok-fn">abs</span>(s_c.vgs_v)             <span class="tok-com"># ideal ncasc |Vgs|</span>
+cap    = n1_max     + <span class="tok-fn">abs</span>(s_c.vgs_v)             <span class="tok-com"># ceiling on ncasc |Vgs|</span>
+w_d = <span class="tok-fn">_size_diode_for_vgs</span>(model, tech, <span class="tok-str">"nmos"</span>, s_d.l_um, s_d.ids_a,
+                          target, cap_vgs=cap)</code></pre>
+  <p>The pinned node is <code>n1 = V_GS,ncasc − V_GS,cascode</code>. To make <code>n1</code> equal the master's <code>V_GS</code>, we want the ncasc diode's <code>V_GS = vgs_master + V_GS,cascode</code> — that's <code>target</code>. But <code>n1</code> can't exceed <code>n1_max</code> (the pref node minus the cascode's own <code>Vdsat</code> minus a <code>0.05 V</code> safety margin), so we cap the diode's <code>V_GS</code> at <code>cap</code>. Part 4's engine picks the nearest chip that respects that ceiling.</p>
+
+  <h3>Traced by hand — the cap bites</h3>
+  <p>With <code>vdd = 1.0</code>, <code>vss = 0</code>, pref PMOS <code>|V_GS| = 0.50</code>, master <code>V_GS = 0.40</code>, and the weak-inversion cascode landing at <code>V_GS = 0.35</code>, <code>Vdsat = 0.10</code>:</p>
+  <table>
+    <thead><tr><th>Quantity</th><th>Computation</th><th class="num">Value</th></tr></thead>
+    <tbody>
+      <tr><td><code>v_pref</code></td><td>1.0 − 0.50</td><td class="num">0.50 V</td></tr>
+      <tr><td><code>n1_max</code></td><td>0.50 − 0.10 − 0.05 − 0</td><td class="num">0.35 V</td></tr>
+      <tr><td><code>target</code> (ideal ncasc V_GS)</td><td>0.40 + 0.35</td><td class="num">0.75 V</td></tr>
+      <tr><td><code>cap</code> (ceiling)</td><td>0.35 + 0.35</td><td class="num">0.70 V</td></tr>
+      <tr><td>ncasc V_GS chosen</td><td>nearest to 0.75, but ≤ 0.70</td><td class="num">0.70 V</td></tr>
+      <tr><td><strong>pinned Vds (n1)</strong></td><td>0.70 − 0.35</td><td class="num"><strong>0.35 V</strong></td></tr>
+    </tbody>
+  </table>
+  <p>The ideal would have pinned <code>Vds</code> at the master's <code>0.40 V</code>, but the pref node's headroom caps it at <code>0.35 V</code> — within <code>50 mV</code>, a big improvement on the raw mirror hop, and honestly limited by the ceiling rather than pretending.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 170" role="img" aria-label="The pinned Vds reaches toward the master but is capped by headroom">
+      <line x1="60" y1="20" x2="60" y2="150" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <!-- master target line -->
+      <line x1="60" y1="40" x2="380" y2="40" stroke="var(--fig-accent2)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="388" y="44" font-size="11" fill="var(--fig-accent2)">master Vds = 0.40 V (goal)</text>
+      <!-- ceiling line -->
+      <line x1="60" y1="65" x2="380" y2="65" stroke="var(--fig-bad)" stroke-width="2" stroke-dasharray="3 3"/>
+      <text x="388" y="69" font-size="11" fill="var(--fig-bad)">ceiling n1_max = 0.35 V</text>
+      <!-- achieved bar from bottom(150) up to 65 -->
+      <rect x="120" y="65" width="90" height="85" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="165" y="112" text-anchor="middle" font-size="12">pinned</text>
+      <text x="165" y="128" text-anchor="middle" font-size="12">Vds = 0.35</text>
+      <!-- gap arrow -->
+      <line x1="260" y1="65" x2="260" y2="40" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="268" y="56" font-size="10" fill="var(--fig-muted)">50 mV short</text>
+    </svg>
+    <figcaption>The tuner reaches for the master's Vds and gets within 50 mV — stopped not by choice but by the pref node's ceiling.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>tune_bias_levels()</code> — the orchestrator</h2>
+
+  <blockquote><p><strong>The one job:</strong> guard the inputs, copy the sizing so nothing is mutated, run both tuners, and hand back the tuned sizing plus the legs' floor-resistor values.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">tune_bias_levels</span>(blocks, ids_map, sizing, model, spec, tech):
+    <span class="tok-kw">if not</span> <span class="tok-fn">isinstance</span>(model, GmIdModel): <span class="tok-kw">return</span> sizing, {}
+    bg = blocks.blocks.get(<span class="tok-str">"bias_gen"</span>)
+    <span class="tok-kw">if</span> bg <span class="tok-kw">is None or not</span> bg.mosfets: <span class="tok-kw">return</span> sizing, {}
+
+    tuned = <span class="tok-fn">dict</span>(sizing)                          <span class="tok-com"># never mutate the caller's map</span>
+    level_r: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">float</span>] = {}
+    consumers = [d <span class="tok-kw">for</span> name, b <span class="tok-kw">in</span> blocks.blocks.items()
+                 <span class="tok-kw">if</span> name != <span class="tok-str">"bias_gen"</span> <span class="tok-kw">for</span> d <span class="tok-kw">in</span> b.mosfets]
+    <span class="tok-fn">_tune_cascode_legs</span>(bg, consumers, ids_map, tuned, model, spec, tech, level_r)
+    <span class="tok-fn">_tune_pref_cascode</span>(bg, tuned, model, spec, tech)
+    <span class="tok-kw">return</span> tuned, level_r</code></pre>
+
+  <p>Read it top to bottom. Two guards bail out harmlessly — wrong model, or no bias generator — returning the original sizing and an empty resistor map. Then <code>dict(sizing)</code> makes the promise real: <strong>the input mapping is never touched</strong>; a fresh copy absorbs every change. The consumers list is "every device that isn't in the bias generator" — the outside world the legs must satisfy. Finally the two tuners run in place on <code>tuned</code> and <code>level_r</code>, and both come back.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 120" role="img" aria-label="Pipeline: geometry pass then bias-level tuning then merge over generic resistors">
+      <g text-anchor="middle" font-size="12">
+        <rect x="10"  y="40" width="120" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="70"  y="60">geometry pass</text><text x="70" y="76" font-size="10" fill="var(--fig-muted)">+ DC check</text>
+        <rect x="200" y="40" width="130" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="265" y="60">tune_bias_levels</text><text x="265" y="76" font-size="10" fill="var(--fig-accent)">this file</text>
+        <rect x="400" y="40" width="130" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="465" y="57">merge level_r</text><text x="465" y="73" font-size="10" fill="var(--fig-accent2)">over generic R</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="130" y1="63" x2="200" y2="63" marker-end="url(#ar)"/>
+        <line x1="330" y1="63" x2="400" y2="63" marker-end="url(#ar)"/>
+      </g>
+    </svg>
+    <figcaption>Where it sits: the last, best-informed word on the level nets, its resistor values layered over the generic fallback.</figcaption>
+  </figure>
+
+  <p>That last output matters: <code>level_r</code> is meant to be merged <em>over</em> the generic values from <code>size_resistors</code>, which cannot derive a level for a <code>mid</code> net and falls back to a representative value. This file supplies the real number.</p>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · The hidden idea, the limits, and the one line</h2>
+
+  <h3>The idea the code never writes down</h3>
+  <p>Both tuners are building the same equation — a rail voltage split into a device's <code>V_GS</code> plus a small, deliberate margin:</p>
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>V</mi><mi>rail</mi></msub><mo>=</mo>
+          <munder><mo>|</mo><mrow></mrow></munder>
+          <msub><mi>V</mi><mrow><mi>GS</mi></mrow></msub>
+          <mo>|</mo>
+          <mo>+</mo>
+          <msub><mi>V</mi><mi>floor</mi></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+  <p>The cascode leg builds it out of atoms — a diode for the <code>|V_GS|</code> term, a resistor for the <code>V_floor</code> term. The pref branch builds the <em>same</em> shape out of two stacked transistors (ncasc diode minus cascode) to place a pinned node. One equation, two constructions.</p>
+
+  <h3>The reveal: why the rail <em>tracks Vth</em></h3>
+  <p>Here is the payoff promised in Part 2. The leg's diode is the <strong>same device type</strong> as the consumer cascode, and it was re-sized to carry the <em>same <code>V_GS</code></em>. So imagine temperature rises and threshold voltage <code>Vth</code> drifts up by <code>60 mV</code>:</p>
+  <ul>
+    <li>The consumer's <code>V_GS</code> rises by ~60 mV — it now needs a <em>higher</em> gate voltage.</li>
+    <li>The diode's <code>V_GS</code> rises by the same ~60 mV — so the rail it produces rises by ~60 mV too.</li>
+    <li>The resistor's floor (<code>I·R</code>) doesn't move — but it was never supposed to; it's a fixed margin, not the tracking part.</li>
+  </ul>
+  <p>The rail and the demand move <strong>in lockstep</strong>. Had the leg used a fixed resistive divider for the whole rail, the rail would have stood still while the consumer's need climbed — and the cascode would drift out of its intended operating point. <em>The diode mirroring the consumer's <code>V_GS</code> is the entire reason the bias is robust over process and temperature.</em></p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 170" role="img" aria-label="Over temperature the diode Vgs and the consumer demand rise together, so the rail tracks">
+      <text x="140" y="24" text-anchor="middle" font-size="12" fill="var(--fig-muted)">cold</text>
+      <text x="380" y="24" text-anchor="middle" font-size="12" fill="var(--fig-muted)">hot (Vth up 60 mV)</text>
+      <!-- cold stack -->
+      <rect x="80" y="90" width="120" height="30" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="140" y="110" text-anchor="middle" font-size="10">floor (fixed)</text>
+      <rect x="80" y="40" width="120" height="50" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="140" y="70" text-anchor="middle" font-size="10">diode Vgs 0.646</text>
+      <text x="140" y="140" text-anchor="middle" font-size="11" fill="var(--fig-accent)">rail 0.750</text>
+      <!-- arrow -->
+      <line x1="215" y1="80" x2="300" y2="80" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="257" y="72" text-anchor="middle" font-size="10" fill="var(--fig-muted)">heat up</text>
+      <!-- hot stack (diode taller) -->
+      <rect x="320" y="90" width="120" height="30" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="380" y="110" text-anchor="middle" font-size="10">floor (fixed)</text>
+      <rect x="320" y="28" width="120" height="62" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="380" y="62" text-anchor="middle" font-size="10">diode Vgs 0.706</text>
+      <text x="380" y="140" text-anchor="middle" font-size="11" fill="var(--fig-accent)">rail 0.810 — matches demand</text>
+    </svg>
+    <figcaption>The diode grows exactly as the consumer's need grows; the fixed floor rides along. The rail chases Vth for free.</figcaption>
+  </figure>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It acts only on the <code>GmIdModel</code> path — any other model returns the sizing untouched with an empty resistor map.</li>
+    <li>It touches only the two structural shapes it recognizes; a bias generator (or foreign netlist) without a diode-on-a-resistor leg or a mirror-drain cascode passes straight through.</li>
+    <li>A shared rail with <em>conflicting</em> consumer demands gets only the mean — the best a single leg can offer, not a per-consumer optimum.</li>
+    <li>The pref cascode reaches the master's <code>Vds</code> only as far as the pref node's headroom allows; when the cap bites, it stops short rather than pretending.</li>
+    <li>Widths are snapped to the grid, so the actual <code>V_GS</code> is the nearest available chip, not the exact target — and the code reads back the actual value rather than assuming.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole file rides one insight: <strong>a diode-connected device is a self-calibrating <code>V_GS</code> reference.</strong> Size it to reproduce a downstream device's <code>V_GS</code> and it will track that device over every corner for free — leaving only a small, fixed floor for a humble resistor to supply. Two tiny constructions, one robust idea.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>bias_levels.py</code> re-sizes the bias generator's <em>level</em> devices — the ones set by an absolute voltage rather than a mirror ratio — by making each cascode leg's diode reproduce its consumers' <code>V_GS</code> (so the rail tracks Vth) and a floor resistor supply the small remainder, and by pinning the pref branch's cascoded mirror as near the master reference as headroom allows.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

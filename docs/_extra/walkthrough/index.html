@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CircuitGenome Sizer — full walkthrough</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-bad-fill:#fbe6e2; --code-bg:#f4f1ea;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-bad-fill:#2b1c1a; --code-bg:#1a1815;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .container { max-width:940px; margin:0 auto; padding:44px 24px 120px; }
+  h1 { font-size:2.3rem; line-height:1.12; margin:0 0 6px; letter-spacing:-0.6px; }
+  .subtitle { color:var(--muted); font-size:1.1rem; margin-bottom:0.5em; }
+  h2 { font-size:1.4rem; margin:2em 0 0.6em; padding-top:14px; border-top:1px solid var(--border); }
+  p,li { max-width:72ch; }
+  a { color:var(--link); }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.88em; }
+  figure.fig { margin:1.8em 0; padding:22px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  svg a { cursor:pointer; }
+  svg a:hover rect, svg a:hover polygon { stroke:var(--fig-accent); stroke-width:3.5; }
+  .pkgcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px;
+    margin:1.4em 0; }
+  .pkg { display:block; padding:18px 18px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; text-decoration:none; color:var(--text); transition:border-color .12s; }
+  .pkg:hover { border-color:var(--accent); }
+  .pkg .fn { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-weight:600;
+    color:var(--accent); font-size:1.05rem; }
+  .pkg .role { color:var(--muted); font-size:0.9rem; margin-top:5px; }
+  .pkg .count { display:inline-block; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px;
+    color:var(--fig-accent2); margin-top:10px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="container">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../index.html">&larr; CircuitGenome docs</a></p>
+
+<h1>The CircuitGenome Sizer — a full walkthrough</h1>
+<div class="subtitle"><code>circuitgenome/sizer/</code> — Layer 3 of the pipeline: turn a recognised op-amp + a performance spec into concrete transistor and resistor sizes.</div>
+
+<p>The sizer has <strong>one front door</strong> (<code>sizer.py</code>) that routes each circuit to one of <strong>two sizing paths</strong> — a measured <strong>gm/Id</strong> pipeline or a square-law <strong>Level-1</strong> CP-SAT sizer — both built on a <strong>shared core</strong>. This overview mirrors the source tree; open any package to dive in, or open the dispatcher to see how the route is chosen.</p>
+
+<h2>The map</h2>
+
+<figure class="fig">
+  <svg viewBox="0 0 860 430" role="img" aria-label="The sizer dispatcher routing to two sizing paths on a shared core">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+    </defs>
+
+    <!-- dispatcher -->
+    <a href="sizer_explained.html">
+      <rect x="300" y="24" width="260" height="52" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="3"/>
+      <text x="430" y="47" text-anchor="middle" font-weight="600" font-size="14">sizer.py · size_circuit()</text>
+      <text x="430" y="65" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the dispatcher — routes by technology</text>
+    </a>
+
+    <!-- three branches -->
+    <path d="M360,76 L360,110 L215,110 L215,140" fill="none" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="230" y="103" text-anchor="middle" font-size="10" fill="var(--fig-muted)">generic tech</text>
+    <path d="M500,76 L500,110 L650,110 L650,140" fill="none" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="640" y="103" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gm/Id LUT</text>
+    <path d="M430,76 L430,150" fill="none" stroke="var(--fig-bad)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#ar)"/>
+    <rect x="352" y="150" width="156" height="30" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+    <text x="430" y="169" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">PTM, no LUT → error</text>
+
+    <!-- analytical package -->
+    <a href="analytical/index.html">
+      <rect x="120" y="140" width="190" height="66" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="215" y="165" text-anchor="middle" font-weight="600" font-size="13">analytical/</text>
+      <text x="215" y="182" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 square-law (CP-SAT)</text>
+      <text x="215" y="196" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">2 pages</text>
+    </a>
+
+    <!-- gmid package -->
+    <a href="gmid/index.html">
+      <rect x="555" y="140" width="190" height="66" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="650" y="165" text-anchor="middle" font-weight="600" font-size="13">gmid/</text>
+      <text x="650" y="182" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id 5-phase pipeline</text>
+      <text x="650" y="196" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">11 pages</text>
+    </a>
+
+    <!-- both rest on shared -->
+    <path d="M215,206 L215,250 L400,250 L400,286" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <path d="M650,206 L650,250 L460,250 L460,286" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="430" y="243" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">both build on ↓</text>
+
+    <!-- shared core -->
+    <a href="shared/index.html">
+      <rect x="180" y="288" width="500" height="66" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="430" y="313" text-anchor="middle" font-weight="600" font-size="13.5">shared/</text>
+      <text x="430" y="331" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">DeviceModel · preprocess · metrics · equations · gm/Id LUT · …</text>
+      <text x="430" y="347" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">9 pages</text>
+    </a>
+
+    <text x="430" y="392" text-anchor="middle" font-size="11" fill="var(--fig-muted)">One interface underneath (DeviceModel) is what lets both paths share this core.</text>
+  </svg>
+  <figcaption>The full sizer: one dispatcher, two sizing paths, one shared core. Click any package to open its walkthrough, or the dispatcher to see how the route is chosen.</figcaption>
+</figure>
+
+<h2>The four packages</h2>
+<div class="pkgcards">
+  <a class="pkg" href="sizer_explained.html"><span class="fn">sizer.py</span><div class="role">The dispatcher — routes each circuit to the right sizer, or refuses with <code>UnsupportedTechError</code>.</div><span class="count">entry point · 1 page</span></a>
+  <a class="pkg" href="gmid/index.html"><span class="fn">gmid/</span><div class="role">The measured gm/Id pipeline — five phases from structural analysis to metrics.</div><span class="count">11 pages + index</span></a>
+  <a class="pkg" href="analytical/index.html"><span class="fn">analytical/</span><div class="role">The Level-1 square-law sizer — discrete W/L via an OR-Tools CP-SAT search.</div><span class="count">2 pages + index</span></a>
+  <a class="pkg" href="shared/index.html"><span class="fn">shared/</span><div class="role">The model-independent core both sizers rest on, keyed on the <code>DeviceModel</code> interface.</div><span class="count">9 pages + index</span></a>
+</div>
+
+<p style="color:var(--muted);font-size:0.9rem;margin-top:2em;">Generated by the <code>explain-code-with-fig</code> skill · intuition-first walkthroughs with hand-authored SVG figures · light/dark toggle top-right.</p>
+
+</div>
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+</script>
+</body>
+</html>

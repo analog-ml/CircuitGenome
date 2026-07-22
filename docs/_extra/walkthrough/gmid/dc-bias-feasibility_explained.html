@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DC-Bias Feasibility, explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>DC-Bias Feasibility, explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/bias.py</code> — does the tail current source still fit under the supply, and can we repair it if it doesn't?</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The physics primer</a>
+  <a href="#part-3">3 · _snap_w()</a>
+  <a href="#part-4">4 · _tail_gm_id_for_headroom()</a>
+  <a href="#part-5">5 · _tail_stack_to_rail()</a>
+  <a href="#part-6">6 · _apply_headroom() — the heart</a>
+  <a href="#part-7">7 · check_dc_operating_point()</a>
+  <a href="#part-8">8 · The hidden inequality</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> after the sizer has chosen every transistor's current and width, does the <em>tail current source</em> still have enough voltage room to stay in saturation — and if not, can we quietly fix it?</p></blockquote>
+
+  <p class="beat">Here is the whole story without a line of code.</p>
+
+  <p>The gm/Id sizer does something clever: it hands each device a current (by Kirchhoff's current law) and sizes it to hit a target <code>gm/Id</code>. But it reads its lookup table at a fixed <code>Vds = Vdd/2</code>, and it <strong>never checks that the devices, once stacked on top of each other, actually fit between the two supply rails with everyone still saturated.</strong></p>
+
+  <p>Think of a supply rail as a <strong>ceiling of fixed height</strong>, and each transistor as a person who must stand at their full height to work correctly. Stack three people in a room and the top of the stack may punch through the ceiling. When that happens to the <em>tail</em> transistor at the bottom of a differential pair, it gets squashed — it drops out of saturation, sources far less current than assumed, and the amplifier's <code>gm1</code> and gain-bandwidth collapse (this is issue&nbsp;#76, cause&nbsp;A).</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 210" role="img" aria-label="Good case versus bad case: the tail either fits or is squashed against the rail">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- GOOD -->
+      <text x="140" y="24" text-anchor="middle" font-size="13" fill="var(--fig-good)" font-weight="600">good — tail saturated</text>
+      <line x1="30" y1="40" x2="250" y2="40" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="255" y="44" font-size="11" fill="var(--fig-muted)">Vdd rail</text>
+      <rect x="90" y="52" width="100" height="34" rx="5" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="140" y="73" text-anchor="middle" font-size="12">tail (sat)</text>
+      <line x1="140" y1="40" x2="140" y2="52" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="205" y="70" font-size="11" fill="var(--fig-good)">Vdsat fits ✓</text>
+      <rect x="90" y="96" width="100" height="34" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="140" y="117" text-anchor="middle" font-size="12">input pair</text>
+      <line x1="30" y1="176" x2="250" y2="176" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="255" y="180" font-size="11" fill="var(--fig-muted)">Vss</text>
+      <!-- BAD -->
+      <text x="420" y="24" text-anchor="middle" font-size="13" fill="var(--fig-bad)" font-weight="600">bad — tail squashed</text>
+      <line x1="310" y1="40" x2="530" y2="40" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <rect x="370" y="44" width="100" height="20" rx="5" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="420" y="59" text-anchor="middle" font-size="11">tail (triode)</text>
+      <text x="478" y="58" font-size="11" fill="var(--fig-bad)">too tall ✗</text>
+      <rect x="370" y="74" width="100" height="56" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="420" y="106" text-anchor="middle" font-size="12">input pair</text>
+      <text x="420" y="122" text-anchor="middle" font-size="10" fill="var(--fig-muted)">lifted too high</text>
+      <line x1="310" y1="176" x2="530" y2="176" stroke="var(--fig-stroke)" stroke-width="3"/>
+    </svg>
+    <figcaption>Same room, same ceiling. On the right the input pair lifts the stack too high, and the tail has no room left to stand up.</figcaption>
+  </figure>
+
+  <p>So this file is a <strong>safety inspector</strong> that runs after sizing. It does three things: <em>detect</em> the squeeze, <em>try to repair</em> it by adjusting a couple of design knobs, and <em>report an honest verdict</em> (<code>bias_feasible</code>) so callers can trust or de-rate the metrics.</p>
+
+  <h3>The cast of characters</h3>
+  <p>Five functions. Hover any box to trace who it calls.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 560 300" role="img" aria-label="Call graph of bias.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="apply"  x1="240" y1="60"  x2="200" y2="108" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="stack"  x1="340" y1="60"  x2="430" y2="108" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="gmid"   x1="150" y1="150" x2="90"  y2="205" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="resize" x1="200" y1="150" x2="230" y2="205" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="snap"   x1="250" y1="235" x2="360" y2="250" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="200" y="20" width="200" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="45" text-anchor="middle" font-weight="600" font-size="13">check_dc_operating_point()</text>
+      </g>
+      <!-- apply_headroom -->
+      <g class="node" data-group="apply">
+        <rect x="90" y="108" width="200" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="190" y="128" text-anchor="middle" font-weight="600" font-size="13">_apply_headroom()</text>
+        <text x="190" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">detect &amp; repair the squeeze</text>
+      </g>
+      <!-- stack_to_rail -->
+      <g class="node" data-group="stack">
+        <rect x="360" y="108" width="190" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="455" y="128" text-anchor="middle" font-weight="600" font-size="13">_tail_stack_to_rail()</text>
+        <text x="455" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">walk devices up to the rail</text>
+      </g>
+      <!-- gm_id -->
+      <g class="node" data-group="gmid">
+        <rect x="0" y="205" width="185" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="92" y="225" text-anchor="middle" font-weight="600" font-size="12">_tail_gm_id_for_headroom()</text>
+        <text x="92" y="240" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">smallest gm/Id that fits</text>
+      </g>
+      <!-- resize (nested) -->
+      <g class="node" data-group="resize">
+        <rect x="200" y="205" width="150" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="275" y="225" text-anchor="middle" font-weight="600" font-size="12">_resize_group()</text>
+        <text x="275" y="240" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">nested helper</text>
+      </g>
+      <!-- snap -->
+      <g class="node" data-group="snap">
+        <rect x="360" y="230" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="435" y="249" text-anchor="middle" font-weight="600" font-size="12">_snap_w()</text>
+        <text x="435" y="263" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">width → grid</text>
+      </g>
+    </svg>
+    <figcaption>The orchestrator on top; the repair engine and its helpers below. We'll learn them bottom-up so the top reads easily.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> before any code, Part&nbsp;2 builds the three words we need — <code>Vgs</code>, <code>Vdsat</code>, and <code>headroom</code> — as a single picture of a voltage stack.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The physics primer (three words, one picture)</h2>
+
+  <p class="beat">You need exactly three ideas. None are as scary as they sound.</p>
+
+  <h3>Vgs — how much a transistor "costs" to turn on</h3>
+  <p>To conduct, a MOSFET needs a gate-to-source voltage <code>Vgs</code>. For our PMOS input pair, its source sits <code>|Vgs|</code> <em>above</em> its gate. If the gate is at the common-mode voltage <code>Vcm</code>, then the pair's source node — the net called <code>net_tail</code> — is dragged up to:</p>
+  <div class="eq-center"><span class="boxed-eq">net_tail&nbsp;=&nbsp;Vcm&nbsp;+&nbsp;|Vgs<sub>pair</sub>|</span></div>
+
+  <h3>Vdsat — how much room a transistor <em>needs</em> to do its job</h3>
+  <p>A current source only behaves like a current source while it stays <strong>saturated</strong>, which requires at least <code>Vdsat</code> of drain-to-source voltage. Below that it slips into <em>triode</em> and its current sags. Think of <code>Vdsat</code> as the transistor's <strong>minimum standing height</strong>.</p>
+
+  <h3>Headroom — the room actually left over</h3>
+  <p>The tail sits between <code>net_tail</code> and the <code>Vdd</code> rail. The gap it's given is the <strong>headroom</strong>:</p>
+  <div class="eq-center"><span class="boxed-eq">headroom<sub>PMOS</sub>&nbsp;=&nbsp;Vdd&nbsp;−&nbsp;(Vcm&nbsp;+&nbsp;|Vgs<sub>pair</sub>|)</span></div>
+  <p>The bias is healthy exactly when <span class="keyline">headroom ≥ Vdsat<sub>tail</sub></span>. When headroom falls short, the tail is squashed.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 260" role="img" aria-label="Voltage stack from Vss to Vdd showing headroom versus tail Vdsat">
+      <!-- axis: y=30 is Vdd(1.0V), y=230 is Vss(0V); 200px per volt -->
+      <line x1="70" y1="30" x2="70" y2="230" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <!-- rails -->
+      <line x1="70" y1="30"  x2="330" y2="30"  stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="336" y="34" font-size="12" fill="var(--fig-muted)">Vdd = 1.0 V</text>
+      <line x1="70" y1="230" x2="330" y2="230" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="336" y="234" font-size="12" fill="var(--fig-muted)">Vss = 0 V</text>
+      <!-- net_tail at 0.9V -> y = 30 + (1.0-0.9)*200 = 50 -->
+      <line x1="70" y1="50" x2="330" y2="50" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="336" y="54" font-size="12" fill="var(--fig-accent)">net_tail = 0.9 V</text>
+      <!-- Vcm at 0.5V -> y = 30 + 0.5*200 = 130 -->
+      <line x1="70" y1="130" x2="330" y2="130" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="336" y="134" font-size="12" fill="var(--fig-muted)">Vcm = 0.5 V (gate)</text>
+      <!-- headroom bracket: Vdd(30) to net_tail(50) = 100mV -->
+      <path d="M100,30 L100,50" stroke="var(--fig-bad)" stroke-width="2"/>
+      <path d="M95,30 L105,30 M95,50 L105,50" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="112" y="45" font-size="11" fill="var(--fig-bad)">headroom = 100 mV</text>
+      <!-- Vdsat needed = 150mV = 30px, shown as a needed band -->
+      <rect x="200" y="30" width="70" height="30" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="235" y="49" text-anchor="middle" font-size="10">Vdsat</text>
+      <text x="235" y="76" text-anchor="middle" font-size="11" fill="var(--fig-bad)">needs 150 mV</text>
+      <!-- |Vgs_pair| bracket: net_tail(50) to Vcm(130) = 0.4V -->
+      <path d="M150,50 L150,130" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <path d="M145,50 L155,50 M145,130 L155,130" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="158" y="94" font-size="11" fill="var(--fig-accent2)">|Vgs_pair| = 0.4 V</text>
+    </svg>
+    <figcaption>The tail needs 150 mV of standing height but is handed only 100 mV — it's 50 mV too tall for the gap. That is the bug, drawn to scale.</figcaption>
+  </figure>
+
+  <h3>The one knob that saves us: gm/Id</h3>
+  <p>Here's the lever the whole file pulls. Raising a device's <code>gm/Id</code> pushes it toward <strong>weak inversion</strong>, which makes <em>both</em> its <code>|Vgs|</code> <em>and</em> its <code>Vdsat</code> smaller. That's two wins at once:</p>
+  <ul>
+    <li>Raise the <strong>tail's</strong> gm/Id → its <code>Vdsat</code> shrinks → it needs less room.</li>
+    <li>Raise the <strong>pair's</strong> gm/Id → its <code>|Vgs|</code> shrinks → <code>net_tail</code> drops → more room appears.</li>
+  </ul>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 150" role="img" aria-label="Higher gm over Id gives smaller Vgs and smaller Vdsat">
+      <text x="120" y="24" text-anchor="middle" font-size="13" font-weight="600">low gm/Id (strong)</text>
+      <rect x="60" y="36" width="120" height="70" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="66" text-anchor="middle" font-size="12">|Vgs| big</text>
+      <text x="120" y="88" text-anchor="middle" font-size="12">Vdsat big</text>
+      <line x1="200" y1="71" x2="280" y2="71" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="240" y="60" text-anchor="middle" font-size="11" fill="var(--fig-accent)">raise gm/Id</text>
+      <text x="360" y="24" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">high gm/Id (weak)</text>
+      <rect x="315" y="50" width="90" height="44" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="360" y="70" text-anchor="middle" font-size="11">|Vgs| small</text>
+      <text x="360" y="86" text-anchor="middle" font-size="11">Vdsat small</text>
+    </svg>
+    <figcaption>The gm/Id knob: turn it up and the transistor gets "shorter" in every voltage that matters.</figcaption>
+  </figure>
+
+  <p>And crucially — raising the pair's gm/Id is <strong>spec-safe</strong>, because the pair's gm requirement is a <em>minimum</em>. A stronger pair still meets spec. That's the loophole the repair exploits.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>_snap_w()</code> — the warm-up</h2>
+
+  <blockquote><p><strong>The one job:</strong> round a computed width to the nearest value the manufacturing grid actually allows, then clamp it into range.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_snap_w</span>(g: GridSpec, w_um: <span class="tok-kw">float</span>) -> <span class="tok-kw">float</span>:
+    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(<span class="tok-fn">round</span>(w_um / g.step) * g.step, g.min), g.max))</code></pre>
+
+  <p>Analogy: you can order lumber in whole inches only. Ask for 23.4 inches and the yard gives you 23. That's all this does — snap to the grid, then refuse anything below <code>min</code> or above <code>max</code>.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Say <code>step = 0.1 µm</code>, <code>min = 0.5</code>, <code>max = 100</code>, and we computed <code>w_um = 2.34</code>:</p>
+  <pre class="code"><code>round(2.34 / 0.1) * 0.1  =  round(23.4) * 0.1  =  23 * 0.1  =  2.3 µm
+max(2.3, 0.5) = 2.3       min(2.3, 100) = 2.3   ->  2.3 µm</code></pre>
+  <p>Every width the repair invents is passed through this so the result is always manufacturable.</p>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>_tail_gm_id_for_headroom()</code> — pick a gm/Id that fits</h2>
+
+  <blockquote><p><strong>The one job:</strong> given a headroom budget, find the <em>smallest</em> gm/Id whose Vdsat still squeezes into it — and return None if even the weakest-inversion setting won't fit.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_tail_gm_id_for_headroom</span>(model, dtype, l_um, headroom_v) -> <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
+    margin = <span class="tok-num">0.9</span> * headroom_v  <span class="tok-com"># keep a little slack below the rail</span>
+    <span class="tok-kw">for</span> gm_id <span class="tok-kw">in</span> model.lut.gm_id_axis:  <span class="tok-com"># ascending -> Vdsat descending</span>
+        <span class="tok-kw">if</span> model.lut.<span class="tok-fn">vdsat</span>(dtype, <span class="tok-fn">float</span>(gm_id), l_um) &lt;= margin:
+            <span class="tok-kw">return</span> <span class="tok-fn">float</span>(gm_id)
+    <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
+
+  <p class="beat">Why "smallest gm/Id"? Because a smaller gm/Id means a larger <code>Vdsat</code> — which means the <em>largest</em> output resistance the tail can have while <em>still</em> fitting. We want the best current source that fits, not just any that fits. Walking the axis <strong>ascending</strong> and taking the first hit gives exactly that.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 150" role="img" aria-label="Scanning the gm/Id axis for the first Vdsat under the margin">
+      <text x="20" y="30" font-size="12" fill="var(--fig-muted)">gm/Id →</text>
+      <!-- cells: gm_id ascending, vdsat descending -->
+      <g font-size="12" text-anchor="middle">
+        <rect x="20"  y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="65"  y="60">gm/Id 5</text><text x="65"  y="78" fill="var(--fig-muted)">Vdsat 200</text>
+        <rect x="115" y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="160" y="60">gm/Id 10</text><text x="160" y="78" fill="var(--fig-muted)">Vdsat 150</text>
+        <rect x="210" y="40" width="90" height="46" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="3"/>
+        <text x="255" y="60" font-weight="600">gm/Id 15</text><text x="255" y="78" fill="var(--fig-accent2)">Vdsat 120 ✓</text>
+        <rect x="305" y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="350" y="60" fill="var(--fig-muted)">gm/Id 20</text><text x="350" y="78" fill="var(--fig-muted)">Vdsat 100</text>
+        <rect x="400" y="40" width="90" height="46" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="445" y="60" fill="var(--fig-muted)">gm/Id 25</text><text x="445" y="78" fill="var(--fig-muted)">Vdsat 90</text>
+      </g>
+      <line x1="20" y1="105" x2="255" y2="105" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="255" y="128" text-anchor="middle" font-size="11" fill="var(--fig-accent)">first Vdsat ≤ margin (135 mV) → stop, return 15</text>
+    </svg>
+    <figcaption>Scan left-to-right; the first Vdsat that fits the margin wins, giving the highest-rout tail that still saturates.</figcaption>
+  </figure>
+
+  <p>The <code>0.9 ×</code> margin leaves a sliver of slack so a device that <em>just barely</em> fits on paper isn't riding the exact edge of the rail. If nothing fits — even the highest gm/Id in the table — it returns <code>None</code>, and the caller will have to try its other knob or give up honestly.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>_tail_stack_to_rail()</code> — walking up the chain</h2>
+
+  <blockquote><p><strong>The one job:</strong> starting at net_tail, follow the series-stacked tail devices one by one up to the supply rail, collecting them in order.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_tail_stack_to_rail</span>(tail_devs, net_tail) -> <span class="tok-kw">list</span>:
+    by_drain = {d.terminals.get(<span class="tok-str">"d"</span>): d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> tail_devs}
+    chain, node, seen = [], net_tail, <span class="tok-fn">set</span>()
+    <span class="tok-kw">while</span> node <span class="tok-kw">in</span> by_drain <span class="tok-kw">and</span> node <span class="tok-kw">not in</span> seen:
+        seen.<span class="tok-fn">add</span>(node)
+        d = by_drain[node]
+        chain.<span class="tok-fn">append</span>(d)
+        node = d.terminals.get(<span class="tok-str">"s"</span>)  <span class="tok-com"># follow to the device below</span>
+    <span class="tok-kw">return</span> chain</code></pre>
+
+  <p>This is a classic <strong>linked-list walk</strong>, but the "pointers" are circuit nets. Each device's <em>source</em> is the next device's <em>drain</em>. Build a lookup <code>by_drain[net] → device</code>, then keep hopping: start at <code>net_tail</code>, grab the device whose drain is that net, jump to <em>its</em> source, repeat. The <code>seen</code> set is a seatbelt against a malformed loop.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 130" role="img" aria-label="Following source-to-drain nets from net_tail up to Vdd">
+      <text x="60" y="70" text-anchor="middle" font-size="12" fill="var(--fig-accent)">net_tail</text>
+      <line x1="90" y1="65" x2="130" y2="65" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="130" y="45" width="90" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="175" y="62" text-anchor="middle" font-size="12">dev A</text>
+      <text x="175" y="77" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">d=net_tail</text>
+      <text x="245" y="60" text-anchor="middle" font-size="10" fill="var(--fig-muted)">net_mid</text>
+      <line x1="220" y1="65" x2="290" y2="65" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="290" y="45" width="90" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="335" y="62" text-anchor="middle" font-size="12">dev B</text>
+      <text x="335" y="77" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">d=net_mid</text>
+      <line x1="380" y1="65" x2="430" y2="65" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="440" y1="35" x2="440" y2="95" stroke="var(--fig-stroke)" stroke-width="3"/>
+      <text x="470" y="69" text-anchor="middle" font-size="12" fill="var(--fig-muted)">Vdd</text>
+    </svg>
+    <figcaption>chain = [A, B]. Each hop follows a device's source to the next device's drain, until the net is the rail itself.</figcaption>
+  </figure>
+
+  <p>Why bother collecting the whole chain? Because a <strong>cascode</strong> tail is two (or more) devices in series, and Part&nbsp;7 will need the <em>sum</em> of their Vdsats, not just one.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>_apply_headroom()</code> — the heart</h2>
+
+  <blockquote><p><strong>The one job:</strong> detect the tail squeeze and, if it's real, repair it with a two-knob search — first the tail's gm/Id, then (only if needed) the input pair's — never mutating the caller's sizing.</p></blockquote>
+
+  <p>This is the single most important function in the file. Everything else is a helper it leans on. Let's take it in four beats.</p>
+
+  <h3>Beat 1 — bail out unless this is the gm/Id path with a real pair + tail</h3>
+  <pre class="code"><code><span class="tok-kw">if not</span> <span class="tok-fn">isinstance</span>(model, GmIdModel): <span class="tok-kw">return</span> sizing, []
+ip, tc = slot_transistors.get(<span class="tok-str">"input_pair"</span>, []), slot_transistors.get(<span class="tok-str">"tail_current"</span>, [])
+<span class="tok-kw">if not</span> (ip <span class="tok-kw">and</span> tc): <span class="tok-kw">return</span> sizing, []
+...
+<span class="tok-kw">if not</span> (s_ip <span class="tok-kw">and</span> s_tc): <span class="tok-kw">return</span> sizing, []</code></pre>
+  <p>Every guard returns the <em>original</em> sizing untouched and an empty warning list. The contract is: "if I can't help, I do no harm."</p>
+
+  <h3>Beat 2 — compute the headroom, and stop early if it already fits</h3>
+  <pre class="code"><code>vcm = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+vgs_pair = <span class="tok-fn">abs</span>(model.<span class="tok-fn">vgs</span>(ip_dev.type, s_ip.w_um, s_ip.l_um, s_ip.ids_a))
+<span class="tok-kw">if</span> ip_dev.type == <span class="tok-str">"pmos"</span>:
+    headroom = spec.vdd - (vcm + vgs_pair)
+<span class="tok-kw">else</span>:
+    headroom = (vcm - vgs_pair) - spec.vss
+vdsat_tail = model.<span class="tok-fn">vds_sat</span>(tc_dev.type, s_tc.w_um, s_tc.l_um, s_tc.ids_a)
+<span class="tok-kw">if</span> headroom &gt;= vdsat_tail: <span class="tok-kw">return</span> sizing, []  <span class="tok-com"># tail already fits</span></code></pre>
+  <p>Note the PMOS/NMOS symmetry: a PMOS pair pushes <code>net_tail</code> up toward <code>Vdd</code>, an NMOS pair pulls it down toward <code>Vss</code>. Same idea, mirrored.</p>
+
+  <h3>Beat 3 — build the candidate list (the clever part)</h3>
+  <p>The repair searches over <em>input-pair operating points</em>, weakest-inversion loophole first:</p>
+  <pre class="code"><code>cands = [(<span class="tok-kw">None</span>, headroom)]                 <span class="tok-com"># candidate 0: leave the pair as-is</span>
+<span class="tok-kw">for</span> gm_id_pair <span class="tok-kw">in</span> model.lut.gm_id_axis:      <span class="tok-com"># then progressively weaker pairs</span>
+    ... w_p = <span class="tok-fn">_snap_w</span>(tech.width, <span class="tok-fn">abs</span>(s_ip.ids_a) / idw)
+    vgs_p = <span class="tok-fn">abs</span>(model.<span class="tok-fn">vgs</span>(...))
+    h = spec.vdd - (vcm + vgs_p) <span class="tok-kw">if</span> ip_dev.type == <span class="tok-str">"pmos"</span> <span class="tok-kw">else</span> (vcm - vgs_p) - spec.vss
+    <span class="tok-kw">if</span> h &gt; headroom + <span class="tok-num">1e-9</span>: cands.<span class="tok-fn">append</span>((gm_id_pair, h))</code></pre>
+  <p>Candidate 0 keeps the pair untouched (the cheapest fix — only move the tail). Every later candidate weakens the pair to <em>buy more headroom</em> <code>h</code>, and is only kept if it genuinely raises the room.</p>
+
+  <h3>Beat 4 — try each candidate; take the first that fully fits</h3>
+  <pre class="code"><code><span class="tok-kw">for</span> gm_id_pair, h <span class="tok-kw">in</span> cands:
+    gm_id_tail = <span class="tok-fn">_tail_gm_id_for_headroom</span>(model, tc_dev.type, s_tc.l_um, h)
+    <span class="tok-kw">if</span> gm_id_tail <span class="tok-kw">is None</span>: <span class="tok-kw">continue</span>
+    repaired = sizing <span class="tok-kw">if</span> gm_id_pair <span class="tok-kw">is None else</span> <span class="tok-fn">_resize_group</span>(sizing, pair_devs, gm_id_pair)
+    repaired = <span class="tok-fn">_resize_group</span>(repaired, tail_group, gm_id_tail)
+    <span class="tok-kw">if</span> model.<span class="tok-fn">vds_sat</span>(...) &lt;= h: <span class="tok-kw">return</span> repaired, []   <span class="tok-com"># verified fit ✓</span>
+    best = best <span class="tok-kw">or</span> repaired                          <span class="tok-com"># else remember closest</span>
+<span class="tok-kw">return</span> (best, _warn()) <span class="tok-kw">if</span> best <span class="tok-kw">else</span> (sizing, _warn())</code></pre>
+  <p>Two subtleties worth naming. First, <code>_resize_group</code> re-sizes a whole mirror group at one gm/Id — because the group shares a gate, one gm/Id keeps every mirror ratio intact (<code>W ∝ I</code>). Second, the code <strong>re-verifies</strong> the fit after snapping to the grid, because rounding the width can nudge Vdsat just over the edge. If nothing fully fits, it keeps the closest attempt and emits an honest warning rather than pretending.</p>
+
+  <h3>The full repair, traced by hand</h3>
+  <p>Using our running numbers — <code>Vdd = 1.0</code>, <code>Vcm = 0.5</code>, PMOS pair <code>|Vgs| = 0.40</code>, tail <code>Vdsat = 0.15</code>:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 230" role="img" aria-label="Two-knob repair decision trace">
+      <!-- step 0 -->
+      <rect x="20" y="20" width="240" height="52" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="140" y="42" text-anchor="middle" font-size="12" font-weight="600">start: headroom 100 &lt; Vdsat 150</text>
+      <text x="140" y="60" text-anchor="middle" font-size="11" fill="var(--fig-bad)">short by 50 mV — repair needed</text>
+      <line x1="140" y1="72" x2="140" y2="92" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- knob 1 -->
+      <rect x="20" y="92" width="240" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="140" y="112" text-anchor="middle" font-size="12" font-weight="600">knob 1: tail gm/Id only</text>
+      <text x="140" y="130" text-anchor="middle" font-size="11">best Vdsat 100 mV vs margin 90 mV</text>
+      <text x="140" y="143" text-anchor="middle" font-size="11" fill="var(--fig-bad)">still short ✗</text>
+      <line x1="140" y1="148" x2="140" y2="168" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- knob 2 -->
+      <rect x="20" y="168" width="240" height="54" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="140" y="188" text-anchor="middle" font-size="12" font-weight="600">knob 2: also weaken pair</text>
+      <text x="140" y="206" text-anchor="middle" font-size="11" fill="var(--fig-good)">|Vgs| 0.35 → headroom 150, fit ✓</text>
+      <!-- right column: values -->
+      <g font-size="11.5">
+        <text x="300" y="42" fill="var(--fig-muted)">net_tail = 0.5 + 0.40 = 0.90 V</text>
+        <text x="300" y="120" fill="var(--fig-muted)">margin = 0.9 × 100 = 90 mV</text>
+        <text x="300" y="188" fill="var(--fig-muted)">net_tail = 0.5 + 0.35 = 0.85 V</text>
+        <text x="300" y="204" fill="var(--fig-good)">margin = 0.9 × 150 = 135 mV ≥ 100</text>
+      </g>
+    </svg>
+    <figcaption>The tail knob alone can't close a 50 mV gap; weakening the pair opens 50 mV more room and the repair lands.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>check_dc_operating_point()</code> — the orchestrator</h2>
+
+  <blockquote><p><strong>The one job:</strong> run the headroom repair, then add a cascode-aware budget check, and return the sizing plus an honest <code>bias_feasible</code> verdict.</p></blockquote>
+
+  <pre class="code"><code>sizing, warnings = <span class="tok-fn">_apply_headroom</span>(...)
+bias_feasible = <span class="tok-kw">not any</span>(<span class="tok-str">"headroom"</span> <span class="tok-kw">in</span> w <span class="tok-kw">for</span> w <span class="tok-kw">in</span> warnings)</code></pre>
+  <p>First it delegates to Part&nbsp;6. The verdict starts as "feasible unless a headroom warning fired."</p>
+
+  <h3>The cascode catch</h3>
+  <p>A single-device check misses a <strong>stacked</strong> tail. Two cascoded devices each need their own Vdsat, so the real requirement is the <em>sum</em>:</p>
+  <pre class="code"><code>chain = <span class="tok-fn">_tail_stack_to_rail</span>(tail.mosfets, net_tail)
+stacked_vdsat = <span class="tok-fn">sum</span>(model.<span class="tok-fn">vds_sat</span>(d.type, ...) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> chain <span class="tok-kw">if</span> d.ref <span class="tok-kw">in</span> sizing)
+<span class="tok-kw">if</span> stacked_vdsat &gt; headroom <span class="tok-kw">and not any</span>(<span class="tok-str">"cascode"</span> <span class="tok-kw">in</span> w <span class="tok-kw">for</span> w <span class="tok-kw">in</span> warnings):
+    warnings.<span class="tok-fn">append</span>(...); bias_feasible = <span class="tok-kw">False</span></code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 160" role="img" aria-label="Stacked cascode Vdsat versus available headroom">
+      <!-- available headroom bar -->
+      <text x="90" y="30" text-anchor="middle" font-size="12" font-weight="600">available</text>
+      <rect x="40" y="40" width="100" height="30" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="90" y="60" text-anchor="middle" font-size="12">150 mV</text>
+      <!-- vs -->
+      <text x="200" y="80" text-anchor="middle" font-size="14" fill="var(--fig-muted)">vs</text>
+      <!-- needed: stacked -->
+      <text x="360" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-bad)">needed (stacked)</text>
+      <rect x="280" y="40" width="160" height="30" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="360" y="60" text-anchor="middle" font-size="12">100 + 120 = 220 mV</text>
+      <line x1="280" y1="55" x2="150" y2="55" stroke="var(--fig-bad)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="260" y="105" text-anchor="middle" font-size="12" fill="var(--fig-bad)">220 &gt; 150 → cannot bias, bias_feasible = False</text>
+      <!-- the two stacked devices -->
+      <rect x="470" y="30" width="42" height="24" rx="4" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+      <text x="491" y="47" text-anchor="middle" font-size="10">dev A</text>
+      <rect x="470" y="56" width="42" height="24" rx="4" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+      <text x="491" y="73" text-anchor="middle" font-size="10">dev B</text>
+    </svg>
+    <figcaption>A single-device check would see only 100 mV and pass; summing the cascode's two Vdsats reveals the real 220 mV demand.</figcaption>
+  </figure>
+
+  <p>The <code>not any("cascode" in w ...)</code> guard keeps the warning from being appended twice. The function returns <code>(sizing, warnings, bias_feasible)</code> — the repaired sizing, every honest warning, and the one boolean callers use to trust or de-rate the metrics.</p>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · The hidden inequality, limits, and the one line</h2>
+
+  <p>Although the file never writes it as a single formula, every check here is testing one physical inequality — the whole voltage stack must fit under the supply with everyone saturated:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>V</mi><mi>dd</mi></msub><mo>-</mo>
+          <mo>(</mo><msub><mi>V</mi><mi>cm</mi></msub><mo>+</mo>
+          <mo>|</mo><msub><mi>V</mi><mi>gs,pair</mi></msub><mo>|</mo><mo>)</mo>
+          <mo>&#8805;</mo>
+          <munder><mo>&#8721;</mo><mi>i</mi></munder>
+          <msub><mi>V</mi><mrow><mi>dsat</mi><mo>,</mo><mi>i</mi></mrow></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Read it aloud: <em>"the room left under the rail after the pair lifts net_tail must cover the sum of every stacked tail device's saturation voltage."</em> The single-device path is just this with one term in the sum; the cascode path restores the missing terms.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It only acts on the <code>GmIdModel</code> path — any other model returns <code>feasible = True</code> untouched.</li>
+    <li>It repairs only the <em>tail</em> squeeze (issue&nbsp;#76, cause A), not every possible bias failure.</li>
+    <li>When even weak inversion can't fit, it does not lie — it warns and lets the downstream SPICE DC check ground the final verdict.</li>
+    <li>It never mutates the caller's <code>sizing</code>; a repair always comes back as a new mapping.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole repair rides one insight: <strong>gm/Id is a single knob that shrinks both the room needed and the room consumed</strong>, and because gm is a <em>minimum</em> spec, turning that knob up is always safe. Two cheap moves — resize the tail mirror, then optionally weaken the pair — recover a bias that a naive sizer would have silently broken.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>bias.py</code> checks that the tail current source still has enough headroom under the supply to stay saturated, repairs a shortfall by turning up gm/Id on the tail (and, if needed, the input pair), and returns an honest <code>bias_feasible</code> verdict — including the summed-Vdsat demand of a cascoded tail that a single-device check would miss.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

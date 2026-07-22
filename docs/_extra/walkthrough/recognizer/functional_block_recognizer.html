@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>functional_block_recognizer.py — resolving candidates into blocks</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px; max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{ grid-template-columns:1fr; } #toc{ position:static; } }
+  header { grid-column:1 / -1; padding:36px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:12px; border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p, li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent); background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem; max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem; color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none; border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  .pkgnav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:18px; }
+  .pkgnav .layer { color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-size:0.68rem; margin-right:2px; }
+  .pkgnav a { text-decoration:none; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:4px 12px; font-size:0.8rem; }
+  .pkgnav a:hover { border-color:var(--accent); color:var(--accent); }
+  .pkgnav a.current { background:var(--accent-sf); color:var(--accent); border-color:var(--accent); font-weight:600; }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted); font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg); padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{ color:var(--tok-kw); font-weight:600; } .tok-str{ color:var(--tok-str); } .tok-num{ color:var(--tok-num); }
+  .tok-com{ color:var(--tok-com); font-style:italic; } .tok-fn{ color:var(--tok-fn); }
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.93rem; }
+  th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-sf); }
+  .mono { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:0.86rem; }
+  .boxed-eq { display:inline-block; margin:1.2em auto; padding:12px 22px; border:2px solid var(--accent); border-radius:10px; background:var(--surface); font-size:1.02rem; }
+  .eq-center { text-align:center; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px; border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px; cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+  <header>
+    <h1>functional_block_recognizer.py <span style="color:var(--muted);font-weight:400;font-size:1.2rem">— Layer 2</span></h1>
+    <div class="subtitle">The judge. Layer 1 handed over a pile of overlapping candidates; this file decides which one truly fills each functional role — with a topology if it has one, by ranking heuristics if it doesn't.</div>
+    <nav class="pkgnav">
+      <span class="layer">recognizer/</span>
+      <a href="index.html">Overview</a>
+      <a href="models.html">1 · models</a>
+      <a href="netlist_parser.html">2 · parser · L0</a>
+      <a href="subcircuit_recognizer.html">3 · SR · L1</a>
+      <a href="hooks.html">4 · hooks · L1</a>
+      <a href="functional_block_recognizer.html" class="current">5 · FBR · L2</a>
+      <a href="__init__.html">6 · API</a>
+    </nav>
+  </header>
+
+  <nav id="toc">
+    <div class="label">Contents</div>
+    <a href="#part-1">1 · The disambiguation job</a>
+    <a href="#part-2">2 · Two modes</a>
+    <a href="#part-3">3 · The two scorers</a>
+    <a href="#part-4">4 · assign_slots (topology)</a>
+    <a href="#part-5">5 · group_by_category funnel</a>
+    <a href="#part-6">6 · The three spurious classes</a>
+    <a href="#part-7">7 · Split pass</a>
+    <a href="#part-8">8 · The hidden idea</a>
+  </nav>
+
+  <main>
+
+    <section class="part" id="part-1">
+      <h2>Part 1 · Why does Layer 2 exist?</h2>
+      <blockquote><p><strong>The one job:</strong> "Layer 1 gave me many overlapping candidates for the same devices. Which one is the <em>real</em> input pair, the <em>real</em> load, the <em>real</em> tail?"</p></blockquote>
+
+      <p class="beat">Remember Layer 1's deliberate cowardice: it reports <em>every</em> pattern that fits and never picks a winner.</p>
+      <p class="beat">So a single differential pair might show up as an <code>input_pair</code> candidate <em>and</em> get re-matched by a bias-mirror pattern, and a cascode pattern, all overlapping.</p>
+      <p class="beat">Someone has to be the judge. That's this file.</p>
+
+      <h3>The analogy: casting a play from a huge audition pile</h3>
+      <p>Layer 1 is an open audition — everyone who vaguely fits a role gets a callback slip. Layer 2 is the casting director: exactly one actor per role, chosen by how well they actually fit the part. And the "part" is defined by wiring — which nets a real input pair must connect to.</p>
+    </section>
+
+    <section class="part" id="part-2">
+      <h2>Part 2 · Two modes, because sometimes you know the script</h2>
+      <p>The casting director works in two very different situations:</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 540 180" role="img" aria-label="Topology vs topology-free modes">
+          <defs><marker id="am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="180" y="14" width="180" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="270" y="32" text-anchor="middle" font-size="12" font-weight="600">SR candidates arrive</text>
+          <text x="270" y="47" text-anchor="middle" font-size="10" fill="var(--fig-muted)">(overlapping, unjudged)</text>
+
+          <line x1="230" y1="54" x2="130" y2="90" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#am)"/>
+          <line x1="310" y1="54" x2="410" y2="90" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#am)"/>
+          <text x="150" y="80" font-size="10" fill="var(--fig-muted)">know topology</text>
+          <text x="360" y="80" font-size="10" fill="var(--fig-muted)">don't</text>
+
+          <rect x="20" y="92" width="220" height="72" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="130" y="114" text-anchor="middle" font-size="13" font-weight="600">assign_slots()</text>
+          <text x="130" y="134" text-anchor="middle" font-size="10" fill="var(--fig-muted)">match each slot's expected wiring;</text>
+          <text x="130" y="149" text-anchor="middle" font-size="10" fill="var(--fig-muted)">precise, exact assignment</text>
+
+          <rect x="300" y="92" width="220" height="72" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="410" y="114" text-anchor="middle" font-size="13" font-weight="600">group_by_category()</text>
+          <text x="410" y="134" text-anchor="middle" font-size="10" fill="var(--fig-muted)">filter noise, rank by heuristics;</text>
+          <text x="410" y="149" text-anchor="middle" font-size="10" fill="var(--fig-muted)">best-guess grouping</text>
+        </svg>
+        <figcaption>With a topology template it's exact matching. Without one, it's a funnel of filters and rankings that make a best guess.</figcaption>
+      </figure>
+
+      <p>Topology mode is the easy, precise case — you have the blueprint. Topology-free mode is the hard, heuristic case — most of this file's complexity lives there.</p>
+    </section>
+
+    <section class="part" id="part-3">
+      <h2>Part 3 · The two scorers — tiny, and everything hinges on them</h2>
+
+      <h3><code>_connectivity_score</code> — used by topology mode</h3>
+      <p>"How many of this candidate's pins land on the exact nets the slot expects?"</p>
+      <pre class="code"><code><span class="tok-kw">return</span> <span class="tok-fn">sum</span>(<span class="tok-num">1</span> <span class="tok-kw">for</span> pin, net <span class="tok-kw">in</span> structure.pins.items()
+           <span class="tok-kw">if</span> slot_connections.get(pin) == net)</code></pre>
+      <p>A candidate whose <code>in1</code>/<code>in2</code>/<code>tail</code> pins all match the slot's expected nets scores 3; a spurious overlap scores 0. Highest score wins the slot.</p>
+
+      <h3><code>_external_port_score</code> — used by topology-free mode</h3>
+      <p>"How many of this candidate's pins touch a subcircuit external port?"</p>
+      <pre class="code"><code><span class="tok-kw">return</span> <span class="tok-fn">sum</span>(<span class="tok-num">1</span> <span class="tok-kw">for</span> net <span class="tok-kw">in</span> structure.pins.values() <span class="tok-kw">if</span> net <span class="tok-kw">in</span> external_ports)</code></pre>
+      <p>This is the <a href="netlist_parser.html#part-7">port-vs-internal distinction</a> from Layer 0, finally cashing in. A real input pair's <code>in1/in2</code> hit the subcircuit's actual input ports; an internal bias mirror touches no ports. Port-adjacency becomes the proxy for "is this on the real signal path?"</p>
+
+      <blockquote><p>Two five-line functions carry the entire judgement. Everything else in the file is orchestration around these two scores.</p></blockquote>
+    </section>
+
+    <section class="part" id="part-4">
+      <h2>Part 4 · <code>assign_slots()</code> — topology mode, traced</h2>
+      <blockquote><p><strong>The one job:</strong> "For each named slot in the topology, pick the candidate whose wiring fits best, and don't reuse a candidate twice."</p></blockquote>
+
+      <pre class="code"><code><span class="tok-kw">for</span> slot <span class="tok-kw">in</span> topology.slots:
+    candidates = [s <span class="tok-kw">for</span> s <span class="tok-kw">in</span> sr_result.structures
+                  <span class="tok-kw">if</span> s.category == slot.category <span class="tok-kw">and</span> <span class="tok-fn">id</span>(s) <span class="tok-kw">not in</span> assigned_ids]
+    <span class="tok-kw">if</span> <span class="tok-kw">not</span> candidates: <span class="tok-kw">continue</span>
+    slot_connections = topology.slot_connections(slot.name)
+    best = <span class="tok-fn">max</span>(candidates, key=<span class="tok-kw">lambda</span> s: <span class="tok-fn">_connectivity_score</span>(s, slot_connections))
+    slot_assignments[slot.name] = SlotAssignment(...)
+    assigned_ids.add(<span class="tok-fn">id</span>(best))</code></pre>
+
+      <p>Two guards do the real work:</p>
+      <ul>
+        <li><strong>category filter</strong> — only candidates of the slot's category are even considered;</li>
+        <li><strong><code>assigned_ids</code></strong> — once a structure fills a slot, its <code>id()</code> is banked so it can't fill a second slot of the same category (crucial when a fully-differential topology has two <code>compensation</code> slots).</li>
+      </ul>
+
+      <p>Why score even when a category has only one slot? Because SR overlaps mean a category can have several candidates regardless of slot count. Connectivity scoring picks the one actually wired into that slot's nets. A slot with no candidates is silently omitted — an honest "I didn't find this."</p>
+    </section>
+
+    <section class="part" id="part-5">
+      <h2>Part 5 · <code>group_by_category()</code> — the topology-free funnel</h2>
+      <blockquote><p><strong>The one job:</strong> "With no blueprint, throw out the obvious noise and rank what's left into a best-guess block → category → candidate structure."</p></blockquote>
+
+      <p>This is the file's centerpiece: a multi-pass funnel that narrows a noisy candidate pile into clean groups.</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 520 300" role="img" aria-label="group_by_category funnel">
+          <defs><marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="140" y="14" width="240" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="260" y="37" text-anchor="middle" font-size="12">initial grouping: block → category</text>
+          <line x1="260" y1="50" x2="260" y2="66" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#af)"/>
+
+          <rect x="120" y="68" width="280" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="260" y="88" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">Filter pass</text>
+          <text x="260" y="105" text-anchor="middle" font-size="10" fill="var(--fig-muted)">drop spurious gain_stage candidates (classes A/B/C)</text>
+          <line x1="260" y1="114" x2="260" y2="130" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#af)"/>
+
+          <rect x="100" y="132" width="320" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="260" y="152" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">Multi-category pass (gain_stage_1)</text>
+          <text x="260" y="169" text-anchor="middle" font-size="10" fill="var(--fig-muted)">re-rank input_pair by distinct external ports; then</text>
+          <text x="260" y="183" text-anchor="middle" font-size="10" fill="var(--fig-muted)">follow the signal chain to load &amp; tail_current</text>
+          <line x1="260" y1="188" x2="260" y2="204" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#af)"/>
+
+          <rect x="120" y="206" width="280" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="260" y="226" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">Split pass</text>
+          <text x="260" y="243" text-anchor="middle" font-size="10" fill="var(--fig-muted)">split single-category blocks into gain_stage_N by port score</text>
+          <line x1="260" y1="252" x2="260" y2="268" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#af)"/>
+
+          <rect x="150" y="270" width="220" height="30" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="260" y="290" text-anchor="middle" font-size="12" font-weight="600">CategoryGroupResult</text>
+        </svg>
+        <figcaption>A four-stage funnel: group, prune noise, re-rank the multi-category stage by signal chain, then split remaining stages.</figcaption>
+      </figure>
+
+      <p>The initial grouping sorts every category's candidates by <code>_external_port_score</code> descending. Then the passes correct that ranking where it's misleading — which is the interesting part.</p>
+    </section>
+
+    <section class="part" id="part-6">
+      <h2>Part 6 · The three classes of spurious matches</h2>
+      <p>The filter pass exists because Layer 1's over-reporting produces predictable false positives. The code names three and kills each:</p>
+
+      <table>
+        <tr><th>Class</th><th>What re-matched</th><th>Tell-tale sign</th></tr>
+        <tr><td><strong>A</strong></td><td>An input-pair / bias-ref nmos re-matched as a gain stage</td><td class="mono">'in' pin on an external port</td></tr>
+        <tr><td><strong>B</strong></td><td>A bias mirror's pmos leg re-matched as a gain stage</td><td class="mono">'bias' pin on an external port</td></tr>
+        <tr><td><strong>C</strong></td><td>Cascode load devices re-matched as a gain stage</td><td class="mono">an nmos whose source ≠ gnd!</td></tr>
+      </table>
+
+      <pre class="code"><code><span class="tok-com"># Class A &amp; B: pin lands on an external port → not a real stage input</span>
+<span class="tok-kw">if</span> s.pins.get(<span class="tok-str">"in"</span>) <span class="tok-kw">in</span> ext <span class="tok-kw">or</span> s.pins.get(<span class="tok-str">"bias"</span>) <span class="tok-kw">in</span> ext:
+    <span class="tok-kw">continue</span>
+<span class="tok-com"># Class C: (single-category blocks only) a floating-source nmos = cascode</span>
+<span class="tok-kw">if</span> single_cat <span class="tok-kw">and</span> <span class="tok-fn">any</span>(
+        d.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">and</span> d.terminals.get(<span class="tok-str">"s"</span>) != _GND
+        <span class="tok-kw">for</span> d <span class="tok-kw">in</span> s.devices):
+    <span class="tok-kw">continue</span></code></pre>
+
+      <p class="beat">Why is Class C gated on <code>single_cat</code>?</p>
+      <p>Because a genuine input pair's nmos sources connect to <code>net_tail</code>, <em>not</em> <code>gnd!</code> — applying Class C to a multi-category <code>gain_stage_1</code> block would wrongly delete the real input pair. Restricting it to single-category (second-stage) blocks avoids that. This is exactly the kind of subtle context-dependence that makes topology-free mode hard.</p>
+
+      <h3>The signal-chain following</h3>
+      <p>The multi-category pass is the cleverest bit. After re-ranking <code>input_pair</code> by how many <em>distinct</em> external ports its <code>{in1, in2}</code> hit (a real diff pair hits two; a bias mirror hits one; a spurious pair hits zero), it uses the winning input pair to <em>chain-follow</em>:</p>
+
+      <div class="eq-center"><div class="boxed-eq">load.in1/in2 ≟ input_pair.out1/out2&nbsp;&nbsp;·&nbsp;&nbsp;tail_current.out ≟ input_pair.tail</div></div>
+
+      <p>In plain English: the real load is the one whose inputs are wired to the input pair's outputs; the real tail is the one whose output is wired to the input pair's tail node. The circuit's own connectivity resolves the ambiguity — no topology needed.</p>
+    </section>
+
+    <section class="part" id="part-7">
+      <h2>Part 7 · The split pass — separating stacked stages</h2>
+      <blockquote><p><strong>The one job:</strong> "A three-stage opamp has several gain stages of the same category. Order them from first to last."</p></blockquote>
+
+      <p>If a <code>gain_stage_*</code> block has exactly one category but more than one candidate, those candidates are almost certainly <em>consecutive stages</em>. Sort them by ascending <code>_external_port_score</code> and fan them out into numbered blocks:</p>
+
+      <pre class="code"><code>structs.sort(key=<span class="tok-kw">lambda</span> s: <span class="tok-fn">_external_port_score</span>(s, ext))
+<span class="tok-kw">for</span> i, s <span class="tok-kw">in</span> <span class="tok-fn">enumerate</span>(structs):
+    to_add.append((<span class="tok-fn">f</span><span class="tok-str">"gain_stage_{base + i}"</span>, cat, [s]))</code></pre>
+
+      <figure class="fig">
+        <svg viewBox="0 0 520 130" role="img" aria-label="Splitting stages by external-port score">
+          <defs><marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <rect x="20" y="45" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="95" y="62" text-anchor="middle" font-size="11">gain_stage_2</text>
+          <text x="95" y="78" text-anchor="middle" font-size="10" fill="var(--fig-muted)">3 candidates</text>
+          <line x1="170" y1="65" x2="215" y2="65" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#as)"/>
+          <g font-size="11" text-anchor="middle">
+            <rect x="220" y="14" width="140" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="290" y="34">gain_stage_2 (score 0)</text>
+            <rect x="220" y="50" width="140" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="290" y="70">gain_stage_3 (score 1)</text>
+            <rect x="220" y="86" width="140" height="30" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="290" y="106">gain_stage_4 (score 2)</text>
+          </g>
+          <text x="410" y="52" font-size="10" fill="var(--fig-muted)">highest port-score</text>
+          <text x="410" y="66" font-size="10" fill="var(--fig-muted)">= closest to output</text>
+          <text x="410" y="80" font-size="10" fill="var(--fig-muted)">= last stage</text>
+        </svg>
+        <figcaption>The candidate whose 'out' pin reaches the external output port scores highest and becomes the final stage.</figcaption>
+      </figure>
+
+      <p>The intuition: the later a stage sits in the chain, the closer it is to the external output port, so the more external ports it touches. Ascending port-score = first-to-last stage order.</p>
+    </section>
+
+    <section class="part" id="part-8">
+      <h2>Part 8 · The hidden idea</h2>
+      <p>Underneath all three passes is one principle, applied over and over:</p>
+
+      <blockquote><p><strong>Connectivity is identity.</strong> A structure's <em>role</em> in the circuit is determined entirely by which nets its pins touch — external ports vs. internal nets, and whether those internal nets chain to a neighbor's pins.</p></blockquote>
+
+      <p>Topology mode states this exactly: score against known expected nets. Topology-free mode approximates it with proxies: external-port adjacency stands in for "on the signal path," and pin-net equality between neighbors stands in for "wired together." Every filter, every re-sort, every split is just a different way of asking <em>where does this thing connect?</em></p>
+
+      <p>And notice the payoff of Layer 1's earlier restraint: because SR over-reported and never disambiguated, Layer 2 has <em>all</em> the candidates it needs to make these connectivity comparisons. Had SR committed early, the true match might already have been thrown away. The two layers' contracts fit together like a lock and key.</p>
+
+      <hr>
+      <p><strong>In one sentence:</strong> <code>functional_block_recognizer.py</code> is the casting director that turns Layer 1's overlapping audition pile into one actor per role — by exact wiring when a topology blueprint exists, and by a funnel of connectivity heuristics (port-adjacency, signal-chain following, stage-splitting) when it doesn't.</p>
+
+      <blockquote><p><strong>Looking ahead →</strong> <a href="__init__.html">Part 6 · __init__.py</a> is the last stop: the tiny public façade that re-exports everything you've now met into one clean, importable API.</p></blockquote>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  })();
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {}; links.forEach(function (a){ map[a.getAttribute('href').slice(1)] = a; });
+    var obs = new IntersectionObserver(function (entries){
+      entries.forEach(function (e){
+        if (e.isIntersecting && map[e.target.id]) {
+          links.forEach(function (l){ l.classList.remove('active'); });
+          map[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin:'-20% 0px -70% 0px' });
+    document.querySelectorAll('section.part').forEach(function (s){ obs.observe(s); });
+  })();
+</script>
+</body>
+</html>

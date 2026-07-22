@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>geometry.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>geometry.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/geometry.py</code> — how the gm/Id path <em>computes</em> every transistor's width and length instead of searching for them.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · Why geometry can be computed</a>
+  <a href="#part-3">3 · swing_gm_id_floor()</a>
+  <a href="#part-4">4 · The two bookkeepers</a>
+  <a href="#part-5">5 · _apply_symmetry()</a>
+  <a href="#part-6">6 · _apply_mirror_ratios()</a>
+  <a href="#part-7">7 · _apply_load_current_margin()</a>
+  <a href="#part-8">8 · assign_geometry_gmid() — assembled</a>
+  <a href="#part-9">9 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> for every transistor whose current is already fixed, hand back a concrete <code>(W, L)</code> — computed straight from a lookup table, then patched for symmetry, mirror ratios, and one deliberate margin — instead of asking a constraint solver to search for it.</p></blockquote>
+
+  <p class="beat">Here is the whole story before a single line of code.</p>
+
+  <p>Most of this sizer sizes transistors by <strong>search</strong>. A CP-SAT solver (a constraint-satisfaction engine, like a Sudoku solver) is told the rules — "these two must match," "this mirror must be 3× that one," "everyone must saturate" — and it hunts through combinations of widths until it finds a set that satisfies every rule at once. Search is powerful, but it is slow, and it can fail to find anything even when an answer exists.</p>
+
+  <p>This file makes a bet: for the gm/Id path, <strong>we don't have to search at all.</strong> The current through every device is already pinned by Kirchhoff's current law. The transconductance target <code>gm/Id</code> is already chosen. Once those two are fixed, physics leaves <em>no freedom</em> in the width — the lookup table hands it to you directly. So instead of a solver exploring a tree, we walk a short, deterministic <strong>forward pass</strong>: plug in, read out, done.</p>
+
+  <p>Analogy: it's the difference between a Sudoku puzzle and a recipe. Sudoku (CP-SAT) means trying values and backtracking until nothing contradicts. A recipe (this file) means every quantity is already determined — "2 cups per person, 4 people, therefore 8 cups" — you just evaluate it. Same kitchen, no guessing.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="CP-SAT search tree on the left versus a straight forward pass on the right">
+      <defs>
+        <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- SEARCH -->
+      <text x="140" y="22" text-anchor="middle" font-size="13" fill="var(--fig-muted)" font-weight="600">CP-SAT — search &amp; backtrack</text>
+      <circle cx="140" cy="46" r="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <g stroke="var(--fig-muted)" stroke-width="1.5">
+        <line x1="132" y1="54" x2="80"  y2="92"/>
+        <line x1="148" y1="54" x2="200" y2="92"/>
+        <line x1="74"  y1="108" x2="48"  y2="150"/>
+        <line x1="86"  y1="108" x2="112" y2="150"/>
+        <line x1="200" y1="108" x2="176" y2="150"/>
+        <line x1="200" y1="108" x2="224" y2="150"/>
+      </g>
+      <circle cx="80"  cy="100" r="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <circle cx="200" cy="100" r="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <circle cx="48"  cy="158" r="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+      <text x="48"  y="182" text-anchor="middle" font-size="10" fill="var(--fig-bad)">✗</text>
+      <circle cx="112" cy="158" r="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+      <text x="112" y="182" text-anchor="middle" font-size="10" fill="var(--fig-bad)">✗</text>
+      <circle cx="176" cy="158" r="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+      <text x="176" y="182" text-anchor="middle" font-size="10" fill="var(--fig-bad)">✗</text>
+      <circle cx="224" cy="158" r="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="224" y="182" text-anchor="middle" font-size="10" fill="var(--fig-good)">✓</text>
+      <text x="140" y="212" text-anchor="middle" font-size="11" fill="var(--fig-muted)">many branches tried, most discarded</text>
+      <!-- divider -->
+      <line x1="290" y1="30" x2="290" y2="220" stroke="var(--fig-border, var(--fig-muted))" stroke-width="1" stroke-dasharray="4 4"/>
+      <!-- FORWARD -->
+      <text x="425" y="22" text-anchor="middle" font-size="13" fill="var(--fig-accent2)" font-weight="600">geometry.py — forward pass</text>
+      <g text-anchor="middle" font-size="11">
+        <rect x="320" y="40" width="90" height="34" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="365" y="61">Id, gm/Id</text>
+        <rect x="320" y="98" width="90" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="365" y="119">LUT → W</text>
+        <rect x="320" y="156" width="90" height="34" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+        <text x="365" y="177">(W, L) ✓</text>
+      </g>
+      <g stroke="var(--fig-accent)" stroke-width="2.5">
+        <line x1="365" y1="74" x2="365" y2="96" marker-end="url(#ar1)"/>
+        <line x1="365" y1="132" x2="365" y2="154" marker-end="url(#ar1)"/>
+      </g>
+      <text x="480" y="119" font-size="11" fill="var(--fig-muted)">no branching</text>
+    </svg>
+    <figcaption>Left: a solver explores and backtracks. Right: with current and gm/Id fixed, the answer is a straight-line evaluation — one path, no dead ends.</figcaption>
+  </figure>
+
+  <h3>The cast of characters</h3>
+  <p>Seven functions. One orchestrator on top; five helpers it leans on; one physics leaf. Hover any box to trace who it calls — we'll learn them <strong>bottom-up</strong>, so the orchestrator reads like plain English by the time we reach it.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 580 330" role="img" aria-label="Call graph of geometry.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="floor"  x1="230" y1="66" x2="110" y2="120" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="outsl"  x1="270" y1="66" x2="300" y2="120" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="tied"   x1="300" y1="66" x2="480" y2="120" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="sym"    x1="240" y1="66" x2="110" y2="210" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="mir"    x1="290" y1="66" x2="300" y2="210" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="margin" x1="310" y1="66" x2="480" y2="210" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="180" y="24" width="200" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="280" y="42" text-anchor="middle" font-weight="600" font-size="12.5">assign_geometry_gmid()</text>
+        <text x="280" y="58" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the forward pass</text>
+      </g>
+      <!-- swing floor -->
+      <g class="node" data-group="floor">
+        <rect x="10" y="120" width="190" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="105" y="140" text-anchor="middle" font-weight="600" font-size="12">swing_gm_id_floor()</text>
+        <text x="105" y="156" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">weakest inversion for swing</text>
+      </g>
+      <!-- output stage slots -->
+      <g class="node" data-group="outsl">
+        <rect x="210" y="120" width="180" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="300" y="140" text-anchor="middle" font-weight="600" font-size="11.5">_output_stage_slots()</text>
+        <text x="300" y="156" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">who sits on the output?</text>
+      </g>
+      <!-- mirror tied refs -->
+      <g class="node" data-group="tied">
+        <rect x="400" y="120" width="175" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="487" y="140" text-anchor="middle" font-weight="600" font-size="11.5">_mirror_tied_refs()</text>
+        <text x="487" y="156" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">whose W is overwritten later</text>
+      </g>
+      <!-- symmetry -->
+      <g class="node" data-group="sym">
+        <rect x="10" y="210" width="190" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="105" y="230" text-anchor="middle" font-weight="600" font-size="12">_apply_symmetry()</text>
+        <text x="105" y="246" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">matched pairs copy the anchor</text>
+      </g>
+      <!-- mirror ratios -->
+      <g class="node" data-group="mir">
+        <rect x="210" y="210" width="180" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="300" y="230" text-anchor="middle" font-weight="600" font-size="12">_apply_mirror_ratios()</text>
+        <text x="300" y="246" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W = ratio × reference W</text>
+      </g>
+      <!-- load margin -->
+      <g class="node" data-group="margin">
+        <rect x="400" y="210" width="175" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="487" y="230" text-anchor="middle" font-weight="600" font-size="11">_apply_load_current_margin()</text>
+        <text x="487" y="246" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">knife-edge load gets +5%</text>
+      </g>
+      <text x="290" y="300" text-anchor="middle" font-size="11" fill="var(--fig-muted)">top row: decide &amp; pick · bottom row: patch the raw geometry</text>
+    </svg>
+    <figcaption>The orchestrator calls six helpers. Three answer questions before sizing; three patch the geometry after. We start with the leaves.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 builds the one idea that makes the whole forward pass possible — why a fixed current and a fixed gm/Id leave the width with nowhere to hide.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · Why geometry can be <em>computed</em>, not searched</h2>
+
+  <p class="beat">One idea unlocks everything. It is not scary.</p>
+
+  <h3>Current density is the missing link</h3>
+  <p>A MOSFET's drain current scales with its width. Double the width, double the current — everything else held fixed. So engineers talk about a <strong>current density</strong>: current per micron of width, written <code>Id/W</code> (units of A/µm). It is like <em>people per square metre</em> at a concert.</p>
+
+  <p>The magic of the gm/Id method is that this density is <strong>not free</strong>: it is completely determined by two things you can read off a lookup table (the <code>LUT</code>) — the chosen inversion level <code>gm/Id</code> and the channel length <code>L</code>. Pick those, and the LUT tells you exactly how crowded each micron of channel is.</p>
+
+  <h3>So the width has nowhere to hide</h3>
+  <p>If you know the total current (people at the concert) and the density (people per square metre), the area is <em>forced</em>:</p>
+
+  <div class="eq-center"><span class="boxed-eq">W&nbsp;=&nbsp;Id&nbsp;÷&nbsp;(Id/W)</span></div>
+
+  <p>That single division is what <code>GmIdModel.geometry_for()</code> does. There is no search, no backtracking, no solver — just a division. This is the beating heart of the entire file, and it fits on one line of physics.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Say Kirchhoff has already fixed the device's current, and the intent picked an inversion level and length:</p>
+  <pre class="code"><code>Id      = 20 µA           <span class="tok-com"># pinned by KCL</span>
+gm/Id   = 15 S/A          <span class="tok-com"># chosen inversion level</span>
+LUT says  Id/W = 5 µA/µm  <span class="tok-com"># density at (gm/Id=15, L)</span>
+
+W = Id / (Id/W) = 20 / 5 = 4.0 µm      <span class="tok-com"># forced — no choice</span></code></pre>
+  <p>Four microns. Not "somewhere between 3 and 5, let the solver decide" — <em>exactly</em> four, then snapped to the manufacturing grid.</p>
+
+  <h3>But three things still need patching</h3>
+  <p>If every device stood alone, we'd be done after that division. Real circuits add three coupling rules the raw per-device pass ignores — and the last four helpers exist precisely to patch them, in order:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 150" role="img" aria-label="The five-step forward pass pipeline">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <g text-anchor="middle" font-size="11.5">
+        <rect x="10"  y="45" width="108" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="64"  y="66">1+2 · LUT</text>
+        <text x="64"  y="82" font-size="10" fill="var(--fig-muted)">(W,L), snap W</text>
+        <rect x="140" y="45" width="108" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="194" y="66">3 · symmetry</text>
+        <text x="194" y="82" font-size="10" fill="var(--fig-muted)">pairs copy anchor</text>
+        <rect x="270" y="45" width="108" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="324" y="66">4 · mirrors</text>
+        <text x="324" y="82" font-size="10" fill="var(--fig-muted)">W = ratio × ref</text>
+        <rect x="400" y="45" width="108" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="454" y="66">5 · load margin</text>
+        <text x="454" y="82" font-size="10" fill="var(--fig-muted)">+5% if knife-edge</text>
+        <rect x="530" y="45" width="80" height="52" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+        <text x="570" y="66">sizing</text>
+        <text x="570" y="82" font-size="10" fill="var(--fig-good)">✓ done</text>
+      </g>
+      <g stroke="var(--fig-accent)" stroke-width="2.5">
+        <line x1="118" y1="71" x2="140" y2="71" marker-end="url(#ar3)"/>
+        <line x1="248" y1="71" x2="270" y2="71" marker-end="url(#ar3)"/>
+        <line x1="378" y1="71" x2="400" y2="71" marker-end="url(#ar3)"/>
+        <line x1="508" y1="71" x2="530" y2="71" marker-end="url(#ar3)"/>
+      </g>
+      <text x="310" y="128" text-anchor="middle" font-size="11" fill="var(--fig-muted)">one direction, no loops back — a genuine forward pass</text>
+    </svg>
+    <figcaption>The whole file, drawn once. Raw per-device geometry first; then three coupling patches applied left-to-right; then the sizing is final.</figcaption>
+  </figure>
+
+  <p>Each remaining Part is one box in this pipeline. Learn the boxes and the orchestrator in Part&nbsp;8 is just "call them in this order."</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>swing_gm_id_floor()</code> — leave room to swing</h2>
+
+  <blockquote><p><strong>The one job:</strong> for an output-path device, find the <em>smallest</em> gm/Id whose saturation voltage still fits inside half the output-swing budget — so the output can swing without the device dropping out of saturation.</p></blockquote>
+
+  <p>An output device must not hog voltage the signal needs to swing through. A device's "cost" here is its <code>Vds_sat</code> — the minimum drain voltage it needs to stay a good current source. Pushing a device toward <strong>weak inversion</strong> (higher gm/Id) shrinks that cost. So this function looks for the <em>gentlest</em> push that gets the cost under budget.</p>
+
+  <p>Analogy: a doorway with a fixed height (the swing budget). A person who is too tall must crouch (weaken inversion) to fit. We want the smallest crouch that clears the frame — crouch more than necessary and you lose other qualities (output resistance). The <em>floor</em> is that minimum crouch.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">swing_gm_id_floor</span>(model, dtype, l_um, vod_max) -> <span class="tok-fn">tuple</span>[<span class="tok-kw">float</span>, <span class="tok-kw">bool</span>]:
+    axis = [<span class="tok-fn">float</span>(g) <span class="tok-kw">for</span> g <span class="tok-kw">in</span> model.lut.gm_id_axis]
+    target = vod_max * _SWING_VDSAT_FRACTION      <span class="tok-com"># half the budget (0.5)</span>
+    <span class="tok-kw">for</span> g <span class="tok-kw">in</span> axis:                             <span class="tok-com"># ascending → Vdsat descending</span>
+        <span class="tok-kw">if</span> model.lut.<span class="tok-fn">vdsat</span>(dtype, g, l_um) &lt;= target:
+            <span class="tok-kw">return</span> g, <span class="tok-kw">True</span>
+    weakest = axis[-<span class="tok-num">1</span>]
+    <span class="tok-kw">return</span> weakest, model.lut.<span class="tok-fn">vdsat</span>(dtype, weakest, l_um) &lt;= vod_max</code></pre>
+
+  <p>Why <em>half</em> the budget (<code>_SWING_VDSAT_FRACTION = 0.5</code>)? Because the swing bench measures the tracking region out to where the small-signal slope drops to 0.7, which cuts off <em>before</em> the true Vdsat point — a device sized exactly at the budget measured ~50 mV short (issue&nbsp;#126). Targeting half the budget is the validated margin that makes the spec real.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 155" role="img" aria-label="Scanning the gm/Id axis for the first Vdsat under the target">
+      <defs>
+        <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="24" y="30" font-size="12" fill="var(--fig-muted)">gm/Id ascending →</text>
+      <g font-size="12" text-anchor="middle">
+        <rect x="20"  y="42" width="92" height="46" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="66"  y="62">gm/Id 5</text><text x="66"  y="80" fill="var(--fig-muted)">Vdsat 220</text>
+        <rect x="118" y="42" width="92" height="46" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="164" y="62">gm/Id 10</text><text x="164" y="80" fill="var(--fig-muted)">Vdsat 170</text>
+        <rect x="216" y="42" width="92" height="46" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="3"/>
+        <text x="262" y="62" font-weight="600">gm/Id 15</text><text x="262" y="80" fill="var(--fig-accent2)">Vdsat 140 ✓</text>
+        <rect x="314" y="42" width="92" height="46" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="360" y="62" fill="var(--fig-muted)">gm/Id 20</text><text x="360" y="80" fill="var(--fig-muted)">Vdsat 115</text>
+        <rect x="412" y="42" width="92" height="46" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+        <text x="458" y="62" fill="var(--fig-muted)">gm/Id 25</text><text x="458" y="80" fill="var(--fig-muted)">Vdsat 100</text>
+      </g>
+      <line x1="24" y1="108" x2="262" y2="108" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar4)"/>
+      <text x="270" y="132" text-anchor="middle" font-size="11" fill="var(--fig-accent)">first Vdsat ≤ target 150 mV → stop, floor = 15</text>
+    </svg>
+    <figcaption>Scan left-to-right; the first Vdsat that fits half the budget wins. The floor is the gentlest inversion that still clears the swing frame.</figcaption>
+  </figure>
+
+  <h3>Traced with real numbers</h3>
+  <p>Take a device with output-swing budget <code>vod_max = 0.30 V</code>:</p>
+  <pre class="code"><code>target = 0.30 × 0.5 = 0.15 V          <span class="tok-com"># half the budget</span>
+gm/Id 5  → Vdsat 0.22  &gt; 0.15  skip
+gm/Id 10 → Vdsat 0.17  &gt; 0.15  skip
+gm/Id 15 → Vdsat 0.14  ≤ 0.15  → return (15, True)   <span class="tok-com"># the floor</span></code></pre>
+
+  <h3>The <code>bool</code> is a feasibility flag</h3>
+  <p>If <em>no</em> gm/Id gets under the half-budget target, the loop falls through and returns the table's <code>weakest</code> inversion as a best effort. The boolean then answers a harsher question: does even that weakest inversion fit the <em>raw</em> (full) budget? If not — <code>False</code> — the output stage cannot meet the swing spec at all, at any sizing. That honest "no" propagates all the way up to <code>feasible = False</code>.</p>
+
+  <blockquote><p><strong>Why the name.</strong> <code>floor</code> is exactly right: it is a lower bound on gm/Id. The device may go weaker, but never stronger than this and still swing. I like that the name states the constraint's direction.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · The two bookkeepers</h2>
+
+  <p>Before sizing, the orchestrator asks two yes/no questions about <em>which</em> devices deserve special handling. Both helpers just build sets — no physics.</p>
+
+  <h3><code>_output_stage_slots()</code> — who actually sits on the output?</h3>
+  <blockquote><p><strong>The one job:</strong> return the set of slots whose devices really touch the amplifier's output node, so only they get the swing floor.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_output_stage_slots</span>(slot_transistors) -> <span class="tok-fn">frozenset</span>[<span class="tok-kw">str</span>]:
+    <span class="tok-kw">if</span> <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span> STAGE_SLOTS):
+        <span class="tok-kw">return</span> STAGE_SLOTS          <span class="tok-com"># multi-stage: the later stages own the output</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">frozenset</span>({<span class="tok-str">"load"</span>})    <span class="tok-com"># one-stage: the load is the output path</span></code></pre>
+
+  <p>The subtlety: <code>compute_requirements</code> also puts swing bounds on the <em>first-stage load</em>. But in a multi-stage amp, only the last stage touches the output — so if any second/third-stage slot exists, the load must <em>not</em> be re-biased for swing. Only a one-stage circuit keeps the load as its output path.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 175" role="img" aria-label="Decision: multi-stage returns stage slots, one-stage returns load">
+      <defs>
+        <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <polygon points="240,15 340,52 240,89 140,52" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="240" y="49" text-anchor="middle" font-size="12">any stage slot?</text>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="170" y1="72" x2="110" y2="118" marker-end="url(#ar5)"/>
+        <line x1="310" y1="72" x2="370" y2="118" marker-end="url(#ar5)"/>
+      </g>
+      <text x="130" y="100" font-size="11" fill="var(--fig-muted)">yes (multi-stage)</text>
+      <text x="345" y="100" font-size="11" fill="var(--fig-muted)">no (one-stage)</text>
+      <rect x="30" y="118" width="160" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="110" y="143" text-anchor="middle" font-size="12">STAGE_SLOTS</text>
+      <rect x="290" y="118" width="160" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="370" y="143" text-anchor="middle" font-size="12">{ "load" }</text>
+    </svg>
+    <figcaption>Multi-stage: the output belongs to the later stages, spare the load. One-stage: the load <em>is</em> the output.</figcaption>
+  </figure>
+
+  <h3><code>_mirror_tied_refs()</code> — whose width gets overwritten later?</h3>
+  <blockquote><p><strong>The one job:</strong> find every current-mirror <em>output</em> device — because its width is destined to be overwritten in step 4, so a swing floor placed on it now would not stick.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_mirror_tied_refs</span>(all_transistors) -> <span class="tok-fn">set</span>[<span class="tok-kw">str</span>]:
+    groups, diodes = {}, {}
+    <span class="tok-kw">for</span> ref, (device, _slot) <span class="tok-kw">in</span> all_transistors.items():
+        gate = device.terminals.get(<span class="tok-str">"g"</span>)
+        <span class="tok-kw">if not</span> gate: <span class="tok-kw">continue</span>
+        key = (gate, device.type)                 <span class="tok-com"># group by shared gate net + type</span>
+        groups.setdefault(key, []).append(ref)
+        <span class="tok-kw">if</span> device.terminals.get(<span class="tok-str">"d"</span>) == gate:      <span class="tok-com"># drain tied to gate = diode</span>
+            diodes.setdefault(key, ref)
+    tied = <span class="tok-fn">set</span>()
+    <span class="tok-kw">for</span> key, members <span class="tok-kw">in</span> groups.items():
+        <span class="tok-kw">if</span> <span class="tok-fn">len</span>(members) &gt;= <span class="tok-num">2</span> <span class="tok-kw">and</span> key <span class="tok-kw">in</span> diodes:
+            tied.update(m <span class="tok-kw">for</span> m <span class="tok-kw">in</span> members <span class="tok-kw">if</span> m != diodes[key])
+    <span class="tok-kw">return</span> tied</code></pre>
+
+  <p>A current mirror is a family of transistors sharing one gate net. The one whose drain is tied to that gate (<code>d == g</code>) is <strong>diode-connected</strong> — it is the reference that sets the bias. Everyone else in the family is an <em>output</em> that copies it. Those outputs are "tied": their inversion level tracks the reference, so a per-device floor can't hold. They're checked against the raw budget only <em>after</em> the mirror pass (Part&nbsp;8, step 7).</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 150" role="img" aria-label="Mirror group: one diode reference, two tied outputs">
+      <text x="250" y="22" text-anchor="middle" font-size="12" fill="var(--fig-muted)">shared gate net · same type → one group</text>
+      <line x1="60" y1="55" x2="440" y2="55" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="250" y="48" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gate net</text>
+      <g text-anchor="middle" font-size="11.5">
+        <rect x="60"  y="70" width="110" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+        <text x="115" y="92">reference</text>
+        <text x="115" y="108" font-size="10" fill="var(--fig-accent)">diode (d=g)</text>
+        <rect x="200" y="70" width="110" height="52" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="255" y="92">output A</text>
+        <text x="255" y="108" font-size="10" fill="var(--fig-bad)">tied ✗ floor</text>
+        <rect x="340" y="70" width="110" height="52" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="395" y="92">output B</text>
+        <text x="395" y="108" font-size="10" fill="var(--fig-bad)">tied ✗ floor</text>
+      </g>
+      <line x1="115" y1="70" x2="115" y2="55" stroke="var(--fig-accent)" stroke-width="2"/>
+      <line x1="255" y1="70" x2="255" y2="55" stroke="var(--fig-bad)" stroke-width="2"/>
+      <line x1="395" y1="70" x2="395" y2="55" stroke="var(--fig-bad)" stroke-width="2"/>
+    </svg>
+    <figcaption>The diode member is the anchor; the dashed outputs are "tied" — their geometry is set later by ratio, so no swing floor is placed on them now.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>_apply_symmetry()</code> — matched pairs share one geometry</h2>
+
+  <blockquote><p><strong>The one job:</strong> force every matched pair (input pair, symmetric load, tail) to have <em>identical</em> W and L by copying the group's first device — the anchor — onto the rest.</p></blockquote>
+
+  <p>A differential amplifier is only balanced if its matched devices are truly identical. Analogy: identical twins must wear the exact same size — not "close," the same. Rounding each independently could hand two "matched" devices slightly different widths and unbalance the amp. So we pick one as the anchor and copy it verbatim.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">equalize</span>(refs):
+    anchor = refs[<span class="tok-num">0</span>]
+    <span class="tok-kw">for</span> r <span class="tok-kw">in</span> refs[<span class="tok-num">1</span>:]:
+        W[r], L[r] = W[anchor], L[anchor]      <span class="tok-com"># plain assignment — verbatim copy</span>
+
+<span class="tok-kw">for</span> slot, devices <span class="tok-kw">in</span> slot_transistors.items():
+    <span class="tok-kw">if</span> slot <span class="tok-kw">not in</span> _SYMMETRY_SLOTS: <span class="tok-kw">continue</span>       <span class="tok-com"># input_pair, load, tail_current</span>
+    groups = {}
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devices:
+        <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>) <span class="tok-kw">and</span> d.ref <span class="tok-kw">in</span> W:
+            groups.setdefault((d.type, ids_map.get(d.ref)), []).append(d.ref)
+    <span class="tok-kw">for</span> grp <span class="tok-kw">in</span> groups.values():
+        <span class="tok-fn">equalize</span>(grp)</code></pre>
+
+  <p>The <strong>single most important line</strong> is the grouping key: <code>(d.type, ids_map.get(d.ref))</code>. Devices match only when they share a type <em>and</em> the same planned current. That is what keeps a folded-cascode load's folding sinks (which carry pair + cascode current) separate from its cascode devices (cascode current only) — different currents, different groups, no accidental equalizing.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 170" role="img" aria-label="Grouping by type and current, then copying the anchor across each group">
+      <defs>
+        <marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="90" y="22" text-anchor="middle" font-size="12" fill="var(--fig-muted)">group (nmos, 20µA)</text>
+      <g text-anchor="middle" font-size="11.5">
+        <rect x="30" y="35" width="70" height="44" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+        <text x="65" y="55">M1</text><text x="65" y="71" font-size="10" fill="var(--fig-accent)">anchor</text>
+        <rect x="110" y="35" width="70" height="44" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="145" y="55">M2</text><text x="145" y="71" font-size="10" fill="var(--fig-muted)">→ copy</text>
+      </g>
+      <path d="M100,50 C104,50 106,57 110,57" stroke="var(--fig-accent)" stroke-width="2" fill="none" marker-end="url(#ar6)"/>
+      <text x="290" y="22" text-anchor="middle" font-size="12" fill="var(--fig-muted)">group (pmos, 40µA) — separate!</text>
+      <g text-anchor="middle" font-size="11.5">
+        <rect x="240" y="35" width="70" height="44" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+        <text x="275" y="55">M3</text><text x="275" y="71" font-size="10" fill="var(--fig-accent2)">anchor</text>
+        <rect x="320" y="35" width="70" height="44" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="355" y="55">M4</text><text x="355" y="71" font-size="10" fill="var(--fig-muted)">→ copy</text>
+      </g>
+      <path d="M310,50 C314,50 316,57 320,57" stroke="var(--fig-accent2)" stroke-width="2" fill="none" marker-end="url(#ar6)"/>
+      <text x="260" y="118" text-anchor="middle" font-size="11" fill="var(--fig-muted)">after: W[M2],L[M2] = W[M1],L[M1]   ·   W[M4],L[M4] = W[M3],L[M3]</text>
+      <text x="260" y="146" text-anchor="middle" font-size="11" fill="var(--fig-muted)">different current ⇒ never merged, even in the same slot</text>
+    </svg>
+    <figcaption>Same type <em>and</em> same current makes a group; the first device is copied onto the rest. Different-current devices stay independent.</figcaption>
+  </figure>
+
+  <p>A second block handles <strong>fully-differential cross-slot pairs</strong> — <code>second_stage_p ↔ second_stage_n</code> and <code>third_stage_p ↔ third_stage_n</code> — gathering same-type devices across the two mirrored halves and equalizing them the same way. Same rule, wider net.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>_apply_mirror_ratios()</code> — the exact ratio rule</h2>
+
+  <blockquote><p><strong>The one job:</strong> set each current-mirror output's width to the <em>exact</em> current ratio times the diode reference's width, at the reference's length — no fractions, no rounding of the ratio.</p></blockquote>
+
+  <p>A current mirror's whole purpose is to copy a current by a chosen ratio. If the reference carries 20&nbsp;µA at 4&nbsp;µm wide, an output meant to carry 50&nbsp;µA must be <code>50/20 = 2.5×</code> as wide — because current scales with width. Getting that ratio slightly wrong biases the whole circuit wrong, so the code multiplies floats directly and never approximates with a <code>Fraction</code>.</p>
+
+  <pre class="code"><code>groups = {}
+<span class="tok-kw">for</span> ref, (device, _slot) <span class="tok-kw">in</span> all_transistors.items():
+    gate = device.terminals.get(<span class="tok-str">"g"</span>)
+    <span class="tok-kw">if</span> gate:
+        groups.setdefault((gate, device.type), []).append(ref)
+<span class="tok-kw">for</span> members <span class="tok-kw">in</span> groups.values():
+    <span class="tok-kw">if</span> <span class="tok-fn">len</span>(members) &lt; <span class="tok-num">2</span>: <span class="tok-kw">continue</span>
+    diodes = [m <span class="tok-kw">for</span> m <span class="tok-kw">in</span> members <span class="tok-kw">if</span> ... g == d ...]   <span class="tok-com"># the reference</span>
+    <span class="tok-kw">if not</span> diodes: <span class="tok-kw">continue</span>
+    ref0 = diodes[<span class="tok-num">0</span>]
+    i_ref = ids_map.get(ref0, <span class="tok-num">0.0</span>)
+    <span class="tok-kw">if</span> i_ref &lt;= <span class="tok-num">0</span>: <span class="tok-kw">continue</span>
+    <span class="tok-kw">for</span> m <span class="tok-kw">in</span> members:
+        <span class="tok-kw">if</span> m == ref0: <span class="tok-kw">continue</span>
+        i_m = ids_map.get(m, <span class="tok-num">0.0</span>)
+        <span class="tok-kw">if</span> i_m &lt;= <span class="tok-num">0</span>: <span class="tok-kw">continue</span>
+        L[m] = L[ref0]
+        W[m] = <span class="tok-fn">snap_w</span>((i_m / i_ref) * W[ref0])       <span class="tok-com"># the ratio rule</span></code></pre>
+
+  <p>That last line is the whole function. Everything above it just finds the reference (<code>ref0</code>, the diode) inside each shared-gate family and its current <code>i_ref</code>. Note it also copies <code>L[ref0]</code> onto the output: a mirror only tracks accurately when both devices share the same length.</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>W</mi><mi>out</mi></msub><mo>=</mo>
+          <mfrac><msub><mi>I</mi><mi>out</mi></msub><msub><mi>I</mi><mi>ref</mi></msub></mfrac>
+          <mo>&#8901;</mo><msub><mi>W</mi><mi>ref</mi></msub>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <h3>Traced with real numbers</h3>
+  <p>Reference diode already sized at <code>W_ref = 4.0 µm</code> carrying <code>I_ref = 20 µA</code>. An output in the same family must carry <code>I_out = 50 µA</code>:</p>
+  <pre class="code"><code>ratio = I_out / I_ref = 50 / 20 = 2.5
+W_out = snap_w(2.5 × 4.0) = snap_w(10.0) = 10.0 µm
+L_out = L_ref                                    <span class="tok-com"># matched length</span></code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 170" role="img" aria-label="Reference width 4um scaled by ratio 2.5 to output width 10um">
+      <defs>
+        <marker id="ar7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="90" y="24" text-anchor="middle" font-size="12" font-weight="600">reference (diode)</text>
+      <rect x="55" y="70" width="70" height="50" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
+      <text x="90" y="98" text-anchor="middle" font-size="12">W = 4.0</text>
+      <text x="90" y="140" text-anchor="middle" font-size="11" fill="var(--fig-muted)">I_ref = 20 µA</text>
+      <line x1="140" y1="95" x2="240" y2="95" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar7)"/>
+      <text x="190" y="84" text-anchor="middle" font-size="11" fill="var(--fig-accent)">× 2.5</text>
+      <text x="190" y="112" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">= 50/20</text>
+      <text x="360" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">output</text>
+      <rect x="290" y="45" width="140" height="75" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="360" y="88" text-anchor="middle" font-size="12">W = 10.0</text>
+      <text x="360" y="140" text-anchor="middle" font-size="11" fill="var(--fig-muted)">I_out = 50 µA</text>
+    </svg>
+    <figcaption>Width scales exactly with the current ratio. The output is 2.5× wider because it carries 2.5× the current — same length, exact ratio.</figcaption>
+  </figure>
+
+  <p>This is precisely the constraint CP-SAT would have <em>searched</em> for. Here it is one multiplication — the deterministic replacement in action.</p>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>_apply_load_current_margin()</code> — the knife-edge fix</h2>
+
+  <blockquote><p><strong>The one job:</strong> in one specific fragile topology, make the current-source load 5% wider so it wins a tug-of-war against the tail current that would otherwise drift out of control.</p></blockquote>
+
+  <p>Picture a single-ended first stage whose load is a plain current source balancing a mirrored tail current. There is <em>no feedback</em> fixing the load-vs-tail balance — no diode in the signal path, no common-mode feedback. At an exact mirror ratio the two currents are nominally equal, so the fold node has no reason to settle: it drifts until the input pair triodes or the output rails. It sits on a knife-edge.</p>
+
+  <p>The fix: size the load mirror <em>slightly strong</em> (<code>_LOAD_CS_MARGIN = 1.05</code>). Now the load gently pulls the node toward its supply rail and it settles there, keeping the input pair saturated with the load right at the edge of saturation. The old uncascoded design provided this ~4% surplus <em>by accident</em>; this makes it an explicit design intent (issue&nbsp;#103).</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_apply_load_current_margin</span>(W, slot_transistors, snap_w):
+    fd = <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span> (<span class="tok-str">"second_stage_p"</span>, ...))
+    load = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors.get(<span class="tok-str">"load"</span>, []) <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
+    tail = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors.get(<span class="tok-str">"tail_current"</span>, []) <span class="tok-kw">if</span> ...]
+    <span class="tok-kw">if</span> fd <span class="tok-kw">or not</span> tail <span class="tok-kw">or</span> <span class="tok-fn">classify_load</span>(load, []) <span class="tok-kw">is not</span> LoadKind.CURRENT_SOURCE:
+        <span class="tok-kw">return</span>                                   <span class="tok-com"># not the fragile case — do nothing</span>
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load:
+        <span class="tok-kw">if</span> d.ref <span class="tok-kw">in</span> W:
+            W[d.ref] = <span class="tok-fn">snap_w</span>(W[d.ref] * _LOAD_CS_MARGIN)</code></pre>
+
+  <p>The three-part guard is strict on purpose: it fires <em>only</em> for a single-ended (not fully-differential, so <code>fd</code> is false), MOSFET-tailed, current-source load. Any other topology returns untouched — no harm.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 165" role="img" aria-label="Load width before and after the 5 percent margin bump">
+      <defs>
+        <marker id="ar8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <text x="90"  y="24" text-anchor="middle" font-size="12" fill="var(--fig-muted)">before — knife-edge</text>
+      <rect x="55" y="60" width="70" height="60" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="90" y="94" text-anchor="middle" font-size="12">W = 8.0</text>
+      <text x="90" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">node drifts ✗</text>
+      <line x1="150" y1="90" x2="250" y2="90" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar8)"/>
+      <text x="200" y="78" text-anchor="middle" font-size="11" fill="var(--fig-accent)">× 1.05</text>
+      <text x="390" y="24" text-anchor="middle" font-size="12" fill="var(--fig-muted)">after — settles to rail</text>
+      <rect x="355" y="56" width="74" height="64" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="392" y="92" text-anchor="middle" font-size="12">W = 8.4</text>
+      <text x="392" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-good)">pair stays saturated ✓</text>
+    </svg>
+    <figcaption>A deliberate 5% width surplus lets the load win the balance and pin the node, trading a hair of symmetry for a stable bias point.</figcaption>
+  </figure>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · <code>assign_geometry_gmid()</code> — the forward pass assembled</h2>
+
+  <blockquote><p><strong>The one job:</strong> run the whole pipeline in order — raw LUT geometry, symmetry, mirror ratios, load margin — build the final <code>TransistorSizing</code>, and return an honest <code>feasible</code> verdict for the swing spec.</p></blockquote>
+
+  <p>By now every helper is familiar, so the orchestrator reads like a checklist. It threads two dictionaries — <code>W</code> and <code>L</code> — through the pipeline, mutating them step by step, then packages the result.</p>
+
+  <h3>Setup — ask the two bookkeepers first</h3>
+  <pre class="code"><code>out_slots    = <span class="tok-fn">_output_stage_slots</span>(slot_transistors)   <span class="tok-com"># Part 4a</span>
+mirror_tied  = <span class="tok-fn">_mirror_tied_refs</span>(all_transistors)      <span class="tok-com"># Part 4b</span>
+cascode_load = <span class="tok-fn">any</span>(intents[d.ref].role == CASCODE <span class="tok-kw">for</span> d <span class="tok-kw">in</span> ...load...)
+
+<span class="tok-kw">def</span> <span class="tok-fn">snap_w</span>(w_um):
+    v = <span class="tok-fn">round</span>(w_um / g.step) * g.step
+    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, g.min), g.max))       <span class="tok-com"># snap to grid, clamp range</span></code></pre>
+
+  <h3>Steps 1+2 — the LUT division, per device</h3>
+  <pre class="code"><code><span class="tok-kw">for</span> ref, (device, slot) <span class="tok-kw">in</span> all_transistors.items():
+    ti = intents[ref]
+    gm_id_min = <span class="tok-kw">None</span>
+    vod = vod_max_map.get(ref)
+    <span class="tok-kw">if</span> (vod <span class="tok-kw">is not None and</span> slot <span class="tok-kw">in</span> out_slots <span class="tok-kw">and</span> ref <span class="tok-kw">not in</span> mirror_tied
+            <span class="tok-kw">and not</span> (cascode_load <span class="tok-kw">and</span> ti.role == SIGNAL)):
+        gm_id_min, fits = <span class="tok-fn">swing_gm_id_floor</span>(model, device.type, ...)   <span class="tok-com"># Part 3</span>
+        <span class="tok-kw">if not</span> fits:
+            feasible = <span class="tok-kw">False</span>; warnings.<span class="tok-fn">append</span>(...)
+    geo = model.<span class="tok-fn">geometry_for</span>(device.type, ids_map[ref], ti.role, ...,
+                             gm_id_min=gm_id_min)               <span class="tok-com"># W = Id / (Id/W)</span>
+    W[ref] = <span class="tok-fn">snap_w</span>(geo.w_um)
+    L[ref] = geo.l_um</code></pre>
+
+  <p>The long <code>if</code> is the swing-floor gate we built the bookkeepers for: apply a floor only to a device that (a) has a swing budget, (b) truly sits on the output, (c) is <em>not</em> a mirror output, and (d) is not a signal device under a cascode load (whose Vgs is a delicate stage-interface pin that must not move). Every excluded device is still checked later against the raw budget — nothing is silently skipped.</p>
+
+  <h3>Steps 3–5 — the three patches, in order</h3>
+  <pre class="code"><code><span class="tok-fn">_apply_symmetry</span>(W, L, slot_transistors, ids_map)        <span class="tok-com"># 3 · Part 5</span>
+<span class="tok-fn">_apply_mirror_ratios</span>(W, L, all_transistors, ids_map, snap_w)  <span class="tok-com"># 4 · Part 6</span>
+<span class="tok-fn">_apply_load_current_margin</span>(W, slot_transistors, snap_w)   <span class="tok-com"># 5 · Part 7</span></code></pre>
+
+  <p>Order matters exactly once. Symmetry runs <em>before</em> mirror ratios. On the rare device that is both a matched-pair member and a mirror output, the mirror pass runs second and <strong>wins</strong> — and that is deliberate, because the mirror ratio is the bias-current-correctness fix. For plain matched pairs the two rules agree anyway, so ordering only decides the tie-break, never the value.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 150" role="img" aria-label="Symmetry then mirror ratios; mirror wins the overlap">
+      <defs>
+        <marker id="ar9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <g text-anchor="middle" font-size="12">
+        <rect x="20"  y="45" width="140" height="48" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90"  y="66">3 · symmetry</text>
+        <text x="90"  y="83" font-size="10" fill="var(--fig-muted)">pairs equalized</text>
+        <rect x="210" y="45" width="140" height="48" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+        <text x="280" y="66">4 · mirror ratios</text>
+        <text x="280" y="83" font-size="10" fill="var(--fig-accent2)">overwrites overlap</text>
+        <rect x="400" y="45" width="130" height="48" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="465" y="66">5 · load margin</text>
+        <text x="465" y="83" font-size="10" fill="var(--fig-muted)">+5% if fragile</text>
+      </g>
+      <g stroke="var(--fig-accent)" stroke-width="2.5">
+        <line x1="160" y1="69" x2="210" y2="69" marker-end="url(#ar9)"/>
+        <line x1="350" y1="69" x2="400" y2="69" marker-end="url(#ar9)"/>
+      </g>
+      <text x="280" y="125" text-anchor="middle" font-size="11" fill="var(--fig-muted)">both/either device? the mirror ratio written second is the one that stands</text>
+    </svg>
+    <figcaption>The patches apply left to right. When symmetry and a mirror both touch one device, the mirror runs last and its exact ratio wins.</figcaption>
+  </figure>
+
+  <h3>Steps 6+7 — package, then the honest post-mirror check</h3>
+  <pre class="code"><code><span class="tok-kw">for</span> ref, (device, _slot) <span class="tok-kw">in</span> all_transistors.items():
+    sizing[ref] = <span class="tok-fn">TransistorSizing</span>(ref=ref, w_um=W[ref], l_um=L[ref], ids_a=...,
+        vgs_v=model.<span class="tok-fn">vgs</span>(...), vds_sat_v=model.<span class="tok-fn">vds_sat</span>(...))   <span class="tok-com"># 6</span>
+
+<span class="tok-kw">for</span> ref, (_device, slot) <span class="tok-kw">in</span> all_transistors.items():           <span class="tok-com"># 7</span>
+    vod = vod_max_map.get(ref)
+    <span class="tok-kw">if</span> (vod <span class="tok-kw">is not None and</span> slot <span class="tok-kw">in</span> out_slots <span class="tok-kw">and</span> ref <span class="tok-kw">in</span> mirror_tied
+            <span class="tok-kw">and</span> sizing[ref].vds_sat_v &gt; vod):
+        feasible = <span class="tok-kw">False</span>; warnings.<span class="tok-fn">append</span>(...)
+<span class="tok-kw">return</span> sizing, warnings, feasible</code></pre>
+
+  <p>Step 7 is the promise we made back in Part&nbsp;4 coming due. The mirror-tied outputs skipped the swing floor, because their geometry was going to be overwritten by the ratio rule. Now that their final width <em>is</em> known, we check each one's actual <code>Vds_sat</code> against its raw budget. If it exceeds it, the output stage genuinely cannot swing — <code>feasible = False</code>, with a specific warning.</p>
+
+  <table>
+    <thead><tr><th>Step</th><th>What it does</th><th>Helper</th></tr></thead>
+    <tbody>
+      <tr><td>1+2</td><td>Per-device (W, L) from the LUT; snap W to grid</td><td><code>geometry_for</code> + <code>snap_w</code></td></tr>
+      <tr><td>3</td><td>Matched pairs copy the anchor's geometry</td><td><code>_apply_symmetry</code></td></tr>
+      <tr><td>4</td><td>Mirror outputs = ratio × reference W</td><td><code>_apply_mirror_ratios</code></td></tr>
+      <tr><td>5</td><td>Knife-edge load gets +5% width</td><td><code>_apply_load_current_margin</code></td></tr>
+      <tr><td>6</td><td>Build final <code>TransistorSizing</code></td><td>—</td></tr>
+      <tr><td>7</td><td>Raw-budget swing check on mirror-tied outputs</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 9 ================= -->
+<section class="part" id="part-9">
+  <h2>Part 9 · The hidden idea, the limits, and one sentence</h2>
+
+  <h3>The hidden idea it never spells out</h3>
+  <p>Nowhere does this file say it, but its whole reason for existing is a shift in <em>kind</em> of computation. The rest of the sizer poses geometry as a <strong>constraint-satisfaction search</strong>: find widths <code>W</code> such that every rule holds at once. This file observes that once current and gm/Id are fixed, the constraints don't leave a search space to explore — they pin the answer. A search collapses into an <strong>evaluation</strong>:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <munder><mtext>search</mtext><mrow><mi>W</mi><mspace width="2px"/><mi>s.t.</mi><mspace width="2px"/><mtext>rules</mtext></mrow></munder>
+          <mspace width="8px"/><mo>&#10230;</mo><mspace width="8px"/>
+          <mi>W</mi><mo>=</mo>
+          <mfrac><msub><mi>I</mi><mi>d</mi></msub><mrow><mo>(</mo><msub><mi>I</mi><mi>d</mi></msub><mo>/</mo><mi>W</mi><mo>)</mo></mrow></mfrac>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Read it aloud: <em>"stop searching for a width that satisfies the rules; the rules already tell you the width — divide."</em> The symmetry, mirror-ratio, and load-margin patches are just the remaining rules that couple devices together, each resolved by copy or multiply rather than by a solver. That is the entire file's cleverness in one line.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It only works when current and gm/Id are already fixed — it is the gm/Id path's tool, not a general sizer.</li>
+    <li>It trusts the LUT: garbage density in, garbage width out. There is no SPICE verification here.</li>
+    <li>The load-margin patch fires for exactly one fragile topology; every other case is left untouched by design.</li>
+    <li>Feasibility here is only about the <em>swing</em> spec. It reports an honest <code>False</code> when an output device can't fit its raw budget, but it does not repair it — that is left to the caller and the downstream checks.</li>
+    <li>It resolves the symmetry/mirror overlap by ordering, not by proving the two rules always agree — they do for matched pairs, but the code leans on "mirror runs last" rather than a guarantee.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The design's whole lightness comes from recognizing that a hard search problem was secretly a division in disguise. No solver, no backtracking, no timeout — a short forward pass with three coupling patches produces geometry that a CP-SAT engine would have spent real time hunting for, and produces it exactly.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>geometry.py</code> replaces CP-SAT search for the gm/Id path with a deterministic forward pass — read each width straight from the LUT (<code>W = Id ÷ Id/W</code>), then patch device coupling by copying matched pairs, multiplying mirror outputs by their exact current ratio, and nudging one knife-edge load 5% wider — returning final sizings plus an honest swing-feasibility verdict.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

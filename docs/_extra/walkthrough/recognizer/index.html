@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>recognizer/ — a visual tour of the circuit recognizer</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:920px; margin:0 auto; padding:0 24px 120px; }
+  header { padding:48px 0 8px; }
+  h1 { font-size:2.4rem; line-height:1.12; margin:0 0 8px; letter-spacing:-0.6px; }
+  .subtitle { color:var(--muted); font-size:1.12rem; max-width:70ch; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px; border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.4em 0 0.4em; }
+  p, li { max-width:72ch; }
+  a { color:var(--link); }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent); background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  figure.fig { margin:1.8em 0; padding:22px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted); font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg); padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{ color:var(--tok-kw); font-weight:600; } .tok-str{ color:var(--tok-str); } .tok-com{ color:var(--tok-com); font-style:italic; } .tok-fn{ color:var(--tok-fn); }
+  /* card grid */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:14px; margin:1.6em 0; }
+  .card { display:block; text-decoration:none; color:inherit; border:1px solid var(--border); border-radius:12px; padding:16px 18px; background:var(--surface); transition:border-color .15s, transform .15s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .card .k { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .card .num { font-size:0.72rem; font-weight:700; color:var(--surface); background:var(--accent); border-radius:6px; padding:2px 7px; }
+  .card .layer { font-size:0.66rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:1px 8px; }
+  .card .fn { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:1.02rem; font-weight:600; color:var(--accent); }
+  .card .d { font-size:0.9rem; color:var(--muted); margin:0; }
+  /* directory tree */
+  .tree { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:0.92rem; line-height:1.9; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 22px; margin:1.4em 0; white-space:pre; overflow-x:auto; }
+  .tree a { text-decoration:none; }
+  .tree a:hover { text-decoration:underline; }
+  .tree .dir { color:var(--fig-accent2); font-weight:600; }
+  .tree .muted { color:var(--muted); }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px; cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl) { opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl) { opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+  <header>
+    <h1>recognizer/ <span style="color:var(--muted);font-weight:400;font-size:1.4rem">— a visual tour</span></h1>
+    <div class="subtitle">Six Python files that read a flat SPICE netlist and reverse-engineer its analog structure: which transistors form a differential pair, a current mirror, a bias generator — and which functional block each belongs to. Pick a page below, or read them top to bottom in learning order.</div>
+  </header>
+
+  <section>
+    <h2>The one idea behind the whole package</h2>
+    <blockquote><p><strong>"Given a flat pile of transistors with no labels, name the analog building blocks — using nothing but which devices share which wires."</strong></p></blockquote>
+
+    <p>A synthesized opamp, once flattened to SPICE, is just 20–40 devices and a mess of net names. A human designer glances at it and sees structure instantly. This package teaches a computer to do the same, in three layers, each a clean transform whose output is the next layer's input.</p>
+  </section>
+
+  <section>
+    <h2>The three-layer pipeline</h2>
+    <p>This is the map to keep in mind. Hover a stage to trace its data flow; click any box to open its page.</p>
+
+    <figure class="fig interactive">
+      <svg viewBox="0 0 620 300" role="img" aria-label="The recognizer's three-layer pipeline">
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+
+        <!-- edges -->
+        <line class="edge" data-group="l0" x1="150" y1="78" x2="150" y2="112" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <line class="edge" data-group="l1" x1="150" y1="160" x2="150" y2="196" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <line class="edge" data-group="hook" x1="300" y1="136" x2="360" y2="136" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#arrow)"/>
+
+        <!-- models sidebar -->
+        <line class="edge" data-group="models" x1="470" y1="150" x2="300" y2="60"  stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+        <line class="edge" data-group="models" x1="470" y1="150" x2="300" y2="136" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+        <line class="edge" data-group="models" x1="470" y1="150" x2="300" y2="222" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+
+        <!-- L0 -->
+        <a href="netlist_parser.html">
+          <g class="node" data-group="l0">
+            <rect x="30" y="36" width="240" height="42" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+            <text x="150" y="55" text-anchor="middle" font-weight="600" font-size="14">Layer 0 · parse()</text>
+            <text x="150" y="71" text-anchor="middle" font-size="10" fill="var(--fig-muted)">SPICE text → ParsedNetlist</text>
+          </g>
+        </a>
+
+        <!-- L1 -->
+        <a href="subcircuit_recognizer.html">
+          <g class="node" data-group="l1">
+            <rect x="30" y="114" width="240" height="46" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+            <text x="150" y="134" text-anchor="middle" font-weight="600" font-size="14">Layer 1 · recognize()</text>
+            <text x="150" y="151" text-anchor="middle" font-size="10" fill="var(--fig-muted)">match templates → every candidate</text>
+          </g>
+        </a>
+
+        <!-- hooks -->
+        <a href="hooks.html">
+          <g class="node" data-group="hook">
+            <rect x="365" y="115" width="150" height="44" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="440" y="135" text-anchor="middle" font-weight="600" font-size="13">hooks</text>
+            <text x="440" y="151" text-anchor="middle" font-size="10" fill="var(--fig-muted)">variable-size legs</text>
+          </g>
+        </a>
+
+        <!-- L2 -->
+        <a href="functional_block_recognizer.html">
+          <g class="node" data-group="l2">
+            <rect x="30" y="198" width="240" height="58" rx="9" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+            <text x="150" y="218" text-anchor="middle" font-weight="600" font-size="14">Layer 2 · FBR</text>
+            <text x="150" y="235" text-anchor="middle" font-size="10" fill="var(--fig-muted)">assign_slots() · group_by_category()</text>
+            <text x="150" y="249" text-anchor="middle" font-size="10" fill="var(--fig-muted)">candidates → named functional blocks</text>
+          </g>
+        </a>
+
+        <!-- models -->
+        <a href="models.html">
+          <g class="node" data-group="models">
+            <rect x="470" y="150" width="130" height="52" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+            <text x="535" y="171" text-anchor="middle" font-weight="600" font-size="13">models</text>
+            <text x="535" y="188" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the dataclasses</text>
+          </g>
+        </a>
+
+        <!-- init -->
+        <a href="__init__.html">
+          <g class="node" data-group="init">
+            <rect x="365" y="212" width="235" height="44" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+            <text x="482" y="232" text-anchor="middle" font-weight="600" font-size="13">__init__ · public façade</text>
+            <text x="482" y="248" text-anchor="middle" font-size="10" fill="var(--fig-muted)">re-exports the 4 verbs + 7 shapes</text>
+          </g>
+        </a>
+
+        <text x="150" y="20" text-anchor="middle" font-size="11" fill="var(--fig-muted)">every layer's output is the next layer's input</text>
+      </svg>
+      <figcaption>Three transforms in a line; models supplies the shapes to all of them; hooks extends Layer 1; __init__ wraps it all in one import. Click a box to dive in.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Read in this order (reordered for learning)</h2>
+    <p>Not the file's order, not alphabetical — <strong>simplest and most foundational first, orchestrator last</strong>. Learn the nouns, then the transforms bottom-up, then the façade that ties them together.</p>
+
+    <div class="cards">
+      <a class="card" href="models.html">
+        <div class="k"><span class="num">1</span><span class="layer">shapes</span></div>
+        <div class="fn">models.py</div>
+        <p class="d">The nine dataclasses. The vocabulary every other file speaks.</p>
+      </a>
+      <a class="card" href="netlist_parser.html">
+        <div class="k"><span class="num">2</span><span class="layer">Layer 0</span></div>
+        <div class="fn">netlist_parser.py</div>
+        <p class="d">SPICE text → ParsedNetlist. Dispatch by first letter. The warm-up.</p>
+      </a>
+      <a class="card" href="subcircuit_recognizer.html">
+        <div class="k"><span class="num">3</span><span class="layer">Layer 1</span></div>
+        <div class="fn">subcircuit_recognizer.py</div>
+        <p class="d">The engine: a pruned backtracking search over template patterns.</p>
+      </a>
+      <a class="card" href="hooks.html">
+        <div class="k"><span class="num">4</span><span class="layer">Layer 1 ext</span></div>
+        <div class="fn">hooks.py</div>
+        <p class="d">Accept-and-extend escape hatches for variable-size structures.</p>
+      </a>
+      <a class="card" href="functional_block_recognizer.html">
+        <div class="k"><span class="num">5</span><span class="layer">Layer 2</span></div>
+        <div class="fn">functional_block_recognizer.py</div>
+        <p class="d">The judge: resolve overlapping candidates into functional blocks.</p>
+      </a>
+      <a class="card" href="__init__.html">
+        <div class="k"><span class="num">6</span><span class="layer">API</span></div>
+        <div class="fn">__init__.py</div>
+        <p class="d">The public façade. Eleven names; no logic; the whole thing at a glance.</p>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <h2>How these pages mirror the source tree</h2>
+    <p>The generated pages follow the layout of <code>circuitgenome/recognizer/</code> one-to-one. The tree is flat (the only subfolder, <code>config/</code>, holds YAML pattern libraries — no Python to explain, shown greyed below).</p>
+
+    <div class="tree"><span class="dir">recognizer/</span>
+├── <a href="__init__.html">__init__.py</a>                       <span class="muted"># 6 · public façade</span>
+├── <a href="models.html">models.py</a>                         <span class="muted"># 1 · dataclasses</span>
+├── <a href="netlist_parser.html">netlist_parser.py</a>                 <span class="muted"># 2 · Layer 0</span>
+├── <a href="subcircuit_recognizer.html">subcircuit_recognizer.py</a>          <span class="muted"># 3 · Layer 1</span>
+├── <a href="hooks.html">hooks.py</a>                          <span class="muted"># 4 · Layer 1 hooks</span>
+├── <a href="functional_block_recognizer.html">functional_block_recognizer.py</a>    <span class="muted"># 5 · Layer 2</span>
+└── <span class="muted">config/                           # YAML pattern libraries (not Python)</span>
+    <span class="muted">├── primitives.yaml</span>
+    <span class="muted">├── structural_patterns.yaml</span>
+    <span class="muted">└── opamp_patterns.yaml</span></div>
+  </section>
+
+  <section>
+    <h2>The whole package, in one snippet</h2>
+    <p>If you remember nothing else, remember this shape — four verbs, three layers, one direction of flow:</p>
+    <pre class="code"><code><span class="tok-kw">from</span> circuitgenome.recognizer <span class="tok-kw">import</span> parse, recognize, group_by_category
+
+netlist = <span class="tok-fn">parse</span>(spice_text)              <span class="tok-com"># Layer 0</span>
+sr      = <span class="tok-fn">recognize</span>(netlist)             <span class="tok-com"># Layer 1 — every candidate, overlaps and all</span>
+fbr     = <span class="tok-fn">group_by_category</span>(sr, netlist) <span class="tok-com"># Layer 2 — best-guess functional groups</span></code></pre>
+
+    <blockquote><p><strong>In one sentence:</strong> the <code>recognizer</code> package turns a flat SPICE netlist into named analog building blocks through three connectivity-driven layers — parse, recognize, assign — that never look at a single transistor size.</p></blockquote>
+
+    <hr>
+    <p style="color:var(--muted);font-size:0.9rem">Generated with the <code>explain-code-with-fig</code> skill · intuition-first teaching, hand-authored themeable SVG</p>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function (fig){
+    fig.querySelectorAll('.node').forEach(function (node){
+      node.addEventListener('mouseenter', function (){
+        var g = node.getAttribute('data-group'); fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function (el){ el.classList.add('hl'); });
+      });
+      node.addEventListener('mouseleave', function (){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function (el){ el.classList.remove('hl'); });
+      });
+    });
+  });
+</script>
+</body>
+</html>

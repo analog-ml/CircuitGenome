@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared Sizing Core — package walkthrough</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .container { max-width:900px; margin:0 auto; padding:44px 24px 120px; }
+  h1 { font-size:2.2rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.08rem; margin-bottom:0.5em; }
+  h2 { font-size:1.4rem; margin:2em 0 0.6em; padding-top:14px; border-top:1px solid var(--border); }
+  p,li { max-width:70ch; }
+  a { color:var(--link); }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.88em; }
+  figure.fig { margin:1.8em 0; padding:22px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  svg a { cursor:pointer; }
+  svg a:hover rect, svg a:hover polygon { stroke:var(--fig-accent); stroke-width:3; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px;
+    margin:1.4em 0; }
+  .card { display:block; padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; text-decoration:none; color:var(--text); transition:border-color .12s; }
+  .card:hover { border-color:var(--accent); }
+  .card .fn { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-weight:600;
+    color:var(--accent); font-size:0.95rem; }
+  .card .role { color:var(--muted); font-size:0.88rem; margin-top:4px; }
+  .card .phase { display:inline-block; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px;
+    color:var(--fig-accent2); margin-top:8px; }
+  .xlink { display:inline-block; margin-top:0.4em; font-size:0.92rem; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="container">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<h1>The Shared Sizing Core — a package walkthrough</h1>
+<div class="subtitle"><code>circuitgenome/sizer/shared/</code> — the model-independent core that both the Level-1 (square-law) sizer and the gm/Id pipeline are built on.</div>
+
+<p>Two very different sizers — a card-less <strong>square-law</strong> analytical sizer and a measured <strong>gm/Id</strong> LUT pipeline — share one body of code. They can, because of a single idea: the op-amp <em>topology</em> relationships (gain, GBW, phase margin, CMRR) are <strong>model-independent</strong>. Only the transistor <em>primitives</em> differ. So the primitives hide behind one interface — <code>DeviceModel</code> — with two swappable implementations, and every other file in this package is written against that interface once.</p>
+
+<p><a class="xlink" href="../index.html">↑ Up to the full sizer overview</a> &nbsp;·&nbsp; <a class="xlink" href="../gmid/index.html">→ See also: the gm/Id pipeline walkthrough (<code>sizer/gmid/</code>)</a></p>
+
+<h2>The architecture — one interface, two implementations</h2>
+
+<figure class="fig">
+  <svg viewBox="0 0 860 500" role="img" aria-label="The shared sizing core architecture centered on the DeviceModel abstraction">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      <marker id="arO" viewBox="0 0 12 12" refX="6" refY="6" markerWidth="11" markerHeight="11" orient="auto"><circle cx="6" cy="6" r="4.5" fill="var(--fig-bg)" stroke="context-stroke" stroke-width="1.5"/></marker>
+    </defs>
+
+    <!-- Foundation row: config -> loader -> models ; taxonomy -->
+    <text x="120" y="34" text-anchor="middle" font-size="11" fill="var(--fig-muted)">YAML config</text>
+    <rect x="60" y="40" width="120" height="30" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="120" y="60" text-anchor="middle" font-size="11">tech + spec .yaml</text>
+    <line x1="180" y1="55" x2="220" y2="55" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <a href="shared-loader_explained.html">
+      <rect x="220" y="38" width="130" height="34" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="285" y="59" text-anchor="middle" font-weight="600" font-size="12">loader.py</text>
+    </a>
+    <line x1="350" y1="55" x2="390" y2="55" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <a href="shared-models_explained.html">
+      <rect x="390" y="38" width="150" height="34" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="465" y="59" text-anchor="middle" font-weight="600" font-size="12">models.py (dataclasses)</text>
+    </a>
+    <a href="shared-taxonomy_explained.html">
+      <rect x="600" y="38" width="200" height="34" rx="7" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="700" y="59" text-anchor="middle" font-weight="600" font-size="12">taxonomy.py — naming rules</text>
+    </a>
+
+    <!-- The keystone: DeviceModel interface -->
+    <rect x="300" y="150" width="260" height="56" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="3"/>
+    <text x="430" y="174" text-anchor="middle" font-weight="600" font-size="15" fill="var(--fig-accent)">DeviceModel</text>
+    <text x="430" y="193" text-anchor="middle" font-size="11" fill="var(--fig-muted)">the interface (Strategy pattern)</text>
+
+    <!-- two implementations plug in from below -->
+    <a href="shared-equations_explained.html">
+      <rect x="150" y="250" width="200" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="250" y="272" text-anchor="middle" font-weight="600" font-size="12.5">equations.py</text>
+      <text x="250" y="289" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 square law</text>
+    </a>
+    <a href="shared-gmid-lut_explained.html">
+      <rect x="510" y="250" width="200" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="610" y="272" text-anchor="middle" font-weight="600" font-size="12.5">gmid_lut.py</text>
+      <text x="610" y="289" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id measured LUT</text>
+    </a>
+    <!-- implements arrows (hollow-circle = "implements") -->
+    <path d="M250,250 L250,215 L360,215 L360,206" fill="none" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#arO)"/>
+    <path d="M610,250 L610,215 L500,215 L500,206" fill="none" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#arO)"/>
+    <text x="430" y="232" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">two implementations, one socket</text>
+
+    <!-- consumers depend on the interface -->
+    <a href="shared-preprocess_explained.html">
+      <rect x="170" y="360" width="220" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="382" text-anchor="middle" font-weight="600" font-size="12.5">preprocess.py</text>
+      <text x="280" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">model-independent pre-sizing</text>
+    </a>
+    <a href="shared-metrics_explained.html">
+      <rect x="470" y="360" width="220" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="580" y="382" text-anchor="middle" font-weight="600" font-size="12.5">metrics.py</text>
+      <text x="580" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">metrics from solved sizing</text>
+    </a>
+    <!-- depends-on arrows from consumers up to the interface -->
+    <path d="M280,360 L280,320 L400,320 L400,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <path d="M580,360 L580,320 L460,320 L460,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="430" y="336" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">both call the interface, never the concrete model</text>
+
+    <!-- verification facade -->
+    <a href="shared-spice-sim_explained.html">
+      <rect x="300" y="440" width="260" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="430" y="460" text-anchor="middle" font-weight="600" font-size="12">spice_sim.py</text>
+      <text x="430" y="475" text-anchor="middle" font-size="10" fill="var(--fig-muted)">facade → spice/ ngspice verification</text>
+    </a>
+  </svg>
+  <figcaption>One <code>DeviceModel</code> interface, two swappable implementations (square law / LUT). Every consumer is written against the interface, so one codebase serves both sizers. Click any box to open its walkthrough.</figcaption>
+</figure>
+
+<h2>All pages</h2>
+<div class="cards">
+  <a class="card" href="shared-models_explained.html"><span class="fn">models.py</span><div class="role">Plain dataclasses — the typed data vocabulary between stages</div><span class="phase">foundation</span></a>
+  <a class="card" href="shared-taxonomy_explained.html"><span class="fn">taxonomy.py</span><div class="role">Slot/net naming conventions — one source of truth</div><span class="phase">foundation</span></a>
+  <a class="card" href="shared-equations_explained.html"><span class="fn">equations.py</span><div class="role">Level-1 square-law MOSFET + op-amp formulas</div><span class="phase">primitive</span></a>
+  <a class="card" href="shared-gmid-lut_explained.html"><span class="fn">gmid_lut.py</span><div class="role">gm/Id LUT + bilinear interpolation (measured BSIM4)</div><span class="phase">primitive</span></a>
+  <a class="card" href="shared-device-model_explained.html"><span class="fn">device_model.py</span><div class="role">The keystone — DeviceModel interface unifying both primitives</div><span class="phase">keystone</span></a>
+  <a class="card" href="shared-loader_explained.html"><span class="fn">loader.py</span><div class="role">Load tech params + specs from YAML into typed objects</div><span class="phase">boundary</span></a>
+  <a class="card" href="shared-preprocess_explained.html"><span class="fn">preprocess.py</span><div class="role">Model-independent pre-sizing: KCL, slots, requirements</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-metrics_explained.html"><span class="fn">metrics.py</span><div class="role">Performance metrics from a solved sizing</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-spice-sim_explained.html"><span class="fn">spice_sim.py</span><div class="role">Facade over the spice/ ngspice verification subpackage</div><span class="phase">verification</span></a>
+</div>
+
+<p style="color:var(--muted);font-size:0.9rem;margin-top:2em;">Generated by the <code>explain-code-with-fig</code> skill · intuition-first walkthroughs with hand-authored SVG figures · light/dark toggle top-right.</p>
+
+</div>
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gm/Id Sizer — package walkthrough</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .container { max-width:900px; margin:0 auto; padding:44px 24px 120px; }
+  h1 { font-size:2.2rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.08rem; margin-bottom:0.5em; }
+  h2 { font-size:1.4rem; margin:2em 0 0.6em; padding-top:14px; border-top:1px solid var(--border); }
+  p,li { max-width:70ch; }
+  a { color:var(--link); }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.88em; }
+  figure.fig { margin:1.8em 0; padding:22px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  svg a { cursor:pointer; }
+  svg a:hover rect, svg a:hover polygon { stroke:var(--fig-accent); stroke-width:3; }
+  /* card grid */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px;
+    margin:1.4em 0; }
+  .card { display:block; padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; text-decoration:none; color:var(--text); transition:border-color .12s; }
+  .card:hover { border-color:var(--accent); }
+  .card .fn { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-weight:600;
+    color:var(--accent); font-size:0.95rem; }
+  .card .role { color:var(--muted); font-size:0.88rem; margin-top:4px; }
+  .card .phase { display:inline-block; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px;
+    color:var(--fig-accent2); margin-top:8px; }
+  .pending { opacity:0.55; pointer-events:none; }
+  .badge { font-size:0.7rem; background:var(--accent-sf); color:var(--accent); border-radius:999px;
+    padding:1px 8px; margin-left:6px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="container">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<h1>The gm/Id Sizer — a package walkthrough</h1>
+<div class="subtitle"><code>circuitgenome/sizer/gmid/</code> — a five-phase pipeline that turns a recognised op-amp topology and a performance spec into concrete transistor and resistor sizes.</div>
+
+<p>This package sizes an analog op-amp the <strong>gm/Id way</strong>: instead of searching for widths with a solver, it <em>computes</em> them from a lookup table, because once the current (from KCL) and the efficiency <code>gm/Id</code> are fixed, the geometry follows directly. The work is split into five phases with <strong>typed hand-offs</strong> between them — like an assembly line where each station receives a labelled part and passes on a more finished one.</p>
+
+<p>Each box below is clickable — it opens the intuition-first, figure-rich walkthrough for that module.</p>
+
+<p style="font-size:0.92rem;"><a href="../index.html">↑ Up to the full sizer overview</a> &nbsp;·&nbsp; <a href="../shared/index.html">→ See also: the shared sizing core (<code>sizer/shared/</code>) that both this pipeline and the Level-1 sizer are built on.</a></p>
+
+<h2>The pipeline, at a glance</h2>
+
+<figure class="fig">
+  <svg viewBox="0 0 860 470" role="img" aria-label="The five-phase gm/Id sizing pipeline with typed hand-offs">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+    </defs>
+
+    <!-- Orchestrator band -->
+    <a href="gmid-sizer_explained.html">
+      <rect x="20" y="18" width="820" height="40" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="430" y="43" text-anchor="middle" font-weight="600" font-size="14">gmid_sizer.py · size_gmid() — the orchestrator (conductor of all five phases)</text>
+    </a>
+
+    <!-- Foundation row: intent + blocks -->
+    <a href="intent_explained.html">
+      <rect x="20" y="78" width="200" height="52" rx="9" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="120" y="100" text-anchor="middle" font-weight="600" font-size="13">intent.py</text>
+      <text x="120" y="118" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">design intent: gm/Id regions</text>
+    </a>
+    <a href="blocks_explained.html">
+      <rect x="235" y="78" width="200" height="52" rx="9" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="335" y="100" text-anchor="middle" font-weight="600" font-size="13">blocks.py</text>
+      <text x="335" y="118" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">functional-block + kind view</text>
+    </a>
+    <text x="455" y="108" font-size="11" fill="var(--fig-muted)">← vocabulary the phases build on</text>
+
+    <!-- Phase pipeline (row 1: Analyze -> Plan) -->
+    <!-- Analyze -->
+    <a href="analyze_explained.html">
+      <rect x="20" y="165" width="175" height="60" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="107" y="188" text-anchor="middle" font-weight="600" font-size="13">1 · Analyze</text>
+      <text x="107" y="205" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">analyze.py</text>
+      <text x="107" y="219" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">structural view</text>
+    </a>
+    <!-- handoff -->
+    <line x1="195" y1="195" x2="245" y2="195" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="220" y="160" text-anchor="middle" font-size="9.5" fill="var(--fig-accent)">CircuitView</text>
+
+    <!-- Plan (phases 2+3) -->
+    <a href="plan_explained.html">
+      <rect x="245" y="165" width="175" height="60" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="332" y="185" text-anchor="middle" font-weight="600" font-size="13">2·3 · Bias &amp; Plan</text>
+      <text x="332" y="201" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">plan.py — currents (KCL),</text>
+      <text x="332" y="214" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm reqs, per-device intent</text>
+    </a>
+    <line x1="420" y1="195" x2="470" y2="195" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="445" y="160" text-anchor="middle" font-size="9.5" fill="var(--fig-accent)">SizingPlan</text>
+
+    <!-- Size (phase 4) big box -->
+    <rect x="470" y="150" width="370" height="180" rx="10" fill="none" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="655" y="168" text-anchor="middle" font-weight="600" font-size="13" fill="var(--fig-accent)">4 · Size</text>
+
+    <a href="geometry_explained.html">
+      <rect x="486" y="180" width="160" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="566" y="200" text-anchor="middle" font-weight="600" font-size="12">geometry.py</text>
+      <text x="566" y="214" text-anchor="middle" font-size="10" fill="var(--fig-muted)">(W,L) forward pass</text>
+    </a>
+    <a href="dc-bias-feasibility_explained.html">
+      <rect x="662" y="180" width="160" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="742" y="200" text-anchor="middle" font-weight="600" font-size="12">bias.py</text>
+      <text x="742" y="214" text-anchor="middle" font-size="10" fill="var(--fig-muted)">headroom repair</text>
+    </a>
+    <a href="resistors_explained.html">
+      <rect x="486" y="230" width="160" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="566" y="250" text-anchor="middle" font-weight="600" font-size="12">resistors.py</text>
+      <text x="566" y="264" text-anchor="middle" font-size="10" fill="var(--fig-muted)">degen / tail / comp</text>
+    </a>
+    <a href="stage-interface_explained.html">
+      <rect x="662" y="230" width="160" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="742" y="247" text-anchor="middle" font-weight="600" font-size="12">stage_interface.py</text>
+      <text x="742" y="261" text-anchor="middle" font-size="10" fill="var(--fig-muted)">pin vs load window</text>
+    </a>
+    <a href="bias-levels_explained.html">
+      <rect x="486" y="278" width="336" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="654" y="297" text-anchor="middle" font-weight="600" font-size="12">bias_levels.py</text>
+      <text x="654" y="312" text-anchor="middle" font-size="10" fill="var(--fig-muted)">bias-generator level devices (cascode diodes + floors)</text>
+    </a>
+
+    <!-- Evaluate (phase 5) -->
+    <line x1="655" y1="330" x2="655" y2="365" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="700" y="352" text-anchor="middle" font-size="9.5" fill="var(--fig-accent)">solved sizing</text>
+    <a href="evaluate_explained.html">
+      <rect x="470" y="368" width="370" height="52" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="655" y="390" text-anchor="middle" font-weight="600" font-size="13">5 · Evaluate — evaluate.py</text>
+      <text x="655" y="408" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">analytical metrics (cascode-aware r_out)</text>
+    </a>
+
+    <!-- connect plan -> size row -->
+    <path d="M332,225 L332,340 L470,340" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="400" y="356" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">plan feeds Size</text>
+  </svg>
+  <figcaption>The five phases, their modules, and the typed hand-offs between them. Click any box to open its walkthrough.</figcaption>
+</figure>
+
+<h2>All pages</h2>
+<div class="cards">
+  <a class="card" href="intent_explained.html"><span class="fn">intent.py</span><div class="role">Design intent as a 3-level hierarchy; gm/Id inversion regions</div><span class="phase">foundation</span></a>
+  <a class="card" href="blocks_explained.html"><span class="fn">blocks.py</span><div class="role">Functional-block view; classifies load/tail kinds</div><span class="phase">foundation</span></a>
+  <a class="card" href="analyze_explained.html"><span class="fn">analyze.py</span><div class="role">Phase 1 — structural CircuitView, built once</div><span class="phase">phase 1</span></a>
+  <a class="card" href="plan_explained.html"><span class="fn">plan.py</span><div class="role">Phases 2+3 — currents by KCL + per-device sizing plan</div><span class="phase">phase 2·3</span></a>
+  <a class="card" href="geometry_explained.html"><span class="fn">geometry.py</span><div class="role">Size — deterministic (W,L) forward pass, mirror ratios</div><span class="phase">phase 4</span></a>
+  <a class="card" href="dc-bias-feasibility_explained.html"><span class="fn">bias.py</span><div class="role">Size — tail DC headroom repair<span class="badge">done</span></div><span class="phase">phase 4</span></a>
+  <a class="card" href="resistors_explained.html"><span class="fn">resistors.py</span><div class="role">Size — degeneration / tail / compensation resistors</div><span class="phase">phase 4</span></a>
+  <a class="card" href="stage-interface_explained.html"><span class="fn">stage_interface.py</span><div class="role">DC feasibility: output pin vs load window (issue #124)</div><span class="phase">phase 4 check</span></a>
+  <a class="card" href="bias-levels_explained.html"><span class="fn">bias_levels.py</span><div class="role">Bias-generator level devices: cascode diodes + floors</div><span class="phase">phase 4 check</span></a>
+  <a class="card" href="evaluate_explained.html"><span class="fn">evaluate.py</span><div class="role">Phase 5 — analytical metrics, cascode-aware r_out</div><span class="phase">phase 5</span></a>
+  <a class="card" href="gmid-sizer_explained.html"><span class="fn">gmid_sizer.py</span><div class="role">Orchestrator — runs all five phases end-to-end</div><span class="phase">orchestrator</span></a>
+</div>
+
+<p style="color:var(--muted);font-size:0.9rem;margin-top:2em;">Generated by the <code>explain-code-with-fig</code> skill · intuition-first walkthroughs with hand-authored SVG figures · light/dark toggle top-right.</p>
+
+</div>
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+</script>
+</body>
+</html>

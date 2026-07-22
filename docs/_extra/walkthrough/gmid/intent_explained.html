@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>intent.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>intent.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/gmid/intent.py</code> — making analog design <em>intent</em> explicit as a three-level hierarchy, so every gm/Id choice is named, reasoned, and overridable.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · gm/Id is a design choice</a>
+  <a href="#part-3">3 · The vocabulary constants</a>
+  <a href="#part-4">4 · BlockIntent &amp; the registry</a>
+  <a href="#part-5">5 · functional_block()</a>
+  <a href="#part-6">6 · resolve_transistor_intents()</a>
+  <a href="#part-7">7 · GmIdIntent — the top knobs</a>
+  <a href="#part-8">8 · The hidden idea &amp; limits</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> take every fuzzy human sentence like <em>"the current-source load should be strong-ish for high output resistance"</em> and turn it into a small, named, overridable data object the sizer can read top-down — and that it can later explain back to you.</p></blockquote>
+
+  <p class="beat">Here is the whole story before a single line of code.</p>
+
+  <p>A gm/Id sizer has to answer a hundred tiny "how strong should this transistor be?" questions. Each answer is really a <strong>design decision</strong>: which inversion region to put the device in, how long to make its channel, and <em>why</em>. The naive way is to sprinkle magic numbers through the sizing code — <code>gm_id = 10</code> here, <code>L = 4 * Lmin</code> there — with the reasoning living only in the author's head.</p>
+
+  <p>Think of it like a recipe. You <em>could</em> write "add some salt" in ten different places and hope every cook guesses the same amount. Or you could write one <strong>ingredients table</strong> at the top — salt: 1 tsp, "brings out the sweetness" — that every step reads from, that a guest can inspect, and that you can tweak in exactly one place. <code>intent.py</code> is that ingredients table for transistor sizing.</p>
+
+  <h3>The three levels of intent</h3>
+  <p>The file's whole shape is a <strong>three-level hierarchy</strong>. The spec says <em>what</em> the circuit must do; the middle layer says <em>how each building block should behave and why</em>; the bottom layer is that intent stamped onto each physical device.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 250" role="img" aria-label="Three-level design-intent hierarchy from circuit spec down to per-device intent">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- Level 1 -->
+      <rect x="130" y="18" width="300" height="54" rx="9" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="280" y="40" text-anchor="middle" font-size="13" font-weight="600">Level 1 · Circuit intent — SizingSpec</text>
+      <text x="280" y="59" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">gain · GBW · PM · swing · power   (the <tspan font-style="italic">what</tspan>)</text>
+      <line x1="280" y1="72" x2="280" y2="92" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- Level 2 -->
+      <rect x="105" y="92" width="350" height="58" rx="9" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="280" y="114" text-anchor="middle" font-size="13" font-weight="600">Level 2 · Functional-block intent — BlockIntent</text>
+      <text x="280" y="133" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">per block: role · gm/Id region · L multiple · rationale</text>
+      <text x="490" y="121" font-size="10.5" fill="var(--fig-accent2)" font-weight="600">tune /</text>
+      <text x="490" y="134" font-size="10.5" fill="var(--fig-accent2)" font-weight="600">override</text>
+      <line x1="280" y1="150" x2="280" y2="170" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- Level 3 -->
+      <rect x="130" y="170" width="300" height="54" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="280" y="192" text-anchor="middle" font-size="13" font-weight="600">Level 3 · Transistor intent — TransistorIntent</text>
+      <text x="280" y="211" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">the block intent resolved onto <tspan font-style="italic">each device</tspan></text>
+    </svg>
+    <figcaption>Top-down intent. The middle layer (highlighted) is the tunable one — the single place a caller or optimizer reaches in to retune a building block.</figcaption>
+  </figure>
+
+  <h3>Good case vs. bad case</h3>
+  <p>Why bother with a whole file for this? Because the alternative rots. Compare the two worlds:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 210" role="img" aria-label="Implicit magic numbers versus an explicit intent registry">
+      <!-- BAD -->
+      <text x="145" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-bad)">implicit — magic numbers</text>
+      <rect x="20" y="36" width="250" height="158" rx="10" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <rect x="38" y="52" width="214" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <text x="145" y="72" text-anchor="middle" font-size="12" font-family="monospace">gm_id = 10   # ???</text>
+      <text x="40" y="108" font-size="11.5" fill="var(--fig-bad)">✗ reasoning lives in someone's head</text>
+      <text x="40" y="130" font-size="11.5" fill="var(--fig-bad)">✗ can't retune one block in isolation</text>
+      <text x="40" y="152" font-size="11.5" fill="var(--fig-bad)">✗ the result can't explain itself</text>
+      <text x="40" y="174" font-size="11.5" fill="var(--fig-bad)">✗ same 10 copied to five places</text>
+      <!-- GOOD -->
+      <text x="415" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-good)">explicit — BlockIntent registry</text>
+      <rect x="290" y="36" width="250" height="158" rx="10" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <rect x="304" y="52" width="222" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/>
+      <text x="415" y="72" text-anchor="middle" font-size="10.5" font-family="monospace">BlockIntent(CS, 10, 4, "high rout…")</text>
+      <text x="308" y="108" font-size="11.5" fill="var(--fig-good)">✓ rationale travels with the number</text>
+      <text x="308" y="130" font-size="11.5" fill="var(--fig-good)">✓ override one block, rest fall back</text>
+      <text x="308" y="152" font-size="11.5" fill="var(--fig-good)">✓ surfaced in the sizing result</text>
+      <text x="308" y="174" font-size="11.5" fill="var(--fig-good)">✓ one source of truth</text>
+    </svg>
+    <figcaption>Same numbers, opposite maintainability. The file's real product isn't the values — it's making the values <em>named, reasoned, and reachable</em>.</figcaption>
+  </figure>
+
+  <h3>The cast of characters</h3>
+  <p>The file is small — two dataclasses, one lookup function, one resolver, and a top-level config object. Hover any box to trace who it leans on.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 560 320" role="img" aria-label="Call and data graph of intent.py">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+      <!-- edges -->
+      <line class="edge" data-group="fb"   x1="250" y1="64" x2="150" y2="112" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="reg"  x1="350" y1="64" x2="450" y2="112" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="maps" x1="135" y1="158" x2="135" y2="204" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="bi"   x1="450" y1="158" x2="450" y2="204" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <line class="edge" data-group="ti"   x1="440" y1="248" x2="365" y2="272" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+      <!-- root -->
+      <g class="node" data-group="root">
+        <rect x="190" y="22" width="220" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="300" y="41" text-anchor="middle" font-weight="600" font-size="12.5">resolve_transistor_intents()</text>
+        <text x="300" y="57" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">stamp intent onto every device</text>
+      </g>
+      <!-- functional_block -->
+      <g class="node" data-group="fb">
+        <rect x="40" y="112" width="190" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="135" y="133" text-anchor="middle" font-weight="600" font-size="12.5">functional_block()</text>
+        <text x="135" y="149" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">(slot, role) → block name</text>
+      </g>
+      <!-- registry -->
+      <g class="node" data-group="reg">
+        <rect x="355" y="112" width="195" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="452" y="133" text-anchor="middle" font-weight="600" font-size="12">DEFAULT_BLOCK_INTENTS</text>
+        <text x="452" y="149" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the 10 default block intents</text>
+      </g>
+      <!-- maps -->
+      <g class="node" data-group="maps">
+        <rect x="35" y="204" width="200" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="135" y="225" text-anchor="middle" font-weight="600" font-size="11.5">_SIGNAL_BLOCK / _CS_BLOCK</text>
+        <text x="135" y="241" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">slot → block lookup tables</text>
+      </g>
+      <!-- BlockIntent -->
+      <g class="node" data-group="bi">
+        <rect x="360" y="204" width="185" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="452" y="225" text-anchor="middle" font-weight="600" font-size="12.5">BlockIntent</text>
+        <text x="452" y="241" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">role · gm/Id · L · rationale</text>
+      </g>
+      <!-- TransistorIntent -->
+      <g class="node" data-group="ti">
+        <rect x="180" y="272" width="200" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="280" y="292" text-anchor="middle" font-weight="600" font-size="12.5">TransistorIntent</text>
+        <text x="280" y="307" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the per-device result</text>
+      </g>
+    </svg>
+    <figcaption>The resolver on top; a lookup function and a registry feed it; the output is one TransistorIntent per device. We'll learn it bottom-up so the top reads easily.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> before any code, Part&nbsp;2 builds the one idea the whole file rests on — that <code>gm/Id</code> is not a measurement but a <em>choice</em> of inversion region.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · gm/Id is a design choice, not a reading</h2>
+
+  <p class="beat">You need exactly one concept before the code makes sense. It's less scary than it looks.</p>
+
+  <h3>First — what is gm/Id?</h3>
+  <p><code>gm</code> is a transistor's <strong>transconductance</strong>: how much output current wiggle you get per volt of input wiggle. It's the raw material of gain. <code>Id</code> is the DC current the device burns. So <code>gm/Id</code> is <strong>transconductance efficiency</strong> — <em>how much gain you buy per microamp of current</em>. Units: 1/V.</p>
+
+  <p>Analogy: think of <code>gm/Id</code> as <strong>miles per gallon</strong> for a transistor. A high value means lots of "go" (gm) for little "fuel" (Id). A low value means you're burning current hard for the same gm.</p>
+
+  <h3>The key move: choosing gm/Id chooses the inversion region</h3>
+  <p>Here's the pivot that makes the whole methodology work. The value you <em>pick</em> for <code>gm/Id</code> maps one-to-one onto how strongly the channel is turned on — its <strong>inversion region</strong>:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 200" role="img" aria-label="The gm/Id axis split into strong, moderate, and weak inversion regions">
+      <!-- region labels -->
+      <text x="94"  y="40" text-anchor="middle" font-size="12.5" font-weight="600">STRONG</text>
+      <text x="240" y="40" text-anchor="middle" font-size="12.5" font-weight="600">MODERATE</text>
+      <text x="431" y="40" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--fig-accent2)">WEAK</text>
+      <!-- bands -->
+      <rect x="60"  y="52" width="67.5"  height="28" rx="4" fill="var(--fig-fill)"  stroke="var(--fig-stroke)"  stroke-width="2"/>
+      <rect x="172.5" y="52" width="135" height="28" rx="4" fill="var(--fig-bg)"    stroke="var(--fig-muted)"   stroke-width="2"/>
+      <rect x="352.5" y="52" width="157.5" height="28" rx="4" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="94"  y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">~5–8</text>
+      <text x="240" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">~10–16</text>
+      <text x="431" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">~18–25</text>
+      <!-- axis -->
+      <line x1="50" y1="120" x2="525" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="500" y="140" font-size="11" fill="var(--fig-muted)">gm/Id (1/V)</text>
+      <!-- constant ticks -->
+      <line x1="127.5" y1="80" x2="127.5" y2="120" stroke="var(--fig-accent)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="127.5" y="158" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">8 · cascode</text>
+      <line x1="172.5" y1="80" x2="172.5" y2="120" stroke="var(--fig-accent)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="172.5" y="176" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">10 · current src</text>
+      <line x1="262.5" y1="80" x2="262.5" y2="120" stroke="var(--fig-accent)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="262.5" y="158" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">14 · signal*</text>
+      <!-- direction hints -->
+      <text x="60"  y="196" font-size="10" fill="var(--fig-muted)">◀ faster · larger Vdsat</text>
+      <text x="525" y="196" text-anchor="end" font-size="10" fill="var(--fig-muted)">more gm/µA · smaller Vgs ▶</text>
+    </svg>
+    <figcaption>The single number gm/Id <em>is</em> the inversion knob. The three constants this file defines (8, 10, 14) live exactly where the domain says they should. *signal 14 is only a nominal estimate — see below.</figcaption>
+  </figure>
+
+  <p>Reading it across: turn <code>gm/Id</code> <strong>down</strong> (strong inversion) and the device is fast, tolerant, with a big saturation voltage. Turn it <strong>up</strong> (weak inversion) and you get maximum gm per microamp with a tiny <code>Vgs</code>, at the cost of speed and area. The whole art of gm/Id sizing is picking the right spot for each device's job.</p>
+
+  <h3>Three regions, three jobs — a comparison</h3>
+  <table>
+    <thead><tr><th>Region</th><th class="num">gm/Id (1/V)</th><th>Great for</th><th>Costs you</th></tr></thead>
+    <tbody>
+      <tr><td>Strong inversion</td><td class="num">5–8</td><td>headroom, speed (ft), matching, high rout with long L</td><td>gm efficiency</td></tr>
+      <tr><td>Moderate inversion</td><td class="num">10–16</td><td>the balanced default for signal devices</td><td>—</td></tr>
+      <tr><td>Weak inversion</td><td class="num">18–25</td><td>max gain per µA, low-power, tiny Vgs</td><td>speed, area</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The one twist: for signal devices, gm/Id is <em>solved</em>, not chosen</h3>
+  <p>This is the subtlety that shapes the data model. For a <strong>current source or load</strong>, gm/Id is a free knob you dial to a region. But for a <strong>signal device</strong> (the input pair, a gain-stage driver), gm/Id is <em>not</em> free — it is pinned by the spec:</p>
+
+  <div class="eq-center"><span class="boxed-eq">gm/Id<sub>signal</sub> = gm<sub>required</sub> / I<sub>D</sub></span></div>
+
+  <p>The spec demands a certain <code>gm</code> to hit its gain-bandwidth; once the current is fixed by Kirchhoff, gm/Id falls out of arithmetic. So in the registry, signal blocks carry <code>gm_id = None</code> — a deliberate "this is <em>solved</em> later, not set here." Hold onto that <code>None</code>; it's the reason the field is <code>float | None</code>.</p>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · The vocabulary constants — the warm-up</h2>
+
+  <blockquote><p><strong>The one job:</strong> give the three inversion regions and three channel-length choices short, self-documenting names, so the registry below reads like prose instead of a wall of numbers.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-com"># --- gm/Id inversion regions used as the block defaults (1/V) ---</span>
+_MODERATE = <span class="tok-num">14.0</span>        <span class="tok-com"># signal nominal (pre-geometry estimate); real gm/Id is solved</span>
+_STRONG = <span class="tok-num">10.0</span>          <span class="tok-com"># current source: headroom + output resistance</span>
+_STRONG_CASCODE = <span class="tok-num">8.0</span>   <span class="tok-com"># cascode: small Vdsat to preserve stacked headroom</span>
+
+<span class="tok-com"># --- channel length as a multiple of L_min ---</span>
+_L_SIGNAL = <span class="tok-num">2.0</span>         <span class="tok-com"># signal: balance gain and ft</span>
+_L_CS = <span class="tok-num">4.0</span>             <span class="tok-com"># current source: longer L → higher output resistance</span>
+_L_CASCODE = <span class="tok-num">3.0</span>        <span class="tok-com"># cascode</span></code></pre>
+
+  <h3>Why is it called <code>_STRONG</code>?</h3>
+  <p>I really like these names. <code>_STRONG = 10.0</code> doesn't say "ten," it says <em>"put this device in strong inversion."</em> The number is an implementation detail; the <em>name</em> is the intent. When you later read <code>BlockIntent(CURRENT_SOURCE, _STRONG, _L_CS, …)</code> you read a <strong>sentence</strong>: "a current source, in strong inversion, with a long channel." That's the whole reason to hoist constants to the top.</p>
+
+  <h3>The channel-length lever, drawn to scale</h3>
+  <p>The <code>_L_*</code> constants are multiples of the minimum drawn length. Analogy: a longer garden hose resists flow more. A longer transistor channel resists current changes more — it has <strong>higher output resistance</strong> — which is exactly what a current source wants and a fast signal device does not.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 180" role="img" aria-label="Channel length multiples as bar lengths: signal 2x, cascode 3x, current source 4x">
+      <text x="150" y="34" text-anchor="end" font-size="12">signal</text>
+      <rect x="160" y="20" width="90" height="26" rx="4" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="262" y="38" font-size="11.5" fill="var(--fig-muted)">2× Lmin — balance gain &amp; ft</text>
+      <text x="150" y="86" text-anchor="end" font-size="12">cascode</text>
+      <rect x="160" y="72" width="135" height="26" rx="4" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="307" y="90" font-size="11.5" fill="var(--fig-muted)">3× Lmin — moderate</text>
+      <text x="150" y="138" text-anchor="end" font-size="12">current source</text>
+      <rect x="160" y="124" width="180" height="26" rx="4" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="352" y="142" font-size="11.5" fill="var(--fig-muted)">4× Lmin — highest rout</text>
+      <line x1="160" y1="164" x2="360" y2="164" stroke="var(--fig-muted)" stroke-width="1.5" marker-end="url(#ar)"/>
+      <text x="360" y="178" text-anchor="end" font-size="10.5" fill="var(--fig-muted)">longer channel → higher output resistance</text>
+    </svg>
+    <figcaption>Current sources get the longest channel because their whole job is to look like a stiff, high-resistance current; signal devices stay short to stay fast.</figcaption>
+  </figure>
+
+  <p>Notice the constants aren't used <em>here</em> — they're just definitions. Every place downstream that needs "strong inversion, long channel" will reach for <code>_STRONG</code> and <code>_L_CS</code> by name. Recap:</p>
+
+  <table>
+    <thead><tr><th>Constant</th><th class="num">Value</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>_MODERATE</code></td><td class="num">14.0</td><td>nominal signal gm/Id (only an estimate — real value is solved)</td></tr>
+      <tr><td><code>_STRONG</code></td><td class="num">10.0</td><td>current-source gm/Id: headroom + output resistance</td></tr>
+      <tr><td><code>_STRONG_CASCODE</code></td><td class="num">8.0</td><td>cascode gm/Id: small Vdsat to preserve the stack</td></tr>
+      <tr><td><code>_L_SIGNAL</code></td><td class="num">2.0</td><td>short channel, fast signal device</td></tr>
+      <tr><td><code>_L_CS</code></td><td class="num">4.0</td><td>long channel, stiff current source</td></tr>
+      <tr><td><code>_L_CASCODE</code></td><td class="num">3.0</td><td>medium channel for the cascode</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>BlockIntent</code> and the registry</h2>
+
+  <blockquote><p><strong>The one job:</strong> bundle the four decisions about one functional building block — its role, its gm/Id region, its channel length, and the human reason — into a single frozen record; then list one such record for every kind of block the amplifier can have.</p></blockquote>
+
+  <h3>The record itself</h3>
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>(frozen=<span class="tok-kw">True</span>)
+<span class="tok-kw">class</span> <span class="tok-fn">BlockIntent</span>:
+    role: <span class="tok-kw">str</span>            <span class="tok-com"># SIGNAL / CURRENT_SOURCE / CASCODE</span>
+    gm_id: <span class="tok-kw">float</span> | <span class="tok-kw">None</span>  <span class="tok-com"># target gm/Id, or None when it is *solved*</span>
+    l_mult: <span class="tok-kw">float</span>        <span class="tok-com"># channel length as a multiple of length.min</span>
+    rationale: <span class="tok-kw">str</span>       <span class="tok-com"># why this region/length — surfaced in the result</span></code></pre>
+
+  <p>It's <code>frozen=True</code> — once built, it can't be mutated. That's on purpose: a default intent should be a <strong>constant</strong> you copy-and-modify, never something a caller accidentally edits in place. Think of each <code>BlockIntent</code> as a printed <strong>spec card</strong>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 480 190" role="img" aria-label="Anatomy of a BlockIntent record with its four fields">
+      <rect x="30" y="18" width="420" height="158" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="48" y="42" font-size="13" font-weight="600">BlockIntent — one building block's spec card</text>
+      <!-- role -->
+      <rect x="48" y="54" width="384" height="26" rx="4" fill="var(--fig-fill)" stroke="var(--fig-muted)" stroke-width="1"/>
+      <text x="60" y="72" font-size="11.5" font-family="monospace">role</text>
+      <text x="150" y="72" font-size="11.5" fill="var(--fig-muted)">what sizing rule applies — SIGNAL / CURRENT_SOURCE / CASCODE</text>
+      <!-- gm_id (highlighted knob) -->
+      <rect x="48" y="86" width="384" height="26" rx="4" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="60" y="104" font-size="11.5" font-family="monospace" font-weight="600">gm_id</text>
+      <text x="150" y="104" font-size="11.5" fill="var(--fig-accent2)">the free knob — a region, or None = "solved from spec"</text>
+      <!-- l_mult -->
+      <rect x="48" y="118" width="384" height="26" rx="4" fill="var(--fig-fill)" stroke="var(--fig-muted)" stroke-width="1"/>
+      <text x="60" y="136" font-size="11.5" font-family="monospace">l_mult</text>
+      <text x="150" y="136" font-size="11.5" fill="var(--fig-muted)">channel length × Lmin</text>
+      <!-- rationale -->
+      <rect x="48" y="150" width="384" height="18" rx="4" fill="var(--fig-fill)" stroke="var(--fig-muted)" stroke-width="1"/>
+      <text x="60" y="163" font-size="11" font-family="monospace">rationale</text>
+      <text x="150" y="163" font-size="11" fill="var(--fig-muted)">the sentence that explains the choice, kept for reporting</text>
+    </svg>
+    <figcaption>Four fields. The middle one — <code>gm_id</code> — is the tunable knob; <code>None</code> means the region is deferred and solved from the gm requirement.</figcaption>
+  </figure>
+
+  <h3>The default registry — ten blocks by role</h3>
+  <p><code>DEFAULT_BLOCK_INTENTS</code> is a dictionary from block name to its <code>BlockIntent</code>. It's long, but it's really just three families. Grouped by role, the ten entries fall into a tidy picture:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 320" role="img" aria-label="The ten default block intents grouped into three role columns">
+      <!-- SIGNAL column -->
+      <rect x="16" y="16" width="168" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="100" y="36" text-anchor="middle" font-size="12.5" font-weight="600">SIGNAL</text>
+      <text x="100" y="53" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id = None · L 2×</text>
+      <g font-size="11.5" text-anchor="middle">
+        <rect x="16" y="72" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="100" y="91">input_stage</text>
+        <rect x="16" y="108" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="100" y="127">gain_stage</text>
+        <rect x="16" y="144" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="100" y="163">output_stage</text>
+      </g>
+      <!-- CURRENT_SOURCE column -->
+      <rect x="196" y="16" width="168" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="280" y="36" text-anchor="middle" font-size="12.5" font-weight="600">CURRENT_SOURCE</text>
+      <text x="280" y="53" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id = 10 · L 4×</text>
+      <g font-size="11.5" text-anchor="middle">
+        <rect x="196" y="72"  width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="280" y="91">active_load</text>
+        <rect x="196" y="108" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="280" y="127">stage_load</text>
+        <rect x="196" y="144" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="280" y="163">tail_current</text>
+        <rect x="196" y="180" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="280" y="199">bias_generator</text>
+        <rect x="196" y="216" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="280" y="235">cmfb</text>
+        <rect x="196" y="252" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="280" y="271">current_source</text>
+      </g>
+      <!-- CASCODE column -->
+      <rect x="376" y="16" width="168" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="460" y="36" text-anchor="middle" font-size="12.5" font-weight="600">CASCODE</text>
+      <text x="460" y="53" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id = 8 · L 3×</text>
+      <g font-size="11.5" text-anchor="middle">
+        <rect x="376" y="72" width="168" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="1.5"/><text x="460" y="91">cascode</text>
+      </g>
+      <text x="460" y="128" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">just one — the</text>
+      <text x="460" y="144" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">stack booster</text>
+    </svg>
+    <figcaption>Ten blocks, three families. All signal blocks defer gm/Id (<code>None</code>); every current source shares the strong-inversion / long-L profile; the lone cascode gets its own tighter setting.</figcaption>
+  </figure>
+
+  <p>Here are two representative entries in full — one from each of the interesting families:</p>
+
+  <pre class="code"><code><span class="tok-str">"input_stage"</span>: <span class="tok-fn">BlockIntent</span>(
+    SIGNAL, <span class="tok-kw">None</span>, _L_SIGNAL,
+    <span class="tok-str">"Convert the differential input voltage to current with high gm, low</span>
+<span class="tok-str">     noise and good matching. gm/Id is solved to meet GBW/gain …"</span>),
+
+<span class="tok-str">"tail_current"</span>: <span class="tok-fn">BlockIntent</span>(
+    CURRENT_SOURCE, _STRONG, _L_CS,
+    <span class="tok-str">"Tail current source: set the input-pair bias current with adequate</span>
+<span class="tok-str">     saturation headroom and high rout. A low gm/Id (strong inversion)…"</span>),</code></pre>
+
+  <p>Read them as sentences. The <code>input_stage</code> says "I'm a signal device, my gm/Id is <code>None</code> because it's solved, keep me short." The <code>tail_current</code> says "I'm a current source, put me in strong inversion at <code>gm/Id = 10</code>, make me long." The <code>rationale</code> string isn't a comment that rots — it rides along into the sizing result so the finished design can explain <em>why</em> each device is the way it is.</p>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>functional_block()</code> — naming a device's block</h2>
+
+  <blockquote><p><strong>The one job:</strong> given where a device sits (its <em>slot</em>) and what kind of device it is (signal? cascode?), return the name of the functional building block it belongs to — so we can look up its intent.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">functional_block</span>(slot: <span class="tok-kw">str</span>, is_signal: <span class="tok-kw">bool</span>, is_cascode: <span class="tok-kw">bool</span>) -> <span class="tok-kw">str</span>:
+    <span class="tok-kw">if</span> is_signal:
+        <span class="tok-kw">return</span> _SIGNAL_BLOCK.<span class="tok-fn">get</span>(slot, <span class="tok-str">"gain_stage"</span>)
+    <span class="tok-kw">if</span> is_cascode:
+        <span class="tok-kw">return</span> <span class="tok-str">"cascode"</span>
+    <span class="tok-kw">return</span> _CS_BLOCK.<span class="tok-fn">get</span>(slot, <span class="tok-str">"current_source"</span>)</code></pre>
+
+  <p>It's a three-step waterfall with a <strong>priority order that matters</strong>. Signal wins first — a cascode is never treated as a signal device — then cascode, and everything else falls through to "some kind of current source."</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 240" role="img" aria-label="functional_block decision waterfall: signal, then cascode, then current source">
+      <!-- is_signal? -->
+      <polygon points="120,20 210,55 120,90 30,55" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="59" text-anchor="middle" font-size="12">is_signal?</text>
+      <line x1="210" y1="55" x2="270" y2="55" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="238" y="46" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+      <rect x="270" y="36" width="230" height="38" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="385" y="54" text-anchor="middle" font-size="11.5">_SIGNAL_BLOCK[slot]</text>
+      <text x="385" y="68" text-anchor="middle" font-size="10" fill="var(--fig-muted)">default → "gain_stage"</text>
+      <!-- down to cascode -->
+      <line x1="120" y1="90" x2="120" y2="118" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="132" y="108" font-size="10.5" fill="var(--fig-muted)">no</text>
+      <polygon points="120,118 210,152 120,186 30,152" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="120" y="156" text-anchor="middle" font-size="12">is_cascode?</text>
+      <line x1="210" y1="152" x2="270" y2="152" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="238" y="143" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">yes</text>
+      <rect x="270" y="134" width="230" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="385" y="156" text-anchor="middle" font-size="11.5">"cascode"</text>
+      <!-- down to CS -->
+      <line x1="120" y1="186" x2="120" y2="210" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="132" y="202" font-size="10.5" fill="var(--fig-muted)">no</text>
+      <rect x="30" y="210" width="470" height="30" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="265" y="230" text-anchor="middle" font-size="11.5">_CS_BLOCK[slot]   ·   default → "current_source"</text>
+    </svg>
+    <figcaption>Signal precedence first, cascode second, current-source fallback last. Each branch also has a safe default for an unknown slot.</figcaption>
+  </figure>
+
+  <p>The <code>.get(slot, default)</code> is a lovely defensive touch: if a device lands in a slot the tables never anticipated, it doesn't crash — it falls back to the most sensible generic block. A stray signal device becomes a <code>gain_stage</code>; a stray current source becomes a generic <code>current_source</code>.</p>
+
+  <h3>The subtlety worth its own figure: a slot is not a block</h3>
+  <p>This is the single most important idea in the file's data model. The docstring flags it explicitly: <em>a functional building block is not the same as an FBR slot.</em> One slot can hold devices of <strong>different roles</strong>.</p>
+
+  <p>Take the <code>second_stage</code> slot. It houses two very different transistors: the signal <strong>driver</strong> that provides the gain, and its current-source <strong>load</strong>. Same slot — but they must get opposite intents. That's exactly why the block is keyed by <code>(slot, role)</code>, split across the two lookup tables:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 200" role="img" aria-label="One slot second_stage resolves to two different blocks depending on role">
+      <rect x="30" y="80" width="150" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="105" y="100" text-anchor="middle" font-size="12.5" font-weight="600">slot: second_stage</text>
+      <text x="105" y="116" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">one FBR slot, two devices</text>
+      <!-- branch signal -->
+      <line x1="180" y1="92" x2="330" y2="46" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="252" y="58" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">role = SIGNAL</text>
+      <rect x="330" y="26" width="185" height="42" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="422" y="46" text-anchor="middle" font-size="12" font-weight="600">gain_stage</text>
+      <text x="422" y="61" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the signal driver — via _SIGNAL_BLOCK</text>
+      <!-- branch CS -->
+      <line x1="180" y1="112" x2="330" y2="158" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="252" y="150" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">role = CURRENT_SOURCE</text>
+      <rect x="330" y="136" width="185" height="42" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="422" y="156" text-anchor="middle" font-size="12" font-weight="600">stage_load</text>
+      <text x="422" y="171" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the current-source load — via _CS_BLOCK</text>
+    </svg>
+    <figcaption>Same slot, two roles, two blocks. This is why <code>_SIGNAL_BLOCK</code> and <code>_CS_BLOCK</code> both list <code>second_stage</code> — pointing it at <code>gain_stage</code> and <code>stage_load</code> respectively.</figcaption>
+  </figure>
+
+  <p>Look back at the two tables and you'll see this everywhere: <code>second_stage</code>, <code>third_stage</code>, and <code>output_stage</code> all appear in <em>both</em> maps, sending the signal driver to a stage block and the load to <code>stage_load</code>. The role, decided upstream by <code>is_signal_device()</code>, picks the lane.</p>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · <code>resolve_transistor_intents()</code> — Level 2 → Level 3</h2>
+
+  <blockquote><p><strong>The one job:</strong> walk over every real transistor in the circuit and stamp the right block's intent onto it, producing one <code>TransistorIntent</code> per device — the record the geometry solver actually consumes.</p></blockquote>
+
+  <p>First, the Level-3 record. It's a <code>BlockIntent</code> plus two extra facts: <em>which</em> device (<code>ref</code>) and <em>which</em> block it came from.</p>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>(frozen=<span class="tok-kw">True</span>)
+<span class="tok-kw">class</span> <span class="tok-fn">TransistorIntent</span>:
+    ref: <span class="tok-kw">str</span>          <span class="tok-com"># which device, e.g. "M1"</span>
+    block: <span class="tok-kw">str</span>        <span class="tok-com"># which functional block it resolved to</span>
+    role: <span class="tok-kw">str</span>
+    gm_id: <span class="tok-kw">float</span> | <span class="tok-kw">None</span>
+    l_mult: <span class="tok-kw">float</span>
+    rationale: <span class="tok-kw">str</span></code></pre>
+
+  <p>And the resolver itself — the orchestrator from our call graph:</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">resolve_transistor_intents</span>(
+    all_transistors,          <span class="tok-com"># ref → (Device, slot_name)</span>
+    cascode_refs,             <span class="tok-com"># set of refs that are cascodes</span>
+    block_intents=DEFAULT_BLOCK_INTENTS,
+):
+    out = {}
+    <span class="tok-kw">for</span> ref, (device, slot) <span class="tok-kw">in</span> all_transistors.<span class="tok-fn">items</span>():
+        block = <span class="tok-fn">functional_block</span>(slot, <span class="tok-fn">is_signal_device</span>(device), ref <span class="tok-kw">in</span> cascode_refs)
+        bi = block_intents[block]
+        out[ref] = <span class="tok-fn">TransistorIntent</span>(ref=ref, block=block, role=bi.role,
+                                    gm_id=bi.gm_id, l_mult=bi.l_mult,
+                                    rationale=bi.rationale)
+    <span class="tok-kw">return</span> out</code></pre>
+
+  <p><strong>The single most important line</strong> is the one that computes <code>block</code>: it turns the two things we know about a device — its slot, and its role flags — into a block name. Everything after is a copy: look the name up in the registry, and spread that <code>BlockIntent</code>'s fields into a per-device <code>TransistorIntent</code>. It's a pure function of its inputs: same circuit in, same intents out.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 130" role="img" aria-label="Resolution pipeline for one device from slot to TransistorIntent">
+      <g text-anchor="middle" font-size="11">
+        <rect x="10" y="46" width="120" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="70" y="66" font-weight="600">device</text>
+        <text x="70" y="82" fill="var(--fig-muted)">(ref, slot)</text>
+        <rect x="185" y="46" width="120" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="245" y="66" font-weight="600">functional_block()</text>
+        <text x="245" y="82" fill="var(--fig-muted)">→ block name</text>
+        <rect x="360" y="46" width="90" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="405" y="66" font-weight="600">registry</text>
+        <text x="405" y="82" fill="var(--fig-muted)">→ BlockIntent</text>
+        <rect x="470" y="46" width="80" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="510" y="63" font-weight="600" font-size="10.5">Transistor-</text>
+        <text x="510" y="77" font-weight="600" font-size="10.5">Intent</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="130" y1="69" x2="185" y2="69" marker-end="url(#ar)"/>
+        <line x1="305" y1="69" x2="360" y2="69" marker-end="url(#ar)"/>
+        <line x1="450" y1="69" x2="470" y2="69" marker-end="url(#ar)"/>
+      </g>
+    </svg>
+    <figcaption>Four hops per device: know where it sits → name its block → fetch that block's intent → stamp it onto the device.</figcaption>
+  </figure>
+
+  <h3>Traced by hand with real devices</h3>
+  <p>Suppose the circuit hands us two transistors:</p>
+  <pre class="code"><code>all_transistors = {
+    <span class="tok-str">"M1"</span>: (input_pair_device, <span class="tok-str">"input_pair"</span>),   <span class="tok-com"># is_signal_device → True</span>
+    <span class="tok-str">"M5"</span>: (load_device,       <span class="tok-str">"load"</span>),         <span class="tok-com"># is_signal_device → False</span>
+}
+cascode_refs = <span class="tok-fn">set</span>()   <span class="tok-com"># nothing cascoded here</span></code></pre>
+
+  <p>Walk it device by device:</p>
+
+  <p class="beat"><strong>M1</strong> — signal, so <code>functional_block("input_pair", True, False)</code> takes the first branch: <code>_SIGNAL_BLOCK["input_pair"] = "input_stage"</code>. Look up the registry → <code>BlockIntent(SIGNAL, None, 2.0, "…")</code>. Stamp:</p>
+  <pre class="code"><code>TransistorIntent("M1", <span class="tok-str">"input_stage"</span>, SIGNAL, <span class="tok-kw">None</span>, <span class="tok-num">2.0</span>, <span class="tok-str">"Convert the diff …"</span>)</code></pre>
+  <p>Note the <code>gm_id = None</code> — M1's inversion region will be solved from the gm requirement later, exactly as Part&nbsp;2 promised.</p>
+
+  <p class="beat"><strong>M5</strong> — not signal, not cascode, so we fall to the last branch: <code>_CS_BLOCK["load"] = "active_load"</code>. Registry → <code>BlockIntent(CURRENT_SOURCE, 10.0, 4.0, "…")</code>. Stamp:</p>
+  <pre class="code"><code>TransistorIntent("M5", <span class="tok-str">"active_load"</span>, CURRENT_SOURCE, <span class="tok-num">10.0</span>, <span class="tok-num">4.0</span>, <span class="tok-str">"First-stage active …"</span>)</code></pre>
+  <p>Here gm/Id is a concrete <code>10.0</code> — a real chosen region, strong inversion, ready for the solver. Two devices in, two fully-explained intents out.</p>
+
+  <table>
+    <thead><tr><th>ref</th><th>slot</th><th>block</th><th>role</th><th class="num">gm/Id</th><th class="num">L×</th></tr></thead>
+    <tbody>
+      <tr><td><code>M1</code></td><td>input_pair</td><td>input_stage</td><td>SIGNAL</td><td class="num">None</td><td class="num">2.0</td></tr>
+      <tr><td><code>M5</code></td><td>load</td><td>active_load</td><td>CURRENT_SOURCE</td><td class="num">10.0</td><td class="num">4.0</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= PART 7 ================= -->
+<section class="part" id="part-7">
+  <h2>Part 7 · <code>GmIdIntent</code> — the circuit-wide knobs</h2>
+
+  <blockquote><p><strong>The one job:</strong> hold the whole registry plus the few knobs that <em>aren't</em> per-block, and make retuning a single building block a one-line copy-and-replace.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>(frozen=<span class="tok-kw">True</span>)
+<span class="tok-kw">class</span> <span class="tok-fn">GmIdIntent</span>:
+    block_intents: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, BlockIntent] = <span class="tok-fn">field</span>(
+        default_factory=<span class="tok-kw">lambda</span>: <span class="tok-fn">dict</span>(DEFAULT_BLOCK_INTENTS))
+    signal_gm_id: <span class="tok-kw">float</span> = _MODERATE              <span class="tok-com"># fallback, pre-geometry gds estimate</span>
+    current_source_gm_id: <span class="tok-kw">float</span> = _STRONG
+    cascode_gm_id: <span class="tok-kw">float</span> = _STRONG_CASCODE
+    signal_l_mult: <span class="tok-kw">float</span> = _L_SIGNAL
+    current_source_l_mult: <span class="tok-kw">float</span> = _L_CS
+    cascode_l_mult: <span class="tok-kw">float</span> = _L_CASCODE
+    degeneration_factor: <span class="tok-kw">float</span> = <span class="tok-num">0.5</span>          <span class="tok-com"># gm1·R for a degenerated input pair</span>
+    cmfb_sense_r: <span class="tok-kw">float</span> = <span class="tok-num">1.0e6</span>              <span class="tok-com"># CMFB averager R (Ω, large)</span></code></pre>
+
+  <p>Two things earn their keep here. First, <code>block_intents</code> defaults via a <code>lambda</code> that builds a <em>fresh copy</em> of the registry — so two <code>GmIdIntent</code>s never share (and accidentally corrupt) the same dictionary. Second, the role-level scalars (<code>signal_gm_id</code>, …) are the <strong>fallback</strong> the device model uses for a rough <code>gds</code> estimate <em>before</em> geometry is solved, and the two resistor knobs cover the parts of the circuit the block registry doesn't — source degeneration and the CMFB sense resistors.</p>
+
+  <h3>The whole point: override one block, keep the rest</h3>
+  <p>Because the registry is a plain dict, retuning one building block is a copy with one key replaced. Everything you don't touch falls back to the default automatically.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 240" role="img" aria-label="Override one block by copying the registry and replacing a single entry">
+      <text x="130" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-muted)">DEFAULT_BLOCK_INTENTS</text>
+      <text x="430" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">your copy (one key swapped)</text>
+      <!-- default column -->
+      <g font-size="11" text-anchor="middle">
+        <rect x="30" y="36" width="200" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="130" y="55">input_stage → None</text>
+        <rect x="30" y="72" width="200" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="130" y="91">active_load → gm/Id 10</text>
+        <rect x="30" y="108" width="200" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/><text x="130" y="127" font-weight="600">tail_current → gm/Id 10</text>
+        <rect x="30" y="144" width="200" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="130" y="163">cascode → gm/Id 8</text>
+        <text x="130" y="192" fill="var(--fig-muted)">… 6 more, untouched …</text>
+      </g>
+      <!-- arrow -->
+      <line x1="240" y1="123" x2="320" y2="123" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="280" y="112" text-anchor="middle" font-size="10" fill="var(--fig-accent)">replace</text>
+      <text x="280" y="140" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">one entry</text>
+      <!-- copy column -->
+      <g font-size="11" text-anchor="middle">
+        <rect x="330" y="36" width="200" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="430" y="55" fill="var(--fig-muted)">input_stage → None</text>
+        <rect x="330" y="72" width="200" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="430" y="91" fill="var(--fig-muted)">active_load → gm/Id 10</text>
+        <rect x="330" y="108" width="200" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/><text x="430" y="127" font-weight="600" fill="var(--fig-accent2)">tail_current → gm/Id 18 ✎</text>
+        <rect x="330" y="144" width="200" height="30" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5"/><text x="430" y="163" fill="var(--fig-muted)">cascode → gm/Id 8</text>
+        <text x="430" y="192" fill="var(--fig-muted)">… 6 more, still default …</text>
+      </g>
+    </svg>
+    <figcaption>An optimizer that wants a weaker (higher gm/Id) tail changes exactly one entry; the other nine building blocks keep their defaults for free.</figcaption>
+  </figure>
+
+  <p>That is the extension point the docstring promises: <em>"To retune a single building block, pass a copy of <code>block_intents</code> with that entry replaced."</em> A future optimizer can sweep one block's gm/Id without disturbing anything else — precisely because intent is data, not scattered code.</p>
+
+  <p>The module ends with a single ready-made default:</p>
+  <pre class="code"><code>DEFAULT_INTENT = <span class="tok-fn">GmIdIntent</span>()</code></pre>
+  <p>— the batteries-included configuration every caller starts from.</p>
+</section>
+
+<!-- ================= PART 8 ================= -->
+<section class="part" id="part-8">
+  <h2>Part 8 · The hidden idea, the limits, and the one line</h2>
+
+  <h3>The hidden idea</h3>
+  <p>The file never writes an equation, but two hidden relationships give it all its meaning. The first is what makes a gm/Id number worth choosing at all — it sets a saturation voltage:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msub><mi>V</mi><mrow><mi>dsat</mi></mrow></msub>
+          <mo>&#8776;</mo>
+          <mfrac><mn>2</mn><mrow><mi>g</mi><mi>m</mi><mo>/</mo><msub><mi>I</mi><mi>D</mi></msub></mrow></mfrac>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Plug the registry's numbers in: a current source at <code>gm/Id = 10</code> wants about <code>2/10 = 0.20 V</code> of headroom; a cascode at <code>gm/Id = 8</code> about <code>0.25 V</code>; a weak-inversion device at <code>gm/Id = 20</code> only <code>0.10 V</code>. The <em>region name</em> and the <em>voltage budget</em> are two views of the same choice — which is why picking a region <em>is</em> a real electrical decision, not a label.</p>
+
+  <p>The second hidden idea is the one that splits the whole data model in two — the signal loophole from Part&nbsp;2:</p>
+
+  <div class="eq-center"><span class="boxed-eq">signal: gm/Id = gm<sub>req</sub> / I<sub>D</sub>   →   store <code>None</code></span></div>
+
+  <p>Signal devices don't get to <em>choose</em> a region; the spec chooses it for them. That single fact is why <code>gm_id</code> is <code>float | None</code>, why every signal block carries <code>None</code>, and why <code>_MODERATE = 14</code> is only a "nominal" estimate for a pre-geometry calculation rather than a real setting.</p>
+
+  <p>Step back and the file is really implementing one clean mapping — a pure lookup from a device's identity to its design intent:</p>
+  <div class="eq-center"><span class="boxed-eq">device (slot, role) &nbsp;→&nbsp; functional block &nbsp;→&nbsp; (region, L, rationale)</span></div>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It <strong>sizes nothing</strong>. It produces intent — the region, length, and reason — that a separate geometry solver (<code>GmIdModel.geometry_for</code>) consumes. It's the recipe, not the cooking.</li>
+    <li>For signal devices it deliberately <strong>refuses to set gm/Id</strong> (<code>None</code>); that number is solved elsewhere from the gm requirement.</li>
+    <li>The taxonomy is <strong>fixed</strong> — ten blocks, three roles. A device in an unrecognized slot falls back to <code>gain_stage</code> or <code>current_source</code>; a device that is somehow both signal and cascode is treated as signal (signal precedence).</li>
+    <li>Two circuit features — source degeneration and CMFB sense resistors — live as <strong>scalar knobs</strong> on <code>GmIdIntent</code>, outside the block registry, because they aren't per-transistor regions.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole design rides one move: <strong>turn a fuzzy design decision into an immutable, named, copyable data record, and attach its reason to it.</strong> That single move buys explainability (the rationale rides into the result), tunability (copy-one-key overrides), and safety (frozen defaults, fresh-copy factories) — all without a line of control flow. The three-level hierarchy is just this record applied at three altitudes.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>intent.py</code> makes analog design intent explicit as a three-level hierarchy — a spec at the top, a registry of per-building-block <code>BlockIntent</code> records in the tunable middle (each naming a gm/Id inversion region, a channel length, and a human rationale, with <code>None</code> for signal devices whose region is solved from the spec), resolved by <code>functional_block</code> and <code>resolve_transistor_intents</code> onto one explainable, overridable <code>TransistorIntent</code> per device.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__init__.py — the public façade</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px; max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{ grid-template-columns:1fr; } #toc{ position:static; } }
+  header { grid-column:1 / -1; padding:36px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:12px; border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p, li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent); background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem; max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem; color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none; border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  .pkgnav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:18px; }
+  .pkgnav .layer { color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-size:0.68rem; margin-right:2px; }
+  .pkgnav a { text-decoration:none; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:4px 12px; font-size:0.8rem; }
+  .pkgnav a:hover { border-color:var(--accent); color:var(--accent); }
+  .pkgnav a.current { background:var(--accent-sf); color:var(--accent); border-color:var(--accent); font-weight:600; }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted); font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg); padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{ color:var(--tok-kw); font-weight:600; } .tok-str{ color:var(--tok-str); } .tok-num{ color:var(--tok-num); }
+  .tok-com{ color:var(--tok-com); font-style:italic; } .tok-fn{ color:var(--tok-fn); }
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.93rem; }
+  th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-sf); }
+  .mono { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:0.86rem; }
+  .boxed-eq { display:inline-block; margin:1.2em auto; padding:12px 22px; border:2px solid var(--accent); border-radius:10px; background:var(--surface); font-size:1.0rem; }
+  .eq-center { text-align:center; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px; cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+  <header>
+    <h1>__init__.py <span style="color:var(--muted);font-weight:400;font-size:1.2rem">— the public façade</span></h1>
+    <div class="subtitle">28 lines with no logic. It curates the one clean surface the outside world imports — and it's the perfect place to see the whole package at once.</div>
+    <nav class="pkgnav">
+      <span class="layer">recognizer/</span>
+      <a href="index.html">Overview</a>
+      <a href="models.html">1 · models</a>
+      <a href="netlist_parser.html">2 · parser · L0</a>
+      <a href="subcircuit_recognizer.html">3 · SR · L1</a>
+      <a href="hooks.html">4 · hooks · L1</a>
+      <a href="functional_block_recognizer.html">5 · FBR · L2</a>
+      <a href="__init__.html" class="current">6 · API</a>
+    </nav>
+  </header>
+
+  <nav id="toc">
+    <div class="label">Contents</div>
+    <a href="#part-1">1 · What an __init__ is for</a>
+    <a href="#part-2">2 · The whole surface</a>
+    <a href="#part-3">3 · Four verbs, one pipeline</a>
+    <a href="#part-4">4 · Why re-export?</a>
+    <a href="#part-5">5 · A full run, end to end</a>
+    <a href="#part-6">6 · The hidden idea</a>
+  </nav>
+
+  <main>
+
+    <section class="part" id="part-1">
+      <h2>Part 1 · What is an <code>__init__.py</code> even for?</h2>
+      <blockquote><p><strong>The one job:</strong> "When someone types <code>from circuitgenome.recognizer import parse</code>, what do they get — and what stays hidden?"</p></blockquote>
+
+      <p class="beat">A Python package is a folder. Import the folder and Python runs its <code>__init__.py</code>.</p>
+      <p class="beat">This file has no algorithms. It's a <strong>storefront window</strong>: it reaches into the back rooms (the five modules you've just studied) and arranges the best items where customers can reach them.</p>
+
+      <p>Two moves, and that's the entire file:</p>
+      <ul>
+        <li><strong>Re-import</strong> the useful names up to the package's top level.</li>
+        <li><strong>Declare <code>__all__</code></strong> — the curated list that defines the public API and what <code>from … import *</code> exposes.</li>
+      </ul>
+
+      <p>Because you've read every other page, this file now reads like a table of contents you already know by heart. That's exactly why it comes last.</p>
+    </section>
+
+    <section class="part" id="part-2">
+      <h2>Part 2 · The whole public surface, on one screen</h2>
+      <p>Every name the package exports, and where it really lives:</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 560 300" role="img" aria-label="Public API surface grouped by source module">
+          <rect x="10" y="14" width="540" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+          <text x="280" y="37" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent)">circuitgenome.recognizer  (what you import)</text>
+
+          <!-- from models -->
+          <rect x="10" y="66" width="540" height="96" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+          <text x="24" y="86" font-size="11" fill="var(--fig-muted)">7 dataclasses ← models.py</text>
+          <g font-family="monospace" font-size="11" fill="var(--fig-text)">
+            <text x="30" y="108">ParsedNetlist</text>
+            <text x="180" y="108">RecognizedStructure</text>
+            <text x="380" y="108">SubcircuitRecognitionResult</text>
+            <text x="30" y="128">PatternDef</text>
+            <text x="180" y="128">PatternDevice</text>
+            <text x="380" y="128">SlotAssignment</text>
+            <text x="30" y="148">CategoryGroupResult</text>
+            <text x="180" y="148">FunctionalBlockRecognitionResult</text>
+          </g>
+
+          <!-- functions -->
+          <rect x="10" y="176" width="130" height="60" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="75" y="198" text-anchor="middle" font-family="monospace" font-size="12" font-weight="600">parse</text>
+          <text x="75" y="216" text-anchor="middle" font-size="10" fill="var(--fig-muted)">netlist_parser</text>
+          <text x="75" y="230" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Layer 0</text>
+
+          <rect x="150" y="176" width="130" height="60" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="215" y="198" text-anchor="middle" font-family="monospace" font-size="12" font-weight="600">recognize</text>
+          <text x="215" y="216" text-anchor="middle" font-size="10" fill="var(--fig-muted)">subcircuit_recognizer</text>
+          <text x="215" y="230" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Layer 1</text>
+
+          <rect x="290" y="176" width="260" height="60" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+          <text x="420" y="198" text-anchor="middle" font-family="monospace" font-size="12" font-weight="600">assign_slots · group_by_category</text>
+          <text x="420" y="216" text-anchor="middle" font-size="10" fill="var(--fig-muted)">functional_block_recognizer</text>
+          <text x="420" y="230" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Layer 2</text>
+
+          <text x="280" y="262" text-anchor="middle" font-size="11" fill="var(--fig-muted)">Not exported: hooks (called by name via strings), load_patterns, all private helpers.</text>
+          <text x="280" y="282" text-anchor="middle" font-size="11" fill="var(--fig-muted)">11 names in __all__ = 7 dataclasses + 4 functions.</text>
+        </svg>
+        <figcaption>Eleven public names: the seven data shapes plus the four pipeline verbs. Everything else is an implementation detail.</figcaption>
+      </figure>
+    </section>
+
+    <section class="part" id="part-3">
+      <h2>Part 3 · Four verbs, one pipeline</h2>
+      <p>The four exported functions <em>are</em> the three-layer pipeline — this is the whole package in four calls:</p>
+
+      <table>
+        <tr><th>Function</th><th>Layer</th><th>Takes</th><th>Returns</th></tr>
+        <tr><td class="mono">parse</td><td>0</td><td>SPICE text</td><td>ParsedNetlist</td></tr>
+        <tr><td class="mono">recognize</td><td>1</td><td>ParsedNetlist</td><td>SubcircuitRecognitionResult</td></tr>
+        <tr><td class="mono">assign_slots</td><td>2</td><td>SR result + topology</td><td>FunctionalBlockRecognitionResult</td></tr>
+        <tr><td class="mono">group_by_category</td><td>2</td><td>SR result + netlist</td><td>CategoryGroupResult</td></tr>
+      </table>
+
+      <p>Read the <code>Returns</code> column top to bottom and you're reading the <a href="models.html#part-2">data-flow map</a> from the models page — every output type feeds the next verb's input. The façade makes that pipeline literally the shape of the API.</p>
+    </section>
+
+    <section class="part" id="part-4">
+      <h2>Part 4 · Why re-export instead of making callers dig?</h2>
+      <p>Without this file, a caller would have to know the <em>internal file layout</em>:</p>
+      <pre class="code"><code><span class="tok-com"># painful: couples callers to the private module structure</span>
+<span class="tok-kw">from</span> circuitgenome.recognizer.netlist_parser <span class="tok-kw">import</span> parse
+<span class="tok-kw">from</span> circuitgenome.recognizer.subcircuit_recognizer <span class="tok-kw">import</span> recognize</code></pre>
+
+      <p>With it, one flat, stable surface:</p>
+      <pre class="code"><code><span class="tok-com"># clean: the package's public contract</span>
+<span class="tok-kw">from</span> circuitgenome.recognizer <span class="tok-kw">import</span> parse, recognize, assign_slots</code></pre>
+
+      <blockquote><p><strong>The real payoff:</strong> the maintainer is now free to rename, split, or merge the internal modules — as long as <code>__init__.py</code> keeps re-exporting the same eleven names, no caller breaks. The façade is a <em>seam</em> between the public promise and the private implementation.</p></blockquote>
+
+      <h3>Why is it called <code>__all__</code>? I like this name.</h3>
+      <p>It's literally "all the things this module means to offer." It does double duty: it documents the public API for a human reader, and it tells <code>from recognizer import *</code> exactly which names to bind. Naming the export list <em>all</em> makes both jobs self-evident.</p>
+    </section>
+
+    <section class="part" id="part-5">
+      <h2>Part 5 · A full run, end to end</h2>
+      <p>Everything you've read across six pages, in one worked call sequence:</p>
+
+      <pre class="code"><code><span class="tok-kw">from</span> circuitgenome.recognizer <span class="tok-kw">import</span> parse, recognize, group_by_category
+
+<span class="tok-com"># Layer 0 — text → structured netlist</span>
+netlist = <span class="tok-fn">parse</span>(spice_text)
+
+<span class="tok-com"># Layer 1 — netlist → every candidate structure (overlaps and all)</span>
+sr = <span class="tok-fn">recognize</span>(netlist)
+
+<span class="tok-com"># Layer 2 (topology-free) — candidates → ranked functional groups</span>
+fbr = <span class="tok-fn">group_by_category</span>(sr, netlist)
+
+<span class="tok-kw">for</span> block, cats <span class="tok-kw">in</span> fbr.groups.items():
+    <span class="tok-kw">for</span> cat, structs <span class="tok-kw">in</span> cats.items():
+        <span class="tok-fn">print</span>(block, cat, structs[<span class="tok-num">0</span>].name)   <span class="tok-com"># best guess per category</span></code></pre>
+
+      <figure class="fig">
+        <svg viewBox="0 0 540 90" role="img" aria-label="End-to-end pipeline">
+          <defs><marker id="ae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+          <g text-anchor="middle" font-size="12">
+            <rect x="10" y="28" width="90" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="55" y="52">SPICE</text>
+            <rect x="150" y="28" width="110" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="205" y="47">parse</text><text x="205" y="62" font-size="9" fill="var(--fig-muted)">ParsedNetlist</text>
+            <rect x="310" y="28" width="110" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="365" y="47">recognize</text><text x="365" y="62" font-size="9" fill="var(--fig-muted)">SR result</text>
+            <rect x="440" y="28" width="90" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="485" y="47">group /</text><text x="485" y="62">assign</text>
+          </g>
+          <g stroke="var(--fig-accent)" stroke-width="2">
+            <line x1="100" y1="48" x2="150" y2="48" marker-end="url(#ae)"/>
+            <line x1="260" y1="48" x2="310" y2="48" marker-end="url(#ae)"/>
+            <line x1="420" y1="48" x2="440" y2="48" marker-end="url(#ae)"/>
+          </g>
+        </svg>
+        <figcaption>Four public verbs, three layers, one direction of flow — the whole recognizer in a single line of import.</figcaption>
+      </figure>
+    </section>
+
+    <section class="part" id="part-6">
+      <h2>Part 6 · The hidden idea</h2>
+      <p>A good <code>__init__.py</code> encodes an architectural claim without a single statement of logic:</p>
+
+      <div class="eq-center"><div class="boxed-eq">public API = the pipeline's data shapes + the pipeline's verbs — nothing else</div></div>
+
+      <p>Look at what it <em>omits</em>: no <code>hooks</code>, no <code>load_patterns</code>, no private helpers. That silence is the design. Hooks are reached only indirectly, by the <code>"module:function"</code> strings inside pattern YAML — so they're an extension point, not a public function. By exporting exactly the eleven names that make up the layered contract, the file draws a crisp line between "the promise" and "how it's kept."</p>
+
+      <p>And it's the perfect capstone for the whole tour: the very structure of <code>__all__</code> — seven nouns, four verbs, three layers — <em>is</em> the summary of everything the package does.</p>
+
+      <hr>
+      <p><strong>In one sentence:</strong> <code>__init__.py</code> is a logic-free storefront window that curates eleven names — the pipeline's seven data shapes and four verbs — into one stable public API, hiding every private helper and hook behind it.</p>
+
+      <blockquote><p><strong>You've finished the tour.</strong> Head back to the <a href="index.html">Overview</a> for the whole-package map, or revisit any layer from the nav above.</p></blockquote>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  })();
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {}; links.forEach(function (a){ map[a.getAttribute('href').slice(1)] = a; });
+    var obs = new IntersectionObserver(function (entries){
+      entries.forEach(function (e){
+        if (e.isIntersecting && map[e.target.id]) {
+          links.forEach(function (l){ l.classList.remove('active'); });
+          map[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin:'-20% 0px -70% 0px' });
+    document.querySelectorAll('section.part').forEach(function (s){ obs.observe(s); });
+  })();
+</script>
+</body>
+</html>

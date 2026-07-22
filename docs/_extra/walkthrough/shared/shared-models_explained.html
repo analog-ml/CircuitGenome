@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>models.py — explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>models.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/models.py</code> — the plain, logic-free data records that flow between the sizer's pipeline stages.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Why this file exists</a>
+  <a href="#part-2">2 · The atoms: MosfetParams &amp; GridSpec</a>
+  <a href="#part-3">3 · SpiceLib — the PDK pointer</a>
+  <a href="#part-4">4 · TechParams — the aggregate spec</a>
+  <a href="#part-5">5 · SizingSpec — what you ask for</a>
+  <a href="#part-6">6 · The outputs &amp; the hidden idea</a>
+</nav>
+
+<main>
+
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> give every stage of the sizer a small set of <em>named boxes</em> to put data in, so the phases can hand work to each other without agreeing on the shape of a loose dictionary.</p></blockquote>
+
+  <p class="beat">Here is the whole story without touching a line of code.</p>
+
+  <p>The Initial Sizing module is a <strong>pipeline</strong>. One stage reads a YAML file and figures out the process technology. Another reads what the user wants from the amplifier. A third actually solves for transistor widths. A fourth reports the answer. Each stage needs to <em>hand something</em> to the next.</p>
+
+  <p>You could pass a raw Python <code>dict</code> between them — but then every stage has to <em>remember</em> which keys exist, guess their types, and pray nobody typos <code>"vdd"</code> as <code>"vdd_v"</code>. That's how pipelines rot.</p>
+
+  <p>Think of these dataclasses as the <strong>labelled shipping crates</strong> on an assembly line. Instead of tossing loose parts down the belt in a cardboard box, each hand-off is a crate with printed compartments: <em>this</em> slot holds the supply voltage, <em>that</em> slot holds the load capacitance. Anyone opening the crate knows exactly what's inside and where — the editor even autocompletes the compartments for you.</p>
+
+  <p>So this file carries <strong>no logic at all</strong>. Every structure here is a plain <code>@dataclass</code> — a record type, nothing more. It defines the <em>typed seams</em> between stages: the specs going in, the sizings coming out.</p>
+
+  <h3>The cast of characters</h3>
+  <p>Not functions calling functions — these are <strong>records nesting records</strong>. Two big crates matter most: <code>TechParams</code> (everything about the process) on the way <em>in</em>, and <code>SizingResult</code> (the sized circuit) on the way <em>out</em>. Everything else is a small crate that lives inside one of them. Hover a crate to trace its hand-off arrow.</p>
+
+  <figure class="fig interactive">
+    <svg viewBox="0 0 660 360" role="img" aria-label="Entity-relationship diagram: TechParams and SizingSpec feed size_circuit, which returns SizingResult; each aggregate nests smaller records">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+
+      <!-- edges (draw first) -->
+      <line class="edge" data-group="tech"   x1="286" y1="130" x2="306" y2="166" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="spec"   x1="286" y1="285" x2="306" y2="192" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+      <line class="edge" data-group="result" x1="398" y1="176" x2="418" y2="164" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+
+      <!-- TechParams container -->
+      <g class="node" data-group="tech">
+        <rect x="14" y="26" width="272" height="176" rx="10" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="150" y="46" text-anchor="middle" font-size="14" font-weight="600" fill="var(--fig-accent)">TechParams</text>
+        <!-- nmos -->
+        <rect x="26" y="56" width="118" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="85" y="73" text-anchor="middle" font-size="11" font-weight="600">nmos</text>
+        <text x="85" y="87" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">MosfetParams</text>
+        <!-- pmos -->
+        <rect x="150" y="56" width="118" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="209" y="73" text-anchor="middle" font-size="11" font-weight="600">pmos</text>
+        <text x="209" y="87" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">MosfetParams</text>
+        <!-- width -->
+        <rect x="26" y="102" width="76" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="64" y="119" text-anchor="middle" font-size="11" font-weight="600">width</text>
+        <text x="64" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">GridSpec</text>
+        <!-- length -->
+        <rect x="106" y="102" width="76" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="144" y="119" text-anchor="middle" font-size="11" font-weight="600">length</text>
+        <text x="144" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">GridSpec</text>
+        <!-- cap -->
+        <rect x="186" y="102" width="76" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="224" y="119" text-anchor="middle" font-size="11" font-weight="600">cap</text>
+        <text x="224" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">GridSpec</text>
+        <!-- spice_lib -->
+        <rect x="26" y="148" width="118" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="85" y="165" text-anchor="middle" font-size="11" font-weight="600">spice_lib</text>
+        <text x="85" y="179" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">SpiceLib?</text>
+        <text x="210" y="166" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">+ paths, maps,</text>
+        <text x="210" y="179" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">device flags</text>
+      </g>
+
+      <!-- SizingSpec container -->
+      <g class="node" data-group="spec">
+        <rect x="14" y="222" width="272" height="120" rx="10" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="150" y="242" text-anchor="middle" font-size="14" font-weight="600" fill="var(--fig-accent)">SizingSpec</text>
+        <rect x="26" y="252" width="234" height="34" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="143" y="267" text-anchor="middle" font-size="10.5" font-weight="600">vdd · vss · ibias · cl</text>
+        <text x="143" y="280" text-anchor="middle" font-size="9" fill="var(--fig-muted)">required</text>
+        <rect x="26" y="294" width="234" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="143" y="310" text-anchor="middle" font-size="10">gain · gbw · PM · slew · power …</text>
+        <text x="143" y="324" text-anchor="middle" font-size="9" fill="var(--fig-muted)">optional — None = unconstrained</text>
+      </g>
+
+      <!-- seam -->
+      <rect x="306" y="150" width="92" height="56" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="352" y="176" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">size_circuit()</text>
+      <text x="352" y="192" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">the sizer</text>
+
+      <!-- SizingResult container -->
+      <g class="node" data-group="result">
+        <rect x="418" y="40" width="228" height="225" rx="10" fill="var(--fig-bg)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="532" y="60" text-anchor="middle" font-size="14" font-weight="600" fill="var(--fig-accent2)">SizingResult</text>
+        <!-- transistors (nested) -->
+        <rect x="430" y="70" width="204" height="64" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="532" y="88" text-anchor="middle" font-size="11" font-weight="600">transistors</text>
+        <text x="532" y="102" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">dict[str, TransistorSizing]</text>
+        <rect x="444" y="108" width="176" height="20" rx="4" fill="var(--fig-fill)" stroke="var(--fig-accent2)" stroke-width="1.2"/>
+        <text x="532" y="122" text-anchor="middle" font-size="9" fill="var(--fig-muted)">→ TransistorSizing card</text>
+        <!-- cc -->
+        <rect x="430" y="144" width="99" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="479" y="164" text-anchor="middle" font-size="10">cc_pf · cc2_pf</text>
+        <!-- metrics -->
+        <rect x="535" y="144" width="99" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="584" y="164" text-anchor="middle" font-size="9.5">metrics·margins</text>
+        <!-- solver -->
+        <rect x="430" y="182" width="99" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="479" y="201" text-anchor="middle" font-size="10">solver_status</text>
+        <!-- bias -->
+        <rect x="535" y="182" width="99" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="584" y="201" text-anchor="middle" font-size="10">bias_feasible</text>
+        <!-- bottom -->
+        <rect x="430" y="218" width="204" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="532" y="238" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">warnings · resistors · intents</text>
+      </g>
+    </svg>
+    <figcaption>The two hand-off crates. <code>TechParams</code> and <code>SizingSpec</code> go into the sizer; <code>SizingResult</code> comes out. Notice the nesting: an aggregate is just smaller records in named slots.</figcaption>
+  </figure>
+
+  <p>Read the diagram as an <strong>entity-relationship</strong> sketch, not a call graph. An arrow from a small crate <em>into</em> a big one means "lives inside." <code>TechParams</code> <em>contains</em> two <code>MosfetParams</code>, three <code>GridSpec</code>s, and (optionally) one <code>SpiceLib</code>. <code>SizingResult</code> <em>contains</em> a whole dictionary of <code>TransistorSizing</code> records, one per device.</p>
+
+  <h3>How we'll learn them</h3>
+  <p>We'll go <strong>smallest crate first</strong>, biggest last — the opposite of the file's own order, because you can't understand the aggregate until you know the parts it nests. That means:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 96" role="img" aria-label="Learning order: atoms first, then the pointer, then the two aggregates">
+      <g text-anchor="middle" font-size="12">
+        <rect x="10"  y="34" width="120" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="70"  y="52">atoms</text>
+        <text x="70"  y="67" font-size="9.5" fill="var(--fig-muted)">Mosfet · Grid</text>
+        <rect x="170" y="34" width="120" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="230" y="52">pointer</text>
+        <text x="230" y="67" font-size="9.5" fill="var(--fig-muted)">SpiceLib</text>
+        <rect x="330" y="34" width="130" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="395" y="52">aggregates in</text>
+        <text x="395" y="67" font-size="9.5" fill="var(--fig-muted)">Tech · Sizing spec</text>
+        <rect x="500" y="34" width="110" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="555" y="52">results out</text>
+        <text x="555" y="67" font-size="9.5" fill="var(--fig-muted)">Sizing · Result</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="130" y1="54" x2="170" y2="54" marker-end="url(#ar)"/>
+        <line x1="290" y1="54" x2="330" y2="54" marker-end="url(#ar)"/>
+        <line x1="460" y1="54" x2="500" y2="54" marker-end="url(#ar)"/>
+      </g>
+    </svg>
+    <figcaption>Our path through the file: build the vocabulary of atoms, then watch them nest into the crates the pipeline actually ships.</figcaption>
+  </figure>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the two smallest crates — <code>MosfetParams</code> (three process numbers) and <code>GridSpec</code> (a min/max/step ruler). Everything bigger is built from these.</p></blockquote>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · The atoms — <code>MosfetParams</code> &amp; <code>GridSpec</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> hold the two smallest, most-reused facts about a process — the electrical character of one transistor polarity, and the discrete ruler that legal geometries snap to.</p></blockquote>
+
+  <h3><code>MosfetParams</code> — three numbers that describe a device</h3>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">MosfetParams</span>:
+    mu_cox: <span class="tok-kw">float</span>   <span class="tok-com"># µ·Cox, the transconductance parameter, in A/V²</span>
+    vth: <span class="tok-kw">float</span>      <span class="tok-com"># threshold voltage in V (+ for NMOS, − for PMOS)</span>
+    lam: <span class="tok-kw">float</span>      <span class="tok-com"># channel-length modulation λ, in 1/V</span></code></pre>
+
+  <p>Analogy: a transistor is like a car engine, and these three numbers are the spec-sheet line items — how hard it pulls (<code>mu_cox</code>), the ignition point it won't run below (<code>vth</code>), and how much it "leaks" torque as load rises (<code>lam</code>). The analytical (Level-1) sizer plugs exactly these three into the Shichman–Hodges equations to size a device on paper, with no SPICE at all.</p>
+
+  <table>
+    <thead><tr><th>Field</th><th>Meaning</th><th>Example (NMOS)</th></tr></thead>
+    <tbody>
+      <tr><td><code>mu_cox</code></td><td>How much current per volt² the device makes</td><td class="num">200e-6 A/V²</td></tr>
+      <tr><td><code>vth</code></td><td>Turn-on threshold; sign encodes polarity</td><td class="num">0.45 V</td></tr>
+      <tr><td><code>lam</code></td><td>Output-conductance / finite-r<sub>out</sub> term</td><td class="num">0.10 /V</td></tr>
+    </tbody>
+  </table>
+
+  <p>A whole <code>TechParams</code> carries <strong>two</strong> of these — one for <code>nmos</code>, one for <code>pmos</code> — because the two polarities have genuinely different physics (the PMOS <code>vth</code> is negative).</p>
+
+  <h3><code>GridSpec</code> — a ruler with three ticks that matter</h3>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">GridSpec</span>:
+    min: <span class="tok-kw">float</span>    <span class="tok-com"># smallest legal value (µm for W/L, pF for cap)</span>
+    max: <span class="tok-kw">float</span>    <span class="tok-com"># largest legal value</span>
+    step: <span class="tok-kw">float</span>   <span class="tok-com"># discretisation step</span></code></pre>
+
+  <p>Analogy: you can't order lumber at any length — the yard sells it in fixed increments, with a shortest and longest board. <code>GridSpec</code> <em>is</em> that catalogue: "widths from 0.5 to 4.5 µm, in 0.5 µm steps." The solver is only ever allowed to pick a value that lands on a tick and stays inside the two ends.</p>
+
+  <h3>Traced with real numbers</h3>
+  <p>Take a width grid <code>GridSpec(min=0.5, max=4.5, step=0.5)</code>. Suppose the sizer computes an ideal width of <code>2.34 µm</code>. It isn't legal — so it snaps to the nearest tick:</p>
+  <pre class="code"><code>round(2.34 / 0.5) * 0.5  =  round(4.68) * 0.5  =  5 * 0.5  =  2.5 µm</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 500 130" role="img" aria-label="A GridSpec drawn as a ruler; the asked-for 2.34 micron snaps to the nearest tick at 2.5">
+      <line x1="50" y1="75" x2="450" y2="75" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- 9 ticks: 0.5 .. 4.5 -->
+      <g stroke="var(--fig-muted)" stroke-width="1.5">
+        <line x1="50"  y1="68" x2="50"  y2="82"/>
+        <line x1="100" y1="68" x2="100" y2="82"/>
+        <line x1="150" y1="68" x2="150" y2="82"/>
+        <line x1="200" y1="68" x2="200" y2="82"/>
+        <line x1="300" y1="68" x2="300" y2="82"/>
+        <line x1="350" y1="68" x2="350" y2="82"/>
+        <line x1="400" y1="68" x2="400" y2="82"/>
+        <line x1="450" y1="68" x2="450" y2="82"/>
+      </g>
+      <!-- snapped tick at 2.5 -> index 4 -> x=250 -->
+      <line x1="250" y1="64" x2="250" y2="86" stroke="var(--fig-accent)" stroke-width="3"/>
+      <text x="50"  y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">0.5 min</text>
+      <text x="150" y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">step 0.5</text>
+      <text x="450" y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">4.5 max</text>
+      <!-- asked -->
+      <text x="235" y="40" text-anchor="middle" font-size="11" fill="var(--fig-accent)">asked 2.34 µm</text>
+      <line x1="235" y1="46" x2="250" y2="62" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="250" y="120" text-anchor="middle" font-size="11" fill="var(--fig-accent)">snaps → 2.5 µm</text>
+    </svg>
+    <figcaption>A <code>GridSpec</code> is just a ruler: <code>min</code> and <code>max</code> are the ends, <code>step</code> the tick spacing. Any computed value lands on the nearest tick.</figcaption>
+  </figure>
+
+  <p>The same three-number record is reused for <em>three</em> different quantities in <code>TechParams</code>: transistor <code>width</code>, transistor <code>length</code>, and compensation <code>cap</code>. One tiny class, three jobs — that's the payoff of a well-chosen atom.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 meets the one atom that isn't just numbers — <code>SpiceLib</code>, a <em>pointer</em> to a foundry PDK on disk, and the reason a couple of extra fields ride alongside it.</p></blockquote>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>SpiceLib</code> — a pointer to a real foundry kit</h2>
+
+  <blockquote><p><strong>The one job:</strong> remember <em>where</em> a foundry PDK lives on disk and <em>which</em> process corner to use, so the SPICE-verification step can build a netlist against the real device models.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">SpiceLib</span>:
+    file: <span class="tok-kw">str</span>                                   <span class="tok-com"># path to the corner library</span>
+    corner: <span class="tok-kw">str</span> = <span class="tok-str">"typical"</span>                    <span class="tok-com"># nominal corner for sizing</span>
+    design: <span class="tok-kw">str</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>                  <span class="tok-com"># optional global settings to .include</span>
+    corners: <span class="tok-kw">list</span>[<span class="tok-kw">str</span>] = field(default_factory=<span class="tok-fn">list</span>)  <span class="tok-com"># corners to re-measure in the CLI</span></code></pre>
+
+  <p>Analogy: <code>MosfetParams</code> was the engine spec printed <em>on the page</em>; <code>SpiceLib</code> is a <strong>library card</strong> that says "the real, exhaustive manual is on shelf <code>sm141064.ngspice</code>, and read the <code>typical</code> edition." The data itself lives elsewhere; this record just holds the reference.</p>
+
+  <h3>Why a PDK needs more than a flat model file</h3>
+  <p>This is the subtlety worth slowing down for. There are two totally different ways a technology can supply its transistors, and <code>SpiceLib</code> exists to mark the harder one:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="Contrast: a flat spice_model include gives M-devices, a spice_lib PDK gives X-subcircuits and needs a device_map">
+      <!-- left: spice_model -->
+      <rect x="20" y="46" width="230" height="128" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="135" y="40" text-anchor="middle" font-size="12" font-weight="600">spice_model (e.g. PTM)</text>
+      <text x="34" y="72"  font-size="10.5">flat <tspan font-family="monospace">.include</tspan> of a file</text>
+      <text x="34" y="94"  font-size="10.5">with <tspan font-family="monospace">.model nmos / pmos</tspan></text>
+      <text x="34" y="116" font-size="10.5">→ devices are <tspan font-weight="600">M</tspan> elements</text>
+      <text x="34" y="138" font-size="10.5" fill="var(--fig-good)">no device_map needed</text>
+      <text x="34" y="160" font-size="10.5" fill="var(--fig-muted)">the simple path</text>
+
+      <!-- right: spice_lib -->
+      <rect x="290" y="46" width="230" height="128" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="405" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">spice_lib (foundry PDK)</text>
+      <text x="304" y="72"  font-size="10.5"><tspan font-family="monospace">.lib "file" corner</tspan></text>
+      <text x="304" y="94"  font-size="10.5">devices are <tspan font-weight="600">subcircuits</tspan></text>
+      <text x="304" y="116" font-size="10.5">→ instantiated with <tspan font-weight="600">X</tspan></text>
+      <text x="304" y="138" font-size="10.5" fill="var(--fig-accent)">needs device_map + handle</text>
+      <text x="304" y="160" font-size="10.5" fill="var(--fig-muted)">GF180, sky130 …</text>
+    </svg>
+    <figcaption>Two ways to get transistors. A PDK selects a <em>corner</em> and its devices are subcircuits (<code>X</code>), so a <code>SpiceLib</code> always drags along a <code>device_map</code> — which is why those extra <code>TechParams</code> fields exist.</figcaption>
+  </figure>
+
+  <p>So <code>SpiceLib</code> is small, but its <em>presence</em> tells the rest of the pipeline "we're in subcircuit-land now." That ripples into <code>TechParams</code>, which we open next.</p>
+
+  <h3>The <code>field(default_factory=list)</code> detail</h3>
+  <p>Notice <code>corners</code> uses <code>field(default_factory=list)</code>, not <code>corners = []</code>. Why? A bare <code>[]</code> default would be <strong>shared by every instance</strong> — a classic Python trap where two <code>SpiceLib</code> objects secretly point at the <em>same</em> list. <code>default_factory=list</code> says "make a fresh empty list for each new record." A quiet correctness detail you'll see again in <code>SizingResult</code>.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;4 assembles all the atoms into <code>TechParams</code> — the big incoming crate — and shows how its optional fields silently pick which sizing engine runs.</p></blockquote>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>TechParams</code> — everything the process gives us</h2>
+
+  <blockquote><p><strong>The one job:</strong> bundle a complete process technology — its two device models, its three geometry grids, and whatever SPICE/gm-Id assets exist — into one crate loaded from a YAML config.</p></blockquote>
+
+  <p>This is the first <strong>aggregate</strong>: a record whose fields are <em>other records</em>. We've already met every part, so the whole is easy now.</p>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">TechParams</span>:
+    name: <span class="tok-kw">str</span>
+    nmos: MosfetParams           <span class="tok-com"># the two atoms from Part 2</span>
+    pmos: MosfetParams
+    width: GridSpec              <span class="tok-com"># the three rulers</span>
+    length: GridSpec
+    cap: GridSpec
+    spice_model: <span class="tok-kw">str</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>   <span class="tok-com"># flat .model card (PTM)</span>
+    gmid_lut: <span class="tok-kw">str</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>      <span class="tok-com"># committed gm/Id lookup table</span>
+    spice_lib: SpiceLib | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>  <span class="tok-com"># the PDK pointer from Part 3</span>
+    device_map: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">str</span>] | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
+    device_handle: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">str</span>] | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
+    wl_units: <span class="tok-kw">str</span> = <span class="tok-str">"m"</span></code></pre>
+
+  <p>The first six fields are <strong>required</strong> and describe every technology: a name, both polarities, and the three grids. Everything after is <strong>optional plumbing</strong> that only some technologies carry.</p>
+
+  <h3>The hidden idea: the optional fields choose the engine</h3>
+  <p>Here's what makes <code>TechParams</code> more than a passive bag. Three of its optional fields — <code>gmid_lut</code>, <code>spice_lib</code>, <code>spice_model</code> — quietly <strong>route the whole pipeline</strong> to a different sizer. The data <em>is</em> the switch.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 580 265" role="img" aria-label="Decision tree: which sizing engine runs depends on which optional TechParams fields are present">
+      <!-- root -->
+      <rect x="230" y="12" width="120" height="34" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="290" y="34" text-anchor="middle" font-size="12" font-weight="600">TechParams</text>
+
+      <!-- q1 -->
+      <rect x="210" y="66" width="160" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="290" y="86" text-anchor="middle" font-size="11">gmid_lut present?</text>
+      <line x1="290" y1="46" x2="290" y2="66" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- yes -> gm/Id -->
+      <rect x="400" y="62" width="160" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="480" y="80" text-anchor="middle" font-size="10.5" font-weight="600">gm/Id procedural</text>
+      <text x="480" y="94" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">the LUT path</text>
+      <line x1="370" y1="82" x2="400" y2="82" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="385" y="76" text-anchor="middle" font-size="9" fill="var(--fig-muted)">yes</text>
+
+      <!-- q2 -->
+      <rect x="210" y="120" width="160" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="290" y="140" text-anchor="middle" font-size="11">spice_lib present?</text>
+      <line x1="290" y1="98" x2="290" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="303" y="114" text-anchor="middle" font-size="9" fill="var(--fig-muted)">no</text>
+      <!-- yes -> PDK -->
+      <rect x="400" y="116" width="160" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="480" y="134" text-anchor="middle" font-size="10.5" font-weight="600">PDK subcircuit (X)</text>
+      <text x="480" y="148" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">SPICE verify</text>
+      <line x1="370" y1="136" x2="400" y2="136" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="385" y="130" text-anchor="middle" font-size="9" fill="var(--fig-muted)">yes</text>
+
+      <!-- q3 -->
+      <rect x="200" y="174" width="180" height="32" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="290" y="194" text-anchor="middle" font-size="11">spice_model present?</text>
+      <line x1="290" y1="152" x2="290" y2="174" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="303" y="168" text-anchor="middle" font-size="9" fill="var(--fig-muted)">no</text>
+      <!-- yes -> .model -->
+      <rect x="400" y="170" width="160" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="480" y="188" text-anchor="middle" font-size="10.5" font-weight="600">.model verify (M)</text>
+      <text x="480" y="202" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">PTM path</text>
+      <line x1="380" y1="190" x2="400" y2="190" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="390" y="184" text-anchor="middle" font-size="9" fill="var(--fig-muted)">yes</text>
+
+      <!-- else -> level 1 -->
+      <rect x="210" y="226" width="160" height="32" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="290" y="246" text-anchor="middle" font-size="10.5" font-weight="600">Level-1 analytical</text>
+      <line x1="290" y1="206" x2="290" y2="226" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="303" y="220" text-anchor="middle" font-size="9" fill="var(--fig-muted)">no</text>
+    </svg>
+    <figcaption>Same crate, four destinies. Which optional asset is filled in silently decides which engine sizes and verifies the circuit — the record doubles as the router.</figcaption>
+  </figure>
+
+  <p>The <code>__future__</code> import at the top of the file is what lets those <code>str | None</code> annotations work as plain strings (they're never evaluated), and <code>device_handle</code> / <code>wl_units</code> exist only to paper over foundry quirks — GF180 names its device instance <code>m0</code> and expects SI units; sky130 names it after the cell and uses bare microns. Plumbing, honestly labelled.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;5 turns to the <em>other</em> incoming crate — <code>SizingSpec</code>, where the user says what the amplifier must achieve, and where <code>None</code> means "don't care."</p></blockquote>
+</section>
+
+<!-- ================= PART 5 ================= -->
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>SizingSpec</code> — the wish list</h2>
+
+  <blockquote><p><strong>The one job:</strong> capture what the designer asks of the amplifier — the operating conditions that are fixed, and the performance bounds that are optional targets.</p></blockquote>
+
+  <p>Where <code>TechParams</code> says "here's the silicon you have," <code>SizingSpec</code> says "here's what I want out of it." It's a flat record — no nesting — but it has a strong shape: a handful of <strong>required</strong> facts and a long tail of <strong>optional</strong> constraints.</p>
+
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">SizingSpec</span>:
+    vdd: <span class="tok-kw">float</span>                 <span class="tok-com"># required: operating conditions</span>
+    vss: <span class="tok-kw">float</span>
+    ibias: <span class="tok-kw">float</span>
+    cl: <span class="tok-kw">float</span>
+    second_stage_current_ratio: <span class="tok-kw">float</span> = <span class="tok-num">2.0</span>   <span class="tok-com"># sensible defaults</span>
+    third_stage_current_ratio: <span class="tok-kw">float</span> = <span class="tok-num">5.0</span>
+    gain_min_db: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>          <span class="tok-com"># optional: None = unconstrained</span>
+    gbw_min_hz: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
+    phase_margin_min_deg: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
+    slew_rate_min_vps: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
+    power_max_w: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
+    <span class="tok-com"># … output_swing, cmrr_min_db, psrr_min_db — all Optional</span></code></pre>
+
+  <p>Analogy: it's a <strong>restaurant order</strong>. Four things you <em>must</em> state — table (supply rails), party size (bias current), and what's on the table already (load cap). Everything else is a preference: "at least 90&nbsp;dB of gain," "no more than 2&nbsp;mW of power." Leave a preference blank and the kitchen simply won't check it.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 210" role="img" aria-label="SizingSpec split into a solid required zone and a dashed optional zone where None means skip">
+      <!-- required zone -->
+      <rect x="20" y="42" width="220" height="150" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="130" y="34" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">required — always given</text>
+      <g font-size="10.5">
+        <text x="36" y="70">vdd — positive supply</text>
+        <text x="36" y="94">vss — negative supply (0 if single)</text>
+        <text x="36" y="118">ibias — input bias current</text>
+        <text x="36" y="142">cl — output load capacitance</text>
+        <text x="36" y="172" fill="var(--fig-muted)">+ current ratios (default 2.0 / 5.0)</text>
+      </g>
+
+      <!-- optional zone -->
+      <rect x="280" y="42" width="220" height="150" rx="10" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="390" y="34" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-muted)">optional — None = skip</text>
+      <g font-size="10.5">
+        <text x="296" y="70">gain_min_db</text>
+        <text x="296" y="90">gbw_min_hz</text>
+        <text x="296" y="110">phase_margin_min_deg</text>
+        <text x="296" y="130">slew_rate_min_vps</text>
+        <text x="296" y="150">power_max_w</text>
+        <text x="296" y="172" fill="var(--fig-muted)">swing · cmrr · psrr …</text>
+      </g>
+    </svg>
+    <figcaption>Two zones in one record. Solid box: the conditions the sizer needs to run at all. Dashed box: bounds it checks only when you fill them in.</figcaption>
+  </figure>
+
+  <h3>Traced with real numbers</h3>
+  <p>A 5&nbsp;V single-supply op-amp driving 10&nbsp;pF, asking for at least 90&nbsp;dB gain and 3&nbsp;MHz bandwidth, silent on everything else:</p>
+  <pre class="code"><code>SizingSpec(vdd=<span class="tok-num">5.0</span>, vss=<span class="tok-num">0.0</span>, ibias=<span class="tok-num">10e-6</span>, cl=<span class="tok-num">10e-12</span>,
+           gain_min_db=<span class="tok-num">90.0</span>, gbw_min_hz=<span class="tok-num">3.0e6</span>)
+<span class="tok-com"># phase_margin_min_deg, power_max_w, cmrr_min_db … all stay None → not enforced</span></code></pre>
+  <p>The <code>None</code> convention is doing real work: it lets one record express "constrain gain and bandwidth, but I don't care about CMRR" without any special flags. Absence <em>is</em> the signal.</p>
+
+  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;6 opens the crate that comes back out — <code>TransistorSizing</code> and the aggregate <code>SizingResult</code> — and names the single idea this whole file quietly enforces.</p></blockquote>
+</section>
+
+<!-- ================= PART 6 ================= -->
+<section class="part" id="part-6">
+  <h2>Part 6 · The outputs, the exception, and the hidden idea</h2>
+
+  <blockquote><p><strong>The one job:</strong> package the sizer's answer — every transistor's dimensions plus circuit-level results and an honest verdict — into one crate the caller can trust and print.</p></blockquote>
+
+  <h3><code>TransistorSizing</code> — the answer for one device</h3>
+  <pre class="code"><code><span class="tok-kw">@dataclass</span>
+<span class="tok-kw">class</span> <span class="tok-fn">TransistorSizing</span>:
+    ref: <span class="tok-kw">str</span>          <span class="tok-com"># netlist reference, e.g. "m1_input_pair"</span>
+    w_um: <span class="tok-kw">float</span>      <span class="tok-com"># gate width in µm</span>
+    l_um: <span class="tok-kw">float</span>      <span class="tok-com"># gate length in µm</span>
+    ids_a: <span class="tok-kw">float</span>     <span class="tok-com"># quiescent drain current in A</span>
+    vgs_v: <span class="tok-kw">float</span>     <span class="tok-com"># quiescent gate-source voltage</span>
+    vds_sat_v: <span class="tok-kw">float</span> <span class="tok-com"># minimum |Vds| for saturation</span></code></pre>
+
+  <p>This is the mirror image of <code>MosfetParams</code>. That atom described a <em>device type</em> in the abstract; this one describes a <em>specific, sized transistor</em> in the final circuit — its geometry and its DC operating point. And a whole amplifier has many of them, so <code>SizingResult</code> keeps a dictionary keyed by <code>ref</code>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 230" role="img" aria-label="SizingResult.transistors is a dict mapping device references to TransistorSizing cards">
+      <text x="95" y="26" text-anchor="middle" font-size="11" fill="var(--fig-muted)">dict keys (device ref)</text>
+      <!-- keys -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="20" y="44" width="150" height="34" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="95" y="65">"m1_input_pair"</text>
+        <rect x="20" y="96" width="150" height="34" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="95" y="117">"m2_input_pair"</text>
+        <rect x="20" y="148" width="150" height="34" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+        <text x="95" y="169">"m5_tail"</text>
+      </g>
+      <!-- arrows -->
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="170" y1="61"  x2="316" y2="90" marker-end="url(#ar)"/>
+        <line x1="170" y1="113" x2="316" y2="118" marker-end="url(#ar)"/>
+        <line x1="170" y1="165" x2="316" y2="146" marker-end="url(#ar)"/>
+      </g>
+      <!-- card -->
+      <rect x="318" y="30" width="222" height="180" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="429" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">TransistorSizing</text>
+      <g font-size="10.5">
+        <text x="334" y="76">ref       = "m1_input_pair"</text>
+        <text x="334" y="98">w_um      = 12.4</text>
+        <text x="334" y="120">l_um      = 0.5</text>
+        <text x="334" y="142">ids_a     = 20e-6</text>
+        <text x="334" y="164">vgs_v     = 0.72</text>
+        <text x="334" y="186">vds_sat_v = 0.15</text>
+      </g>
+    </svg>
+    <figcaption><code>SizingResult.transistors</code> is a phone book: look up a device by its netlist name, get back the full sizing card. One <code>TransistorSizing</code> per transistor.</figcaption>
+  </figure>
+
+  <h3><code>SizingResult</code> — the whole answer</h3>
+  <p>The final aggregate gathers the per-device dictionary <em>plus</em> circuit-level results. Its required fields carry the core answer; its <code>field(default_factory=…)</code> fields carry the extras that may legitimately be empty.</p>
+
+  <table>
+    <thead><tr><th>Field</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td><code>transistors</code></td><td>The per-device dict above — the heart of the result</td></tr>
+      <tr><td><code>cc_pf</code> / <code>cc2_pf</code></td><td>Compensation cap values, or <code>None</code> for single-stage</td></tr>
+      <tr><td><code>metrics</code></td><td>Computed performance, e.g. <code>{"gain_db": 90.1, "gbw_hz": 3e6}</code></td></tr>
+      <tr><td><code>margins</code></td><td>actual/spec per constraint; a value <code>&gt; 1</code> means the spec is met</td></tr>
+      <tr><td><code>solver_status</code></td><td>OR-Tools string: <code>OPTIMAL</code>, <code>FEASIBLE</code>, <code>INFEASIBLE</code>, <code>UNKNOWN</code></td></tr>
+      <tr><td><code>bias_feasible</code></td><td>The gm/Id DC verdict — <code>False</code> when the metrics are optimistic</td></tr>
+      <tr><td><code>warnings</code> / <code>resistors</code> / <code>transistor_intents</code></td><td>Advisory text, sized resistors, per-device design intent — often empty</td></tr>
+    </tbody>
+  </table>
+
+  <p>Note <code>margins</code>: because it stores <em>actual/spec</em>, reading the result never requires re-checking the spec — a single number tells you both "did it pass?" (<code>&gt; 1</code>) and "by how much?" This is the same "let the data answer the question" spirit as <code>SizingSpec</code>'s <code>None</code>.</p>
+
+  <h3><code>UnsupportedTechError</code> — the one non-record</h3>
+  <p>The file's only class that <em>isn't</em> a dataclass is a small exception:</p>
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">UnsupportedTechError</span>(<span class="tok-fn">ValueError</span>):
+    <span class="tok-str">"""Raised when a technology can't be sized by the requested method."""</span></code></pre>
+  <p>It's here for the same reason as the records: it's part of the <strong>vocabulary of the seam</strong>. When a PTM/SPICE node has no gm/Id LUT, the analytical sizer isn't a valid fallback — so rather than return a garbage <code>SizingResult</code>, a stage raises this specific error and the caller can catch exactly it. A named failure is as much a contract as a named field.</p>
+
+  <h3>The hidden idea: typed seams and data contracts</h3>
+  <p>Step back and the whole file is implementing one principle it never states:</p>
+
+  <div class="eq-center"><span class="boxed-eq">every hand-off between stages is a <strong>named, typed record</strong> — never a loose dict</span></div>
+
+  <p>That's the payoff of a file with no logic. Each stage depends only on the <em>shape</em> of these crates, not on the internals of the stage before it. You can rewrite the gm/Id sizer completely, and as long as it still returns a <code>SizingResult</code>, every downstream printer, verifier, and CLI keeps working untouched. The dataclasses are the <strong>stable interface</strong>; the logic around them is free to churn.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 120" role="img" aria-label="Pipeline stages connected only through typed record seams">
+      <g text-anchor="middle" font-size="11">
+        <rect x="10"  y="42" width="110" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="65"  y="66">load config</text>
+        <rect x="225" y="42" width="110" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="280" y="66">size circuit</text>
+        <rect x="440" y="42" width="110" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="495" y="66">report / verify</text>
+      </g>
+      <g stroke="var(--fig-stroke)" stroke-width="2">
+        <line x1="120" y1="62" x2="225" y2="62" marker-end="url(#ar)"/>
+        <line x1="335" y1="62" x2="440" y2="62" marker-end="url(#ar)"/>
+      </g>
+      <text x="172" y="34" text-anchor="middle" font-size="10" fill="var(--fig-accent)">TechParams · SizingSpec</text>
+      <text x="387" y="34" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">SizingResult</text>
+    </svg>
+    <figcaption>The records are the only thing that crosses between stages. Swap a stage's insides freely — the typed seam is the contract that holds the pipeline together.</figcaption>
+  </figure>
+
+  <h3>What this file honestly does <em>not</em> do</h3>
+  <ul>
+    <li><strong>No validation.</strong> Nothing here checks that <code>vdd &gt; vss</code> or that a width lands on the grid — these are dumb records; the surrounding stages enforce meaning.</li>
+    <li><strong>Not actually immutable.</strong> They're plain dataclasses, not <code>frozen=True</code>. The docstring's "freely inspected or passed" is a <em>convention</em>, not an enforced guarantee — a stage <em>could</em> mutate one, and nothing would stop it.</li>
+    <li><strong>No behaviour.</strong> There are no methods. Any computation over these lives elsewhere; this file is deliberately inert so it can be imported anywhere without side effects.</li>
+    <li><strong>Defaults, not intelligence.</strong> <code>corner="typical"</code>, <code>wl_units="m"</code>, ratios of <code>2.0</code>/<code>5.0</code> — reasonable starting points, but the file never reasons about whether they fit your process.</li>
+  </ul>
+
+  <h3>Why it's elegant</h3>
+  <p>The whole design rides one restraint: <strong>keep the data types free of logic so they can be the shared language of every stage</strong>. Small atoms (<code>MosfetParams</code>, <code>GridSpec</code>) compose into aggregates (<code>TechParams</code>, <code>SizingResult</code>); optional fields double as routers; <code>None</code> and empty collections carry meaning without flags. It's the least code in the module and the most important, because everything else agrees to speak through it.</p>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>models.py</code> defines the logic-free dataclasses that are the typed seams of the sizer — small atoms (<code>MosfetParams</code>, <code>GridSpec</code>, <code>SpiceLib</code>) that compose into the incoming crates (<code>TechParams</code>, <code>SizingSpec</code>) and the outgoing crate (<code>SizingResult</code>, holding one <code>TransistorSizing</code> per device) — so every pipeline stage hands work to the next through a stable, named contract instead of a loose dictionary.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>
