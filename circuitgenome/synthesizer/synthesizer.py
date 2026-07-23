@@ -24,7 +24,7 @@ from .compatibility import (
     is_compensation_compatible,
     is_load_branch_compatible,
     is_output_type_compatible,
-    is_second_stage_compatible,
+    is_stage_interface_compatible,
     is_tail_current_compatible,
     orient_cmfb,
     prune_cmfb,
@@ -120,7 +120,7 @@ def build_circuit(
 
     Returns ``None`` if *variant_map* is rejected by
     :func:`~circuitgenome.synthesizer.compatibility.polarity.is_combination_valid`,
-    :func:`~circuitgenome.synthesizer.compatibility.second_stage.is_second_stage_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.stage_interface.is_stage_interface_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.compensation.is_compensation_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.output.is_output_type_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.load_branch.is_load_branch_compatible`,
@@ -141,7 +141,7 @@ def build_circuit(
 
     if not is_combination_valid(variant_map):
         return None
-    if not is_second_stage_compatible(topology, variant_map):
+    if not is_stage_interface_compatible(topology, variant_map):
         return None
     if not is_compensation_compatible(topology, variant_map):
         return None
@@ -227,7 +227,7 @@ def enumerate_circuits(
     Combinations where a ``second_stage`` slot sensing the first stage's
     output has a signal device of the same channel type as the input pair
     (see
-    :func:`~circuitgenome.synthesizer.compatibility.second_stage.is_second_stage_compatible`)
+    :func:`~circuitgenome.synthesizer.compatibility.stage_interface.is_stage_interface_compatible`)
     are also skipped -- the first stage's reachable output window and the
     second stage's required gate level are disjoint, so no sizing can bias
     the interface (the ``third_stage`` slot senses a wide-swing node instead

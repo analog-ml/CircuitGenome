@@ -18,7 +18,7 @@ feedback) to absorb the difference. This is the textbook reason plain
 current-source loads are only used with common-mode control.
 
 The check is *structural* (actual device terminal references, no YAML tags,
-same approach as :mod:`~circuitgenome.synthesizer.compatibility.second_stage`):
+same approach as :mod:`~circuitgenome.synthesizer.compatibility.stage_interface`):
 the untapped branch node (port ``in1``) counts as DC-defined when the load
 contains
 
