@@ -475,6 +475,193 @@
 
   <p>Read it plainly: your resistance is your own <code>ro</code>, amplified by <code>(1 + gm &middot; R_below)</code>. When there's nothing below you but a rail, <code>R_below = 0</code> in effect, the factor is 1, and you contribute just <code>ro</code>.</p>
 
+  <h3>But where does <code>ro &middot; (1 + gm&middot;R_src)</code> actually come from?</h3>
+
+  <blockquote><p><strong>The one job of this derivation:</strong> replace the transistor with its two-part small-signal model, push a probe current into the drain, and ask what voltage shows up. The famous formula is nothing but the answer to that one thought experiment — a single KCL, no deeper magic.</p></blockquote>
+
+  <p>First, the physical intuition. A cascode is a <strong>self-correcting valve</strong>. Try to force extra current into its drain and a chain reaction fires: the current must squeeze through the stage below, which lifts the source node; the gate, parked on a quiet bias net, doesn't move; so the valve's opening — <code>vgs</code> — <em>narrows</em>. A narrower valve opposes the very current you injected. Opposition to injected current <em>is</em> resistance — and the harder the pushback, the bigger the boost.</p>
+
+  <p>To turn that story into the formula we need only the standard small-signal picture of a MOSFET: between drain and source it is <strong>two elements in parallel</strong> — its own leak <code>ro</code>, and a dependent current generator pumping <code>gm&middot;vgs</code> from drain to source. The gate connects to nothing electrically; it only <em>steers</em> the generator.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 600 300" role="img" aria-label="The thought experiment: the cascode transistor is replaced by its small-signal model and a test current is injected at the drain">
+      <!-- left: the circuit -->
+      <text x="110" y="22" text-anchor="middle" font-size="12" fill="var(--fig-muted)">the circuit</text>
+      <line x1="20" y1="58" x2="94" y2="58" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="52" y="48" text-anchor="middle" font-size="11" fill="var(--fig-accent)">Rin?</text>
+      <circle cx="110" cy="58" r="4" fill="var(--fig-stroke)"/>
+      <text x="124" y="62" font-size="11">d</text>
+      <line x1="110" y1="58" x2="110" y2="74" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="60" y="74" width="100" height="44" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="110" y="101" text-anchor="middle" font-size="12" font-weight="600">m_casc</text>
+      <line x1="110" y1="118" x2="110" y2="136" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="110" cy="136" r="4" fill="var(--fig-stroke)"/>
+      <text x="124" y="140" font-size="11">s</text>
+      <line x1="110" y1="140" x2="110" y2="150" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="72" y="150" width="76" height="40" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="110" y="175" text-anchor="middle" font-size="11.5">R_src</text>
+      <text x="156" y="175" font-size="10.5" fill="var(--fig-muted)">the stage below</text>
+      <line x1="110" y1="190" x2="110" y2="212" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="92" y1="212" x2="128" y2="212" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="98" y1="219" x2="122" y2="219" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <line x1="104" y1="226" x2="116" y2="226" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <!-- middle -->
+      <line x1="206" y1="130" x2="252" y2="130" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="229" y="118" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">becomes</text>
+      <!-- right: the model -->
+      <text x="430" y="22" text-anchor="middle" font-size="12" fill="var(--fig-muted)">the small-signal model — gate held at AC ground</text>
+      <line x1="430" y1="32" x2="430" y2="52" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="444" y="42" font-size="11" fill="var(--fig-accent)">inject ix</text>
+      <circle cx="430" cy="60" r="4" fill="var(--fig-accent)"/>
+      <text x="410" y="52" text-anchor="end" font-size="11" font-weight="600">d (vx)</text>
+      <line x1="365" y1="60" x2="495" y2="60" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- ro branch -->
+      <line x1="365" y1="60" x2="365" y2="88" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="348" y="88" width="34" height="52" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="365" y="118" text-anchor="middle" font-size="12">ro</text>
+      <line x1="365" y1="140" x2="365" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- gm generator branch -->
+      <line x1="495" y1="60" x2="495" y2="94" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="495" cy="118" r="24" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="495" y1="104" x2="495" y2="130" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="527" y="114" font-size="11.5">gm·vgs</text>
+      <line x1="495" y1="142" x2="495" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- source node and R_src -->
+      <line x1="365" y1="172" x2="495" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="430" cy="172" r="4" fill="var(--fig-stroke)"/>
+      <text x="408" y="166" text-anchor="end" font-size="11">s (vs)</text>
+      <line x1="430" y1="172" x2="430" y2="186" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="411" y="186" width="38" height="48" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="430" y="213" text-anchor="middle" font-size="11">R_src</text>
+      <line x1="430" y1="234" x2="430" y2="252" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="412" y1="252" x2="448" y2="252" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="418" y1="259" x2="442" y2="259" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <line x1="424" y1="266" x2="436" y2="266" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <!-- gate -->
+      <circle cx="300" cy="116" r="4" fill="var(--fig-stroke)"/>
+      <text x="300" y="104" text-anchor="middle" font-size="11">g</text>
+      <line x1="300" y1="120" x2="300" y2="142" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="284" y1="142" x2="316" y2="142" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="290" y1="149" x2="310" y2="149" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <line x1="296" y1="156" x2="304" y2="156" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="300" y="172" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">AC ground</text>
+      <path d="M308,124 C350,182 400,186 424,174" fill="none" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="356" y="198" font-size="10.5" fill="var(--fig-muted)">vgs = vg − vs</text>
+      <!-- takeaway -->
+      <text x="300" y="288" text-anchor="middle" font-size="11.5" font-weight="600">the whole game: compute vx, divide by ix  —  Rin = vx / ix</text>
+    </svg>
+    <figcaption>The thought experiment. Left: the question Part&nbsp;4's recursion keeps asking. Right: the transistor replaced by its two-element model — <code>ro</code> in parallel with a <code>gm·vgs</code> generator — with <code>R_src</code>, the stage below, under the source.</figcaption>
+  </figure>
+
+  <p>Now run the experiment in three short steps.</p>
+
+  <p><strong>Step 1 — follow the current down.</strong> A MOS gate is an open circuit: no current enters it, ever. So the whole probe current <code>ix</code> that enters the drain has exactly one exit — out the source and down through <code>R_src</code>. A current through a resistor makes a voltage:</p>
+
+  <div class="eq-center"><code>vs = ix &middot; R_src</code></div>
+
+  <p><strong>Step 2 — watch the valve narrow.</strong> The gate sits at AC ground (<code>vg = 0</code>), but the source just rose. So</p>
+
+  <div class="eq-center"><code>vgs = vg &minus; vs = &minus;ix &middot; R_src</code></div>
+
+  <p>Negative. The valve narrowed, exactly as the story predicted.</p>
+
+  <p><strong>Step 3 — the generator fights back.</strong> This is the single most important step. The generator pumps <code>gm&middot;vgs</code> downward, drain to source — but <code>vgs</code> is now <em>negative</em>, so it actually pumps <code>gm&middot;ix&middot;R_src</code> <em>upward</em>, recirculating current against the probe. KCL at the drain: <code>ro</code> must swallow both the probe current <em>and</em> everything the generator throws back up:</p>
+
+  <div class="eq-center"><code>i(ro) = ix + gm&middot;ix&middot;R_src = ix &middot; (1 + gm&middot;R_src)</code></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 330" role="img" aria-label="The same small-signal model with every current and voltage solved, showing the gm generator recirculating current against the probe">
+      <!-- probe -->
+      <line x1="300" y1="28" x2="300" y2="50" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="312" y="40" font-size="11.5" fill="var(--fig-accent)">ix</text>
+      <circle cx="300" cy="60" r="4" fill="var(--fig-accent)"/>
+      <text x="272" y="54" text-anchor="end" font-size="11" font-weight="600">vx</text>
+      <line x1="235" y1="60" x2="365" y2="60" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- ro branch, solved -->
+      <line x1="235" y1="60" x2="235" y2="88" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="218" y="88" width="34" height="52" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="235" y="118" text-anchor="middle" font-size="12">ro</text>
+      <line x1="235" y1="140" x2="235" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="196" y1="84" x2="196" y2="148" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="186" y="108" text-anchor="end" font-size="11" fill="var(--fig-accent)">ix·(1+gm·R_src)</text>
+      <text x="186" y="124" text-anchor="end" font-size="10" fill="var(--fig-muted)">must all squeeze through ro</text>
+      <!-- gm branch, solved -->
+      <line x1="365" y1="60" x2="365" y2="94" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="365" cy="118" r="24" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="365" y1="132" x2="365" y2="106" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="398" y="106" font-size="11" fill="var(--fig-accent2)">gm·vgs = −gm·ix·R_src</text>
+      <text x="398" y="122" font-size="10" fill="var(--fig-muted)">negative → pumps upward</text>
+      <text x="398" y="138" font-size="10.5" font-weight="600" fill="var(--fig-accent2)">the pushback</text>
+      <line x1="365" y1="142" x2="365" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <!-- source node and R_src -->
+      <line x1="235" y1="172" x2="365" y2="172" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <circle cx="300" cy="172" r="4" fill="var(--fig-accent2)"/>
+      <text x="238" y="192" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">vs = ix·R_src</text>
+      <line x1="300" y1="172" x2="300" y2="186" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <rect x="281" y="186" width="38" height="48" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="300" y="213" text-anchor="middle" font-size="11">R_src</text>
+      <line x1="300" y1="234" x2="300" y2="250" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="282" y1="250" x2="318" y2="250" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="288" y1="257" x2="312" y2="257" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <line x1="294" y1="264" x2="306" y2="264" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <!-- gate, solved -->
+      <circle cx="150" cy="116" r="4" fill="var(--fig-stroke)"/>
+      <text x="150" y="104" text-anchor="middle" font-size="11">g</text>
+      <line x1="150" y1="120" x2="150" y2="140" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="134" y1="140" x2="166" y2="140" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <line x1="140" y1="147" x2="160" y2="147" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <line x1="146" y1="154" x2="154" y2="154" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="150" y="176" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">vgs = −ix·R_src</text>
+      <!-- sum -->
+      <text x="310" y="296" text-anchor="middle" font-size="11.5">vx = vs + drop across ro = ix·R_src + ro·ix·(1 + gm·R_src)</text>
+      <text x="310" y="318" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent)">÷ ix  →  Rin = R_src + ro·(1 + gm·R_src)</text>
+    </svg>
+    <figcaption>Same circuit, solved. The generator recirculates <code>gm·ix·R_src</code> against the probe, so <code>ro</code> must carry <code>(1 + gm·R_src)</code> times the probe current — its voltage drop, and hence <code>Rin</code>, is amplified by exactly that factor.</figcaption>
+  </figure>
+
+  <p><strong>Add the voltages and divide.</strong> From the rail up to the drain, the probe voltage is the drop across <code>R_src</code> plus the drop across <code>ro</code>:</p>
+
+  <div class="eq-center"><code>vx = ix&middot;R_src + ro &middot; ix&middot;(1 + gm&middot;R_src)</code></div>
+
+  <p>Divide by <code>ix</code> and the probe current cancels out:</p>
+
+  <div class="eq-center">
+    <span class="boxed-eq">
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
+        <mrow>
+          <msubsup><mi>R</mi><mi>in</mi><mtext>exact</mtext></msubsup><mo>=</mo>
+          <msub><mi>R</mi><mi>src</mi></msub><mo>+</mo>
+          <msub><mi>r</mi><mi>o</mi></msub>
+          <mo>&#8901;</mo>
+          <mo>(</mo><mn>1</mn><mo>+</mo>
+          <msub><mi>g</mi><mi>m</mi></msub>
+          <msub><mi>R</mi><mi>src</mi></msub><mo>)</mo>
+        </mrow>
+      </math>
+    </span>
+  </div>
+
+  <p>Sanity-check the base case: sitting on a rail means <code>R_src = 0</code>, the pushback never fires, and the whole thing collapses to plain <code>ro</code> — precisely the early <code>return ro</code> in the code above.</p>
+
+  <h3>The honest fine print: a term went missing</h3>
+
+  <p>Compare carefully. The exact answer is <code>R_src + ro&middot;(1 + gm&middot;R_src)</code>; the code returns only <code>ro&middot;(1 + gm&middot;R_src)</code>. The lone series <code>R_src</code> term has been dropped. Is that a bug? Run the numbers from the trace below (<code>ro = R_src = 100 kΩ</code>, <code>gm = 1 mS</code>) through each term:</p>
+
+  <table>
+    <thead><tr><th>term</th><th>what it is</th><th class="num">value</th><th class="num">share</th></tr></thead>
+    <tbody>
+      <tr><td><code>gm&middot;ro&middot;R_src</code></td><td>the pushback boost</td><td class="num">10 MΩ</td><td class="num">≈98%</td></tr>
+      <tr><td><code>ro</code></td><td>the device's own leak</td><td class="num">100 kΩ</td><td class="num">≈1%</td></tr>
+      <tr><td><code>R_src</code></td><td>the stage below, in series — <strong>dropped by the code</strong></td><td class="num">100 kΩ</td><td class="num">≈1%</td></tr>
+    </tbody>
+  </table>
+
+  <p>Exact: <code>10.2 MΩ</code>. The code: <code>10.1 MΩ</code>. The dropped term is smaller than the dominant one by a factor of <code>gm&middot;ro</code> — the transistor's <em>intrinsic gain</em>, ~100 here and rarely below ~30 in practice — so the shortcut costs about 1% on a quantity feeding a coarse gain <em>estimate</em>. A deliberate, cheap approximation, not an accident.</p>
+
+  <p>One more honest omission: a real device also has a back-gate generator <code>gmb&middot;vbs</code> (the body effect) that pushes back <em>too</em> — the true boost is <code>(gm + gmb)&middot;ro&middot;R_src</code>. Ignoring it only <em>understates</em> the resistance, so the estimate errs on the conservative side.</p>
+
+  <p>Textbooks file this whole mechanism under <strong>source degeneration</strong>: any resistance under a source "degenerates" (tames) the transistor's response to its own <code>vgs</code>. It's the same negative-feedback loop seen from two sides — the loop that tames the gain of an amplifier is the loop that stiffens the output of a cascode. I really like that the code's variable is named <code>r_src</code>: it points straight at the source terminal, where all of this physics happens.</p>
+
   <h3>Traced with real numbers</h3>
   <p>Two NMOS in a telescopic stack, both sized so <code>gds = 10 µS</code> (so <code>ro = 100 kΩ</code>) and <code>gm = 1 mS</code>:</p>
 
