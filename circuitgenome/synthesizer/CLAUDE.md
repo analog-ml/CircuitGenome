@@ -49,8 +49,8 @@ SPICE netlists.
   `from .compatibility import is_cmfb_compatible, ...`). Submodules:
   - `compatibility/polarity.py` — polarity compatibility filter
     (`is_combination_valid`).
-  - `compatibility/second_stage.py` — stage-interface level compatibility
-    filter (`is_second_stage_compatible`).
+  - `compatibility/stage_interface.py` — stage-interface level compatibility
+    filter (`is_stage_interface_compatible`).
   - `compatibility/compensation.py` — compensation inversion-parity filter
     (`is_compensation_compatible`, helper `stage_inversions`).
   - `compatibility/output.py` — output-cardinality compatibility filter
@@ -138,7 +138,7 @@ polarity doesn't match `input_pair`'s (untagged variants, e.g.
 constraint). To support a new/edited variant, just add the right `polarity:`
 tag in YAML — no code changes needed.
 
-## Stage-interface compatibility filter (`compatibility/second_stage.py`)
+## Stage-interface compatibility filter (`compatibility/stage_interface.py`)
 
 A `second_stage` variant is structurally unbiasable against the first stage
 when the gate level its *signal device* (the transistor whose gate is the
@@ -152,7 +152,7 @@ terminal*: common-source stages (source on a supply) put the gate one
 `Vgs` from that supply and suit the **opposite**-polarity pair; followers
 (source on the output node) put the gate one `Vgs` beyond the output,
 toward the device's back rail, and suit the **same**-polarity pair
-(`required_pair_type`). `is_second_stage_compatible` detects all of this
+(`required_pair_type`). `is_stage_interface_compatible` detects all of this
 structurally (no YAML tags) and only constrains `second_stage`-category
 slots whose `in` net is one of the load's output nets
 (`load.out`/`out1`/`out2`) — the 3-stage topologies' `third_stage` slot
@@ -219,7 +219,7 @@ bias rail, no diode connection) leaves that node high-impedance between two
 series current sources — no sizing can absorb the load-vs-tail current
 mismatch, and one device always leaves saturation (issue #112).
 `is_load_branch_compatible` detects this structurally (no YAML tags, like
-`compatibility/second_stage`): the `in1` node counts as DC-defined when the
+`compatibility/stage_interface`): the `in1` node counts as DC-defined when the
 load has a diode-connected MOSFET on it (`active_load_*`), a resistor
 touching it (`resistor_load_*`), or a MOSFET source terminal on it (the
 cascode loads' folding/cascode devices); loads that never put a MOSFET drain
@@ -431,7 +431,7 @@ including correct-but-infeasible ones — as mutation seeds. Currently tagged:
    see "Unsupported (parked) variants" / "Bias-infeasible (DSE-only)
    variants" above).
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
-3. `is_second_stage_compatible(topology, variant_map)` — skip on
+3. `is_stage_interface_compatible(topology, variant_map)` — skip on
    stage-interface level mismatch (see "Stage-interface compatibility
    filter" above).
 4. `is_compensation_compatible(topology, variant_map)` — skip if a

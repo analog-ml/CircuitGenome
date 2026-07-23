@@ -32,8 +32,8 @@ from .compensation import is_compensation_compatible, stage_inversions
 from .load_branch import is_load_branch_compatible, untapped_branch_is_dc_defined
 from .output import is_output_type_compatible
 from .polarity import is_combination_valid
-from .second_stage import (
-    is_second_stage_compatible,
+from .stage_interface import (
+    is_stage_interface_compatible,
     required_pair_type,
     signal_device_type,
 )
@@ -54,7 +54,7 @@ __all__ = [
     "untapped_branch_is_dc_defined",
     "is_output_type_compatible",
     "is_combination_valid",
-    "is_second_stage_compatible",
+    "is_stage_interface_compatible",
     "required_pair_type",
     "signal_device_type",
     "CANONICAL_TAIL_CURRENT_VARIANT",

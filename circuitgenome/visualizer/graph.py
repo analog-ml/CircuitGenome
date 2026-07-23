@@ -22,7 +22,7 @@ from circuitgenome.synthesizer.compatibility import (
     is_combination_valid,
     is_load_branch_compatible,
     is_output_type_compatible,
-    is_second_stage_compatible,
+    is_stage_interface_compatible,
     is_tail_current_compatible,
 )
 from circuitgenome.synthesizer.models import Connection, ModuleVariant, TopologyTemplate
@@ -137,11 +137,11 @@ def explain_incompatibility(topology: TopologyTemplate, variant_map: dict[str, M
         reasons.append(
             "Polarity mismatch between input_pair/load/tail_current (is_combination_valid)."
         )
-    if not is_second_stage_compatible(topology, variant_map):
+    if not is_stage_interface_compatible(topology, variant_map):
         reasons.append(
             "second_stage signal device needs a gate level outside the input "
             "pair's output window; the stage-interface DC level is unreachable "
-            "(is_second_stage_compatible)."
+            "(is_stage_interface_compatible)."
         )
     if not is_output_type_compatible(topology, variant_map):
         reasons.append(

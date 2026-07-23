@@ -30,7 +30,7 @@ stages compose to the same positive-feedback structure (standard NMC
 requires a non-inverting second stage and an inverting output stage).
 
 The check is *structural* (actual device terminal references, no YAML
-tags, same approach as :mod:`~circuitgenome.synthesizer.compatibility.second_stage`):
+tags, same approach as :mod:`~circuitgenome.synthesizer.compatibility.stage_interface`):
 a stage variant's inversion count is computed by walking gate-to-drain /
 gate-to-source hops from its ``in`` port, and chains are composed by
 following ``second_stage``-category slots' ``in``/``out`` nets between the

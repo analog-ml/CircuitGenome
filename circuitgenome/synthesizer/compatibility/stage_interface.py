@@ -94,7 +94,7 @@ def required_pair_type(variant: ModuleVariant) -> str | None:
     return None
 
 
-def is_second_stage_compatible(
+def is_stage_interface_compatible(
     topology: TopologyTemplate,
     variant_map: dict[str, ModuleVariant],
 ) -> bool:

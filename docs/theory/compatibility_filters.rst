@@ -180,7 +180,7 @@ are combinations using the untagged ``inverter_based_input`` (its output level
 sits near mid-rail, reachable by either gate type). Source followers now live
 in the ``output_stage`` category, wired after the gain stages (their ``in`` is
 ``net_ampout``, never a load-output net), so this filter does not apply to them
-(:mod:`~circuitgenome.synthesizer.compatibility.second_stage`).
+(:mod:`~circuitgenome.synthesizer.compatibility.stage_interface`).
 
 .. _compat-compensation:
 

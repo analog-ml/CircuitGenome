@@ -12,7 +12,7 @@ from circuitgenome.synthesizer.compatibility import (
     is_compensation_compatible,
     is_load_branch_compatible,
     is_output_type_compatible,
-    is_second_stage_compatible,
+    is_stage_interface_compatible,
     is_tail_current_compatible,
     prune_cmfb,
     prune_tail_current,
@@ -432,7 +432,7 @@ def test_second_stage_filter_rejects_unreachable_gate_levels():
             "input_pair": by_name[input_pair],
             "second_stage": by_name[second_stage],
         }
-        assert not is_second_stage_compatible(two_stage_se_topo, variant_map), (
+        assert not is_stage_interface_compatible(two_stage_se_topo, variant_map), (
             input_pair, second_stage,
         )
 
@@ -468,7 +468,7 @@ def test_second_stage_filter_allows_reachable_gate_levels_and_untagged_pair():
             "input_pair": by_name[input_pair],
             "second_stage": by_name[second_stage],
         }
-        assert is_second_stage_compatible(two_stage_se_topo, variant_map), (
+        assert is_stage_interface_compatible(two_stage_se_topo, variant_map), (
             input_pair, second_stage,
         )
 
@@ -490,7 +490,7 @@ def test_second_stage_filter_leaves_third_stage_unconstrained():
             "second_stage": by_name["common_source_pmos"],
             "third_stage": third_stage,
         }
-        assert is_second_stage_compatible(topo, variant_map), third_stage.name
+        assert is_stage_interface_compatible(topo, variant_map), third_stage.name
 
     # ...but the same NMOS-gate variant in the *second_stage* slot still fails.
     variant_map = {
@@ -498,7 +498,7 @@ def test_second_stage_filter_leaves_third_stage_unconstrained():
         "second_stage": by_name["common_source_nmos"],
         "third_stage": by_name["common_source_nmos"],
     }
-    assert not is_second_stage_compatible(topo, variant_map)
+    assert not is_stage_interface_compatible(topo, variant_map)
 
 
 def test_enumerate_circuits_excludes_unreachable_second_stages():
@@ -1164,7 +1164,7 @@ def test_enumerate_circuits_count():
     excluded -- the latter carry the "differential" tag for the CMFB-loop
     reason, with is_load_branch_compatible as the structural guard for the
     untapped branch node; issue #112; see
-    test_is_output_type_compatible_*). is_second_stage_compatible
+    test_is_output_type_compatible_*). is_stage_interface_compatible
     keeps the level-reachable amplification_stage variant
     (differential_ota_second_stage is parked as unsupported, issue #114;
     the two followers are no longer in the amplification pool -- they moved
