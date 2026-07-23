@@ -32,6 +32,13 @@ if TYPE_CHECKING:
 # Same matched-pair slots CP-SAT treats as symmetric (constraints.build_model).
 _SYMMETRY_SLOTS = frozenset({"input_pair", "load", "tail_current"})
 # FD cross-slot matched pairs (second_stage_p ↔ _n, third_stage_p ↔ _n).
+# The follower buffer slots (output_stage_p/_n) are deliberately excluded: their
+# p/n devices already match device-for-device from identical per-device intent
+# (same follower gm/Id + L, same series IDS), so no equalization is needed.  And
+# _apply_symmetry groups a pair's devices by *type* alone — correct for a CS gain
+# stage (signal + opposite-polarity load) but wrong for a common_drain, whose
+# follower and bias current source share polarity: a type-only group would fuse
+# them to one geometry (issue #175).
 _FD_PAIRS = (("second_stage_p", "second_stage_n"),
              ("third_stage_p", "third_stage_n"))
 

@@ -8,7 +8,10 @@ from circuitgenome.sizer.shared.device_model import (
     build_device_model,
 )
 from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
-from circuitgenome.sizer.gmid.intent import TransistorIntent
+from circuitgenome.sizer.gmid.intent import (
+    TransistorIntent,
+    resolve_transistor_intents,
+)
 from circuitgenome.sizer.shared.loader import load_tech
 from circuitgenome.synthesizer.models import Device
 
@@ -132,6 +135,57 @@ def test_no_margin_without_a_tail(tech, model):
     sizing, _, _ = assign_geometry_gmid(model, all_t, slot_t, ids, _intents(roles), {}, tech)
     exact = _snap_w(tech, 0.5 * sizing["mref"].w_um)
     assert sizing["ml1"].w_um == pytest.approx(exact)
+
+
+def _fd_follower_pair():
+    """Buffered FD output stage: a common_drain follower plus its bias current
+    source on each of the p and n paths.
+
+    All four devices share polarity (a common_drain follower and its current
+    source are the same type) and carry the same series IDS — the exact shape
+    that a naive ``_FD_PAIRS`` entry would mis-equalize (issue #175).
+    """
+    def follower(ref, side):
+        return Device(ref=ref, type="pmos",
+                      terminals={"d": "gnd!", "g": f"net_ampout_{side}",
+                                 "s": f"out_{side}", "b": f"out_{side}"})
+
+    def csource(ref, side):
+        return Device(ref=ref, type="pmos",
+                      terminals={"d": f"out_{side}", "g": "net_biasp",
+                                 "s": "vdd!", "b": "vdd!"})
+
+    fp, cp = follower("mfp", "p"), csource("mcp", "p")
+    fn, cn = follower("mfn", "n"), csource("mcn", "n")
+    all_t = {"mfp": (fp, "output_stage_p"), "mcp": (cp, "output_stage_p"),
+             "mfn": (fn, "output_stage_n"), "mcn": (cn, "output_stage_n")}
+    slot_t = {"output_stage_p": [fp, cp], "output_stage_n": [fn, cn]}
+    ids = {r: 40e-6 for r in all_t}   # series stack: one branch current for both
+    return all_t, slot_t, ids
+
+
+def test_fd_follower_pair_matches_per_role(tech, model):
+    """FD follower buffers match p↔n from identical intent, not via _FD_PAIRS.
+
+    Guards issue #175: ``output_stage_p``/``_n`` are deliberately absent from
+    ``_FD_PAIRS``.  Each slot's follower and bias current source share polarity
+    and IDS, so the type-only ``_FD_PAIRS`` equalizer would wrongly fuse them.
+    The correct outcome, asserted here: p == n *per role*, and the follower is
+    sized differently from its current source.
+    """
+    all_t, slot_t, ids = _fd_follower_pair()
+    intents = resolve_transistor_intents(all_t, cascode_refs=set())
+    # the registry splits the two same-polarity devices by role
+    assert intents["mfp"].block == "output_stage"   # source follower
+    assert intents["mcp"].block == "stage_load"      # bias current source
+
+    sizing, _, _ = assign_geometry_gmid(model, all_t, slot_t, ids, intents, {}, tech)
+
+    # p and n match device-for-device (the invariant #172 relies on)
+    assert (sizing["mfp"].w_um, sizing["mfp"].l_um) == (sizing["mfn"].w_um, sizing["mfn"].l_um)
+    assert (sizing["mcp"].w_um, sizing["mcp"].l_um) == (sizing["mcn"].w_um, sizing["mcn"].l_um)
+    # follower and its bias source are distinct — a naive _FD_PAIRS entry would fuse them
+    assert (sizing["mfp"].w_um, sizing["mfp"].l_um) != (sizing["mcp"].w_um, sizing["mcp"].l_um)
 
 
 def test_over_ceiling_request_warns_and_clamps(tech, model):
