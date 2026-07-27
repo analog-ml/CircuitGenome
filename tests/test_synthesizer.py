@@ -1408,11 +1408,41 @@ def test_enumerate_three_stage_fully_differential_nonempty():
                 if t.name == "three_stage_opamp_rnmc_fully_differential")
     circuit = next(enumerate_circuits(topo, modules))
     assert circuit.topology == "three_stage_opamp_rnmc_fully_differential"
-    assert circuit.external_ports == ["ibias", "vcm_ref", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
+    # First circuit's load is non-differential (resistor_load_gnd), so cmfb is
+    # pruned and vcm_ref is dropped from the interface (issue #18); see
+    # test_vcm_ref_dropped_when_cmfb_pruned for both branches.
+    assert circuit.external_ports == ["ibias", "in1", "in2", "outp", "outn", "vdd!", "gnd!"]
 
     topo = next(t for t in topologies
                 if t.name == "three_stage_opamp_nmc_fully_differential")
     assert next(enumerate_circuits(topo, modules), None) is not None
+
+
+def test_vcm_ref_dropped_when_cmfb_pruned():
+    """vcm_ref is present only when cmfb is a real consumer (issue #18).
+
+    vcm_ref is wired solely via cmfb.vref. For a load whose output_cardinality
+    isn't "differential", prune_cmfb empties the cmfb variant, so vcm_ref would
+    be an unconnected external pin -- it is dropped from external_ports. A
+    differential-output load keeps a real cmfb, so vcm_ref stays."""
+    modules = load_modules()
+    topologies = load_topologies()
+    topo = next(t for t in topologies
+                if t.name == "two_stage_opamp_fully_differential")
+
+    seen: dict[str, list[str]] = {}
+    for circuit in enumerate_circuits(topo, modules):
+        cardinality = circuit.variant_map["load"].output_cardinality
+        key = "differential" if cardinality == "differential" else "other"
+        if key not in seen:
+            seen[key] = circuit.external_ports
+        if len(seen) == 2:
+            break
+
+    assert "vcm_ref" in seen["differential"]
+    assert "vcm_ref" not in seen["other"]
+    # Only vcm_ref differs; the rest of the interface is unchanged.
+    assert [p for p in seen["differential"] if p != "vcm_ref"] == seen["other"]
 
 
 def test_enumerate_two_stage_opamp_buffered_count():

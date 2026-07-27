@@ -114,7 +114,9 @@ list is current.
   `fully_differential` topologies. However, `cmfb` is only a real consumer
   of rail 4 when `load.output_cardinality == "differential"` (see "CMFB
   compatibility filter" below) -- otherwise `cmfb` is pruned to an empty
-  placeholder, rail 4 is not needed, and `vcm_ref` is left unconnected.
+  placeholder, rail 4 is not needed, and `vcm_ref` is dropped from that
+  combination's `external_ports` (issue #18, `_external_ports_for`) so the
+  `.subckt` interface has no unconnected pin.
 - **`load` in/out nets**: `load.in1`/`in2` (folding nodes fed by
   `input_pair.out1`/`out2`) and `load.out`/`out1`/`out2` (the load's output
   node(s)) are wired to *separate* nets by every topology -- `net_loadout1`/
@@ -465,7 +467,10 @@ including correct-but-infeasible ones — as mutation seeds. Currently tagged:
     net-merge pass for `load` ports declared `alias_of` another `load` port
     (see "Net-naming & wiring conventions" above).
 14. Yield `SynthesizedCircuit(name, topology, variant_map, external_ports,
-    devices)`.
+    devices)`, where `external_ports = _external_ports_for(topology,
+    variant_map)` — `topology.external_ports` minus `vcm_ref` when the `cmfb`
+    slot was pruned to an empty placeholder (issue #18), so the interface has
+    no unconnected pin. Static per topology for every other case.
 
 Any new per-combination transform should slot in between steps 7 and 12,
 following the same "compute once from `variant_map`, then overwrite the

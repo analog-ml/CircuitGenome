@@ -305,7 +305,7 @@ internal device structure is invisible to the template.
        and ``dda_cmfb`` (differential-difference amplifier). Present only when
        ``load``'s ``output_cardinality`` is ``"differential"`` (see "CMFB
        compatibility filter" below); otherwise pruned to an empty placeholder
-       and ``vcm_ref`` is left unconnected.
+       and ``vcm_ref`` is dropped from ``external_ports`` (issue #18).
    * - ``compensation``
      - - ``in`` — stage-input side of the Miller capacitor.
        - ``out`` — stage-output side of the Miller capacitor.
