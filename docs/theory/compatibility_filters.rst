@@ -287,9 +287,11 @@ canonical ``resistive_sense_cmfb`` variant is allowed through -- the
 ``dda_cmfb`` choice would otherwise be enumerated as a duplicate no-op
 circuit. That canonical variant is then pruned to an empty placeholder (no
 ports, no devices), so it contributes no devices to the assembled circuit and
-``cmfb.bias`` is no longer counted as a needed bias rail. The
-``vcm_ref`` external port (statically present on every ``fully_differential``
-topology) is left unconnected for these circuits
+``cmfb.bias`` is no longer counted as a needed bias rail. Because
+``cmfb.vref`` is the only connection referencing the ``vcm_ref`` external port,
+that port is dropped from these circuits' ``external_ports`` (issue #18,
+:func:`~circuitgenome.synthesizer.synthesizer._external_ports_for`) so the
+``.subckt`` interface has no unconnected pin
 (:mod:`~circuitgenome.synthesizer.compatibility.cmfb`).
 
 .. _compat-tail-current:

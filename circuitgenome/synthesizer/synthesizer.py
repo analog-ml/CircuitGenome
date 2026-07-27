@@ -108,6 +108,26 @@ def _circuit_name(topology: TopologyTemplate, variant_map: dict[str, ModuleVaria
     return "__".join(parts)
 
 
+def _external_ports_for(topology: TopologyTemplate,
+                        variant_map: dict[str, ModuleVariant]) -> list[str]:
+    """External ports for this combination, dropping ``vcm_ref`` when ``cmfb``
+    is pruned (issue #18).
+
+    ``vcm_ref`` is referenced only by the ``cmfb`` slot's ``vref`` port
+    (``cmfb.vref -> vcm_ref``). For every ``load`` whose ``output_cardinality``
+    isn't ``"differential"``, :func:`~.compatibility.cmfb.prune_cmfb` replaces
+    the ``cmfb`` variant with an empty placeholder (no ports, no devices), so
+    that connection disappears and ``vcm_ref`` would be a no-op pin in the
+    ``.subckt`` interface. Drop it so the declared ports match the circuit's
+    real connectivity (an empty ``cmfb`` variant is detected by its lack of
+    ports). Combinations that keep a real ``cmfb`` are returned unchanged.
+    """
+    cmfb = variant_map.get("cmfb")
+    if cmfb is not None and not cmfb.ports and "vcm_ref" in topology.external_ports:
+        return [p for p in topology.external_ports if p != "vcm_ref"]
+    return topology.external_ports
+
+
 def build_circuit(
     topology: TopologyTemplate,
     variant_map: dict[str, ModuleVariant],
@@ -193,7 +213,7 @@ def build_circuit(
         name=name,
         topology=topology.name,
         variant_map=variant_map,
-        external_ports=topology.external_ports,
+        external_ports=_external_ports_for(topology, variant_map),
         devices=all_devices,
     )
 
