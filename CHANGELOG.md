@@ -23,6 +23,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 - 🐛 FD stage-interface check for CMFB-pinned interfaces — equality repair machinery, auto-exempting output-sensing CMFBs ([#164](https://github.com/analog-ml/CircuitGenome/pull/164)).
 - 🐛 FD-capable DC bias-soundness gate — `_read_op_fd` open-input `.op`, output-state verdict (railed/split); dead FD circuits no longer masquerade as noise-floor gain misses ([#166](https://github.com/analog-ml/CircuitGenome/pull/166)).
 - 🐛 FD benches drop the cross-feedback ties for the standard open-input rig — the tie network is bistable against a real CM loop (healthy sky130 circuits measured −79 dB) and made the FD DC check vacuous ([#170](https://github.com/analog-ml/CircuitGenome/pull/170)).
+- 🐛 Re-tune the five `ptm45` example specs so each sizes with all margins ≥ 0 under gm/Id — 2-stage phase margin via `second_stage_current_ratio` 2.5→4.0, output-swing headroom 0.1/0.15→0.2 V, 3-stage FD `third_stage_current_ratio` 5→6 and swing-min 0.15→0.2 V, one-stage gain 40→30 dB; restores a ptm45-only per-topology regression guard so the specs cannot silently drift again ([#74](https://github.com/analog-ml/CircuitGenome/issues/74)).
 
 ### Docs
 
