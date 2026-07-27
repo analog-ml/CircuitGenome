@@ -24,5 +24,6 @@ slew_rate_min_vps: 5.0e+5  # V/s — minimum slew rate (ibias / Cc)
 
 # Power and swing
 power_max_w: 5.0e-4      # W  — maximum total quiescent power
-output_swing_max_v: 0.85   # V  — 0.15 V headroom from VDD
+output_swing_max_v: 0.80   # V  — 0.20 V headroom from VDD (the output CS stage needs
+                           # ~0.18 V Vdsat+margin at 45 nm; 0.15 V headroom is infeasible)
 output_swing_min_v: 0.15    # V  — 0.15 V headroom from VSS

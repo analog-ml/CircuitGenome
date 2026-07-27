@@ -14,7 +14,11 @@ ibias: 10.0e-6      # A — input bias current
 cl: 2.0e-12       # F — output load capacitance
 
 # DC and frequency performance
-gain_min_db: 40           # dB — minimum open-loop DC gain
+gain_min_db: 30           # dB — minimum open-loop DC gain.  A single active-load
+                          # stage at 45 nm tops out near 31 dB (gm·(ro_n‖ro_p)
+                          # with the node's high λ), so 30 dB is the honest ceiling
+                          # for a one-stage example here — two-/three-stage specs
+                          # target higher gain because they cascade stages.
 
 # Power and swing
 power_max_w: 5.0e-4      # W  — maximum total quiescent power

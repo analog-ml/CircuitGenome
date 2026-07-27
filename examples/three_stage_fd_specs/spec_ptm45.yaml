@@ -14,7 +14,9 @@ ibias: 10.0e-6      # A — input bias current
 cl: 2.0e-12       # F — output load capacitance
 
 second_stage_current_ratio: 2.5   # iDS_2 = ratio × ibias = 25 µA
-third_stage_current_ratio: 5.0    # iDS_3 = ratio × ibias = 50 µA
+third_stage_current_ratio: 6.0    # iDS_3 = ratio × ibias = 60 µA.  The FD nested-Miller
+                                  # loop needs more output-stage gm than the SE variant
+                                  # to clear 60° phase margin (5.0× only reaches ~59.8°).
 
 # DC and frequency performance
 gain_min_db: 70           # dB — minimum open-loop DC gain
@@ -24,5 +26,7 @@ slew_rate_min_vps: 5.0e+5  # V/s — minimum slew rate (ibias / Cc)
 
 # Power and swing
 power_max_w: 5.0e-4      # W  — maximum total quiescent power
-output_swing_max_v: 0.85   # V  — 0.15 V headroom from VDD
-output_swing_min_v: 0.15    # V  — 0.15 V headroom from VSS
+output_swing_max_v: 0.80   # V  — 0.20 V headroom from VDD (the output CS stage needs
+                           # ~0.18 V Vdsat+margin at 45 nm; 0.15 V headroom is infeasible)
+output_swing_min_v: 0.20    # V  — 0.20 V headroom from VSS (the FD output cannot pull
+                            # below ~0.19 V at this bias; 0.15 V is infeasible)

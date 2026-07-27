@@ -1263,3 +1263,50 @@ def test_resistor_load_keeps_gain_when_interstage_biases():
     assert result.metrics.get("gain_db") is not None
     assert not any("issue #148" in w for w in result.warnings)
     assert any("corner-fragile" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
+# Shipped ptm45 example specs stay feasible AND meet every margin (issue #74).
+#
+# Guards against silent drift: each examples/<dir>/spec_ptm45.yaml must size on
+# its topology's reference circuit with all margins >= 0. (An earlier guard,
+# #69, parametrized over the ptm32/22/16 nodes and was removed wholesale when
+# those nodes were dropped — which let the specs regress. This one is ptm45-only
+# and per-topology so it cannot be deleted by a node change.)
+# ---------------------------------------------------------------------------
+
+
+def _assert_example_ptm45_met(fbr_tuple, spec_dir):
+    """Load examples/<spec_dir>/spec_ptm45.yaml, size it on the reference
+    circuit, and assert it sizes feasibly with every margin satisfied."""
+    from pathlib import Path
+    import yaml
+    parsed, sr_result, fbr_result, topology = fbr_tuple
+    path = Path(__file__).parent.parent / "examples" / spec_dir / "spec_ptm45.yaml"
+    spec = SizingSpec(**yaml.safe_load(path.read_text()))
+    result = size_circuit(parsed, sr_result, fbr_result, topology, load_tech("ptm45"), spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE", "GMID"), \
+        f"{spec_dir}: {result.solver_status}"
+    bad = {k: round(m, 4) for k, m in result.margins.items() if m is not None and m < 0}
+    assert not bad, f"{spec_dir}: unmet margins {bad}"
+
+
+def test_ptm45_example_one_stage_met(one_stage_fbr):
+    _assert_example_ptm45_met(one_stage_fbr, "one_stage_specs")
+
+
+def test_ptm45_example_two_stage_se_met(two_stage_fbr):
+    _assert_example_ptm45_met(two_stage_fbr, "two_stage_se_specs")
+
+
+def test_ptm45_example_two_stage_fd_met(two_stage_fd_fbr):
+    _assert_example_ptm45_met(two_stage_fd_fbr, "two_stage_fd_specs")
+
+
+def test_ptm45_example_three_stage_se_met(three_stage_rnmc_se_fbr):
+    _assert_example_ptm45_met(three_stage_rnmc_se_fbr, "three_stage_se_specs")
+
+
+def test_ptm45_example_three_stage_fd_met(three_stage_rnmc_fd_fbr):
+    _assert_example_ptm45_met(three_stage_rnmc_fd_fbr, "three_stage_fd_specs")
+
