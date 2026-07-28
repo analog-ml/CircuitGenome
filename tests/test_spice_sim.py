@@ -358,9 +358,10 @@ def test_fd_two_stage_ac_metrics_are_real(cmfb):
 
 
 # A GMID-sized three-stage FD op-amp (rnmc, folded-cascode differential-output
-# load), frozen because enumerating this topology live takes minutes. Its
-# analytical gain is ~114 dB, but the open-loop FD bench currently measures it
-# at ~-42 dB -- see test_fd_three_stage_ac_metrics_are_real.
+# load), frozen because enumerating this topology live takes minutes. The CMFB
+# senses the true outputs (outp/outn) per #167, so the output CM regulates and
+# the open-loop FD bench measures a real ~66 dB gain -- see
+# test_fd_three_stage_ac_metrics_are_real.
 _FD_THREE_STAGE_NETLIST = """\
 .subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
 m1_input_pair net_diff1 in1 net_tail net_tail pmos
@@ -398,8 +399,8 @@ mp5_bias_gen net_bias5 net_bias5 vdd! vdd! pmos
 mn6_bias_gen net_bias6 ibias gnd! gnd! nmos
 mp6_bias_gen net_bias6 net_bias6 vdd! vdd! pmos
 mn7_bias_gen net_bias7 ibias gnd! gnd! nmos
-r1_cmfb net_loadout1 cmfb_sense 1k
-r2_cmfb net_loadout2 cmfb_sense 1k
+r1_cmfb outp cmfb_sense 1k
+r2_cmfb outn cmfb_sense 1k
 m1_cmfb cmfb_d1 cmfb_sense cmfb_tail gnd! nmos
 m2_cmfb net_cmfb_out vcm_ref cmfb_tail gnd! nmos
 m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
@@ -421,15 +422,13 @@ c1_comp2_n net_loadout1 net_mid2_n 1p
 
 
 @ngspice
-@pytest.mark.xfail(strict=True, reason="issue #61: the open-loop FD bench has "
-                   "no differential DC operating-point loop, so a high-gain "
-                   "three-stage FD (analytical ~114 dB) never sits in its linear "
-                   "region open-loop and measures as an attenuation (~-42 dB). "
-                   "Remove this marker when the FD bench is fixed.")
 def test_fd_three_stage_ac_metrics_are_real():
     """#61's three-stage FD acceptance criterion: a feasible three-stage FD
-    op-amp should report real (positive) gain/GBW/PM.  It does not yet --
-    xfail pins the gap so a bench fix flips this to xpass and trips the suite."""
+    op-amp reports real (positive) gain/GBW/PM, not n/a.  With the #167 CMFB
+    output-sense wiring the output CM regulates, so the open-loop bench measures
+    ~66 dB.  (PM is only checked to be physical, not >= the 60° spec target: a
+    GMID-sized variant can be marginally stable and still be a real, non-n/a
+    measurement -- which is all #61 requires.)"""
     parsed = parse(_FD_THREE_STAGE_NETLIST)
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_rnmc_fully_differential")
@@ -447,6 +446,7 @@ def test_fd_three_stage_ac_metrics_are_real():
     assert sim["gbw_hz"] is not None and sim["gbw_hz"] > 0
     pm = sim["phase_margin_deg"]
     assert pm is not None and 0 < pm <= 180
+    assert not any("not measurable" in n for n in sim.get("notes", []))
 
 
 # --- phase-margin plausibility guard ----------------------------------------
