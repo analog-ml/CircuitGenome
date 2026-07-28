@@ -223,24 +223,39 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
     return gain_db, gbw, pm, reason, best_pol
 
 
+_SR_SPAN = 0.2   # fraction of the total edge swing the slew window spans
+
+
 def _edge_slew(t, vo, vdd) -> float | None:
-    """Standard 20%-80% slew of one output transition (robust to edge spikes):
-    the average slope across the central 60% of the swing."""
+    """Peak slew rate of one output transition (V/s): the steepest secant
+    across any window spanning ``_SR_SPAN`` of the total swing.
+
+    Slew rate is the *current-limited* rate the output can move — the fast,
+    roughly constant ramp early in a large step. The previous 20%-80% average
+    measured that only when the edge had fully settled inside the window; on an
+    edge whose transient ends on a slow pole-zero-doublet *settling* tail the
+    80% mark lands in the tail and the "slew" collapsed to the settling speed
+    (e.g. 0.7 V/µs measured vs a ~16 V/µs ibias/Cc limit — issue #65).
+
+    A fixed-voltage-span secant reads the slew plateau instead: the window is
+    wide enough (a fifth of the swing) to skip the sub-sample feedback-cap
+    feedthrough spike, and short enough not to average in the settling tail."""
     if len(t) < 4:
         return None
-    v0, vf = vo[0], vo[-1]
-    swing = vf - v0
+    swing = vo[-1] - vo[0]
     if abs(swing) < 0.05 * vdd:
         return None
-    prog = (vo - v0) / swing            # 0→1 fraction of the transition
-    idx = np.where((prog >= 0.2) & (prog <= 0.8))[0]
-    if idx.size < 2:
-        return None
-    dt = t[idx[-1]] - t[idx[0]]
-    if dt <= 0:
-        return None
-    sr = abs(0.6 * swing) / dt
-    return float(sr) if sr > 0 else None
+    span = _SR_SPAN * abs(swing)
+    n = len(vo)
+    best = 0.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(vo[j] - vo[i]) >= span:
+                dt = t[j] - t[i]
+                if dt > 0:
+                    best = max(best, abs(vo[j] - vo[i]) / dt)
+                break
+    return float(best) if best > 0 else None
 
 
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
