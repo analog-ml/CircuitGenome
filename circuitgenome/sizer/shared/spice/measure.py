@@ -235,27 +235,36 @@ def _edge_slew(t, vo, vdd) -> float | None:
     measured that only when the edge had fully settled inside the window; on an
     edge whose transient ends on a slow pole-zero-doublet *settling* tail the
     80% mark lands in the tail and the "slew" collapsed to the settling speed
-    (e.g. 0.7 V/µs measured vs a ~16 V/µs ibias/Cc limit — issue #65).
+    (e.g. 0.7 V/µs measured vs the current-limited ibias/Cc plateau — issue #65).
 
-    A fixed-voltage-span secant reads the slew plateau instead: the window is
-    wide enough (a fifth of the swing) to skip the sub-sample feedback-cap
-    feedthrough spike, and short enough not to average in the settling tail."""
+    A fixed-voltage-span secant reads the plateau instead: for each start sample
+    it takes the first later sample that has moved ``_SR_SPAN`` of the swing in
+    the edge's direction (via the running extreme, so end-ringing can't cut a
+    window short), and keeps the steepest such secant. The span is wide enough
+    to skip the sub-sample feedback-cap feedthrough spike, short enough not to
+    average in the settling tail."""
     if len(t) < 4:
         return None
     swing = vo[-1] - vo[0]
     if abs(swing) < 0.05 * vdd:
         return None
     span = _SR_SPAN * abs(swing)
-    n = len(vo)
-    best = 0.0
-    for i in range(n):
-        for j in range(i + 1, n):
-            if abs(vo[j] - vo[i]) >= span:
-                dt = t[j] - t[i]
-                if dt > 0:
-                    best = max(best, abs(vo[j] - vo[i]) / dt)
-                break
-    return float(best) if best > 0 else None
+    # First sample that is `span` past each start, in the edge's direction. The
+    # running extreme is monotone, so searchsorted finds that crossing per start.
+    if swing > 0:
+        j = np.searchsorted(np.maximum.accumulate(vo), vo + span)
+    else:
+        j = np.searchsorted(-np.minimum.accumulate(vo), span - vo)
+    i = np.arange(len(t))
+    reached = j < len(t)
+    if not reached.any():
+        return None
+    i, j = i[reached], j[reached]
+    dt = t[j] - t[i]
+    good = dt > 0
+    if not good.any():
+        return None
+    return float(np.max(np.abs(vo[j] - vo[i])[good] / dt[good]))
 
 
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
