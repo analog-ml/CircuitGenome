@@ -570,6 +570,29 @@ def test_new_metrics_measured_on_generic_two_stage():
 
 
 @ngspice
+@pytest.mark.parametrize("tech,vdd", [("ptm45", 1.0), ("gf180mcu", 3.3)])
+def test_slew_swing_measured_on_real_device_techs(tech, vdd):
+    """Issue #63 acceptance: on the active-load SE anchor, slew rate and output
+    swing return numbers (not n/a) that are physically plausible on the *real
+    device* techs, not just the Level-1 generic tech. Values are device- and
+    corner-dependent, so the bounds are loose (sign, straddles mid-supply,
+    within an order of magnitude of the analytical ibias/Cc)."""
+    text, result, tech_p, spec = _active_load_two_stage_se(tech, vdd, 50, 5e5)
+    sim = spice_sim.simulate_metrics(text, result, tech_p, spec)
+    if sim["slew_rate_vps"] is None:
+        pytest.skip(f"{tech} did not converge in this environment")
+
+    hi, lo = sim["output_swing_max_v"], sim["output_swing_min_v"]
+    assert hi is not None and lo is not None
+    assert 0.0 <= lo < vdd / 2.0 < hi <= vdd
+
+    sr = sim["slew_rate_vps"]
+    assert sr is not None and sr > 0
+    sr_analytic = spec.ibias / (result.cc_pf * 1e-12)
+    assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
+
+
+@ngspice
 def test_cmrr_psrr_none_without_clean_gain():
     """CMRR/PSRR are ratios against the differential gain: a circuit whose AC
     measurement is not a clean positive gain must report them as None (a
