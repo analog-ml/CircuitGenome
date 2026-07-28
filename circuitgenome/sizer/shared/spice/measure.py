@@ -223,24 +223,48 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
     return gain_db, gbw, pm, reason, best_pol
 
 
+_SR_SPAN = 0.2   # fraction of the total edge swing the slew window spans
+
+
 def _edge_slew(t, vo, vdd) -> float | None:
-    """Standard 20%-80% slew of one output transition (robust to edge spikes):
-    the average slope across the central 60% of the swing."""
+    """Peak slew rate of one output transition (V/s): the steepest secant
+    across any window spanning ``_SR_SPAN`` of the total swing.
+
+    Slew rate is the *current-limited* rate the output can move — the fast,
+    roughly constant ramp early in a large step. The previous 20%-80% average
+    measured that only when the edge had fully settled inside the window; on an
+    edge whose transient ends on a slow pole-zero-doublet *settling* tail the
+    80% mark lands in the tail and the "slew" collapsed to the settling speed
+    (e.g. 0.7 V/µs measured vs the current-limited ibias/Cc plateau — issue #65).
+
+    A fixed-voltage-span secant reads the plateau instead: for each start sample
+    it takes the first later sample that has moved ``_SR_SPAN`` of the swing in
+    the edge's direction (via the running extreme, so end-ringing can't cut a
+    window short), and keeps the steepest such secant. The span is wide enough
+    to skip the sub-sample feedback-cap feedthrough spike, short enough not to
+    average in the settling tail."""
     if len(t) < 4:
         return None
-    v0, vf = vo[0], vo[-1]
-    swing = vf - v0
+    swing = vo[-1] - vo[0]
     if abs(swing) < 0.05 * vdd:
         return None
-    prog = (vo - v0) / swing            # 0→1 fraction of the transition
-    idx = np.where((prog >= 0.2) & (prog <= 0.8))[0]
-    if idx.size < 2:
+    span = _SR_SPAN * abs(swing)
+    # First sample that is `span` past each start, in the edge's direction. The
+    # running extreme is monotone, so searchsorted finds that crossing per start.
+    if swing > 0:
+        j = np.searchsorted(np.maximum.accumulate(vo), vo + span)
+    else:
+        j = np.searchsorted(-np.minimum.accumulate(vo), span - vo)
+    i = np.arange(len(t))
+    reached = j < len(t)
+    if not reached.any():
         return None
-    dt = t[idx[-1]] - t[idx[0]]
-    if dt <= 0:
+    i, j = i[reached], j[reached]
+    dt = t[j] - t[i]
+    good = dt > 0
+    if not good.any():
         return None
-    sr = abs(0.6 * swing) / dt
-    return float(sr) if sr > 0 else None
+    return float(np.max(np.abs(vo[j] - vo[i])[good] / dt[good]))
 
 
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,

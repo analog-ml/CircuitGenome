@@ -50,8 +50,13 @@ def test_margins_unmeasured_metric_is_skipped_not_failed():
 # Analytic gain gate (issue #125) — no ngspice needed
 # ---------------------------------------------------------------------------
 
-def _sizeable_item(topo, spec, tech):
-    """First enumerated candidate that sizes GMID-feasible, as a worker item."""
+def _sizeable_item(topo, spec, tech, require_gain=False):
+    """First enumerated candidate that sizes GMID-feasible, as a worker item.
+
+    ``require_gain`` additionally skips candidates whose analytic ``gain_db`` is
+    gated to ``None`` (a resistor-loaded output the model reports as railed,
+    issue #148). Those never exercise the analytic-gain gate, which fires only
+    on a *computed* gain below spec (issue #125, defect 2)."""
     from circuitgenome.recognizer import assign_slots, parse, recognize
     from circuitgenome.sizer import size_circuit
     modules = load_modules()
@@ -61,6 +66,8 @@ def _sizeable_item(topo, spec, tech):
         fbr = assign_slots(recognize(parsed), topo)
         result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
         if result.solver_status == "GMID" and result.bias_feasible:
+            if require_gain and result.metrics.get("gain_db") is None:
+                continue
             variants = {s: v.name for s, v in circuit.variant_map.items() if v}
             return (i, text, variants)
     return None
@@ -73,9 +80,9 @@ def test_analytic_gain_gate_skips_spice(monkeypatch):
                 if t.name == "two_stage_opamp_single_ended")
     tech = load_tech("gf180mcu")
     spec = _spec(second_stage_current_ratio=2.0, gain_min_db=200)
-    item = _sizeable_item(topo, spec, tech)
+    item = _sizeable_item(topo, spec, tech, require_gain=True)
     if item is None:
-        pytest.skip("no GMID-feasible candidate in the first 60")
+        pytest.skip("no GMID-feasible candidate with a computed gain in the first 60")
 
     monkeypatch.setattr("circuitgenome.designer.designer.check_bias_soundness",
                         lambda *a, **k: (True, None))
