@@ -318,6 +318,137 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
     assert not ok and reason and "SPICE bias" in reason
 
 
+# --- FD open-loop AC metrics (issue #61) ------------------------------------
+#
+# The FD AC bench (measure._loop_fb / _measure_ac, FD branch) drives vcm_ref to
+# the output CM and lets the on-chip CMFB regulate it, anchors the inputs at Vcm
+# through huge resistors for the differential operating point, and measures
+# v(outp)-v(outn) open-loop.  These reported n/a before the #165/#167 CMFB
+# rewire and the #162 bias gate (the CMFB common-mode loop fought the old
+# outp->inn/outn->inp DC feedback ties); these tests lock in real gain/GBW/PM.
+
+@ngspice
+@pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_inverting",
+                                  "dda_cmfb_inverting"])
+def test_fd_two_stage_ac_metrics_are_real(cmfb):
+    """A feasible two-stage FD folded-cascode op-amp reports measured
+    gain/GBW/PM, not n/a (issue #61)."""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_differential_output",
+        "tail_current": "current_mirror_tail_pmos",
+        "comp_p": "miller_cap", "comp_n": "miller_cap",
+        "second_stage_p": "common_source_nmos",
+        "second_stage_n": "common_source_nmos",
+        "cmfb": cmfb})
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=50,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=1e6,
+                      output_swing_max_v=0.8, output_swing_min_v=0.2)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID"
+    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    assert sim["gbw_hz"] is not None and sim["gbw_hz"] > 0
+    pm = sim["phase_margin_deg"]
+    assert pm is not None and 0 < pm <= 180
+    # A clean measurement leaves no "not measurable" AC diagnostic.
+    assert not any("not measurable" in n for n in sim.get("notes", []))
+
+
+# A GMID-sized three-stage FD op-amp (rnmc, folded-cascode differential-output
+# load), frozen because enumerating this topology live takes minutes. Its
+# analytical gain is ~114 dB, but the open-loop FD bench currently measures it
+# at ~-42 dB -- see test_fd_three_stage_ac_metrics_are_real.
+_FD_THREE_STAGE_NETLIST = """\
+.subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
+m1_input_pair net_diff1 in1 net_tail net_tail pmos
+m2_input_pair net_diff2 in2 net_tail net_tail pmos
+mp1_load load_internal_0 net_cmfb_out vdd! vdd! pmos
+mp2_load load_internal_1 net_cmfb_out vdd! vdd! pmos
+mp3_load net_loadout1 net_bias3 load_internal_0 vdd! pmos
+mp4_load net_loadout2 net_bias3 load_internal_1 vdd! pmos
+mn1_load net_loadout1 net_bias2 net_diff1 gnd! nmos
+mn2_load net_loadout2 net_bias2 net_diff2 gnd! nmos
+mn3_load net_diff1 net_bias1 gnd! gnd! nmos
+mn4_load net_diff2 net_bias1 gnd! gnd! nmos
+m1_tail_current net_bias7 net_bias7 vdd! vdd! pmos
+m2_tail_current net_tail net_bias7 vdd! vdd! pmos
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mp1_bias_gen net_bias1 bias_gen_pref vdd! vdd! pmos
+mn1_bias_gen net_bias1 net_bias1 gnd! gnd! nmos
+mp2_bias_gen net_bias2 bias_gen_pref vdd! vdd! pmos
+mn2_bias_gen net_bias2 net_bias2 bias_gen_mid2 gnd! nmos
+r2_bias_gen bias_gen_mid2 gnd! 1k
+mn3_bias_gen net_bias3 ibias gnd! gnd! nmos
+mp3_bias_gen net_bias3 net_bias3 bias_gen_mid3 vdd! pmos
+r3_bias_gen bias_gen_mid3 vdd! 1k
+mp4_bias_gen net_bias4 bias_gen_pref vdd! vdd! pmos
+mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+mn5_bias_gen net_bias5 ibias gnd! gnd! nmos
+mp5_bias_gen net_bias5 net_bias5 vdd! vdd! pmos
+mn6_bias_gen net_bias6 ibias gnd! gnd! nmos
+mp6_bias_gen net_bias6 net_bias6 vdd! vdd! pmos
+mn7_bias_gen net_bias7 ibias gnd! gnd! nmos
+r1_cmfb net_loadout1 cmfb_sense 1k
+r2_cmfb net_loadout2 cmfb_sense 1k
+m1_cmfb cmfb_d1 cmfb_sense cmfb_tail gnd! nmos
+m2_cmfb net_cmfb_out vcm_ref cmfb_tail gnd! nmos
+m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
+m4_cmfb net_cmfb_out cmfb_d1 vdd! vdd! pmos
+m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
+mn1_second_stage_p net_mid2_p net_loadout2 gnd! gnd! nmos
+mp1_second_stage_p net_mid2_p net_bias5 vdd! vdd! pmos
+mn1_third_stage_p outp net_mid2_p gnd! gnd! nmos
+mp1_third_stage_p outp net_bias6 vdd! vdd! pmos
+c1_comp1_p net_mid2_p outp 1p
+c1_comp2_p net_loadout2 net_mid2_p 1p
+mn1_second_stage_n net_mid2_n net_loadout1 gnd! gnd! nmos
+mp1_second_stage_n net_mid2_n net_bias5 vdd! vdd! pmos
+mn1_third_stage_n outn net_mid2_n gnd! gnd! nmos
+mp1_third_stage_n outn net_bias6 vdd! vdd! pmos
+c1_comp1_n net_mid2_n outn 1p
+c1_comp2_n net_loadout1 net_mid2_n 1p
+.ends"""
+
+
+@ngspice
+@pytest.mark.xfail(strict=True, reason="issue #61: the open-loop FD bench has "
+                   "no differential DC operating-point loop, so a high-gain "
+                   "three-stage FD (analytical ~114 dB) never sits in its linear "
+                   "region open-loop and measures as an attenuation (~-42 dB). "
+                   "Remove this marker when the FD bench is fixed.")
+def test_fd_three_stage_ac_metrics_are_real():
+    """#61's three-stage FD acceptance criterion: a feasible three-stage FD
+    op-amp should report real (positive) gain/GBW/PM.  It does not yet --
+    xfail pins the gap so a bench fix flips this to xpass and trips the suite."""
+    parsed = parse(_FD_THREE_STAGE_NETLIST)
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_fully_differential")
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, third_stage_current_ratio=5.0,
+                      gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=1e6, output_swing_max_v=0.8,
+                      output_swing_min_v=0.2)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID"
+    sim = spice_sim.simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    assert sim["gbw_hz"] is not None and sim["gbw_hz"] > 0
+    pm = sim["phase_margin_deg"]
+    assert pm is not None and 0 < pm <= 180
+
+
 # --- phase-margin plausibility guard ----------------------------------------
 
 def test_pm_plausible_range():
