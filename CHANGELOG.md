@@ -18,6 +18,8 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Fixed
 
+- 🐛 Slew-rate SPICE measurement read the pole-zero-doublet settling tail instead of the slew plateau — steepest-secant-over-20%-swing replaces the 20–80% average, which collapsed to the settling speed on unsettled edges (ptm45 two-stage 0.7 → 11 V/µs) ([#186](https://github.com/analog-ml/CircuitGenome/pull/186)).
+- 🧪 Repair `test_analytic_gain_gate_skips_spice`, regressed by #148's `gain_db=None` railing gate — the test now selects a computed-gain candidate that actually exercises the #125 gate ([#186](https://github.com/analog-ml/CircuitGenome/pull/186)).
 - 🐛 FD load resistors never landed in the `load` slot — `out1`/`out2` pin aliases + rail-check hooks on `resistor_load_*`; the synthesizer's 1 kΩ placeholder no longer ships ([#163](https://github.com/analog-ml/CircuitGenome/pull/163)).
 - 🐛 FD CMFB senses the outputs (`outp`/`outn`), with loop polarity from the stage chain's inversion parity (`orient_cmfb`, `<name>_inverting` variants) — output CM was unregulated in every CMFB variant ([#167](https://github.com/analog-ml/CircuitGenome/pull/167)).
 - 🐛 FD stage-interface check for CMFB-pinned interfaces — equality repair machinery, auto-exempting output-sensing CMFBs ([#164](https://github.com/analog-ml/CircuitGenome/pull/164)).
