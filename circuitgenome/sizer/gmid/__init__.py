@@ -15,9 +15,13 @@ from __future__ import annotations
 
 from .intent import (
     DEFAULT_BLOCK_INTENTS,
+    DEFAULT_INTENT,
+    INTENT_BY_TECH,
     BlockIntent,
     GmIdIntent,
     TransistorIntent,
+    intent_for_tech,
+    make_intent,
     resolve_transistor_intents,
 )
 from .gmid_sizer import size_gmid
@@ -25,8 +29,12 @@ from .gmid_sizer import size_gmid
 __all__ = [
     "BlockIntent",
     "DEFAULT_BLOCK_INTENTS",
+    "DEFAULT_INTENT",
     "GmIdIntent",
+    "INTENT_BY_TECH",
     "TransistorIntent",
+    "intent_for_tech",
+    "make_intent",
     "resolve_transistor_intents",
     "size_gmid",
 ]

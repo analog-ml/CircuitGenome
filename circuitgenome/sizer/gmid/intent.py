@@ -67,7 +67,7 @@ its job is buffering, not gain.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ..shared.device_model import CASCODE, CURRENT_SOURCE, SIGNAL
 from ..shared.taxonomy import is_signal_device
@@ -260,3 +260,68 @@ class GmIdIntent:
 
 
 DEFAULT_INTENT = GmIdIntent()
+
+
+def make_intent(
+    *,
+    signal_l_mult: float = _L_SIGNAL,
+    cs_l_mult: float = _L_CS,
+    cascode_l_mult: float = _L_CASCODE,
+    follower_l_mult: float = _L_FOLLOWER,
+    signal_gm_id: float = _MODERATE,
+    cs_gm_id: float = _STRONG,
+    cascode_gm_id: float = _STRONG_CASCODE,
+    follower_gm_id: float = _FOLLOWER,
+) -> GmIdIntent:
+    """Build a :class:`GmIdIntent` whose per-block intents and flat role fallbacks
+    share one set of L / gm-Id knobs.
+
+    This matters because the two live in different places: ``block_intents`` drive
+    the *actual* geometry (``geometry.py`` passes each device's ``l_mult``/``gm_id``
+    into :meth:`GmIdModel.geometry_for`), while the flat ``signal_l_mult`` etc. feed
+    only the *pre-geometry* gds estimate.  Setting one without the other would move
+    the estimate but not the sizing (or vice versa); this helper keeps them
+    consistent so a per-tech override actually retunes the design.
+
+    Signal-block gm/Id stays *solved* (``None``); the follower ``output_stage``
+    keeps its own fixed gm/Id and (short) L, tunable via ``follower_*``.
+    """
+    def _tune(name: str, bi: BlockIntent) -> BlockIntent:
+        if name == "output_stage":                 # source-follower buffer
+            return replace(bi, l_mult=follower_l_mult, gm_id=follower_gm_id)
+        if bi.role == SIGNAL:                        # gm/Id solved → leave None
+            return replace(bi, l_mult=signal_l_mult)
+        if bi.role == CASCODE:
+            return replace(bi, l_mult=cascode_l_mult, gm_id=cascode_gm_id)
+        return replace(bi, l_mult=cs_l_mult, gm_id=cs_gm_id)   # current sources
+
+    blocks = {n: _tune(n, bi) for n, bi in DEFAULT_BLOCK_INTENTS.items()}
+    return GmIdIntent(
+        block_intents=blocks,
+        signal_gm_id=signal_gm_id,
+        current_source_gm_id=cs_gm_id,
+        cascode_gm_id=cascode_gm_id,
+        signal_l_mult=signal_l_mult,
+        current_source_l_mult=cs_l_mult,
+        cascode_l_mult=cascode_l_mult,
+    )
+
+
+# --- per-technology gm/Id intent registry (issue #77) ------------------------
+# The DEFAULT_INTENT knobs were tuned for ptm45 (45 nm, low intrinsic gain at
+# L_min); a tech with a larger L_min can register its own SPICE-tuned intent
+# here (build it with make_intent so block and flat knobs stay in lockstep).
+# Any tech not listed falls back to DEFAULT_INTENT (ptm45 included).
+#
+# Intentionally empty for now: a SPICE sweep of the two-stage SE spec (#77)
+# found gf180mcu already meets it under DEFAULT_INTENT (L-policy changes moved
+# neither the acceptance rate nor the worst-case margin), and sky130's failures
+# are non-policy (SPICE .op non-convergence + the second-stage weak-inversion gm
+# ceiling), so no L-policy override recovers them.  See the issue for the data.
+INTENT_BY_TECH: dict[str, GmIdIntent] = {}
+
+
+def intent_for_tech(name: str) -> GmIdIntent:
+    """Per-tech gm/Id intent from :data:`INTENT_BY_TECH` (``DEFAULT_INTENT`` if
+    the tech is not registered)."""
+    return INTENT_BY_TECH.get(name, DEFAULT_INTENT)

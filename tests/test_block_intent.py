@@ -7,8 +7,12 @@ from circuitgenome.recognizer import assign_slots, parse, recognize
 from circuitgenome.sizer.gmid import size_gmid
 from circuitgenome.sizer.gmid.intent import (
     DEFAULT_BLOCK_INTENTS,
+    DEFAULT_INTENT,
+    INTENT_BY_TECH,
     GmIdIntent,
     functional_block,
+    intent_for_tech,
+    make_intent,
 )
 from circuitgenome.sizer.shared.device_model import (
     CASCODE,
@@ -68,6 +72,46 @@ def test_registry_is_complete_and_documented():
             assert bi.gm_id is None, name
         else:
             assert bi.gm_id and bi.gm_id > 0, name
+
+
+def test_make_intent_default_matches_default_intent():
+    # make_intent() with no overrides must reproduce DEFAULT_INTENT block-for-block
+    # and in the flat role fallbacks — otherwise an "unchanged" per-tech entry
+    # would silently perturb sizing.
+    d = make_intent()
+    assert (d.signal_l_mult, d.current_source_l_mult, d.cascode_l_mult) == (
+        DEFAULT_INTENT.signal_l_mult, DEFAULT_INTENT.current_source_l_mult,
+        DEFAULT_INTENT.cascode_l_mult)
+    assert d.cascode_gm_id == DEFAULT_INTENT.cascode_gm_id
+    for name, bi in DEFAULT_INTENT.block_intents.items():
+        got = d.block_intents[name]
+        assert (got.role, got.gm_id, got.l_mult) == (bi.role, bi.gm_id, bi.l_mult), name
+
+
+def test_make_intent_keeps_block_and_flat_in_lockstep():
+    # The knob must move BOTH the block intents (drive geometry) and the flat
+    # fallbacks (drive the pre-geometry gds estimate).
+    t = make_intent(signal_l_mult=3.0, cs_l_mult=6.0, cs_gm_id=12.0)
+    assert t.signal_l_mult == 3.0 and t.current_source_l_mult == 6.0
+    # Signal blocks: L moved, gm/Id still solved (None); current sources: both moved.
+    assert t.block_intents["gain_stage"].l_mult == 3.0
+    assert t.block_intents["gain_stage"].gm_id is None
+    assert t.block_intents["tail_current"].l_mult == 6.0
+    assert t.block_intents["tail_current"].gm_id == 12.0
+    # Untouched knobs keep their defaults.
+    assert t.block_intents["cascode"].l_mult == DEFAULT_INTENT.cascode_l_mult
+
+
+def test_intent_for_tech_registry_fallback():
+    # Unregistered tech → DEFAULT_INTENT; a registered entry is returned verbatim.
+    assert intent_for_tech("ptm45_hp") is DEFAULT_INTENT
+    assert intent_for_tech("does_not_exist") is DEFAULT_INTENT
+    custom = make_intent(signal_l_mult=3.0)
+    INTENT_BY_TECH["__test_tech__"] = custom
+    try:
+        assert intent_for_tech("__test_tech__") is custom
+    finally:
+        INTENT_BY_TECH.pop("__test_tech__", None)
 
 
 def test_result_carries_transistor_intents(sized):
