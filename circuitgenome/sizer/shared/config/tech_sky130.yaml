@@ -43,10 +43,11 @@ pmos:
   vth: -0.69         # V
   lam: 0.08          # 1/V
 
-width:               # bins cover W in [0.36(n)/0.42(p), 100] µm; 0.42 fits both
-  min: 0.42
-  max: 100.0
-  step: 0.005
+width:               # bins cover W in [0.36(n)/0.42(p), 100) µm; 0.42 fits both.
+  min: 0.42          # max is 99, NOT 100: the model bin wmax=100µm is an
+  max: 99.0          # EXCLUSIVE bound, so a device snapped to exactly 100µm
+  step: 0.005        # hits no bin ("could not find a valid modelname") and
+                     # aborts ngspice — misreported as .op non-convergence (#77).
 
 length:              # bins cover L in [0.15, 100] µm
   min: 0.15

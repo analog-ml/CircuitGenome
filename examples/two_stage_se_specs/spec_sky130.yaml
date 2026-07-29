@@ -7,9 +7,9 @@
 #     feasible circuits then measure ~63 dB open-loop in ngspice.
 #   - ibias is 15 uA (vs gf180's 20 uA) to preserve the stacked-Vdsat headroom
 #     the tail and second stage need under 1.8 V.
-# Verified: 3/24 enumerated circuits meet every margin in ngspice (worst-case
-# margin +12%, GBW-bound). The remaining failures are cascode/stacked variants
-# that are supply-limited at 1.8 V and a separate SPICE .op non-convergence.
+# Verified: 9/24 enumerated circuits meet every margin in ngspice (worst-case
+# margin +12%, GBW-bound). The remaining failures are real bias limits at 1.8 V
+# (cascode/stacked-Vdsat headroom and the second-stage gm ceiling), not tooling.
 vdd: 1.8
 vss: 0.0
 ibias: 15.0e-6

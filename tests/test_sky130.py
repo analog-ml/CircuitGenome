@@ -28,6 +28,10 @@ def test_sky130_tech_loads_lib_and_maps():
     assert tech.wl_units == "um"
     # 1.8 V core grids: sky130 bins cover W>=0.42 (both polarities), L>=0.15.
     assert tech.width.min == 0.42 and tech.length.min == 0.15
+    # width.max must stay < 100 µm: the PDK model bin wmax=100 µm is an EXCLUSIVE
+    # bound, so a device snapped to exactly 100 µm hits no bin and aborts ngspice
+    # ("could not find a valid modelname"), misreported as .op non-convergence (#77).
+    assert tech.width.max < 100.0
     assert tech.nmos.vth > 0 > tech.pmos.vth
 
 

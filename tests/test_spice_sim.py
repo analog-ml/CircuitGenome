@@ -261,6 +261,27 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
     assert not ok and reason and "SPICE bias" in reason
 
 
+@ngspice
+def test_sky130_width_max_device_is_modelable():
+    """Regression (#77): a device snapped to sky130's width.max must still land in
+    a PDK model bin. The bin wmax=100 µm is an EXCLUSIVE bound, so a device at
+    exactly 100 µm hits no bin, ngspice aborts ('could not find a valid
+    modelname'), and the .op reader misreports it as non-convergence. Fails if
+    width.max regresses to >= the bin boundary (a maxed device stops modelling)."""
+    import re
+    tech = load_tech("sky130")
+    deck_text = (
+        "* sky130 width.max modelability (#77)\n"
+        f'.lib "{tech.spice_lib.file}" tt\n.option scale=1.0u\n'
+        f"xM d g 0 0 sky130_fd_pr__pfet_01v8 w={tech.width.max} l=0.3 nf=1\n"
+        "vg g 0 -0.9\nvdd d 0 -1.0\n"
+        ".control\nop\nprint @m.xM.msky130_fd_pr__pfet_01v8[id]\n.endc\n.end\n")
+    out = deck._run_capture(deck_text)
+    assert out and re.search(r"\[id\]\s*=\s*[-\d.eE+]+", out), (
+        f"a device at sky130 width.max={tech.width.max}µm found no PDK model bin "
+        f"(ngspice aborted before the .op):\n{out}")
+
+
 # --- FD bias gate (issue #162) ----------------------------------------------
 
 def _fd_circuit(want: dict[str, str]):
