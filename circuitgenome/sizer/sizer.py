@@ -52,8 +52,9 @@ def size_circuit(
     """
     # gm/Id technologies (LUT present) use the block-based pipeline.
     if getattr(tech, "gmid_lut", None):
-        from .gmid import size_gmid
-        return size_gmid(parsed, sr_result, fbr_result, topology, tech, spec)
+        from .gmid import intent_for_tech, size_gmid
+        return size_gmid(parsed, sr_result, fbr_result, topology, tech, spec,
+                         intent=intent_for_tech(tech.name))
 
     # A PTM/SPICE-model node without a gm/Id LUT must not silently fall through
     # to the Level-1 square-law sizer — those are the inaccurate numbers gm/Id
