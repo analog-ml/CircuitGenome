@@ -69,6 +69,18 @@ def test_load_variant_names():
     }
 
 
+def test_load_bias_infeasible_variants():
+    """Only telescopic_cascode_load_nmos is tagged ``bias_infeasible`` (issue
+    #189): its self-biased PMOS diode stack pins the cascode node too low and
+    the input-side NMOS cascode lands ~25 mV in triode (18/18 on gf180).
+    Functionally-correct wiring dropped from default enumeration and kept for
+    design-space exploration; the wide-swing twin is the feasible equivalent.
+    Its PMOS sibling (telescopic_cascode_load_pmos) biases fine and is untagged."""
+    modules = load_modules()
+    infeasible = {v.name for v in modules["load"] if v.bias_infeasible}
+    assert infeasible == {"telescopic_cascode_load_nmos"}
+
+
 def test_load_ports_identical_across_variants():
     """Every load variant declares the same canonical 11-port signature, in
     the same order — only the per-port `role` (and `alias_of`) differs."""
@@ -1152,36 +1164,40 @@ def test_enumerate_circuits_nonempty():
 
 def test_enumerate_circuits_count():
     """2-stage single-ended: inverter_based_input is parked as unsupported
-    (issue #113: no fixed-Vgs sizing path), and the two stacked-diode cascode
-    tails are tagged bias_infeasible (issue #111: dropped from default
-    enumeration, kept only with include_infeasible for design-space
-    exploration), so enumeration covers the 4 tail-consuming input pairs x 14
-    loads x 6 (of 8) tails = 336 input_pair/load/tail_current combinations,
-    of which 84 are
+    (issue #113: no fixed-Vgs sizing path), the two stacked-diode cascode
+    tails are tagged bias_infeasible (issue #111), and telescopic_cascode_load_nmos
+    is likewise tagged bias_infeasible (issue #189: its self-biased PMOS stack
+    pins the cascode node too low, triode-ing the input-side cascode) -- all
+    dropped from default enumeration, kept only with include_infeasible for
+    design-space exploration. Enumeration covers the 4 tail-consuming input
+    pairs x 14 loads x 6 (of 8) tails = 336 input_pair/load/tail_current
+    combinations, of which 84 are
     polarity-valid (see test_polarity_filter_*). Of those, 60 also have an
     output_cardinality compatible with single_ended (the 24 combos using a
     differential-output cascode load or a current_source_load_* are
     excluded -- the latter carry the "differential" tag for the CMFB-loop
     reason, with is_load_branch_compatible as the structural guard for the
     untapped branch node; issue #112; see
-    test_is_output_type_compatible_*). is_stage_interface_compatible
-    keeps the level-reachable amplification_stage variant
+    test_is_output_type_compatible_*); the 6 NMOS-pair combos using the
+    bias_infeasible telescopic_cascode_load_nmos (issue #189) drop out, leaving
+    54. is_stage_interface_compatible keeps the level-reachable
+    amplification_stage variant
     (differential_ota_second_stage is parked as unsupported, issue #114;
     the two followers are no longer in the amplification pool -- they moved
     to the output_stage category and enumerate in the buffered topologies,
     so the count is unchanged): common_source_nmos for the 30
-    PMOS-pair combos, common_source_pmos for the 30 NMOS-pair combos (see
+    PMOS-pair combos, common_source_pmos for the 24 NMOS-pair combos (see
     test_second_stage_filter_*); all remaining stages have 1 inversion, so
     is_compensation_compatible prunes nothing further here. The two
     wide-swing telescopic loads (issue #129) each add one single-output
     cascode load per polarity, contributing exactly like their self-biased
     twins. The bias generator is constructed, not enumerated, so it
-    contributes no factor: (30 x 1 + 30 x 1) x 3 comp = 180."""
+    contributes no factor: (30 x 1 + 24 x 1) x 3 comp = 162."""
     modules = load_modules()
     topologies = load_topologies()
     topo = next(t for t in topologies if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
-    assert len(circuits) == 180
+    assert len(circuits) == 162
 
 
 def _stacked_tail_names(circuits):
@@ -1196,22 +1212,25 @@ def _stacked_tail_names(circuits):
 def test_enumerate_circuits_drops_bias_infeasible_by_default():
     """The stacked-diode cascode tails (bias_infeasible, issue #111) are
     functionally-correct wiring but do not bias on low-voltage specs, so they
-    are dropped from default enumeration -- just like unsupported variants --
-    leaving the default two_stage_opamp_single_ended count unchanged."""
+    are dropped from default enumeration -- just like unsupported variants.
+    The default two_stage_opamp_single_ended count (162) also drops
+    telescopic_cascode_load_nmos (bias_infeasible, issue #189); see
+    test_enumerate_circuits_count for the derivation."""
     modules = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_single_ended")
     circuits = list(enumerate_circuits(topo, modules))
     assert _stacked_tail_names(circuits) == set()
-    assert len(circuits) == 180
+    assert len(circuits) == 162
 
 
 def test_enumerate_circuits_include_infeasible_keeps_stacked_tails():
-    """config={"include_infeasible": True} keeps the stacked-diode cascode
-    tails for design-space exploration. They enumerate exactly where the
-    wide-swing cascode tails do (same polarity/output reachability), adding one
-    stacked-tail circuit per wide-swing cascode-tail circuit: the default 180
-    grows by the 60 cascode-tail combinations (30 PMOS + 30 NMOS) to 240."""
+    """config={"include_infeasible": True} keeps the bias_infeasible variants
+    for design-space exploration. The stacked-diode cascode tails enumerate
+    exactly where the wide-swing cascode tails do (same polarity/output
+    reachability), adding one stacked-tail circuit per wide-swing cascode-tail
+    circuit -- 60 combos (30 PMOS + 30 NMOS); telescopic_cascode_load_nmos
+    (issue #189) adds back its 18. The default 162 grows by 60 + 18 = 78 to 240."""
     modules = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_single_ended")
@@ -1352,10 +1371,11 @@ def test_synthesize_topology_filter():
 
 
 def test_enumerate_three_stage_single_ended_count():
-    """3-stage single-ended (NMC/RNMC): 60 single-ended-valid
+    """3-stage single-ended (NMC/RNMC): 54 single-ended-valid
     input_pair/load/tail_current combinations (polarity, output-cardinality,
     and untapped-branch filters, with inverter_based_input parked as
-    unsupported, issue #113; see test_enumerate_circuits_count -- the 60
+    unsupported, issue #113, and telescopic_cascode_load_nmos tagged
+    bias_infeasible, issue #189; see test_enumerate_circuits_count -- the 54
     includes the two wide-swing telescopic loads, issue #129).
 
     The enumerable amplification variants per pair polarity are one CS stage
@@ -1371,21 +1391,21 @@ def test_enumerate_three_stage_single_ended_count():
     The compensation parity filter (issues #114/#139) then splits the schemes:
     - RNMC each compensation wraps a *single* stage, so a non-inverting stage
       (2 inversions, positive-even) is rejected in either slot; only the
-      CS x CS pairings survive: 60 x 1 second x 2 third x 3 comp1 x 3 comp2
-      = 1080. (The non-inverting variants are enumerated then filtered out,
+      CS x CS pairings survive: 54 x 1 second x 2 third x 3 comp1 x 3 comp2
+      = 972. (The non-inverting variants are enumerated then filtered out,
       leaving the count unchanged from before issue #139.)
     - NMC comp1 wraps the second+third cascade and comp2 wraps the third
       alone: comp2 forces the third stage inverting (CS, 1 of the 2 CS
       variants), and comp1 then forces the second stage non-inverting (the
-      1 level-reachable non-inverting stage), so 60 x 1 second x 2 third
-      x 3 comp1 x 3 comp2 = 1080. Before issue #139 no non-inverting gain
+      1 level-reachable non-inverting stage), so 54 x 1 second x 2 third
+      x 3 comp1 x 3 comp2 = 972. Before issue #139 no non-inverting gain
       stage existed, so NMC enumerated zero.
     The bias generator is constructed, not enumerated, so it adds no factor."""
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "three_stage_opamp_nmc_single_ended": 1080,
-        "three_stage_opamp_rnmc_single_ended": 1080,
+        "three_stage_opamp_nmc_single_ended": 972,
+        "three_stage_opamp_rnmc_single_ended": 972,
     }
     for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
@@ -1455,11 +1475,11 @@ def test_enumerate_two_stage_opamp_buffered_count():
     exactly the unbuffered count x 2 (both follower polarities across the two
     pair polarities cancel to a single reachable follower per combo, so the
     doubling is the two enumerable output-stage variants summed over the two
-    pair polarities that each keep one): SE 180 -> 360, FD 648 -> 2592."""
+    pair polarities that each keep one): SE 162 -> 324, FD 648 -> 2592."""
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "two_stage_opamp_buffered_single_ended": 360,
+        "two_stage_opamp_buffered_single_ended": 324,
         "two_stage_opamp_buffered_fully_differential": 2592,
     }
     for name, count in expected.items():
@@ -1473,14 +1493,14 @@ def test_enumerate_three_stage_buffered_single_ended_count():
     comp1 wraps the second+third cascade and comp2 the inverting CS third, so
     the second stage must be non-inverting -- supplied by the
     noninverting_stage_* variants (issue #139); the follower output_stage then
-    doubles the unbuffered 1080 to 2160. RNMC each compensation wraps a single
+    doubles the unbuffered 972 to 1944. RNMC each compensation wraps a single
     CS stage, so both amp slots survive and the follower likewise doubles the
-    unbuffered 1080 to 2160."""
+    unbuffered 972 to 1944."""
     modules = load_modules()
     topologies = load_topologies()
     expected = {
-        "three_stage_opamp_nmc_buffered_single_ended": 2160,
-        "three_stage_opamp_rnmc_buffered_single_ended": 2160,
+        "three_stage_opamp_nmc_buffered_single_ended": 1944,
+        "three_stage_opamp_rnmc_buffered_single_ended": 1944,
     }
     for name, count in expected.items():
         topo = next(t for t in topologies if t.name == name)
@@ -1516,17 +1536,17 @@ def test_synthesize_three_stage_single_ended_filters():
 
     # NMC now enumerates: the noninverting_stage_* variants (issue #139) supply
     # the non-inverting second stage comp1 requires, so the config triple
-    # matches both the plain (1080) and buffered (2160) NMC single-ended
+    # matches both the plain (972) and buffered (1944) NMC single-ended
     # topologies.
-    assert len(nmc) == 1080 + 2160
+    assert len(nmc) == 972 + 1944
     assert {c.topology for c in nmc} == {
         "three_stage_opamp_nmc_single_ended",
         "three_stage_opamp_nmc_buffered_single_ended",
     }
 
-    # The config triple now matches both the plain (1080) and buffered (2160)
+    # The config triple now matches both the plain (972) and buffered (1944)
     # RNMC single-ended topologies.
-    assert len(rnmc) == 1080 + 2160
+    assert len(rnmc) == 972 + 1944
     assert {c.topology for c in rnmc} == {
         "three_stage_opamp_rnmc_single_ended",
         "three_stage_opamp_rnmc_buffered_single_ended",
@@ -1534,7 +1554,7 @@ def test_synthesize_three_stage_single_ended_filters():
 
     # The exact-topology filter still isolates just the plain topology.
     plain = synthesize({"topology": "three_stage_opamp_rnmc_single_ended"})
-    assert len(plain) == 1080
+    assert len(plain) == 972
     assert all(c.topology == "three_stage_opamp_rnmc_single_ended" for c in plain)
 
 

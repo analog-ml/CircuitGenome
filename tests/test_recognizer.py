@@ -92,7 +92,11 @@ def test_round_trip_one_stage_opamp(
         "amplification_stage": modules["amplification_stage"],
         "output_stage":    modules["output_stage"],
     }
-    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_UNSUPPORTED))
+    # telescopic_cascode_load_nmos is bias_infeasible (issue #189), so the
+    # round-trip builder opts into both unsupported and infeasible variants.
+    circuit = next(enumerate_circuits(
+        topology, simple_modules,
+        {**_INCLUDE_UNSUPPORTED, "include_infeasible": True}))
 
     sr_result = recognize(parse(to_flat_spice(circuit)))
 
@@ -220,9 +224,14 @@ def test_round_trip_two_stage_opamp(
 ):
     modules, plain, buffered = two_stage_fixtures
     topology = buffered if follower else plain
-    # include_unsupported only for the parked inverter_based_input pair; the
-    # followers are no longer parked.
-    config = _INCLUDE_UNSUPPORTED if input_pair == "inverter_based_input" else {}
+    # include_unsupported only for the parked inverter_based_input pair (the
+    # followers are no longer parked); include_infeasible for the
+    # bias_infeasible telescopic_cascode_load_nmos (issue #189).
+    config: dict = {}
+    if input_pair == "inverter_based_input":
+        config["include_unsupported"] = True
+    if load == "telescopic_cascode_load_nmos":
+        config["include_infeasible"] = True
     simple_modules = {
         "input_pair":         [v for v in modules["input_pair"]         if v.name == input_pair],
         "load":               [v for v in modules["load"]               if v.name == load],

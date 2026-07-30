@@ -490,6 +490,17 @@ modules:
     polarity: nmos_input
     output_cardinality: single
     display_name: "Telescopic-Cascode Load (NMOS, for NMOS Input Pair, Single Output)"
+    bias_infeasible: >-
+      Self-biased stacked-diode PMOS cascode: mp1/mp3 pin the internal cascode
+      node (internal_2) at vdd - |Vgs_mp1| - |Vgs_mp3| (~1.6 V at gf180), a
+      fixed ceiling with no tunable rail. The input-side NMOS cascode mn1 (drain
+      on that node, source on the input-pair drain in1) is left too little Vds
+      and lands ~25 mV into triode -- the whole class fails the DC bias gate on
+      gf180 (18/18 bias_infeasible), the input-side device short on headroom the
+      self-biased stack cannot give back (issue #189). Functionally correct
+      wiring; the wide-swing telescopic_cascode_load_wideswing_nmos (bias2-gated
+      cascodes, tunable level) is the feasible equivalent and biases. Kept for
+      design-space exploration (config include_infeasible=True).
     # Mirror image of telescopic_cascode_load_pmos: mn1/mn2 are NMOS cascode
     # devices (gated by bias1) connecting in1/in2 up to internal_2/out;
     # mp1/mp3 form a diode-connected PMOS cascode reference leg

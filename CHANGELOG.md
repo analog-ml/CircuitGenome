@@ -18,6 +18,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Fixed
 
+- 🐛 `telescopic_cascode_load_nmos` tagged `bias_infeasible` — its self-biased PMOS diode stack pins the internal cascode node at `vdd − |Vgs_mp1| − |Vgs_mp3|`, an untunable ceiling that leaves the input-side NMOS cascode ~25 mV into triode (18/18 fail the gf180 DC bias gate); dropped from default enumeration and kept for design-space exploration, with the wide-swing `telescopic_cascode_load_wideswing_nmos` as the feasible equivalent ([#189](https://github.com/analog-ml/CircuitGenome/issues/189)).
 - 🐛 Slew-rate SPICE measurement read the pole-zero-doublet settling tail instead of the slew plateau — steepest-secant-over-20%-swing replaces the 20–80% average, which collapsed to the settling speed on unsettled edges (ptm45 two-stage 0.7 → 11 V/µs) ([#186](https://github.com/analog-ml/CircuitGenome/pull/186)).
 - 🧪 Repair `test_analytic_gain_gate_skips_spice`, regressed by #148's `gain_db=None` railing gate — the test now selects a computed-gain candidate that actually exercises the #125 gate ([#186](https://github.com/analog-ml/CircuitGenome/pull/186)).
 - 🐛 FD load resistors never landed in the `load` slot — `out1`/`out2` pin aliases + rail-check hooks on `resistor_load_*`; the synthesizer's 1 kΩ placeholder no longer ships ([#163](https://github.com/analog-ml/CircuitGenome/pull/163)).
