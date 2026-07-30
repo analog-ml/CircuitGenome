@@ -15,6 +15,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 - ✨ Recognizer parser accepts *sized* SPICE netlists — MOSFET `W/L/nf/m` params, `sky130_fd_pr__*`/foundry model names via a configurable model-name table, and preserved R/C value tokens; sizes ride along on `Device.params` and `recognize()` is unchanged ([#168](https://github.com/analog-ml/CircuitGenome/pull/168)).
 - ✨ SKY130 1.8 V core PDK for the gm/Id sizer — trimmed vendored PDK, `device_handle`/`wl_units` tech fields, LUT monotone-envelope fix ([#159](https://github.com/analog-ml/CircuitGenome/pull/159)).
+- ✨ Optional body-effect coefficients (`gamma`/`phi`) on `MosfetParams` plus `extract_tech.py --body-effect`, which fits γ/2φF per tech from a reverse-body-bias `vth` sweep (populated for gf180/sky130) — latent infrastructure for a future Vsb-aware model. Investigating #106, an analytic cascode-rail body-effect correction built on these was found to *regress* the gf180 two-stage benchmark (126 → 114 accepted; the reported cascode failures were already resolved by #124/#167), so the rail-planner correction itself was not applied ([#106](https://github.com/analog-ml/CircuitGenome/issues/106)).
 
 ### Fixed
 

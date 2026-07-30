@@ -24,10 +24,18 @@ class MosfetParams:
     :param mu_cox: Process transconductance parameter µ·Cox in A/V².
     :param vth: Threshold voltage in V (positive for NMOS, negative for PMOS).
     :param lam: Channel-length modulation coefficient λ in 1/V (always positive).
+    :param gamma: Body-effect coefficient γ in √V (``ΔVth = γ(√(2φF+Vsb) −
+        √(2φF))``). Defaults to ``0.0`` — no body-effect correction, which is
+        correct for the synthetic Level-1 SPICE model (``gamma=0``) and any
+        tech whose YAML omits it.
+    :param phi: Surface-potential term 2φF in V (only meaningful with a
+        non-zero ``gamma``). Defaults to ``0.7``.
     """
     mu_cox: float
     vth: float
     lam: float
+    gamma: float = 0.0
+    phi: float = 0.7
 
 
 @dataclass

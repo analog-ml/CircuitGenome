@@ -27,10 +27,14 @@ nmos:
   mu_cox: 1.70e-04   # A/V²
   vth: 0.70          # V
   lam: 0.10          # 1/V
+  gamma: 0.3101          # √V   body-effect coefficient γ (issue #106)
+  phi: 0.3650            # V    surface potential 2φF
 pmos:
   mu_cox: 4.00e-05   # A/V²
   vth: -0.70         # V
   lam: 0.12          # 1/V
+  gamma: 0.5220          # √V   body-effect coefficient γ (issue #106)
+  phi: 0.4900            # V    surface potential 2φF
 
 width:
   min: 0.22

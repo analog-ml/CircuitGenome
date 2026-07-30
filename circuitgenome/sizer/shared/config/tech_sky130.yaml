@@ -38,10 +38,14 @@ nmos:
   mu_cox: 1.70e-04   # A/V²
   vth: 0.72          # V
   lam: 0.13          # 1/V
+  gamma: 0.4625          # √V   body-effect coefficient γ (issue #106)
+  phi: 0.9600            # V    surface potential 2φF
 pmos:
   mu_cox: 6.40e-05   # A/V²
   vth: -0.69         # V
   lam: 0.08          # 1/V
+  gamma: 0.4859          # √V   body-effect coefficient γ (issue #106)
+  phi: 0.8950            # V    surface potential 2φF
 
 width:               # bins cover W in [0.36(n)/0.42(p), 100) µm; 0.42 fits both.
   min: 0.42          # max is 99, NOT 100: the model bin wmax=100µm is an
