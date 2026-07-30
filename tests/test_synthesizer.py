@@ -2177,6 +2177,53 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
     assert tail_devices["m1_tail_current"].terminals["g"] == "net_bias7"
 
 
+# Rail kinds whose leg carries a sizer-set floor/level resistor; every other
+# consumed kind (gate_vdd/gate_gnd = mirror diodes, current_source/current_sink
+# = bare mirrors) must have no resistor -- see the #100 guard below.
+_RESISTIVE_RAIL_KINDS = frozenset({"cascode_gnd", "cascode_vdd", "tunable"})
+
+
+@pytest.mark.parametrize("topo_name", [
+    "one_stage_opamp",
+    "two_stage_opamp_single_ended",
+    "two_stage_opamp_fully_differential",
+])
+def test_bias_resistor_only_on_resistive_rail_kinds(topo_name):
+    """Regression guard for #100: no bias leg puts a resistor on a rail whose
+    kind sets its level structurally.
+
+    The single-global-``v_gate`` bug lived entirely on two rail kinds --
+    supply-referenced gates (``gate_vdd``/``gate_gnd``) and current-interface
+    mirror tails (``current_source``/``current_sink``). The demand-driven bias
+    construction (#103) builds those as mirror diodes / bare mirrors with **no
+    resistor at all**, so the sizer has nothing to mis-size there; only the
+    ``cascode_*``/``tunable`` legs keep a per-rail resistor (sized by
+    ``resistors.size_resistors`` / ``bias_levels.tune_bias_levels``). This
+    asserts that invariant structurally across every enumerated combination of
+    a few representative topologies, so a future leg-library change cannot
+    silently reintroduce a resistor onto a current-interface tail rail.
+    """
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == topo_name)
+    checked_resistive = checked_non_resistive = 0
+    for circuit in enumerate_circuits(topo, modules):
+        kinds = required_rail_kinds(topo, circuit.variant_map)
+        bias_res = {ref for ref, dev in circuit.devices
+                    if ref.endswith("_bias_gen") and dev.type == "resistor"}
+        for idx, kind in kinds.items():
+            has_r = f"r{idx}_bias_gen" in bias_res
+            if kind in _RESISTIVE_RAIL_KINDS:
+                checked_resistive += has_r
+            else:
+                assert not has_r, (
+                    f"{topo_name}: rail {idx} is {kind!r} but got a resistor "
+                    f"r{idx}_bias_gen -- #100 regression")
+                checked_non_resistive += 1
+    # Both arms must actually fire, or the guard proves nothing.
+    assert checked_non_resistive > 0
+    assert checked_resistive > 0
+
+
 @pytest.mark.parametrize(
     "tail_variant_name,expected_out_ports,expected_bias_refs",
     [
