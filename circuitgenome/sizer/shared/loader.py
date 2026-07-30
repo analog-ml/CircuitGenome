@@ -48,6 +48,8 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             mu_cox=float(d["mu_cox"]),
             vth=float(d["vth"]),
             lam=float(d["lam"]),
+            gamma=float(d.get("gamma", 0.0)),
+            phi=float(d.get("phi", 0.7)),
         )
 
     def _grid(d: dict, min_key: str = "min", max_key: str = "max") -> GridSpec:

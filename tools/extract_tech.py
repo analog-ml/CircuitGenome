@@ -17,10 +17,17 @@ by simulating the actual BSIM4 device in ngspice and fitting:
 Because mu_cox(effective) and lam are bias/length dependent, the extraction
 geometry (``Wext``, ``Lext``) and bias are recorded in the emitted YAML header.
 
+A ``--body-effect`` pass additionally fits the Level-1 body-effect pair
+(``γ``, ``2φF``) from a reverse-body-bias sweep of ``vth`` and injects them
+into the tech YAML — the rail planner uses them to place cascode gates that
+sit off their body rail (issue #106).
+
 Usage::
 
-    python3 tools/extract_tech.py            # regenerate all built-in nodes
-    python3 tools/extract_tech.py --node 45  # one node
+    python3 tools/extract_tech.py                     # regenerate all built-in nodes
+    python3 tools/extract_tech.py --node 45           # one node
+    python3 tools/extract_tech.py --gm-id --node gf180mcu       # gm/Id LUT only
+    python3 tools/extract_tech.py --body-effect --node gf180mcu # γ/2φF only
 
 Requires: ngspice on PATH, numpy.
 """
@@ -128,28 +135,46 @@ class _Model:
 
 
 def _run_ngspice(deck: str) -> np.ndarray:
-    """Run a deck in ngspice batch mode and return the wrdata table."""
+    """Run a deck in ngspice batch mode and return the wrdata table.
+
+    A ``.control``-driven deck writes its result with ``wrdata`` and carries no
+    top-level ``.print``/``.plot``, so some ngspice builds emit a "no
+    simulations run" note and a non-zero exit even though the run succeeded and
+    the file was written.  Success is therefore judged by a readable output
+    file, not the exit code; a genuinely failed run leaves no file and raises.
+    """
     with tempfile.TemporaryDirectory() as d:
         out = Path(d) / "out.dat"
         sp = Path(d) / "deck.sp"
         sp.write_text(deck.replace("__OUT__", str(out)))
-        subprocess.run(
-            ["ngspice", "-b", str(sp)],
-            capture_output=True, text=True, check=True,
+        proc = subprocess.run(
+            ["ngspice", "-b", str(sp)], capture_output=True, text=True,
         )
+        if not out.exists() or out.stat().st_size == 0:
+            raise RuntimeError(
+                f"ngspice produced no output (rc={proc.returncode}):\n{proc.stderr}"
+            )
         return np.loadtxt(out)
 
 
-def _transfer(model: _Model, dev: str, vdd: float, w_um: float, l_um: float):
-    """Return (vgs[], id_abs[]) for a Vds=Vdd transfer sweep."""
+def _transfer(model: _Model, dev: str, vdd: float, w_um: float, l_um: float,
+              vsb: float = 0.0):
+    """Return (vgs[], id_abs[]) for a Vds=Vdd transfer sweep.
+
+    ``vsb`` (≥ 0) reverse-biases the source-body junction by holding the bulk
+    a fixed offset off the source — below it for NMOS, above it for PMOS — so
+    fitting ``vth`` at several ``vsb`` maps the body effect. ``vsb=0`` ties the
+    bulk to the source and reproduces the plain transfer sweep exactly.
+    """
     w, l = w_um * _UM, l_um * _UM
     step = vdd / 400.0
     if dev == "nmos":
-        src = f"Vd d 0 {vdd}\nVg g 0 0\n{model.inst('nmos', 'd g 0 0', w, l)}\n"
+        src = (f"Vd d 0 {vdd}\nVg g 0 0\nVb b 0 {-vsb:.6e}\n"
+               f"{model.inst('nmos', 'd g 0 b', w, l)}\n")
         sweep = f".dc Vg 0 {vdd} {step:.6e}"
     else:
-        src = (f"Vs s 0 {vdd}\nVd d 0 0\nVg g 0 {vdd}\n"
-               f"{model.inst('pmos', 'd g s s', w, l)}\n")
+        src = (f"Vs s 0 {vdd}\nVd d 0 0\nVg g 0 {vdd}\nVb b 0 {vdd + vsb:.6e}\n"
+               f"{model.inst('pmos', 'd g s b', w, l)}\n")
         sweep = f".dc Vg {vdd} 0 {-step:.6e}"
     deck = (f"* transfer {dev}\n{model.include}{src}{sweep}\n"
             ".control\nrun\nwrdata __OUT__ i(Vd)\n.endc\n.end\n")
@@ -198,6 +223,82 @@ def _fit_lambda(vds, idr, vdd):
     mask = vds > 0.5 * vdd
     slope, intercept = np.polyfit(vds[mask], idr[mask], 1)
     return slope / intercept
+
+
+def _fit_body_effect(vsb: np.ndarray, vth_mag: np.ndarray):
+    """Fit |Vth|(Vsb) = |Vth0| + γ(√(2φF+Vsb) − √(2φF)) -> (gamma, two_phi).
+
+    The model is linear in ``γ`` but not in ``2φF``, so we grid-search a
+    physical ``2φF`` range and, for each candidate, close γ by least squares
+    (through the origin, since ``ΔVth(0) = 0``); the pair with the smallest
+    residual wins.  ``vsb[0]`` must be 0 (the |Vth0| reference).
+    """
+    dvth = vth_mag - vth_mag[0]
+    best = None
+    for two_phi in np.arange(0.30, 1.20 + 1e-9, 0.005):
+        x = np.sqrt(two_phi + vsb) - np.sqrt(two_phi)
+        denom = float(np.dot(x, x))
+        if denom <= 0.0:
+            continue
+        gamma = float(np.dot(x, dvth) / denom)
+        resid = float(np.sum((dvth - gamma * x) ** 2))
+        if best is None or resid < best[0]:
+            best = (resid, gamma, float(two_phi))
+    _, gamma, two_phi = best
+    return max(gamma, 0.0), two_phi
+
+
+def extract_body_effect(node: str) -> dict:
+    """Extract γ / 2φF per polarity from a small reverse-body-bias sweep."""
+    cfg = NODES[node]
+    model = _Model(cfg)
+    vdd, w, l = cfg["vdd"], cfg["w_ext_um"], cfg["l_ext_um"]
+    vsb_pts = np.linspace(0.0, min(1.0, 0.6 * vdd), 6)
+    be: dict[str, dict] = {}
+    for dev in ("nmos", "pmos"):
+        vth_mag = []
+        for vsb in vsb_pts:
+            vgs, idr = _transfer(model, dev, vdd, w, l, float(vsb))
+            vth, _ = _fit_transfer(vgs, idr, w, l)
+            vth_mag.append(abs(vth))
+        gamma, two_phi = _fit_body_effect(vsb_pts, np.asarray(vth_mag))
+        be[dev] = dict(gamma=gamma, phi=two_phi)
+    return be
+
+
+def inject_body_effect_yaml(node: str, be: dict) -> None:
+    """Add/update ``gamma:``/``phi:`` in each nmos/pmos block of the tech YAML.
+
+    Targets the *real* tech file (``tech_ptm45.yaml`` for PTM nodes,
+    ``tech_gf180mcu.yaml`` / ``tech_sky130.yaml`` for the hand-maintained PDK
+    nodes), inserting the two keys just after each block's ``lam:`` line (or
+    replacing them in place on a re-run).  Like ``inject_gmid_lut_yaml`` this
+    is a separate pass, so run it after the base (and ``--gm-id``) extraction.
+    """
+    stem = NODES[node].get("out", f"ptm{node}")
+    yml = _CONFIG / f"tech_{stem}.yaml"
+    if not yml.exists():
+        print(f"  {yml.name} not found; skipping γ/2φF inject")
+        return
+    out: list[str] = []
+    block: str | None = None
+    for line in yml.read_text().splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if indent == 0 and stripped.endswith(":") and " " not in stripped[:-1]:
+            key = stripped[:-1]
+            block = key if key in ("nmos", "pmos") else None
+        if block in ("nmos", "pmos") and (
+                stripped.startswith("gamma:") or stripped.startswith("phi:")):
+            continue  # drop existing; re-emitted below
+        out.append(line)
+        if block in ("nmos", "pmos") and stripped.startswith("lam:"):
+            pad = " " * indent
+            out.append(f"{pad}gamma: {be[block]['gamma']:.4f}"
+                       f"          # √V   body-effect coefficient γ (issue #106)")
+            out.append(f"{pad}phi: {be[block]['phi']:.4f}"
+                       f"            # V    surface potential 2φF")
+    yml.write_text("\n".join(out) + "\n")
 
 
 def extract(node: str) -> dict:
@@ -414,8 +515,20 @@ def main() -> None:
     ap.add_argument("--gm-id", action="store_true",
                     help="Characterize the gm/Id LUT (write *_gmid.npz + YAML gmid_lut:) "
                          "instead of the Level-1 fit.")
+    ap.add_argument("--body-effect", action="store_true",
+                    help="Extract γ/2φF from a reverse-body-bias sweep and inject "
+                         "gamma:/phi: into the tech YAML (issue #106). Separate pass; "
+                         "run after the base extraction.")
     args = ap.parse_args()
     nodes = [args.node] if args.node else sorted(NODES)
+    if args.body_effect:
+        for node in nodes:
+            be = extract_body_effect(node)
+            inject_body_effect_yaml(node, be)
+            n, p = be["nmos"], be["pmos"]
+            print(f"{node} body effect: nmos γ={n['gamma']:.4f} 2φF={n['phi']:.4f} | "
+                  f"pmos γ={p['gamma']:.4f} 2φF={p['phi']:.4f}")
+        return
     if args.gm_id:
         for node in nodes:
             data = extract_gmid(node)
