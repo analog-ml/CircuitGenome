@@ -1,41 +1,15 @@
 # Opamp-specific SR pattern library.
 #
-# Patterns here either carry an opamp FBR category (input_pair, load,
+# Every pattern here carries an opamp FBR category (input_pair, load,
 # tail_current, bias_generation, compensation, amplification_stage,
-# output_stage, cmfb) or
-# reference opamp-specific children (e.g. cascoded_differential_pair_pmos
-# references differential_pair_pmos). Corresponds 1:1 with opamp_modules.yaml
-# variants for the MVP composite patterns.
+# output_stage, cmfb) so the functional-block recognizer can slot it.
+# Corresponds 1:1 with opamp_modules.yaml variants for the MVP composite
+# patterns.
 #
 # `same_net` entries are the only required equalities; unlisted terminals
 # are unconstrained.
 
 patterns:
-  # ── Opamp-adjacent structural composite (no FBR category) ─────────────────
-  # cascoded_differential_pair_pmos references differential_pair_pmos (below),
-  # making it opamp-specific despite having no category of its own.
-
-  - name: cascoded_differential_pair_pmos
-    devices:
-      - {ref: m_dp1, type: pmos}
-      - {ref: m_dp2, type: pmos}
-      - {ref: m_gc1, type: pmos}
-      - {ref: m_gc2, type: pmos}
-    same_net:
-      - [m_dp1.s, m_dp2.s]         # shared tail
-      - [m_dp1.d, m_gc1.s]         # diff pair out1 → gate-coupled source1
-      - [m_dp2.d, m_gc2.s]         # diff pair out2 → gate-coupled source2
-    pins:
-      in1: m_dp1.g
-      in2: m_dp2.g
-      out1: m_gc1.d
-      out2: m_gc2.d
-      tail: m_dp1.s
-    tech_type_from: m_dp1
-    children:
-      - {pattern: differential_pair_pmos, devices: [m_dp1, m_dp2]}
-      - {pattern: gate_coupled_pair_pmos, devices: [m_gc1, m_gc2]}
-
   # ─── INPUT PAIR variants ────────────────────────────────────────────────────
   # inverter_based_input is listed first so it wins input_pair
   # connectivity-score ties against differential_pair_nmos/differential_pair_pmos:
