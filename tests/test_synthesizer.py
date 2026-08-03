@@ -858,6 +858,38 @@ def test_enumerate_circuits_excludes_high_z_untapped_branch_loads():
     assert cs_loads <= fd_loads
 
 
+def test_load_branch_is_redundant_with_output_cardinality_today():
+    """Invariant pinning issue #150: on the shipped catalog the untapped-
+    load-branch filter (``is_load_branch_compatible``) prunes nothing the
+    output-cardinality filter (``is_output_type_compatible``) hasn't already
+    pruned -- every load it rejects in a single_ended topology is also
+    rejected there by its ``output_cardinality`` tag.
+
+    The filter is kept as a *structural* guard against a future or mistagged
+    rail-gated single-ended load that the tag alone would wave through (the
+    tag is declared intent; load_branch is derived from device wiring). This
+    test makes that dormant-by-design redundancy explicit and flips the day a
+    load makes load_branch load-bearing -- if it fails, load_branch is now
+    catching something the tag doesn't, and issue #150's "no-op today"
+    premise is stale (which is the signal to keep the filter, not remove it).
+    """
+    modules = load_modules()
+    topologies = load_topologies()
+
+    for topo in topologies:
+        if topo.config.get("output_type") != "single_ended":
+            continue
+        for load in modules["load"]:
+            variant_map = {"load": load}
+            if not is_load_branch_compatible(topo, variant_map):
+                # load_branch rejects it -> output_cardinality must too,
+                # else the guard is silently load-bearing.
+                assert not is_output_type_compatible(topo, variant_map), (
+                    topo.name,
+                    load.name,
+                )
+
+
 def test_is_cmfb_compatible_differential_load_allows_both_cmfb_variants():
     """A load with output_cardinality "differential" has a real bias_cmfb
     consumer (folded_cascode_load_*_input_differential_output's mn3/mn4 or

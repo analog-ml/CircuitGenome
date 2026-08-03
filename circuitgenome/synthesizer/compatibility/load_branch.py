@@ -39,6 +39,17 @@ To extend: nothing to tag -- a new ``load`` variant is classified by what its
 devices connect to ``in1``, and a new topology is covered by its
 ``output_type`` (``single_ended`` templates leave ``in1``'s net untapped by
 the wiring convention documented in ``config/opamp_topologies.yaml``).
+
+On the shipped catalog this filter prunes nothing the output-cardinality
+filter (:mod:`~circuitgenome.synthesizer.compatibility.output`) hasn't
+already dropped: every load it rejects is also tagged
+``output_cardinality: "differential"`` (issue #150). It is kept, redundantly,
+as a *structural* guard -- the tag is declared intent, this check is derived
+from device wiring -- against a future or mistagged rail-gated single-ended
+load the tag alone would wave through. That dormant-by-design redundancy is
+pinned by
+``tests/test_synthesizer.py::test_load_branch_is_redundant_with_output_cardinality_today``,
+which flips the day a load makes this filter load-bearing.
 """
 from __future__ import annotations
 from ..models import ModuleVariant, TopologyTemplate
