@@ -16,6 +16,7 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
+from ..shared import equations as eq
 from ..shared.device_model import Level1Model
 from ..shared.metrics import _evaluate_metrics
 from ..shared.models import SizingResult, SizingSpec, TechParams, TransistorSizing
@@ -104,4 +105,5 @@ def size_level1(
         cc2_pf=cc2_pf,
         warnings=all_warnings,
         resistors=resistors,
+        open_loop_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
     )

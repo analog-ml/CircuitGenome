@@ -159,6 +159,11 @@ def _evaluate_metrics(
         rout3 = float("inf")
 
     # --- Gain ---
+    # NOTE: this is an un-derated single-point upper bound — the naive per-stage
+    # cascade product with no efficiency derate (#155).  It over-estimates
+    # multi-stage DC gain and is not open-loop-measurable above
+    # eq.OPEN_LOOP_GAIN_CEILING_DB; callers surface that via
+    # SizingResult.open_loop_measurable.
     # Single-ended non-mirror first stage delivers k_fs·gm1·Rout1 (k_fs=0.5);
     # mirror / fully-differential first stage delivers the full gm1·Rout1.
     k_fs = _first_stage_gain_factor(slot_transistors)

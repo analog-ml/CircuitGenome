@@ -29,6 +29,7 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
+from ..shared import equations as eq
 from ..shared.models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
@@ -94,4 +95,5 @@ def size_gmid(
         resistors={**currents.load_resistors, **extra_r},
         bias_feasible=bias_feasible,
         transistor_intents=plan.tintents,
+        open_loop_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
     )

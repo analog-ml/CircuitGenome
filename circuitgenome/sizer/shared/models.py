@@ -186,7 +186,11 @@ class SizingResult:
     :param metrics: Computed performance metrics, e.g.
         ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``. Analytical (model-based,
         ngspice-free) estimate; for PTM the CLI measures and displays ngspice
-        values (``spice_sim.simulate_metrics``) instead.
+        values (``spice_sim.simulate_metrics``) instead.  Note ``gain_db`` is an
+        **un-derated single-point upper bound** — the naive per-stage cascade
+        product with no efficiency derate — so it over-estimates multi-stage DC
+        gain and is not open-loop-measurable above the ceiling flagged by
+        ``open_loop_measurable`` (see :data:`~.equations.OPEN_LOOP_GAIN_CEILING_DB`).
     :param margins: Safety margin for each constrained spec (actual/spec for
         min specs, spec/actual for max specs). Values > 1 mean spec is met.
     :param solver_status: OR-Tools CP-SAT status string:
@@ -204,6 +208,13 @@ class SizingResult:
         intent keyed by device reference (``gmid.intent.TransistorIntent``: the
         functional block, role, gm/Id region, L multiple and rationale). Empty
         for the Level-1 path.
+    :param open_loop_measurable: ``False`` when the analytical ``gain_db``
+        exceeds the open-loop-bench ceiling (:data:`~.equations.OPEN_LOOP_GAIN_CEILING_DB`)
+        — the design rails to ~0 dB in an open-loop AC measurement even though
+        the DC bias is sound, so the reported gain/GBW/PM are optimistic. This
+        is an **advisory** signal (parallel to ``bias_feasible``): the metrics
+        are still reported and SPICE remains the authority — consumers should
+        deprioritise, not prune, on it.
     """
     transistors: dict[str, TransistorSizing]
     cc_pf: float | None
@@ -215,3 +226,4 @@ class SizingResult:
     resistors: dict[str, float] = field(default_factory=dict)
     transistor_intents: dict = field(default_factory=dict)
     bias_feasible: bool = True
+    open_loop_measurable: bool = True
