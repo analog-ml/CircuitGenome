@@ -470,6 +470,39 @@ def test_fd_three_stage_ac_metrics_are_real():
     assert not any("not measurable" in n for n in sim.get("notes", []))
 
 
+@ngspice
+def test_fd_cmrr_psrr_measured():
+    """#184 acceptance: an FD topology with a clean differential AC gain reports
+    SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
+    cmrr/_measure_psrr, FD branch) gate on the same ``ac_clean`` flag as the AC
+    bench, so once the #165/#167 CMFB output-sense rewire made the open-loop FD
+    gain clean, rejection flows through automatically.  Both are ratios against
+    the differential gain, so each must land above the gain floor (a matched FD
+    deck converts common-mode/supply to a near-zero differential output --
+    numerically small but real, not the garbage-against-garbage the SE guard in
+    test_cmrr_psrr_none_without_clean_gain rejects)."""
+    parsed = parse(_FD_THREE_STAGE_NETLIST)
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_fully_differential")
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("ptm45")
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, third_stage_current_ratio=5.0,
+                      gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=1e6, output_swing_max_v=0.8,
+                      output_swing_min_v=0.2)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID"
+    sim = spice_sim.simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
+
+    gain = sim["gain_db"]
+    assert gain is not None and gain > 0
+    # Rejection = Adm - A(cm|supply); each is a positive dB margin above the
+    # differential gain.  Loose upper bound catches a pure-noise-floor infinity.
+    assert sim["cmrr_db"] is not None and gain < sim["cmrr_db"] < 400.0
+    assert sim["psrr_db"] is not None and gain < sim["psrr_db"] < 400.0
+
+
 # --- phase-margin plausibility guard ----------------------------------------
 
 def test_pm_plausible_range():
