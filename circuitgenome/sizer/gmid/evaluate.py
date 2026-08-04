@@ -84,12 +84,13 @@ def _resistor_load_bias(
     A fixed load resistor holds the first-stage output ``I·R`` from its
     reference rail, but the driven common-source stage needs its gate exactly
     ``|Vgs|`` from that *same* rail to carry its quiescent current in
-    saturation.  The two are sized independently (``R`` from the nominal
-    threshold + a fixed overdrive, ``|Vgs|`` from the gm/Id target), so when
-    they disagree by more than the driven device's own ``Vdsat`` the second
-    stage is pushed out of its intended operating regime and its high-impedance
-    output rails open-loop — yet the small-signal formula would still report an
-    optimistic ``gm·Rout`` gain (issue #148).
+    saturation.  ``R`` is seeded from the driven signal device's ``Vgs`` read
+    from the LUT at the nominal corner (issue #158), so the two normally agree;
+    but if the driven device operates far from the seed's nominal gm/Id, they can
+    still disagree by more than its own ``Vdsat``, pushing the second stage out of
+    its intended regime so its high-impedance output rails open-loop — yet the
+    small-signal formula would still report an optimistic ``gm·Rout`` gain
+    (issue #148).
 
     Returns ``(invalid, notes)``: ``invalid`` gates the gain-derived metrics;
     ``notes`` always carries a corner-fragility advisory because a fixed
@@ -107,9 +108,9 @@ def _resistor_load_bias(
     mismatch = abs(v_off - abs(s.vgs_v))
     fragility = (
         "first-stage load is a fixed rail-referenced resistor: its DC drop is "
-        "sized from the nominal threshold and cannot track Vth across PVT "
-        "corners, so the inter-stage bias is corner-fragile — verify gain "
-        "across corners in SPICE.")
+        "sized from the LUT Vgs at the nominal corner and cannot track Vth "
+        "across PVT corners, so the inter-stage bias is corner-fragile — verify "
+        "gain across corners in SPICE.")
     if mismatch > s.vds_sat_v:
         rail = "gnd" if drv.type == "nmos" else "vdd"
         return True, [

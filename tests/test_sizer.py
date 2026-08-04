@@ -1244,23 +1244,49 @@ def test_fd_stage_interface_skips_resistor_load():
 # Resistor-load DC-headroom gate (issue #148)
 # ---------------------------------------------------------------------------
 
-def test_resistor_load_gates_gain_when_interstage_cannot_bias():
-    """A fixed rail-referenced resistor load holds the first-stage output at
-    I·R from its rail; when that misses the driven common-source stage's |Vgs|
-    by more than the stage's Vdsat, the open-loop output rails, so the analytical
-    gain (and the GBW/PM/CMRR/PSRR that derive from it) must be reported as
-    unmeasurable — not an optimistic gm·Rout (issue #148)."""
+def test_resistor_load_lut_seed_biases_interstage():
+    """gnd-referenced twin: with the LUT-sourced load-resistor seed (issue #158),
+    the first-stage output lands on the driven NMOS common-source stage's |Vgs|
+    by construction, so the interstage biases and the gain is measurable — the
+    #148 railing gate stands down. (Before #158 the seed was vth+Vov = 0.85 V,
+    which missed the driven ~0.76 V Vgs and tripped the gate.)  Only the
+    corner-fragility advisory remains."""
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
         "load": "resistor_load_gnd",
         "second_stage": "common_source_nmos"})
     assert result.solver_status == "GMID"
-    # Gain-derived metrics dropped; large-signal metrics that still hold stay.
-    for k in ("gain_db", "gbw_hz", "phase_margin_deg", "cmrr_db", "psrr_db"):
-        assert k not in result.metrics
-    assert "power_w" in result.metrics
-    assert "slew_rate_vps" in result.metrics
-    assert any("issue #148" in w for w in result.warnings)
+    assert result.metrics.get("gain_db") is not None
+    assert not any("issue #148" in w for w in result.warnings)
+    assert any("corner-fragile" in w for w in result.warnings)
+
+
+def test_resistor_load_bias_gate_fires_on_mismatch():
+    """The #148 gate itself: when the first-stage output I·R misses the driven
+    stage's |Vgs| by more than its Vdsat, the operating point is invalid and the
+    gain-derived metrics must be gated (issue #148). Exercised directly since the
+    LUT seed (#158) prevents the mismatch through the normal sizing pipeline."""
+    from types import SimpleNamespace
+    from circuitgenome.sizer.gmid.evaluate import _resistor_load_bias
+
+    def _inputs(gd_load_r, vgs, vdsat):
+        drv = SimpleNamespace(ref="m2_second_stage", type="nmos",
+                              terminals={"s": "gnd!"})
+        blocks = SimpleNamespace(
+            blocks={"second_stage": SimpleNamespace(signal_device=drv)},
+            is_fully_differential=False)
+        return (SimpleNamespace(blocks=blocks),
+                SimpleNamespace(gd_load_r=gd_load_r),
+                {"m2_second_stage": SimpleNamespace(vgs_v=vgs, vds_sat_v=vdsat)},
+                SimpleNamespace(ibias=40e-6))
+
+    # branch = 20 µA. v_off = 20 µA / gd_load_r.
+    # Mismatch: v_off = 0.85 V, driven |Vgs| = 0.60 V, Vdsat = 0.10 V → gate fires.
+    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.85, 0.60, 0.10))
+    assert invalid and any("issue #148" in n for n in notes)
+    # Consistent: v_off = 0.62 V within Vdsat of 0.60 V → gate stands down.
+    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.62, 0.60, 0.10))
+    assert not invalid and any("corner-fragile" in n for n in notes)
 
 
 def test_resistor_load_keeps_gain_when_interstage_biases():

@@ -28,22 +28,16 @@ wl_units: um                       # subckt w=/l= are microns (.option scale=1.0
 
 gmid_lut: models/sky130_gmid.npz   # gm/Id LUT (drives sizing)
 
-# Nominal Level-1 params: the gm/Id path uses the LUT, so these only satisfy
-# the schema and seed the deterministic load-resistor bias (~vth+Vov).
-# mu_cox/lam: square-law fit at L=0.5um, tt (the fit is degenerate at
-# Lmin=0.15um in a 130nm process); vth: BSIM operating-point vth at Lmin, tt
-# (sky130's reverse short-channel effect puts it well above the ~0.45V
-# long-channel value).
+# The gm/Id path sizes off the LUT, so no Level-1 square-law params are needed
+# (issue #158). mu_cox/lam are omitted (the fit is degenerate at Lmin=0.15um in
+# a 130nm process — the output-sweep fit even yields a negative pmos lambda); vth
+# is omitted too — the load-resistor bias seed is now read from the LUT (the
+# driven signal device's Vgs), so no hand-curated vth is required. gamma/phi are
+# retained for the body-effect model (issue #106).
 nmos:
-  mu_cox: 1.70e-04   # A/V²
-  vth: 0.72          # V
-  lam: 0.13          # 1/V
   gamma: 0.4625          # √V   body-effect coefficient γ (issue #106)
   phi: 0.9600            # V    surface potential 2φF
 pmos:
-  mu_cox: 6.40e-05   # A/V²
-  vth: -0.69         # V
-  lam: 0.08          # 1/V
   gamma: 0.4859          # √V   body-effect coefficient γ (issue #106)
   phi: 0.8950            # V    surface potential 2φF
 

@@ -63,6 +63,7 @@ _CC_STABILITY_RATIO = 0.25
 
 def size_load_resistors(
     slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
+    seed_v: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """Size resistor-load devices so the first-stage output biases on.
 
@@ -70,10 +71,15 @@ def size_load_resistors(
     value is chosen so the DC drop places the first-stage output node at a level
     that turns the driven device on:
 
-    * resistor to **gnd** (PMOS-input loads): ``V_node = vth_n + Vov`` →
-      ``R = V_node / (ibias/2)``.
-    * resistor from **vdd** (NMOS-input loads): drop ``= |vth_p| + Vov`` →
-      ``R = drop / (ibias/2)``.
+    * resistor to **gnd** (PMOS-input loads): ``V_node`` = the NMOS driven
+      device's turn-on gate voltage → ``R = V_node / (ibias/2)``.
+    * resistor from **vdd** (NMOS-input loads): drop = the PMOS driven device's
+      ``|Vgs|`` → ``R = drop / (ibias/2)``.
+
+    ``seed_v`` supplies that turn-on voltage per polarity (``{"nmos": …,
+    "pmos": …}``, magnitudes in V). The gm/Id path passes the driven signal
+    device's ``Vgs`` read from the LUT (issue #158); when omitted (Level-1 path),
+    it falls back to the analytical ``|vth| + Vov`` estimate.
 
     Only the ``load`` slot is sized; other resistor roles keep their netlist
     value.  Returns ``{ref: ohms}``.
@@ -86,9 +92,9 @@ def size_load_resistors(
     for r in slot_resistors.get("load", []):
         nets = [str(n).lower() for n in r.terminals.values()]
         if any("gnd" in n or n in ("0", "vss!") for n in nets):
-            v = tech.nmos.vth + vov
+            v = seed_v["nmos"] if seed_v else tech.nmos.vth + vov
         elif any("vdd" in n for n in nets):
-            v = abs(tech.pmos.vth) + vov
+            v = seed_v["pmos"] if seed_v else abs(tech.pmos.vth) + vov
         else:
             continue  # not a rail-referenced load resistor
         if v > 0:

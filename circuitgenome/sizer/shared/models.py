@@ -21,9 +21,15 @@ class UnsupportedTechError(ValueError):
 class MosfetParams:
     """CMOS process parameters for one device polarity.
 
-    :param mu_cox: Process transconductance parameter µ·Cox in A/V².
     :param vth: Threshold voltage in V (positive for NMOS, negative for PMOS).
+        Required for Level-1/analytical techs. ``None`` for gm/Id (LUT) techs:
+        the LUT supplies every operating-point voltage, including the load-resistor
+        bias seed, so a gm/Id tech needs no hand-curated ``vth`` (issue #158).
+    :param mu_cox: Process transconductance parameter µ·Cox in A/V². Required for
+        Level-1/analytical techs; ``None`` for gm/Id (LUT) techs, where sizing
+        runs off the LUT and the square-law fit is dead weight (issue #158).
     :param lam: Channel-length modulation coefficient λ in 1/V (always positive).
+        Required/optional under the same rule as ``mu_cox``.
     :param gamma: Body-effect coefficient γ in √V (``ΔVth = γ(√(2φF+Vsb) −
         √(2φF))``). Defaults to ``0.0`` — no body-effect correction, which is
         correct for the synthetic Level-1 SPICE model (``gamma=0``) and any
@@ -31,9 +37,9 @@ class MosfetParams:
     :param phi: Surface-potential term 2φF in V (only meaningful with a
         non-zero ``gamma``). Defaults to ``0.7``.
     """
-    mu_cox: float
-    vth: float
-    lam: float
+    vth: float | None = None
+    mu_cox: float | None = None
+    lam: float | None = None
     gamma: float = 0.0
     phi: float = 0.7
 

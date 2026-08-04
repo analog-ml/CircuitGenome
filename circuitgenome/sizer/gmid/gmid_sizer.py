@@ -56,7 +56,7 @@ def size_gmid(
     view = analyze_circuit(fbr_result, topology)
 
     # Phase 2 — Bias currents: IDS from KCL, rail-referenced load resistors.
-    currents = assign_currents(view, spec, tech)
+    currents = assign_currents(view, spec, tech, intent)
 
     # Phase 3 — Plan: gm requirements + compensation caps + per-device intent.
     plan = plan_devices(view, currents, spec, tech, intent)

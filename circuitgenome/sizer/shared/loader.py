@@ -21,6 +21,42 @@ def load_spec(path: Path | str) -> SizingSpec:
         **{k: v for k, v in data.items() if k in SizingSpec.__dataclass_fields__})
 
 
+def _validate_mosfets(
+    nmos: MosfetParams, pmos: MosfetParams, *, is_level1: bool
+) -> None:
+    """Reject silently-broken process params at load time (issue #158).
+
+    gm/Id (LUT) techs may omit ``vth``/``mu_cox``/``lam`` entirely — the LUT
+    supplies every operating-point voltage. Level-1/analytical techs (no
+    ``gmid_lut``) require all three, with ``lam``/``mu_cox`` positive and the
+    ``vth`` sign matching the polarity, so a bad fit can't be committed silently.
+    """
+    if not is_level1:
+        # Only sanity-check a vth if one is present (it is optional here).
+        if nmos.vth is not None and nmos.vth <= 0:
+            raise ValueError(f"nmos.vth must be positive, got {nmos.vth}")
+        if pmos.vth is not None and pmos.vth >= 0:
+            raise ValueError(f"pmos.vth must be negative, got {pmos.vth}")
+        return
+    if nmos.vth is None or nmos.vth <= 0:
+        raise ValueError(
+            f"nmos.vth must be a positive number for a Level-1 tech "
+            f"(no gmid_lut), got {nmos.vth}")
+    if pmos.vth is None or pmos.vth >= 0:
+        raise ValueError(
+            f"pmos.vth must be a negative number for a Level-1 tech "
+            f"(no gmid_lut), got {pmos.vth}")
+    for name, p in (("nmos", nmos), ("pmos", pmos)):
+        if p.mu_cox is None or p.mu_cox <= 0:
+            raise ValueError(
+                f"{name}.mu_cox must be a positive number for a Level-1 tech "
+                f"(no gmid_lut), got {p.mu_cox}")
+        if p.lam is None or p.lam <= 0:
+            raise ValueError(
+                f"{name}.lam must be a positive number for a Level-1 tech "
+                f"(no gmid_lut), got {p.lam}")
+
+
 def load_tech(path: Path | str | None = None) -> TechParams:
     """Load :class:`~.models.TechParams` from a YAML file.
 
@@ -45,9 +81,9 @@ def load_tech(path: Path | str | None = None) -> TechParams:
 
     def _mosfet(d: dict) -> MosfetParams:
         return MosfetParams(
-            mu_cox=float(d["mu_cox"]),
-            vth=float(d["vth"]),
-            lam=float(d["lam"]),
+            vth=float(d["vth"]) if "vth" in d else None,
+            mu_cox=float(d["mu_cox"]) if "mu_cox" in d else None,
+            lam=float(d["lam"]) if "lam" in d else None,
             gamma=float(d.get("gamma", 0.0)),
             phi=float(d.get("phi", 0.7)),
         )
@@ -89,10 +125,16 @@ def load_tech(path: Path | str | None = None) -> TechParams:
     if device_handle is not None:
         device_handle = {str(k): str(v) for k, v in device_handle.items()}
 
+    # The nmos/pmos blocks are optional for gm/Id techs (they may carry only
+    # gamma/phi, or nothing); Level-1 techs are caught by _validate_mosfets.
+    nmos = _mosfet(data.get("nmos") or {})
+    pmos = _mosfet(data.get("pmos") or {})
+    _validate_mosfets(nmos, pmos, is_level1=gmid_lut is None)
+
     return TechParams(
         name=str(data["name"]),
-        nmos=_mosfet(data["nmos"]),
-        pmos=_mosfet(data["pmos"]),
+        nmos=nmos,
+        pmos=pmos,
         width=_grid(data["width"]),
         length=_grid(data["length"]),
         cap=GridSpec(
