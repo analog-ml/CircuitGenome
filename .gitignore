@@ -226,3 +226,7 @@ circuitgenome/sizer/shared/eval_engines
 
 .mem/
 .copilot/
+.claude/
+
+# ngspice scratch output
+bsim4v5.out
