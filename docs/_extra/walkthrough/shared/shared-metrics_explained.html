@@ -445,6 +445,8 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
   <p>Then, if the spec set a floor, the margin is <code>gain_db − spec.gain_min_db</code>. If the floor was 70 dB, the margin is <code>+10 dB</code> — a positive number, meaning the design comfortably clears the bar.</p>
 
   <p>One honest edge case: the whole block is guarded by <code>all(g &gt; 0)</code>. If any stage gain is zero or negative (a device that never got sized, an <code>inf</code> resistance producing a degenerate product), the gain is simply <em>not reported</em> rather than reporting a garbage number. Silence beats a lie.</p>
+
+  <p>Even when it <em>is</em> reported, <code>gain_db</code> is an un-derated cascade product — a single-point upper bound. Above the open-loop ceiling callers receive an advisory <code>open_loop_measurable = False</code> flag (#155), because a bench that can't hold mid-rail will measure ~0 dB no matter how healthy the DC bias looks.</p>
 </section>
 
 <!-- ================= PART 6 ================= -->
@@ -610,6 +612,7 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
     <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
     <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
     <li>The cascode-aware output resistances arrive through <code>rout{1,2,3}_override</code> — this file does not compute them; the gm/Id pipeline does and passes them in.</li>
+    <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
   </ul>
 
   <h3>Why it's elegant</h3>

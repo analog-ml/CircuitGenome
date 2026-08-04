@@ -177,7 +177,7 @@
   </figure>
 
   <h3>The cast of characters</h3>
-  <p>The file is small — two dataclasses, one lookup function, one resolver, and a top-level config object. Hover any box to trace who it leans on.</p>
+  <p>The file is small — two dataclasses, one lookup function, one resolver, a consistency-preserving factory (<code>make_intent</code>), a per-tech resolver (<code>intent_for_tech</code> over the <code>INTENT_BY_TECH</code> registry), and a top-level config object. Hover any box to trace who it leans on.</p>
 
   <figure class="fig interactive">
     <svg viewBox="0 0 560 320" role="img" aria-label="Call and data graph of intent.py">
@@ -680,6 +680,28 @@ cascode_refs = <span class="tok-fn">set</span>()   <span class="tok-com"># nothi
   <p>The module ends with a single ready-made default:</p>
   <pre class="code"><code>DEFAULT_INTENT = <span class="tok-fn">GmIdIntent</span>()</code></pre>
   <p>— the batteries-included configuration every caller starts from.</p>
+
+  <h3>Keeping the two knob sets in lockstep: <code>make_intent()</code></h3>
+  <p>There is a subtle trap in the layout above. The per-block <code>block_intents</code> drive the <em>actual</em> geometry — <code>geometry.py</code> passes each device's <code>l_mult</code>/<code>gm_id</code> into the solver — while the flat role scalars (<code>signal_l_mult</code>, <code>current_source_gm_id</code>, …) feed only the <em>pre-geometry</em> <code>gds</code> estimate. Set one without the other and you move the estimate but not the sizing, or the sizing but not the estimate. <code>make_intent()</code> is the <strong>consistency-preserving factory</strong> that closes that gap: give it one set of L / gm/Id knobs and it builds a <code>GmIdIntent</code> whose per-block intents <em>and</em> flat fallbacks share those exact values, so a retune actually moves both places at once.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">make_intent</span>(*, signal_l_mult=<span class="tok-num">2.0</span>, cs_l_mult=<span class="tok-num">4.0</span>, cascode_l_mult=<span class="tok-num">3.0</span>,
+                follower_l_mult=<span class="tok-num">1.0</span>, signal_gm_id=<span class="tok-num">14.0</span>, cs_gm_id=<span class="tok-num">10.0</span>,
+                cascode_gm_id=<span class="tok-num">8.0</span>, follower_gm_id=<span class="tok-num">15.0</span>) -> GmIdIntent:
+    <span class="tok-com"># rebuild every block from the same knobs, then set the flat fallbacks to match</span>
+    ...</code></pre>
+
+  <p>Signal blocks stay <em>solved</em> (<code>gm_id = None</code>) — only their <code>l_mult</code> is retuned — and the source-follower <code>output_stage</code> keeps its own <code>follower_*</code> settings, exactly the two exceptions Part&nbsp;4 called out. It's the machine version of the copy-one-key move above, but applied to <em>every</em> block from one dial so the flat estimate never drifts out of sync with the geometry.</p>
+
+  <h3>Per-technology overrides: <code>INTENT_BY_TECH</code> and <code>intent_for_tech()</code></h3>
+  <p>The <code>DEFAULT_INTENT</code> knobs were tuned for one PDK; a different technology (a larger <code>L_min</code>, say) might want its own SPICE-tuned intent. The file leaves room for that with a tiny registry and resolver:</p>
+
+  <pre class="code"><code><span class="tok-com"># any tech not listed falls back to DEFAULT_INTENT</span>
+INTENT_BY_TECH: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, GmIdIntent] = {}
+
+<span class="tok-kw">def</span> <span class="tok-fn">intent_for_tech</span>(name: <span class="tok-kw">str</span>) -> GmIdIntent:
+    <span class="tok-kw">return</span> INTENT_BY_TECH.<span class="tok-fn">get</span>(name, DEFAULT_INTENT)</code></pre>
+
+  <p>The honest part: <code>INTENT_BY_TECH</code> ships <strong>empty</strong>. A SPICE sweep (issue&nbsp;#77) found that no per-tech L-policy override actually improved the technologies tried — gf180 already meets the spec under <code>DEFAULT_INTENT</code>, and sky130's failures are non-policy (SPICE <code>.op</code> non-convergence and a second-stage weak-inversion gm ceiling), so no L-policy change recovers them. So the <em>mechanism</em> exists — register a <code>make_intent(...)</code>-built override under a tech name and every device retunes in lockstep — but with the registry empty, <code>intent_for_tech()</code> resolves every technology to the same <code>DEFAULT_INTENT</code>. It's a deliberately dormant hook, ready the day a PDK actually needs its own policy.</p>
 </section>
 
 <!-- ================= PART 8 ================= -->

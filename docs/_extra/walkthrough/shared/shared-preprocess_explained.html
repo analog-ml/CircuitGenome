@@ -339,21 +339,23 @@
 
   <pre class="code"><code>_RESISTOR_LOAD_OVERDRIVE = <span class="tok-num">0.15</span>   <span class="tok-com"># V_node ≈ Vth + this</span>
 
-<span class="tok-kw">def</span> <span class="tok-fn">size_load_resistors</span>(slot_resistors, spec, tech) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">float</span>]:
+<span class="tok-kw">def</span> <span class="tok-fn">size_load_resistors</span>(slot_resistors, spec, tech, seed_v=<span class="tok-kw">None</span>) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">float</span>]:
     branch_i = spec.ibias / <span class="tok-num">2.0</span>          <span class="tok-com"># each load carries one pair branch</span>
     <span class="tok-kw">if</span> branch_i &lt;= <span class="tok-num">0</span>: <span class="tok-kw">return</span> {}
     vov = _RESISTOR_LOAD_OVERDRIVE
     <span class="tok-kw">for</span> r <span class="tok-kw">in</span> slot_resistors.get(<span class="tok-str">"load"</span>, []):
         nets = [<span class="tok-fn">str</span>(n).lower() <span class="tok-kw">for</span> n <span class="tok-kw">in</span> r.terminals.values()]
         <span class="tok-kw">if</span> <span class="tok-fn">any</span>(<span class="tok-str">"gnd"</span> <span class="tok-kw">in</span> n <span class="tok-kw">or</span> n <span class="tok-kw">in</span> (<span class="tok-str">"0"</span>, <span class="tok-str">"vss!"</span>) <span class="tok-kw">for</span> n <span class="tok-kw">in</span> nets):
-            v = tech.nmos.vth + vov            <span class="tok-com"># resistor to gnd → NMOS turns on</span>
+            v = seed_v[<span class="tok-str">"nmos"</span>] <span class="tok-kw">if</span> seed_v <span class="tok-kw">else</span> tech.nmos.vth + vov   <span class="tok-com"># resistor to gnd → NMOS turns on</span>
         <span class="tok-kw">elif</span> <span class="tok-fn">any</span>(<span class="tok-str">"vdd"</span> <span class="tok-kw">in</span> n <span class="tok-kw">for</span> n <span class="tok-kw">in</span> nets):
-            v = <span class="tok-fn">abs</span>(tech.pmos.vth) + vov         <span class="tok-com"># resistor from vdd → PMOS turns on</span>
+            v = seed_v[<span class="tok-str">"pmos"</span>] <span class="tok-kw">if</span> seed_v <span class="tok-kw">else</span> <span class="tok-fn">abs</span>(tech.pmos.vth) + vov   <span class="tok-com"># resistor from vdd → PMOS turns on</span>
         <span class="tok-kw">else</span>:
             <span class="tok-kw">continue</span>                            <span class="tok-com"># not rail-referenced → skip</span>
         <span class="tok-kw">if</span> v &gt; <span class="tok-num">0</span>:
             out[r.ref] = v / branch_i
     <span class="tok-kw">return</span> out</code></pre>
+
+  <p>The threshold-plus-overdrive figure is only the analytical (Level-1) fallback. The gm/Id pipeline instead passes the driven device's real turn-on <code>Vgs</code> read straight from its LUT (<code>seed_v</code>), so the <code>I·R</code> drop lands on the exact gate voltage the next stage actually needs (#158).</p>
 
   <h3>Traced with real numbers</h3>
   <p>Take <code>spec.ibias = 20 µA</code>, so each branch carries <code>10 µA</code>. The resistor connects to <code>gnd</code>, so it must lift its node high enough to turn an NMOS on. With <code>Vth,n = 0.45 V</code> and <code>Vov = 0.15 V</code>:</p>

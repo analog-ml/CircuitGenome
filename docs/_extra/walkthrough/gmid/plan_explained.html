@@ -127,7 +127,7 @@
   <p>Do this carefully up front and the geometry solver that follows has a clean, KCL-consistent target sheet. Skip it, and the solver invents currents ad-hoc, quietly violates KCL at some node, and chases gain targets that the bias current can never physically deliver.</p>
 
   <h3>The cast of characters</h3>
-  <p>Two orchestrators, five helpers. Phase 2 on the left, Phase 3 on the right; the currents computed on the left flow into the right. Hover any box to trace its link.</p>
+  <p>Two orchestrators, six helpers. Phase 2 on the left (which also reads <code>intent</code>, via <code>_load_seed_v</code>), Phase 3 on the right; the currents computed on the left flow into the right. Hover any box to trace its link.</p>
 
   <figure class="fig interactive">
     <svg viewBox="0 0 645 270" role="img" aria-label="Call graph of plan.py: assign_currents and plan_devices with their helpers">
@@ -269,9 +269,10 @@
 
   <blockquote><p><strong>The one job:</strong> hand every device its quiescent current from <code>spec.ibias</code> and KCL, and size the rail-referenced load resistors from the first-stage branch current.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">assign_currents</span>(view, spec, tech) -> CurrentPlan:
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">assign_currents</span>(view, spec, tech, intent) -> CurrentPlan:
     ids_map = <span class="tok-fn">assign_ids</span>(view.slot_transistors, view.all_transistors, spec)
-    load_resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors, spec, tech)
+    load_resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors, spec, tech,
+                                         <span class="tok-fn">_load_seed_v</span>(tech, intent))
     gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(load_resistors.values())) <span class="tok-kw">if</span> load_resistors <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
     <span class="tok-kw">return</span> <span class="tok-fn">CurrentPlan</span>(ids_map=ids_map, load_resistors=load_resistors,
                        gd_load_r=gd_load_r)</code></pre>
@@ -321,9 +322,9 @@
 
   <h3>Sizing the load resistors</h3>
   <p>When the first stage uses a plain resistor load (rather than an active mirror), <code>size_load_resistors</code> picks each <code>R</code> so the DC drop lands the output node at a sensible level. For a PMOS-input stage the resistor ties to ground and must set:</p>
-  <div class="eq-center"><span class="boxed-eq">V<sub>node</sub>&nbsp;=&nbsp;V<sub>th,n</sub>&nbsp;+&nbsp;V<sub>ov</sub>&nbsp;&nbsp;⇒&nbsp;&nbsp;R&nbsp;=&nbsp;V<sub>node</sub>&nbsp;/&nbsp;(ibias/2)</span></div>
-  <p>With <code>V<sub>th,n</sub> = 0.4 V</code>, an overdrive <code>V<sub>ov</sub> = 0.2 V</code>, and the branch current we just derived (20 µA):</p>
-  <pre class="code"><code>V_node = 0.4 + 0.2 = 0.6 V
+  <div class="eq-center"><span class="boxed-eq">V<sub>node</sub>&nbsp;=&nbsp;|V<sub>gs</sub>|<sub>LUT</sub>&nbsp;&nbsp;⇒&nbsp;&nbsp;R&nbsp;=&nbsp;V<sub>node</sub>&nbsp;/&nbsp;(ibias/2)</span></div>
+  <p>Since #158, <code>V<sub>node</sub></code> is no longer a hand-curated <code>V<sub>th</sub> + V<sub>ov</sub></code>. It is the driven signal device's turn-on <code>|V<sub>gs</sub>|</code> read straight from the gm/Id LUT at its nominal signal region (via <code>_load_seed_v</code>). Say that lands at <code>|V<sub>gs</sub>|<sub>LUT</sub> ≈ 0.6 V</code>; with the branch current we just derived (20 µA):</p>
+  <pre class="code"><code>V_node = |Vgs|_LUT ≈ 0.6 V   (nominal signal gm/Id, no Vth + Vov)
 R      = 0.6 V / 20 µA = 30 kΩ</code></pre>
 
   <p>The last line of the function then turns the <em>smallest</em> load resistor into a conductance the next phase will fold into its gain math:</p>
