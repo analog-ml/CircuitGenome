@@ -13,12 +13,22 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Added
 
-- ✨ Recognizer parser accepts *sized* SPICE netlists — MOSFET `W/L/nf/m` params, `sky130_fd_pr__*`/foundry model names via a configurable model-name table, and preserved R/C value tokens; sizes ride along on `Device.params` and `recognize()` is unchanged ([#168](https://github.com/analog-ml/CircuitGenome/pull/168)).
+- ✨ Recognizer parser accepts *sized* SPICE netlists — MOSFET `W/L/nf/m` params, `sky130_fd_pr__*`/foundry model names via a configurable model-name table, and preserved R/C value tokens; sizes ride along on `Device.params` and `recognize()` is unchanged ([#169](https://github.com/analog-ml/CircuitGenome/pull/169)).
 - ✨ SKY130 1.8 V core PDK for the gm/Id sizer — trimmed vendored PDK, `device_handle`/`wl_units` tech fields, LUT monotone-envelope fix ([#159](https://github.com/analog-ml/CircuitGenome/pull/159)).
+- ✨ Per-tech gm/Id intent registry — `make_intent`/`INTENT_BY_TECH`/`intent_for_tech(tech.name)` threaded into `size_gmid`, so a per-tech override moves the block-intents (drive geometry) and flat role fallbacks (drive the pre-geometry `gds` estimate) *together*; ships a feasible sky130 spec and fixes the sky130 `.op` non-convergence it surfaced ([#187](https://github.com/analog-ml/CircuitGenome/pull/187)).
 - ✨ Optional body-effect coefficients (`gamma`/`phi`) on `MosfetParams` plus `extract_tech.py --body-effect`, which fits γ/2φF per tech from a reverse-body-bias `vth` sweep (populated for gf180/sky130) — latent infrastructure for a future Vsb-aware model. Investigating #106, an analytic cascode-rail body-effect correction built on these was found to *regress* the gf180 two-stage benchmark (126 → 114 accepted; the reported cascode failures were already resolved by #124/#167), so the rail-planner correction itself was not applied ([#106](https://github.com/analog-ml/CircuitGenome/issues/106)).
+
+### Changed
+
+- ♻️ Decouple gm/Id techs from the Level-1 square-law schema — `MosfetParams.vth`/`mu_cox`/`lam` are now optional (a gm/Id PDK tech may omit the `nmos:`/`pmos:` blocks entirely) and `size_load_resistors` takes a LUT-sourced per-polarity seed; drops the honest-but-dead square-law placeholders sky130's degenerate-at-Lmin fit was forced to carry to satisfy a schema it never touches ([#195](https://github.com/analog-ml/CircuitGenome/pull/195)).
+- ♻️ Rename the stage-interface compatibility filter `second_stage` → `stage_interface` (module, `is_*_compatible`, call site) — behavior-neutral, closing the gap #144's doc-stub rename opened ([#178](https://github.com/analog-ml/CircuitGenome/pull/178)).
 
 ### Fixed
 
+- 🐛 Flag un-measurable analytical open-loop gain — advisory `OPEN_LOOP_GAIN_CEILING_DB`/`open_loop_measurable` on `SizingResult` so consumers can deprioritise three-stage topologies that report ~178 dB analytically then rail to 0 dB on every SPICE corner while `bias_feasible` stays `True` ([#194](https://github.com/analog-ml/CircuitGenome/pull/194)).
+- 🐛 Reserve the gm/Id `output_stage` intent block for the source-follower buffer (fixed gm/Id = 15, L = 1× min); a third *gain* stage now maps to `gain_stage`, aligning sizer terminology with the synthesizer/recognizer (where `output_stage` is specifically a unity-gain `common_drain_*` follower) ([#172](https://github.com/analog-ml/CircuitGenome/pull/172)).
+- 🐛 Drop the unconnected `vcm_ref` pin from FD circuits whose `cmfb` is pruned — for the 10/14 non-differential `load` variants `prune_cmfb` empties the CMFB slot, leaving `vcm_ref` a no-op external pin the sizer already treats as semantic (`has_vcm`) ([#180](https://github.com/analog-ml/CircuitGenome/pull/180)).
+- 🐛 Remove the uncategorized `cascoded_differential_pair_pmos` SR pattern — the only library pattern with neither `category` nor `circuit_block`, so FBR skipped it in both slotting modes (recognized-but-never-slotted, inert) and its cascodes-in-input-pair shape contradicted the load-cascode convention ([#192](https://github.com/analog-ml/CircuitGenome/pull/192)).
 - 🐛 `telescopic_cascode_load_nmos` tagged `bias_infeasible` — its self-biased PMOS diode stack pins the internal cascode node at `vdd − |Vgs_mp1| − |Vgs_mp3|`, an untunable ceiling that leaves the input-side NMOS cascode ~25 mV into triode (18/18 fail the gf180 DC bias gate); dropped from default enumeration and kept for design-space exploration, with the wide-swing `telescopic_cascode_load_wideswing_nmos` as the feasible equivalent ([#189](https://github.com/analog-ml/CircuitGenome/issues/189)).
 - 🐛 Slew-rate SPICE measurement read the pole-zero-doublet settling tail instead of the slew plateau — steepest-secant-over-20%-swing replaces the 20–80% average, which collapsed to the settling speed on unsettled edges (ptm45 two-stage 0.7 → 11 V/µs) ([#186](https://github.com/analog-ml/CircuitGenome/pull/186)).
 - 🧪 Repair `test_analytic_gain_gate_skips_spice`, regressed by #148's `gain_db=None` railing gate — the test now selects a computed-gain candidate that actually exercises the #125 gate ([#186](https://github.com/analog-ml/CircuitGenome/pull/186)).
@@ -32,8 +42,21 @@ open the PR for the full root-cause / design detail. Emoji legend:
 ### Docs
 
 - 📝 Code walkthroughs — 34 hand-authored, figure-rich HTML deep dives into the sizer and recognizer internals, shipped verbatim alongside the Sphinx docs (`html_extra_path`, ADR 0002) with a searchable landing page and module-page deep-dive links ([#173](https://github.com/analog-ml/CircuitGenome/pull/173)).
+- 📝 Sync the HTML code walkthroughs with #158/#190/#77/#155 (9 files, +67/−25) — living documents co-updated with the code they describe ([#198](https://github.com/analog-ml/CircuitGenome/pull/198)).
+- 📝 Document why the FD source-follower buffer slots are deliberately absent from `_FD_PAIRS` — `_apply_symmetry` groups a pair by `type` alone and would fuse the two same-polarity follower devices — plus a regression test locking the invariant ([#177](https://github.com/analog-ml/CircuitGenome/pull/177)).
+- 📝 Derive the cascode `Rin = ro·(1 + gm·Rsrc)` boost formula in the gm/Id `blocks.py` walkthrough — intuition, two theme-aware SVGs, three-step KCL ([#176](https://github.com/analog-ml/CircuitGenome/pull/176)).
+- 📝 Update the `intent.py` walkthrough for the follower `output_stage` (fixed gm/Id = 15, L = 1× min) after #172 ([#174](https://github.com/analog-ml/CircuitGenome/pull/174)).
 - 📝 Restructure this changelog to the Keep a Changelog + SemVer format (one line per PR).
 - 📝 Clarify the overview template table and buffered op-amps ([#154](https://github.com/analog-ml/CircuitGenome/pull/154)).
+
+### Internal / Build
+
+- 🧪 Lock in measured FD CMRR/PSRR (`test_fd_cmrr_psrr_measured`) — the #165/#167 CMFB output-sense rewire opened the `ac_clean` gate, so FD rejection metrics already flow through `simulate_metrics` (169.6/207.2 dB on the frozen three-stage FD); the FD half of #184 ([#197](https://github.com/analog-ml/CircuitGenome/pull/197)).
+- 🧪 Guard bias resistors off gate/current rails — across every enumerated 1-/2-stage-SE/2-stage-FD combination a constructed `r*_bias_gen` appears only on `cascode_*`/`tunable` rails and never on a `gate_*`/`current_*` rail, locking in the #100 single-global-`v_gate` resolution ([#188](https://github.com/analog-ml/CircuitGenome/pull/188)).
+- 🧪 Lock SPICE slew-rate and output-swing on the real device techs (ptm45 BSIM4, gf180mcu gm/Id), not just the generic Level-1 anchor (#63) ([#185](https://github.com/analog-ml/CircuitGenome/pull/185)).
+- 🧪 Lock in FD open-loop AC metrics (#61) — two-stage FD passes (≈49 dB / 7.8 MHz / 88°); three-stage seeded as a frozen-netlist `xfail` ([#182](https://github.com/analog-ml/CircuitGenome/pull/182)).
+- 🧪 Correct the three-stage FD AC test to a passing ~66 dB assertion — the #182 `xfail` was a stale pre-#167 site-packages install sensing the CMFB at the first-stage node; the working tree already senses the true outputs ([#183](https://github.com/analog-ml/CircuitGenome/pull/183)).
+- 🔧 Pin the untapped-load-branch filter's redundancy as a test-enforced invariant — kept as a structural (device-wiring-derived) defense-in-depth guard against a mistagged single-ended load, though the `output_cardinality` tag filter already drops everything it would ([#193](https://github.com/analog-ml/CircuitGenome/pull/193)).
 
 ## [0.2.0] – 2026-07-08
 
