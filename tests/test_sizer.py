@@ -9,7 +9,9 @@ from circuitgenome.sizer.shared.equations import (
     gd,
     gm,
     gm_ceiling,
+    OPEN_LOOP_GAIN_CEILING_DB,
     open_loop_gain_db,
+    open_loop_measurable,
     phase_margin_two_stage_deg,
     rout,
     slew_rate_vps,
@@ -153,6 +155,16 @@ def test_open_loop_gain_two_stage():
 
     gain = open_loop_gain_db([gm1_val * rout1, gm2_val * rout2])
     assert gain > 60  # should be substantial (>60 dB)
+
+
+def test_open_loop_measurable_flag():
+    # Below the ceiling: a realistic two-stage gain is measurable.
+    assert open_loop_measurable(90.0) is True
+    assert open_loop_measurable(OPEN_LOOP_GAIN_CEILING_DB) is True
+    # Above the ceiling: an over-estimated three-stage cascade rails (#155).
+    assert open_loop_measurable(178.8) is False
+    # No computed gain (single-stage / gated) → no evidence of railing.
+    assert open_loop_measurable(None) is True
 
 
 def test_unity_gain_bw():

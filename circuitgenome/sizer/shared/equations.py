@@ -103,6 +103,37 @@ def open_loop_gain_db(stage_gains: list[float]) -> float:
     return 20.0 * math.log10(abs(product)) if product != 0.0 else -math.inf
 
 
+# Empirical open-loop DC-gain ceiling for the ngspice open-loop AC bench (dB).
+# The analytical ``gain_db`` is an un-derated cascade product; above this ceiling
+# the open-loop DC operating point cannot hold the output at mid-rail without
+# feedback, so the measured open-loop AC gain rails to ~0 dB even when the
+# per-device DC bias is sound.  Calibrated to observed GF180 behaviour (#155):
+# measurable two-stage designs top out ~133 dB, whereas three-stage cascades at
+# ≥175 dB rail on every PVT corner.  150 dB sits safely between the two bands to
+# minimise false positives.
+OPEN_LOOP_GAIN_CEILING_DB = 150.0
+
+
+def open_loop_measurable(
+    gain_db: float | None, ceiling_db: float = OPEN_LOOP_GAIN_CEILING_DB
+) -> bool:
+    """Whether the analytical open-loop gain is measurable on an open-loop bench.
+
+    ``open_loop_gain_db`` returns an un-derated single-point upper bound; above
+    ``ceiling_db`` the open-loop DC operating point cannot be held at mid-rail,
+    so ngspice's open-loop AC gain rails to ~0 dB even when the DC bias is sound.
+    This is an **advisory** heuristic, not a hard prune — the analytical
+    ``gain_db`` is still reported and SPICE remains the authority.  See
+    :data:`OPEN_LOOP_GAIN_CEILING_DB`.
+
+    :param gain_db: Analytical open-loop DC gain in dB, or ``None`` when no gain
+        was computed (single-stage / gated).  ``None`` → measurable (no evidence
+        of railing).
+    :returns: ``True`` when measurable, ``False`` when predicted to rail.
+    """
+    return gain_db is None or gain_db <= ceiling_db
+
+
 def unity_gain_bw(gm1_a_v: float, cc_f: float) -> float:
     """Unity-gain bandwidth (GBW) in Hz.
 
