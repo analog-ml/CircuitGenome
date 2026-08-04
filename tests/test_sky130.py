@@ -32,7 +32,10 @@ def test_sky130_tech_loads_lib_and_maps():
     # bound, so a device snapped to exactly 100 µm hits no bin and aborts ngspice
     # ("could not find a valid modelname"), misreported as .op non-convergence (#77).
     assert tech.width.max < 100.0
-    assert tech.nmos.vth > 0 > tech.pmos.vth
+    # gm/Id tech: Level-1 square-law params and vth are decoupled (issue #158) —
+    # the LUT supplies every operating-point voltage, including the seed.
+    assert tech.nmos.vth is None and tech.pmos.vth is None
+    assert tech.nmos.mu_cox is None and tech.nmos.lam is None
 
 
 def test_sky130_emit_model_selects_corner():

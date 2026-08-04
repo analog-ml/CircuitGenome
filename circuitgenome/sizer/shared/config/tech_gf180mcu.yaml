@@ -21,18 +21,15 @@ device_map:                                      # generic type -> PDK subcircui
 
 gmid_lut: models/gf180mcu_gmid.npz   # gm/Id LUT (drives sizing)
 
-# Nominal Level-1 params: the gm/Id path uses the LUT above, so these only
-# satisfy the schema and seed the deterministic load-resistor bias (~vth+Vov).
+# The gm/Id path sizes off the LUT above, so no Level-1 square-law params are
+# needed (issue #158): mu_cox/lam and vth are all omitted. The load-resistor
+# bias seed is read from the LUT (the driven signal device's Vgs), so no
+# hand-curated vth is required. gamma/phi are retained for the body-effect
+# model (issue #106).
 nmos:
-  mu_cox: 1.70e-04   # A/V²
-  vth: 0.70          # V
-  lam: 0.10          # 1/V
   gamma: 0.3101          # √V   body-effect coefficient γ (issue #106)
   phi: 0.3650            # V    surface potential 2φF
 pmos:
-  mu_cox: 4.00e-05   # A/V²
-  vth: -0.70         # V
-  lam: 0.12          # 1/V
   gamma: 0.5220          # √V   body-effect coefficient γ (issue #106)
   phi: 0.4900            # V    surface potential 2φF
 

@@ -212,8 +212,7 @@ class GmIdModel:
     def vgs(self, dtype, w_um, l_um, ids):
         """Gate-source voltage from the LUT, signed +ve NMOS / −ve PMOS."""
         mag = self.lut.vgs(dtype, self._gm_id_at(dtype, w_um, l_um, ids), l_um)
-        vth = _params(self.tech, dtype).vth
-        return mag if vth >= 0 else -mag
+        return mag if dtype == "nmos" else -mag
 
     def gm_ceiling(self, dtype, ids, l_um):
         """Weak-inversion gm ceiling ``max_gm_id·|Id|`` from the table."""

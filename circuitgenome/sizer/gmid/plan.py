@@ -59,10 +59,26 @@ class SizingPlan:
     warnings: list[str]
 
 
-def assign_currents(view: CircuitView, spec: SizingSpec, tech: TechParams) -> CurrentPlan:
+def _load_seed_v(tech: TechParams, intent: GmIdIntent) -> dict[str, float]:
+    """Turn-on ``|Vgs|`` per polarity for the driven signal device, from the LUT.
+
+    The load resistor must bias the first-stage output at the gate voltage that
+    turns its driven device on. That device is a signal transistor, so its
+    ``Vgs`` at the nominal signal gm/Id (and signal length) is the self-consistent
+    seed — sourced from the same LUT that drives sizing, so a gm/Id tech needs no
+    hand-curated ``vth`` (issue #158).
+    """
+    lut = GmIdLut(tech.gmid_lut)
+    l_um = intent.signal_l_mult * tech.length.min
+    return {dt: lut.vgs(dt, intent.signal_gm_id, l_um) for dt in ("nmos", "pmos")}
+
+
+def assign_currents(view: CircuitView, spec: SizingSpec, tech: TechParams,
+                    intent: GmIdIntent) -> CurrentPlan:
     """Assign per-device quiescent currents and size the load resistors."""
     ids_map = assign_ids(view.slot_transistors, view.all_transistors, spec)
-    load_resistors = size_load_resistors(view.slot_resistors, spec, tech)
+    load_resistors = size_load_resistors(view.slot_resistors, spec, tech,
+                                         _load_seed_v(tech, intent))
     gd_load_r = (1.0 / min(load_resistors.values())) if load_resistors else 0.0
     return CurrentPlan(ids_map=ids_map, load_resistors=load_resistors,
                        gd_load_r=gd_load_r)
