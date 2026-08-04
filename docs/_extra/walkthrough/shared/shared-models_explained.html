@@ -255,13 +255,17 @@
 
   <blockquote><p><strong>The one job:</strong> hold the two smallest, most-reused facts about a process — the electrical character of one transistor polarity, and the discrete ruler that legal geometries snap to.</p></blockquote>
 
-  <h3><code>MosfetParams</code> — three numbers that describe a device</h3>
+  <h3><code>MosfetParams</code> — five fields that describe a device</h3>
 
   <pre class="code"><code><span class="tok-kw">@dataclass</span>
 <span class="tok-kw">class</span> <span class="tok-fn">MosfetParams</span>:
-    mu_cox: <span class="tok-kw">float</span>   <span class="tok-com"># µ·Cox, the transconductance parameter, in A/V²</span>
-    vth: <span class="tok-kw">float</span>      <span class="tok-com"># threshold voltage in V (+ for NMOS, − for PMOS)</span>
-    lam: <span class="tok-kw">float</span>      <span class="tok-com"># channel-length modulation λ, in 1/V</span></code></pre>
+    vth: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>      <span class="tok-com"># threshold voltage in V (+ for NMOS, − for PMOS)</span>
+    mu_cox: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>   <span class="tok-com"># µ·Cox, the transconductance parameter, in A/V²</span>
+    lam: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>      <span class="tok-com"># channel-length modulation λ, in 1/V</span>
+    gamma: <span class="tok-kw">float</span> = <span class="tok-num">0.0</span>          <span class="tok-com"># body-effect coefficient γ, in √V</span>
+    phi: <span class="tok-kw">float</span> = <span class="tok-num">0.7</span>            <span class="tok-com"># surface-potential term 2φF, in V</span></code></pre>
+
+  <p>The first three are the square-law numbers, and they're now optional (<code>None</code>): a gm/Id LUT tech reads its operating point straight from the table, so it can omit them entirely (#158). The last two, <code>gamma</code>/<code>phi</code>, carry the body-effect model and default to <code>0.0</code>/<code>0.7</code> (#190).</p>
 
   <p>Analogy: a transistor is like a car engine, and these three numbers are the spec-sheet line items — how hard it pulls (<code>mu_cox</code>), the ignition point it won't run below (<code>vth</code>), and how much it "leaks" torque as load rises (<code>lam</code>). The analytical (Level-1) sizer plugs exactly these three into the Shichman–Hodges equations to size a device on paper, with no SPICE at all.</p>
 
@@ -580,6 +584,7 @@
       <tr><td><code>margins</code></td><td>actual/spec per constraint; a value <code>&gt; 1</code> means the spec is met</td></tr>
       <tr><td><code>solver_status</code></td><td>OR-Tools string: <code>OPTIMAL</code>, <code>FEASIBLE</code>, <code>INFEASIBLE</code>, <code>UNKNOWN</code></td></tr>
       <tr><td><code>bias_feasible</code></td><td>The gm/Id DC verdict — <code>False</code> when the metrics are optimistic</td></tr>
+      <tr><td><code>open_loop_measurable</code></td><td>Advisory flag (parallel to <code>bias_feasible</code>): <code>False</code> when the analytical <code>gain_db</code> exceeds <code>OPEN_LOOP_GAIN_CEILING_DB</code>, so an open-loop AC bench would rail to ~0 dB and the reported gain/GBW/PM are optimistic — deprioritise, don't prune, on it</td></tr>
       <tr><td><code>warnings</code> / <code>resistors</code> / <code>transistor_intents</code></td><td>Advisory text, sized resistors, per-device design intent — often empty</td></tr>
     </tbody>
   </table>

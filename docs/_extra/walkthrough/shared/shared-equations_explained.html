@@ -221,6 +221,8 @@
 
   <p>Notice there is no call graph in the usual sense — these are all <strong>leaf functions</strong>, pure math with no side effects. What matters is the <em>data-flow</em>: the primitives produce numbers, and the metrics consume them. So we'll teach it bottom-up, exactly as the arrow points.</p>
 
+  <p>One member of the metrics family sits just off to the side of the figure: <code>open_loop_measurable()</code>, an advisory companion to <code>open_loop_gain_db</code>. It answers a yes/no question rather than producing a metric — whether the analytical gain is small enough for an open-loop bench to actually measure.</p>
+
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 introduces the single parent equation — the square law — that every device primitive is secretly a rearrangement of.</p></blockquote>
 </section>
 
@@ -549,6 +551,8 @@
   <pre class="code"><code>product = 31.6 · 20 = 632
 A0(dB)  = 20 · log10(632) = 20 · 2.80 = 56 dB</code></pre>
   <p>The <code>product != 0</code> guard returns <code>−∞ dB</code> for a dead stage instead of crashing on <code>log10(0)</code> — the honest "no gain at all."</p>
+
+  <p>One caveat: this is an <strong>un-derated single-point upper bound</strong> — a naive cascade product with no efficiency derate. Its companion <code>open_loop_measurable()</code> flags any result above the ~150 dB open-loop-bench ceiling (<code>OPEN_LOOP_GAIN_CEILING_DB</code>), where the output can no longer be held at mid-rail and the measured open-loop gain rails toward 0 dB.</p>
 
   <h3><code>unity_gain_bw</code> — how fast before the gain runs out</h3>
   <blockquote><p><strong>The one job:</strong> find the frequency where the amplifier's gain has fallen all the way to 1× (0 dB) — its speed limit.</p></blockquote>

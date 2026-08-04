@@ -317,9 +317,11 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_mosfet</span>(d):
     <span class="tok-kw">return</span> <span class="tok-fn">MosfetParams</span>(
-        mu_cox=<span class="tok-fn">float</span>(d[<span class="tok-str">"mu_cox"</span>]),
-        vth=<span class="tok-fn">float</span>(d[<span class="tok-str">"vth"</span>]),
-        lam=<span class="tok-fn">float</span>(d[<span class="tok-str">"lam"</span>]))
+        vth=<span class="tok-fn">float</span>(d[<span class="tok-str">"vth"</span>]) <span class="tok-kw">if</span> <span class="tok-str">"vth"</span> <span class="tok-kw">in</span> d <span class="tok-kw">else</span> <span class="tok-kw">None</span>,
+        mu_cox=<span class="tok-fn">float</span>(d[<span class="tok-str">"mu_cox"</span>]) <span class="tok-kw">if</span> <span class="tok-str">"mu_cox"</span> <span class="tok-kw">in</span> d <span class="tok-kw">else</span> <span class="tok-kw">None</span>,
+        lam=<span class="tok-fn">float</span>(d[<span class="tok-str">"lam"</span>]) <span class="tok-kw">if</span> <span class="tok-str">"lam"</span> <span class="tok-kw">in</span> d <span class="tok-kw">else</span> <span class="tok-kw">None</span>,
+        gamma=<span class="tok-fn">float</span>(d.<span class="tok-fn">get</span>(<span class="tok-str">"gamma"</span>, <span class="tok-num">0.0</span>)),
+        phi=<span class="tok-fn">float</span>(d.<span class="tok-fn">get</span>(<span class="tok-str">"phi"</span>, <span class="tok-num">0.7</span>)))
 
 <span class="tok-kw">def</span> <span class="tok-fn">_grid</span>(d, min_key=<span class="tok-str">"min"</span>, max_key=<span class="tok-str">"max"</span>):
     <span class="tok-kw">return</span> <span class="tok-fn">GridSpec</span>(
@@ -327,7 +329,7 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
         max=<span class="tok-fn">float</span>(d[max_key]),
         step=<span class="tok-fn">float</span>(d[<span class="tok-str">"step"</span>]))</code></pre>
 
-  <p>Why wrap <code>float()</code> around values YAML already parsed? Because you can't <em>trust</em> that YAML gave you a number. Write <code>vth: 0.5</code> and you get a float; write <code>vth: "0.5"</code> or <code>vth: 5e-1</code> in a way the parser reads as a string, and you'd get a <code>str</code>. The explicit <code>float()</code> is the officer converting <em>every</em> value to the official currency, no exceptions. Note <code>d["mu_cox"]</code> uses <code>[]</code>, not <code>.get()</code> — these fields are <strong>required</strong>, so a missing one <em>should</em> raise loudly.</p>
+  <p>Why wrap <code>float()</code> around values YAML already parsed? Because you can't <em>trust</em> that YAML gave you a number. Write <code>vth: 0.5</code> and you get a float; write <code>vth: "0.5"</code> or <code>vth: 5e-1</code> in a way the parser reads as a string, and you'd get a <code>str</code>. The explicit <code>float()</code> is the officer converting <em>every</em> value to the official currency, no exceptions. Each square-law number (<code>vth</code>, <code>mu_cox</code>, <code>lam</code>) is coerced only when its key is actually present — a gm/Id (LUT) tech may omit them entirely and fall back to <code>None</code>, since the lookup table already supplies those operating-point values. The body-effect terms <code>gamma</code>/<code>phi</code> always fill in, defaulting to <code>0.0</code> / <code>0.7</code>. That's why each field is guarded with <code>if key in d</code> rather than a bare <code>d["…"]</code>: requiredness is enforced only for Level-1 techs, by a separate <code>_validate_mosfets</code> pass, not by <code>[]</code>-access.</p>
 
   <p>The third helper resolves relative paths against the config file's own directory:</p>
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_resolve</span>(rel):
@@ -440,7 +442,7 @@ lib_d = data.<span class="tok-fn">get</span>(<span class="tok-str">"spice_lib"</
     <thead><tr><th>YAML in</th><th>Coercion</th><th>TechParams field</th></tr></thead>
     <tbody>
       <tr><td><code>name: generic_parameterized</code></td><td class="num"><code>str()</code></td><td><code>name = "generic_parameterized"</code></td></tr>
-      <tr><td><code>nmos: {mu_cox: 270.0e-6, vth: 0.5, lam: 0.04}</code></td><td class="num"><code>_mosfet</code></td><td><code>MosfetParams(0.00027, 0.5, 0.04)</code></td></tr>
+      <tr><td><code>nmos: {mu_cox: 270.0e-6, vth: 0.5, lam: 0.04}</code></td><td class="num"><code>_mosfet</code></td><td><code>MosfetParams(vth=0.5, mu_cox=0.00027, lam=0.04)</code></td></tr>
       <tr><td><code>width: {min: 1.0, max: 600.0, step: 1.0}</code></td><td class="num"><code>_grid</code></td><td><code>GridSpec(1.0, 600.0, 1.0)</code></td></tr>
       <tr><td><code>cap: {min_pf: 0.1, max_pf: 50.0, step_pf: 0.1}</code></td><td class="num">rename</td><td><code>GridSpec(0.1, 50.0, 0.1)</code></td></tr>
       <tr><td><em>(no spice_model / gmid_lut / spice_lib)</em></td><td class="num">default</td><td><code>None, None, None</code></td></tr>
@@ -478,7 +480,7 @@ lib_d = data.<span class="tok-fn">get</span>(<span class="tok-str">"spice_lib"</
     <li><strong>Invalid value</strong> → <code>float("abc")</code> raises <code>ValueError</code>. No custom message; you get Python's.</li>
     <li><strong>An unknown nickname</strong> → if <code>tech_foo.yaml</code> doesn't exist, resolution falls through and <code>open(path)</code> raises <code>FileNotFoundError</code> on the original string.</li>
     <li><strong>A typo in an optional key</strong> (e.g. <code>vddd</code>, <code>spicemodel</code>) is <em>silently dropped</em> — no schema validation catches it. This is the price of leniency.</li>
-    <li>No range or physical-sanity checks — a negative width or <code>vth</code> of 900 V loads happily. Sanity is someone else's job.</li>
+    <li>Process-param sanity <em>is</em> now checked for Level-1 techs (no <code>gmid_lut</code>): <code>_validate_mosfets</code> rejects a wrong-signed <code>vth</code> (NMOS must be &gt; 0, PMOS &lt; 0) and a non-positive <code>mu_cox</code>/<code>lam</code>, raising <code>ValueError</code>. But broader range checking still isn't here — a negative width loads happily. That much sanity is still someone else's job.</li>
   </ul>
 
   <h3>Why it's elegant</h3>

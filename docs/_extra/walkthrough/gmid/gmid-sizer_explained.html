@@ -290,7 +290,7 @@
 view = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)
 
 <span class="tok-com"># Phase 2 — Bias currents: IDS from KCL, rail-referenced load resistors.</span>
-currents = <span class="tok-fn">assign_currents</span>(view, spec, tech)</code></pre>
+currents = <span class="tok-fn">assign_currents</span>(view, spec, tech, intent)</code></pre>
 
   <h3>Phase 1 → <code>CircuitView</code></h3>
   <p>Analogy: before an electrician touches a house, they walk it and <strong>label every wire</strong> — "this is the main, this is the kitchen ring." <code>analyze_circuit</code> does exactly that: it takes the functional-block recognition result and the intended topology and produces a <code>CircuitView</code>, the labelled map everyone downstream reads:</p>
@@ -524,9 +524,12 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
               + si_warnings + eval_notes),
     resistors={**currents.load_resistors, **extra_r},
     bias_feasible=bias_feasible,
-    transistor_intents=plan.tintents)</code></pre>
+    transistor_intents=plan.tintents,
+    open_loop_measurable=eq.open_loop_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)))</code></pre>
 
   <p>Notice the <code>return</code> is a <strong>gathering</strong> step. It reaches back into every crate that came down the line — <code>plan.cc_pf</code>, <code>currents.load_resistors</code>, <code>plan.tintents</code> — and the running <code>bias_feasible</code> flag. Because each hand-off was kept as a named object, the final assembly is just picking the right field off each one:</p>
+
+  <p>The last field, <code>open_loop_measurable</code>, also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155).</p>
 
   <figure class="fig">
     <svg viewBox="0 0 640 230" role="img" aria-label="Assembling the final SizingResult from every upstream crate">
@@ -618,7 +621,7 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
     </span>
   </div>
 
-  <p>Every phase is a <strong>pure function from one type to the next</strong>: <code>CircuitView → CurrentPlan → SizingPlan → sizing → SizingResult</code>. That is why the orchestrator can stay a flat 97 lines with no branching cleverness — all the intelligence lives behind the typed seams, and the conductor just carries crates. Flatten those hand-offs into a bag of loose dictionaries and you lose the whole property: nothing would be testable alone, and a bug could no longer be pinned to a single seam.</p>
+  <p>Every phase is a <strong>pure function from one type to the next</strong>: <code>CircuitView → CurrentPlan → SizingPlan → sizing → SizingResult</code>. That is why the orchestrator can stay a flat ~100 lines with no branching cleverness — all the intelligence lives behind the typed seams, and the conductor just carries crates. Flatten those hand-offs into a bag of loose dictionaries and you lose the whole property: nothing would be testable alone, and a bug could no longer be pinned to a single seam.</p>
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
@@ -629,7 +632,7 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
   </ul>
 
   <h3>Why it's elegant</h3>
-  <p>The whole 97-line file rides one design decision: <strong>make every hand-off an explicit, named type</strong>. That single choice turns a five-way tangle into five independent, testable stages a reader can follow top-to-bottom in one sitting — and lets a bug be traced to one seam instead of hunted through a monolith.</p>
+  <p>The whole ~100-line file rides one design decision: <strong>make every hand-off an explicit, named type</strong>. That single choice turns a five-way tangle into five independent, testable stages a reader can follow top-to-bottom in one sitting — and lets a bug be traced to one seam instead of hunted through a monolith.</p>
 
   <hr>
   <p><strong>In one sentence:</strong> <code>gmid_sizer.py</code> is the conductor of the gm/Id sizing orchestra — it runs Analyze → Bias currents → Plan → Size → Evaluate in order, carrying an explicitly-typed crate (<code>CircuitView</code>, <code>CurrentPlan</code>, <code>SizingPlan</code>, <code>sizing</code>) across each seam, and returns one self-graded <code>SizingResult</code> whose <code>bias_feasible</code> flag is the honest <code>AND</code> of every check along the way.</p>
