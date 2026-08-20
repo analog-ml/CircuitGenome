@@ -158,7 +158,7 @@ def _apply_mirror_ratios(
     L: dict[str, float],
     all_transistors: dict[str, tuple],
     ids_map: dict[str, float],
-    snap_w,
+    snap,
 ) -> None:
     """Current-mirror outputs track the reference W by the exact current ratio.
 
@@ -190,11 +190,11 @@ def _apply_mirror_ratios(
             if i_m <= 0:
                 continue
             L[m] = L[ref0]
-            W[m] = snap_w((i_m / i_ref) * W[ref0])
+            W[m] = snap((i_m / i_ref) * W[ref0])
 
 
 def _apply_load_current_margin(
-    W: dict[str, float], slot_transistors: dict[str, list], snap_w
+    W: dict[str, float], slot_transistors: dict[str, list], snap
 ) -> None:
     """Give a knife-edge current-source load ``_LOAD_CS_MARGIN`` extra width.
 
@@ -213,7 +213,7 @@ def _apply_load_current_margin(
         return
     for d in load:
         if d.ref in W:
-            W[d.ref] = snap_w(W[d.ref] * _LOAD_CS_MARGIN)
+            W[d.ref] = snap(W[d.ref] * _LOAD_CS_MARGIN)
 
 
 def assign_geometry_gmid(
@@ -247,7 +247,6 @@ def assign_geometry_gmid(
     ``feasible`` is ``False`` when an output-path device cannot fit its raw
     budget even at the weakest inversion.
     """
-    g = tech.width
     warnings: list[str] = []
     feasible = True
     vod_max_map = vod_max_map or {}
@@ -257,10 +256,6 @@ def assign_geometry_gmid(
         intents[d.ref].role == CASCODE
         for d in slot_transistors.get("load", [])
         if d.ref in intents)
-
-    def snap_w(w_um: float) -> float:
-        v = round(w_um / g.step) * g.step
-        return float(min(max(v, g.min), g.max))
 
     # --- 1+2: per-device geometry from the LUT (block intent → gm/Id, L), W snapped ---
     W: dict[str, float] = {}
@@ -285,7 +280,7 @@ def assign_geometry_gmid(
             gm_id=ti.gm_id, l_um=model.length_for(ti.l_mult),
             gm_id_min=gm_id_min,
         )
-        W[ref] = snap_w(geo.w_um)
+        W[ref] = tech.width.snap(geo.w_um)
         L[ref] = geo.l_um
         if geo.gm_id_capped:
             warnings.append(
@@ -297,10 +292,10 @@ def assign_geometry_gmid(
     _apply_symmetry(W, L, slot_transistors, ids_map)
 
     # --- 4: current-mirror ratios (exact, no Fraction approximation) ---
-    _apply_mirror_ratios(W, L, all_transistors, ids_map, snap_w)
+    _apply_mirror_ratios(W, L, all_transistors, ids_map, tech.width.snap)
 
     # --- 5: deliberate margin for a knife-edge current-source load ---
-    _apply_load_current_margin(W, slot_transistors, snap_w)
+    _apply_load_current_margin(W, slot_transistors, tech.width.snap)
 
     # --- 6: build TransistorSizing with final geometry ---
     sizing: dict[str, TransistorSizing] = {}

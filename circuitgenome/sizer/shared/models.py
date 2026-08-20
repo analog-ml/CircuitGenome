@@ -56,6 +56,11 @@ class GridSpec:
     max: float
     step: float
 
+    def snap(self, x: float) -> float:
+        """Snap ``x`` to ``step``, clamped to ``[min, max]``."""
+        v = round(x / self.step) * self.step
+        return float(min(max(v, self.min), self.max))
+
 
 @dataclass
 class SpiceLib:

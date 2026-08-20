@@ -484,13 +484,13 @@ Vgs   (from table)   = +0.45 V   (NMOS → positive)</code></pre>
       <rect x="300" y="60" width="160" height="26" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
       <text x="380" y="78" text-anchor="middle" font-size="11">4× · gm/Id 10</text>
       <!-- snap note -->
-      <text x="260" y="120" text-anchor="middle" font-size="11" fill="var(--fig-muted)">role_length() = _snap_l(mult × L_min) → clamped to the length grid</text>
+      <text x="260" y="120" text-anchor="middle" font-size="11" fill="var(--fig-muted)">role_length() = tech.length.snap(mult × L_min) → clamped to the length grid</text>
       <text x="260" y="140" text-anchor="middle" font-size="11" fill="var(--fig-muted)">e.g. L_min 0.045µm → signal 0.09µm · cascode 0.135µm · CS 0.18µm</text>
     </svg>
     <figcaption>Role sets length. Longer channel = higher rout for bias devices; shorter = faster signal devices. The multiplier is snapped to the manufacturing grid.</figcaption>
   </figure>
 
-  <p>The plumbing is three tiny methods. <code>role_length()</code> looks up the multiplier for a role and calls <code>length_for()</code>, which multiplies by <code>L_min</code> and snaps to the grid via <code>_snap_l()</code>. And <code>_role_gm_id()</code> returns the cascode or current-source nominal gm/Id.</p>
+  <p>The plumbing is three tiny methods. <code>role_length()</code> looks up the multiplier for a role and calls <code>length_for()</code>, which multiplies by <code>L_min</code> and snaps to the grid via <code>tech.length.snap()</code> — the grid owns its own snapping rule, so every module that needs it asks the same <code>GridSpec</code>. And <code>_role_gm_id()</code> returns the cascode or current-source nominal gm/Id.</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">role_length</span>(self, role):
     mult = {CURRENT_SOURCE: self.policy.cs_l_mult,
