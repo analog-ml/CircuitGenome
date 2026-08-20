@@ -1,0 +1,46 @@
+{
+ "spec": {
+  "vdd": 1.8,
+  "vss": 0.0,
+  "ibias": 2e-05,
+  "cl": 5e-12,
+  "second_stage_current_ratio": 2.5,
+  "third_stage_current_ratio": 5.0,
+  "gain_min_db": 45,
+  "gbw_min_hz": 2000000.0,
+  "phase_margin_min_deg": 60,
+  "power_max_w": 0.002
+ },
+ "tech": "sky130_1v8",
+ "runtime_s": 60072.4,
+ "unverified_specs": [],
+ "templates": {
+  "two_stage_opamp_buffered_fully_differential": {
+   "template": "two_stage_opamp_buffered_fully_differential",
+   "enumerated": 2592,
+   "sizing_failed": 0,
+   "bias_infeasible": 1692,
+   "spec_failed": 549,
+   "unverified": 0,
+   "errors": 0,
+   "accepted": 351,
+   "runtime_s": 60072.37504775915,
+   "rejection_reasons": {
+    "SPICE bias check: the .op operating point railed \u2014 the circuit does not establish a usable mid-rail bias point.": 1260,
+    "cascode tail current source cannot bias: needs # mV of stacked Vdsat but only # mV is available at Vcm=# V \u2014 the input-pair current will collapse (use a non-cas": 360,
+    "missed spec(s): gain_db, gbw_hz": 279,
+    "missed spec(s): gain_db": 198,
+    "second-stage gm requirement exceeds the weak-inversion ceiling \u2014 increase second_stage_current_ratio/ibias or relax gain.": 72,
+    "missed spec(s): gbw_hz": 72
+   }
+  }
+ },
+ "best_points": {
+  "highest_gain": "circuit_0433",
+  "highest_gbw": "circuit_0269",
+  "highest_phase_margin": "circuit_0269",
+  "lowest_power": "circuit_0001",
+  "most_robust": "circuit_1745"
+ },
+ "n_solutions": 351
+}
