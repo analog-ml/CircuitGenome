@@ -547,7 +547,7 @@ R = (1e-12 + 2e-12) / (1e-3 · 1e-12) = 3e-12 / 1e-15 = 3000 Ω = 3 kΩ</code></
         <span class="tok-kw">if not</span> (s <span class="tok-kw">and</span> s.vgs_v <span class="tok-kw">and</span> src): <span class="tok-kw">continue</span>
         sign = <span class="tok-num">1.0</span> <span class="tok-kw">if</span> dev.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -<span class="tok-num">1.0</span>
         <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS:
-            base = spec.vdd <span class="tok-kw">if</span> src == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> spec.vss
+            base = spec.<span class="tok-fn">rail_v</span>(src)      <span class="tok-com"># "vdd!" → vdd, anything else → vss</span>
         <span class="tok-kw">else</span>:
             base = <span class="tok-fn">_stack_node_v</span>(src, dev, consumers, sizing, spec)
             <span class="tok-kw">if</span> base <span class="tok-kw">is None</span>: <span class="tok-kw">continue</span>
@@ -555,6 +555,8 @@ R = (1e-12 + 2e-12) / (1e-3 · 1e-12) = 3e-12 / 1e-15 = 3000 Ω = 3 kΩ</code></
     <span class="tok-kw">return</span> <span class="tok-fn">sum</span>(targets) / <span class="tok-fn">len</span>(targets) <span class="tok-kw">if</span> targets <span class="tok-kw">else</span> <span class="tok-kw">None</span></code></pre>
 
   <p>The idea is beautifully simple once you see it. A transistor gated by the rail wants its gate one <code>|Vgs|</code> away from its own <em>source</em>. So: find where the source sits (a rail is easy; an internal node needs a stack walk), then step one <code>|Vgs|</code> toward the gate — up for NMOS, down for PMOS. Do that for every consumer and average, because one physical resistor can only offer <em>one</em> compromise voltage to a rail that several devices share.</p>
+
+  <p><code>spec.rail_v</code> is the "a rail is easy" half, and it is a method on <code>SizingSpec</code> (<code>shared/models.py</code>) shared with <code>stage_interface.py</code>. Read it literally: <em>everything</em> that is not <code>"vdd!"</code> maps to <code>vss</code>, including <code>"gnd!"</code> and <code>"0"</code>. Every shipped spec is single-supply with <code>vss = 0.0</code>, so ground really is 0&nbsp;V; a dual-supply spec would need those two names handled separately.</p>
 
   <p>Two guards deserve a name. A <strong>diode-connected</strong> consumer (<code>d == rail_net</code>) is skipped — it's a current interface, not a voltage demand. And a consumer with no usable sizing is skipped too. If nobody yields a level, it returns <code>None</code> and the caller falls back.</p>
 
@@ -583,7 +585,7 @@ R = (1e-12 + 2e-12) / (1e-3 · 1e-12) = 3e-12 / 1e-15 = 3000 Ω = 3 kΩ</code></
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_stack_node_v</span>(node, consumer, mosfets, sizing, spec):
     sign = <span class="tok-num">1.0</span> <span class="tok-kw">if</span> consumer.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -<span class="tok-num">1.0</span>
-    vcm = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+    vcm = spec.vcm                 <span class="tok-com"># input common mode (supply midpoint today)</span>
     acc = <span class="tok-num">0.0</span>
     seen = <span class="tok-fn">set</span>()
     <span class="tok-kw">while</span> node <span class="tok-kw">not in</span> RAILS:
@@ -603,7 +605,7 @@ R = (1e-12 + 2e-12) / (1e-3 · 1e-12) = 3e-12 / 1e-15 = 3000 Ω = 3 kΩ</code></
         node = dev.terminals.get(<span class="tok-str">"s"</span>)
     <span class="tok-kw">if</span> (consumer.type == <span class="tok-str">"nmos"</span>) == (node == <span class="tok-str">"vdd!"</span>):
         <span class="tok-kw">return</span> <span class="tok-kw">None</span>  <span class="tok-com"># stack terminated on the wrong supply</span>
-    <span class="tok-kw">return</span> (spec.vdd <span class="tok-kw">if</span> node == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> spec.vss) + sign * acc</code></pre>
+    <span class="tok-kw">return</span> spec.<span class="tok-fn">rail_v</span>(node) + sign * acc</code></pre>
 
   <p>This is a <strong>linked-list walk</strong>, just like the tail-stack walk — but the "pointers" are nets. Each device's <em>source</em> is the next device's <em>drain</em>. Build no lookup this time; on each hop, scan for the same-type device whose drain <em>is</em> the current node, add its <code>Vdsat + margin</code> to <code>acc</code>, then jump to its source. The <code>seen</code> set is a seatbelt against a malformed loop.</p>
 

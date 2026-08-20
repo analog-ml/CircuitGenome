@@ -63,17 +63,13 @@ __all__ = ["check_stage_interface"]
 _MARGIN_V = 0.05
 
 
-def _rail_v(net: str, spec: SizingSpec) -> float:
-    return spec.vdd if net == "vdd!" else spec.vss
-
-
 def _diode_level(net: str | None, diode_by_net: dict, sizing: dict,
                  spec: SizingSpec, _depth: int = 0) -> float | None:
     """DC level of ``net`` when a diode chain ties it to a rail, else ``None``."""
     if net is None or _depth > 8:
         return None
     if net in RAILS:
-        return _rail_v(net, spec)
+        return spec.rail_v(net)
     d = diode_by_net.get(net)
     s = sizing.get(d.ref) if d is not None else None
     if s is None:
@@ -100,7 +96,7 @@ def _stack_bound(net: str, dtype: str, devs: list, pair_refs: set[str],
     the feedback-held inputs).
     """
     sgn = 1.0 if dtype == "nmos" else -1.0
-    vcm = (spec.vdd + spec.vss) / 2.0
+    vcm = spec.vcm
     by_drain: dict[str, object] = {}
     diode_by_net: dict[str, object] = {}
     for d in devs:
@@ -126,7 +122,7 @@ def _stack_bound(net: str, dtype: str, devs: list, pair_refs: set[str],
             return g_lvl - sgn * abs(s.vgs_v) + sgn * floor
         src = dev.terminals.get("s")
         if src in RAILS:
-            return _rail_v(src, spec) + sgn * floor
+            return spec.rail_v(src) + sgn * floor
         node = src
     return None
 
@@ -147,8 +143,10 @@ def _pin_level(dev, s: TransistorSizing, spec: SizingSpec) -> float | None:
     vgs = abs(s.vgs_v)
     src, drn = dev.terminals.get("s"), dev.terminals.get("d")
     if src in RAILS:  # common-source: gate = source rail ± V_GS
-        return _rail_v(src, spec) + (vgs if dev.type == "nmos" else -vgs)
+        return spec.rail_v(src) + (vgs if dev.type == "nmos" else -vgs)
     if drn in RAILS:  # follower: gate = quiescent output ± V_GS
+        # Deliberately not spec.vcm: this is the *output* quiescent level, not the
+        # input CM.  An explicit input-CM field on SizingSpec must not move it.
         vout_q = (spec.vdd + spec.vss) / 2.0
         return vout_q + (vgs if dev.type == "nmos" else -vgs)
     return None
@@ -211,6 +209,8 @@ def _fd_interface_target(
     for r in cmfb.resistors:
         touched.update(r.terminals.values())
     if touched & iface_nets:
+        # Deliberately not spec.vcm: the CMFB holds the *output* CM at mid-rail.
+        # An explicit input-CM field on SizingSpec must not move it.
         return (spec.vdd + spec.vss) / 2.0
     return None
 

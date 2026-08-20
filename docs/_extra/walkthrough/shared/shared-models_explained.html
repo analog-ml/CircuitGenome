@@ -485,9 +485,25 @@
     phase_margin_min_deg: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
     slew_rate_min_vps: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
     power_max_w: <span class="tok-kw">float</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>
-    <span class="tok-com"># … output_swing, cmrr_min_db, psrr_min_db — all Optional</span></code></pre>
+    <span class="tok-com"># … output_swing, cmrr_min_db, psrr_min_db — all Optional</span>
+
+    <span class="tok-kw">@property</span>
+    <span class="tok-kw">def</span> <span class="tok-fn">vcm</span>(self) -&gt; <span class="tok-kw">float</span>:            <span class="tok-com"># input common mode</span>
+        <span class="tok-kw">return</span> (self.vdd + self.vss) / <span class="tok-num">2.0</span>
+
+    <span class="tok-kw">def</span> <span class="tok-fn">rail_v</span>(self, net: <span class="tok-kw">str</span>) -&gt; <span class="tok-kw">float</span>:  <span class="tok-com"># net name → its DC level</span>
+        <span class="tok-kw">return</span> self.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> self.vss</code></pre>
 
   <p>Analogy: it's a <strong>restaurant order</strong>. Four things you <em>must</em> state — table (supply rails), party size (bias current), and what's on the table already (load cap). Everything else is a preference: "at least 90&nbsp;dB of gain," "no more than 2&nbsp;mW of power." Leave a preference blank and the kitchen simply won't check it.</p>
+
+  <h3>Two derived readings</h3>
+  <p>The record answers two questions so often that it answers them itself. Neither adds state — both are one line over <code>vdd</code> and <code>vss</code>.</p>
+  <ul>
+    <li><code>spec.vcm</code> — the <strong>input common mode</strong>. Today it is simply the supply midpoint, and saying so as a named property makes the assumption visible instead of leaving <code>(vdd + vss) / 2</code> scattered through the sizer looking like arithmetic. If a spec ever states an input CM explicitly, this is the one place it lands.</li>
+    <li><code>spec.rail_v(net)</code> — the DC level of a <strong>supply net</strong>, so a walker that arrives at <code>"vdd!"</code> or <code>"gnd!"</code> can turn the name into a voltage. Read it literally: everything that is not <code>"vdd!"</code> maps to <code>vss</code>. Since every shipped spec is single-supply (<code>vss = 0.0</code>), <code>gnd!</code> correctly reads as 0&nbsp;V — but a dual-supply spec would report ground as the negative rail, which is why the method's docstring says so out loud.</li>
+  </ul>
+
+  <p>The distinction <code>vcm</code> draws matters more than it looks. Two places in the sizer compute the same midpoint and deliberately <em>don't</em> call <code>spec.vcm</code>: a follower's quiescent <em>output</em> level, and the <em>output</em> common mode a CMFB servos. They match today by coincidence, not by meaning — and an explicit input-CM field would move <code>vcm</code> while leaving those two alone.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 210" role="img" aria-label="SizingSpec split into a solid required zone and a dashed optional zone where None means skip">
@@ -634,12 +650,12 @@
   <ul>
     <li><strong>No validation.</strong> Nothing here checks that <code>vdd &gt; vss</code> or that a width lands on the grid — these are dumb records; the surrounding stages enforce meaning.</li>
     <li><strong>Not actually immutable.</strong> They're plain dataclasses, not <code>frozen=True</code>. The docstring's "freely inspected or passed" is a <em>convention</em>, not an enforced guarantee — a stage <em>could</em> mutate one, and nothing would stop it.</li>
-    <li><strong>Almost no behaviour.</strong> The one method is <code>GridSpec.snap</code>, and it only reads the record's own three numbers — no other state, no side effects. Every real computation still lives elsewhere; this file stays inert enough to import anywhere.</li>
+    <li><strong>Almost no behaviour.</strong> Three methods in the whole file — <code>GridSpec.snap</code>, <code>SizingSpec.vcm</code> and <code>SizingSpec.rail_v</code> — and each reads nothing but the record's own fields: no other state, no side effects. Every real computation still lives elsewhere; this file stays inert enough to import anywhere.</li>
     <li><strong>Defaults, not intelligence.</strong> <code>corner="typical"</code>, <code>wl_units="m"</code>, ratios of <code>2.0</code>/<code>5.0</code> — reasonable starting points, but the file never reasons about whether they fit your process.</li>
   </ul>
 
   <h3>Why it's elegant</h3>
-  <p>The whole design rides one restraint: <strong>keep the data types free of logic so they can be the shared language of every stage</strong> — the lone exception being a rule like <code>snap</code> that is <em>about</em> the record and nothing else, which belongs with it rather than copied into five call sites. Small atoms (<code>MosfetParams</code>, <code>GridSpec</code>) compose into aggregates (<code>TechParams</code>, <code>SizingResult</code>); optional fields double as routers; <code>None</code> and empty collections carry meaning without flags. It's the least code in the module and the most important, because everything else agrees to speak through it.</p>
+  <p>The whole design rides one restraint: <strong>keep the data types free of logic so they can be the shared language of every stage</strong> — the lone exception being a rule like <code>snap</code>, or a reading like <code>vcm</code> and <code>rail_v</code>, that is <em>about</em> the record and nothing else, and so belongs with it rather than copied into five call sites. Small atoms (<code>MosfetParams</code>, <code>GridSpec</code>) compose into aggregates (<code>TechParams</code>, <code>SizingResult</code>); optional fields double as routers; <code>None</code> and empty collections carry meaning without flags. It's the least code in the module and the most important, because everything else agrees to speak through it.</p>
 
   <hr>
   <p><strong>In one sentence:</strong> <code>models.py</code> defines the logic-free dataclasses that are the typed seams of the sizer — small atoms (<code>MosfetParams</code>, <code>GridSpec</code>, <code>SpiceLib</code>) that compose into the incoming crates (<code>TechParams</code>, <code>SizingSpec</code>) and the outgoing crate (<code>SizingResult</code>, holding one <code>TransistorSizing</code> per device) — so every pipeline stage hands work to the next through a stable, named contract instead of a loose dictionary.</p>

@@ -99,7 +99,7 @@
   <div class="label">Contents</div>
   <a href="#part-1">1 · Why this file exists</a>
   <a href="#part-2">2 · The pin, the window, the rule</a>
-  <a href="#part-3">3 · GridSpec.snap() &amp; _rail_v()</a>
+  <a href="#part-3">3 · GridSpec.snap() &amp; SizingSpec.rail_v()</a>
   <a href="#part-4">4 · _pin_level()</a>
   <a href="#part-5">5 · _diode_level()</a>
   <a href="#part-6">6 · _stack_bound() — the two walls</a>
@@ -224,7 +224,7 @@
       <!-- snap / rail leaves under resize -->
       <g class="node" data-group="resize2">
         <rect x="235" y="272" width="150" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="310" y="292" text-anchor="middle" font-weight="600" font-size="12">width.snap() · _rail_v()</text>
+        <text x="310" y="292" text-anchor="middle" font-weight="600" font-size="12">width.snap() · spec.rail_v()</text>
         <text x="310" y="307" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">grid &amp; rail primitives</text>
       </g>
     </svg>
@@ -291,7 +291,7 @@
 
 <!-- ================= PART 3 ================= -->
 <section class="part" id="part-3">
-  <h2>Part 3 · <code>GridSpec.snap()</code> &amp; <code>_rail_v()</code> — the two leaves</h2>
+  <h2>Part 3 · <code>GridSpec.snap()</code> &amp; <code>SizingSpec.rail_v()</code> — the two leaves</h2>
 
   <blockquote><p><strong>The one job:</strong> two tiny primitives — snap a width to the manufacturing grid, and turn a rail's <em>name</em> into its <em>voltage</em>.</p></blockquote>
 
@@ -300,12 +300,15 @@
     v = <span class="tok-fn">round</span>(x / self.step) * self.step
     <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))
 
-<span class="tok-kw">def</span> <span class="tok-fn">_rail_v</span>(net: <span class="tok-kw">str</span>, spec: SizingSpec) -&gt; <span class="tok-kw">float</span>:
-    <span class="tok-kw">return</span> spec.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> spec.vss</code></pre>
+<span class="tok-com"># on SizingSpec, in shared/models.py — called here as spec.rail_v(net)</span>
+<span class="tok-kw">def</span> <span class="tok-fn">rail_v</span>(self, net: <span class="tok-kw">str</span>) -&gt; <span class="tok-kw">float</span>:
+    <span class="tok-kw">return</span> self.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> self.vss</code></pre>
 
   <p><code>GridSpec.snap</code> is the lumber-yard rule: you can order boards in whole grid steps only. Ask for <code>2.34&nbsp;µm</code> on a <code>0.1&nbsp;µm</code> grid and you get <code>round(2.34/0.1)·0.1 = 2.3&nbsp;µm</code>, then it's clamped between <code>min</code> and <code>max</code>. Every width the repair invents passes through <code>tech.width.snap</code>, so nothing unbuildable escapes. It lives on the grid itself rather than in this file, so the width, length, and capacitance rulers all share one rule.</p>
 
-  <p><code>_rail_v</code> is even smaller: the netlist calls the top rail <code>"vdd!"</code> and everything else is the bottom rail. This one line is the anchor every voltage calculation eventually bottoms out on — the base case of the recursion in Part&nbsp;5 and the rail exit in Part&nbsp;6 both call it.</p>
+  <p><code>rail_v</code> is even smaller: the netlist calls the top rail <code>"vdd!"</code> and everything else is the bottom rail. This one line is the anchor every voltage calculation eventually bottoms out on — the base case of the recursion in Part&nbsp;5 and the rail exit in Part&nbsp;6 both call it. It lives on <code>SizingSpec</code> rather than in this file, because it answers a question about the <em>spec</em> (what voltage is this supply net at?), and <code>resistors.py</code> asks it too.</p>
+
+  <p>Read "everything else is the bottom rail" literally, because it is: <code>RAILS</code> also contains <code>"gnd!"</code> and <code>"0"</code>, and both land on <code>vss</code>. Every shipped spec is single-supply with <code>vss = 0.0</code>, so <code>gnd! → 0&nbsp;V</code> is right today. A dual-supply spec (<code>vss = -2.5</code>) would report ground as <code>−2.5&nbsp;V</code> — the docstring on the method names that trap so it is not rediscovered the hard way.</p>
 </section>
 
 <!-- ================= PART 4 ================= -->
@@ -331,13 +334,15 @@
     vgs = <span class="tok-fn">abs</span>(s.vgs_v)
     src, drn = dev.terminals.get(<span class="tok-str">"s"</span>), dev.terminals.get(<span class="tok-str">"d"</span>)
     <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS:  <span class="tok-com"># common-source: gate = source rail ± V_GS</span>
-        <span class="tok-kw">return</span> <span class="tok-fn">_rail_v</span>(src, spec) + (vgs <span class="tok-kw">if</span> dev.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -vgs)
+        <span class="tok-kw">return</span> spec.<span class="tok-fn">rail_v</span>(src) + (vgs <span class="tok-kw">if</span> dev.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -vgs)
     <span class="tok-kw">if</span> drn <span class="tok-kw">in</span> RAILS:  <span class="tok-com"># follower: gate = quiescent output ± V_GS</span>
-        vout_q = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+        vout_q = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>   <span class="tok-com"># not spec.vcm — see below</span>
         <span class="tok-kw">return</span> vout_q + (vgs <span class="tok-kw">if</span> dev.type == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -vgs)
     <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
 
   <p>Two shapes, one idea — the gate sits one <code>|V<sub>GS</sub>|</code> from whichever terminal is fixed.</p>
+
+  <p>Note what the follower branch does <em>not</em> say. <code>vout_q</code> is the supply midpoint, arithmetically identical to <code>spec.vcm</code> — and it is deliberately written out rather than calling it. <code>spec.vcm</code> means the <strong>input</strong> common mode; this is the follower's quiescent <strong>output</strong> level. They agree only because both currently default to mid-rail. If <code>SizingSpec</code> ever gains a real input-CM field, <code>spec.vcm</code> must move and this must not, so collapsing the two would manufacture a coupling that a later change has to unpick.</p>
 
   <table>
     <thead><tr><th>Second-stage kind</th><th>What's fixed</th><th>Pinned node</th></tr></thead>
@@ -352,7 +357,7 @@
   <h3>Traced with real numbers</h3>
   <p>Our second stage is a common-source NMOS with <code>|V<sub>GS</sub>| = 0.55&nbsp;V</code> and its source on the bottom rail (<code>V<sub>ss</sub> = 0</code>):</p>
   <pre class="code"><code>src = "vss!"  ->  in RAILS
-pin = _rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
+pin = spec.rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
 
   <figure class="fig">
     <svg viewBox="0 0 480 150" role="img" aria-label="A common-source NMOS pins its gate one V_GS above the source rail">
@@ -392,7 +397,7 @@ pin = _rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
     <span class="tok-kw">if</span> net <span class="tok-kw">is None</span> <span class="tok-kw">or</span> _depth &gt; <span class="tok-num">8</span>:
         <span class="tok-kw">return</span> <span class="tok-kw">None</span>
     <span class="tok-kw">if</span> net <span class="tok-kw">in</span> RAILS:
-        <span class="tok-kw">return</span> <span class="tok-fn">_rail_v</span>(net, spec)          <span class="tok-com"># base case: a rail is a known voltage</span>
+        <span class="tok-kw">return</span> spec.<span class="tok-fn">rail_v</span>(net)          <span class="tok-com"># base case: a rail is a known voltage</span>
     d = diode_by_net.get(net)
     s = sizing.get(d.ref) <span class="tok-kw">if</span> d <span class="tok-kw">is not None</span> <span class="tok-kw">else</span> <span class="tok-kw">None</span>
     <span class="tok-kw">if</span> s <span class="tok-kw">is None</span>:
@@ -440,7 +445,7 @@ pin = _rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_stack_bound</span>(net, dtype, devs, pair_refs, sizing, spec) -&gt; <span class="tok-kw">float</span> | <span class="tok-kw">None</span>:
     sgn = <span class="tok-num">1.0</span> <span class="tok-kw">if</span> dtype == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> -<span class="tok-num">1.0</span>
-    vcm = (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+    vcm = spec.vcm                                <span class="tok-com"># the input common mode</span>
     <span class="tok-com"># index devices of this type by their drain net; note the diode-tied ones</span>
     by_drain, diode_by_net = {}, {}
     <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs:
@@ -464,7 +469,7 @@ pin = _rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
             <span class="tok-kw">return</span> g_lvl - sgn * <span class="tok-fn">abs</span>(s.vgs_v) + sgn * floor
         src = dev.terminals.get(<span class="tok-str">"s"</span>)
         <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS:                             <span class="tok-com"># anchor C: a supply rail</span>
-            <span class="tok-kw">return</span> <span class="tok-fn">_rail_v</span>(src, spec) + sgn * floor
+            <span class="tok-kw">return</span> spec.<span class="tok-fn">rail_v</span>(src) + sgn * floor
         node = src                                    <span class="tok-com"># else hop down one device</span>
     <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
 
@@ -475,7 +480,7 @@ pin = _rail_v("vss!") + vgs   =   0 + 0.55   =   0.55 V</code></pre>
     <tbody>
       <tr><td>A · input pair</td><td>feedback holds gates at <code>V<sub>cm</sub></code>, source at <code>V<sub>cm</sub> ∓ |V<sub>GS</sub>|</code></td><td><code>V<sub>cm</sub> − sgn·|V<sub>GS</sub>| + sgn·floor</code></td></tr>
       <tr><td>B · mirror cascode</td><td>gate level from <code>_diode_level</code> (Part&nbsp;5)</td><td><code>g_lvl − sgn·|V<sub>GS</sub>| + sgn·floor</code></td></tr>
-      <tr><td>C · supply rail</td><td><code>_rail_v</code> (Part&nbsp;3)</td><td><code>rail + sgn·floor</code></td></tr>
+      <tr><td>C · supply rail</td><td><code>spec.rail_v</code> (Part&nbsp;3)</td><td><code>rail + sgn·floor</code></td></tr>
     </tbody>
   </table>
 
@@ -689,8 +694,10 @@ warning = (f<span class="tok-str">"stage interface cannot bias: the second-stage
     touched = <span class="tok-fn">set</span>()
     <span class="tok-kw">for</span> d <span class="tok-kw">in</span> cmfb.mosfets: touched.<span class="tok-fn">update</span>(d.terminals.values())
     <span class="tok-kw">for</span> r <span class="tok-kw">in</span> cmfb.resistors: touched.<span class="tok-fn">update</span>(r.terminals.values())
-    <span class="tok-kw">if</span> touched &amp; iface_nets: <span class="tok-kw">return</span> (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>
+    <span class="tok-kw">if</span> touched &amp; iface_nets: <span class="tok-kw">return</span> (spec.vdd + spec.vss) / <span class="tok-num">2.0</span>   <span class="tok-com"># output CM, not spec.vcm</span>
     <span class="tok-kw">return</span> <span class="tok-kw">None</span></code></pre>
+  <p>Same distinction as Part&nbsp;4: the CMFB servos the first stage's <em>output</em> common mode, so the midpoint stays a literal here instead of becoming <code>spec.vcm</code>.</p>
+
   <p>Returning <code>None</code> exempts every other family — resistor loads self-bias on the load line, a CMFB sensing the <em>second-stage</em> outputs closes the loop around this node itself, and a mirror/diode load without CMFB leaves its high-impedance side floating to absorb the mismatch. Forcing an equality on those would over-constrain a circuit that SPICE proves is fine (tracked in issue #162).</p>
 
   <p>When the target does apply, <code>_check_fd_interface()</code> compares it to the pin and — if they differ by more than <code>_MARGIN_V</code> — scans the second-stage <code>gm/Id</code> with <em>both</em> sides moved together, keeping the pair symmetric:</p>
