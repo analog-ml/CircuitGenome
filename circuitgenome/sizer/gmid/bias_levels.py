@@ -50,11 +50,6 @@ def _sized(model: GmIdModel, ref: str, dtype: str, w_um: float, l_um: float,
     )
 
 
-def _snap_w(tech: TechParams, w_um: float) -> float:
-    g = tech.width
-    return float(min(max(round(w_um / g.step) * g.step, g.min), g.max))
-
-
 def _diode_candidates(model: GmIdModel, tech: TechParams, dtype: str,
                       l_um: float, ids_a: float) -> list[tuple[float, float]]:
     """``(w_um, |vgs|)`` per LUT gm/Id point, weak to strong ``|vgs|`` order."""
@@ -63,7 +58,7 @@ def _diode_candidates(model: GmIdModel, tech: TechParams, dtype: str,
         idw = model.lut.id_per_w(dtype, float(gm_id), l_um)
         if idw <= 0:
             continue
-        w = _snap_w(tech, abs(ids_a) / idw)
+        w = tech.width.snap(abs(ids_a) / idw)
         out.append((w, abs(model.vgs(dtype, w, l_um, ids_a))))
     return out
 
@@ -193,7 +188,7 @@ def _tune_pref_cascode(bg, sizing, model, spec, tech) -> None:
         gm_id_weak = float(model.lut.gm_id_axis[-1])
         idw = model.lut.id_per_w("nmos", gm_id_weak, s_c.l_um)
         if idw > 0:
-            w_c = _snap_w(tech, abs(s_c.ids_a) / idw)
+            w_c = tech.width.snap(abs(s_c.ids_a) / idw)
             sizing[cascode.ref] = _sized(model, cascode.ref, "nmos", w_c,
                                          s_c.l_um, s_c.ids_a)
             s_c = sizing[cascode.ref]

@@ -63,11 +63,6 @@ __all__ = ["check_stage_interface"]
 _MARGIN_V = 0.05
 
 
-def _snap_w(tech: TechParams, w_um: float) -> float:
-    g = tech.width
-    return float(min(max(round(w_um / g.step) * g.step, g.min), g.max))
-
-
 def _rail_v(net: str, spec: SizingSpec) -> float:
     return spec.vdd if net == "vdd!" else spec.vss
 
@@ -164,7 +159,7 @@ def _resize_at(model: GmIdModel, tech: TechParams, dev,
     idw = model.lut.id_per_w(dev.type, gm_id, s.l_um)
     if idw <= 0:
         return None
-    w = _snap_w(tech, abs(s.ids_a) / idw)
+    w = tech.width.snap(abs(s.ids_a) / idw)
     return TransistorSizing(
         ref=dev.ref, w_um=w, l_um=s.l_um, ids_a=s.ids_a,
         vgs_v=model.vgs(dev.type, w, s.l_um, s.ids_a),

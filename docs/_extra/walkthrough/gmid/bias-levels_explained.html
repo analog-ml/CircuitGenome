@@ -99,7 +99,7 @@
   <div class="label">Contents</div>
   <a href="#part-1">1 · Why this file exists</a>
   <a href="#part-2">2 · What a rail "level" is</a>
-  <a href="#part-3">3 · _snap_w()</a>
+  <a href="#part-3">3 · GridSpec.snap()</a>
   <a href="#part-4">4 · Picking a diode width</a>
   <a href="#part-5">5 · _tune_cascode_legs() — the heart</a>
   <a href="#part-6">6 · _tune_pref_cascode()</a>
@@ -200,10 +200,10 @@
         <text x="130" y="309" text-anchor="middle" font-weight="600" font-size="12">_sized()</text>
         <text x="130" y="323" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">build a TransistorSizing</text>
       </g>
-      <!-- _snap_w -->
+      <!-- GridSpec.snap -->
       <g class="node" data-group="snap">
         <rect x="360" y="290" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="435" y="309" text-anchor="middle" font-weight="600" font-size="12">_snap_w()</text>
+        <text x="435" y="309" text-anchor="middle" font-weight="600" font-size="12">tech.width.snap()</text>
         <text x="435" y="323" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">width → grid</text>
       </g>
     </svg>
@@ -289,13 +289,19 @@
 
 <!-- ================= PART 3 ================= -->
 <section class="part" id="part-3">
-  <h2>Part 3 · <code>_snap_w()</code> — the warm-up</h2>
+  <h2>Part 3 · <code>GridSpec.snap()</code> — the warm-up</h2>
 
   <blockquote><p><strong>The one job:</strong> round a computed width to the nearest value the manufacturing grid allows, then clamp it into the legal range.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_snap_w</span>(tech: TechParams, w_um: <span class="tok-kw">float</span>) -> <span class="tok-kw">float</span>:
-    g = tech.width
-    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(<span class="tok-fn">round</span>(w_um / g.step) * g.step, g.min), g.max))</code></pre>
+  <p>The rule belongs to the grid, not to this file: it is a method on <code>GridSpec</code> in <code>shared/models.py</code>, and <code>bias_levels.py</code> asks the width ruler to apply it.</p>
+
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">GridSpec</span>:
+    <span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
+        v = <span class="tok-fn">round</span>(x / self.step) * self.step
+        <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))
+
+<span class="tok-com"># at the call site, in bias_levels.py:</span>
+w = tech.width.<span class="tok-fn">snap</span>(<span class="tok-fn">abs</span>(ids_a) / idw)</code></pre>
 
   <p>Analogy: you can order lumber only in whole inches. Ask for 23.4 inches and the yard hands you 23. That is all this does — snap to the grid, then refuse anything below <code>min</code> or above <code>max</code>.</p>
 
@@ -303,7 +309,7 @@
   <p>Say <code>step = 0.1 µm</code>, <code>min = 0.5</code>, <code>max = 100</code>, and the tuner computed <code>w_um = 4.27</code>:</p>
   <pre class="code"><code>round(4.27 / 0.1) * 0.1  =  round(42.7) * 0.1  =  43 * 0.1  =  4.3 µm
 max(4.3, 0.5) = 4.3       min(4.3, 100) = 4.3   ->  4.3 µm</code></pre>
-  <p>Every width the two tuners invent is passed through this, so whatever <code>V_GS</code> they aim for, the device they actually place is manufacturable. Keep it in your pocket — it shows up inside both tuners.</p>
+  <p>Every width the two tuners invent is passed through <code>tech.width.snap</code>, so whatever <code>V_GS</code> they aim for, the device they actually place is manufacturable. Keep it in your pocket — it shows up inside both tuners.</p>
 </section>
 
 <!-- ================= PART 4 ================= -->
@@ -320,7 +326,7 @@ max(4.3, 0.5) = 4.3       min(4.3, 100) = 4.3   ->  4.3 µm</code></pre>
     <span class="tok-kw">for</span> gm_id <span class="tok-kw">in</span> model.lut.gm_id_axis:
         idw = model.lut.<span class="tok-fn">id_per_w</span>(dtype, <span class="tok-fn">float</span>(gm_id), l_um)  <span class="tok-com"># current density</span>
         <span class="tok-kw">if</span> idw &lt;= <span class="tok-num">0</span>: <span class="tok-kw">continue</span>
-        w = <span class="tok-fn">_snap_w</span>(tech, <span class="tok-fn">abs</span>(ids_a) / idw)             <span class="tok-com"># width to carry this current</span>
+        w = tech.width.<span class="tok-fn">snap</span>(<span class="tok-fn">abs</span>(ids_a) / idw)          <span class="tok-com"># width to carry this current</span>
         out.<span class="tok-fn">append</span>((w, <span class="tok-fn">abs</span>(model.<span class="tok-fn">vgs</span>(dtype, w, l_um, ids_a))))
     <span class="tok-kw">return</span> out</code></pre>
 
@@ -547,7 +553,7 @@ pref_diode  = pmos diode on the cascode's drain</code></pre>
   <pre class="code"><code>gm_id_weak = <span class="tok-fn">float</span>(model.lut.gm_id_axis[-<span class="tok-num">1</span>])   <span class="tok-com"># weakest inversion</span>
 idw = model.lut.<span class="tok-fn">id_per_w</span>(<span class="tok-str">"nmos"</span>, gm_id_weak, s_c.l_um)
 <span class="tok-kw">if</span> idw &gt; <span class="tok-num">0</span>:
-    w_c = <span class="tok-fn">_snap_w</span>(tech, <span class="tok-fn">abs</span>(s_c.ids_a) / idw)
+    w_c = tech.width.<span class="tok-fn">snap</span>(<span class="tok-fn">abs</span>(s_c.ids_a) / idw)
     sizing[cascode.ref] = <span class="tok-fn">_sized</span>(model, cascode.ref, <span class="tok-str">"nmos"</span>, w_c, s_c.l_um, s_c.ids_a)</code></pre>
   <p>Push the cascode to the <strong>weak-inversion end</strong> of the table — the last axis point. That gives it the lowest <code>V_GS</code> and lowest <code>Vdsat</code>. A shorter cascode leaves more of the ceiling for the <code>ncasc</code> diode to push the pinned node upward. It is the same "widen the device to shrink its V_GS" trick from Part 2, dialed to the extreme.</p>
 

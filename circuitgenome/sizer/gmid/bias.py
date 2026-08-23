@@ -31,14 +31,10 @@ when the tail can't actually bias.
 from __future__ import annotations
 
 from ..shared.device_model import GmIdModel
-from ..shared.models import GridSpec, SizingSpec, TechParams, TransistorSizing
+from ..shared.models import SizingSpec, TechParams, TransistorSizing
 from .blocks import OpAmpBlocks
 
 __all__ = ["check_dc_operating_point"]
-
-
-def _snap_w(g: GridSpec, w_um: float) -> float:
-    return float(min(max(round(w_um / g.step) * g.step, g.min), g.max))
 
 
 def _tail_gm_id_for_headroom(
@@ -127,7 +123,7 @@ def _apply_headroom(
             idw = model.lut.id_per_w(dev.type, gm_id, s.l_um) if s else 0.0
             if not s or idw <= 0:
                 continue
-            w_new = _snap_w(tech.width, abs(s.ids_a) / idw)
+            w_new = tech.width.snap(abs(s.ids_a) / idw)
             out[dev.ref] = TransistorSizing(
                 ref=dev.ref, w_um=w_new, l_um=s.l_um, ids_a=s.ids_a,
                 vgs_v=model.vgs(dev.type, w_new, s.l_um, s.ids_a),
@@ -151,7 +147,7 @@ def _apply_headroom(
         idw = model.lut.id_per_w(ip_dev.type, gm_id_pair, s_ip.l_um)
         if idw <= 0:
             continue
-        w_p = _snap_w(tech.width, abs(s_ip.ids_a) / idw)
+        w_p = tech.width.snap(abs(s_ip.ids_a) / idw)
         vgs_p = abs(model.vgs(ip_dev.type, w_p, s_ip.l_um, s_ip.ids_a))
         h = (spec.vdd - (vcm + vgs_p) if ip_dev.type == "pmos"
              else (vcm - vgs_p) - spec.vss)

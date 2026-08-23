@@ -343,7 +343,8 @@ Phase 4a — Size: assign geometry (LUT → W/L, symmetry, mirror ratios)
 :func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid` is the core
 forward pass, driven by each device's ``TransistorIntent``: (a) the LUT gives
 per-device (W, L) from ``Id`` + the block's gm/Id region and L (signal devices
-solve gm/Id from ``gm_req``); (b) snap W to grid; (c) *symmetry* — matched pairs
+solve gm/Id from ``gm_req``); (b) snap W to grid via
+:meth:`~circuitgenome.sizer.shared.models.GridSpec.snap`; (c) *symmetry* — matched pairs
 share the anchor's geometry; (d) *mirror ratios* — each output W = exact current
 ratio × the diode reference's W.  Returns
 :class:`~circuitgenome.sizer.shared.models.TransistorSizing` (W, L, Vgs, Vdsat).

@@ -167,12 +167,6 @@ class GmIdModel:
         self.policy = policy or GmIdPolicy()
 
     # -- geometry / grid helpers -------------------------------------------
-    def _snap_l(self, l_um: float) -> float:
-        """Snap a length to the tech length grid, clamped to its bounds."""
-        g = self.tech.length
-        v = round(l_um / g.step) * g.step
-        return float(min(max(v, g.min), g.max))
-
     def role_length(self, role: str) -> float:
         """Channel length for ``role`` from the L-policy multiplier (µm, snapped)."""
         mult = {CURRENT_SOURCE: self.policy.cs_l_mult,
@@ -181,7 +175,7 @@ class GmIdModel:
 
     def length_for(self, l_mult: float) -> float:
         """Channel length for an explicit L multiple of ``length.min`` (µm, snapped)."""
-        return self._snap_l(l_mult * self.tech.length.min)
+        return self.tech.length.snap(l_mult * self.tech.length.min)
 
     def _role_gm_id(self, role: str) -> float:
         """Nominal gm/Id for a non-signal role (current source / cascode)."""

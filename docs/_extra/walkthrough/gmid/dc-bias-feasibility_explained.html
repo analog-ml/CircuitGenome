@@ -99,7 +99,7 @@
   <div class="label">Contents</div>
   <a href="#part-1">1 · Why this file exists</a>
   <a href="#part-2">2 · The physics primer</a>
-  <a href="#part-3">3 · _snap_w()</a>
+  <a href="#part-3">3 · GridSpec.snap()</a>
   <a href="#part-4">4 · _tail_gm_id_for_headroom()</a>
   <a href="#part-5">5 · _tail_stack_to_rail()</a>
   <a href="#part-6">6 · _apply_headroom() — the heart</a>
@@ -200,7 +200,7 @@
       <!-- snap -->
       <g class="node" data-group="snap">
         <rect x="360" y="230" width="150" height="40" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="435" y="249" text-anchor="middle" font-weight="600" font-size="12">_snap_w()</text>
+        <text x="435" y="249" text-anchor="middle" font-weight="600" font-size="12">tech.width.snap()</text>
         <text x="435" y="263" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">width → grid</text>
       </g>
     </svg>
@@ -287,14 +287,21 @@
 
 <!-- ================= PART 3 ================= -->
 <section class="part" id="part-3">
-  <h2>Part 3 · <code>_snap_w()</code> — the warm-up</h2>
+  <h2>Part 3 · <code>GridSpec.snap()</code> — the warm-up</h2>
 
   <blockquote><p><strong>The one job:</strong> round a computed width to the nearest value the manufacturing grid actually allows, then clamp it into range.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_snap_w</span>(g: GridSpec, w_um: <span class="tok-kw">float</span>) -> <span class="tok-kw">float</span>:
-    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(<span class="tok-fn">round</span>(w_um / g.step) * g.step, g.min), g.max))</code></pre>
+  <p>This one does not live in <code>bias.py</code> at all. Snapping belongs to the grid being snapped to, so it is a method on <code>GridSpec</code> (<code>shared/models.py</code>) and <code>bias.py</code> simply asks the width ruler to do it:</p>
 
-  <p>Analogy: you can order lumber in whole inches only. Ask for 23.4 inches and the yard gives you 23. That's all this does — snap to the grid, then refuse anything below <code>min</code> or above <code>max</code>.</p>
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">GridSpec</span>:
+    <span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
+        v = <span class="tok-fn">round</span>(x / self.step) * self.step
+        <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))
+
+<span class="tok-com"># at the call site, in bias.py:</span>
+w_new = tech.width.<span class="tok-fn">snap</span>(<span class="tok-fn">abs</span>(s.ids_a) / idw)</code></pre>
+
+  <p>Analogy: you can order lumber in whole inches only. Ask for 23.4 inches and the yard gives you 23. That's all this does — snap to the grid, then refuse anything below <code>min</code> or above <code>max</code>. The same method serves the length and capacitance rulers, so the rule is written once.</p>
 
   <h3>Traced with real numbers</h3>
   <p>Say <code>step = 0.1 µm</code>, <code>min = 0.5</code>, <code>max = 100</code>, and we computed <code>w_um = 2.34</code>:</p>
@@ -414,7 +421,7 @@ vdsat_tail = model.<span class="tok-fn">vds_sat</span>(tc_dev.type, s_tc.w_um, s
   <p>The repair searches over <em>input-pair operating points</em>, weakest-inversion loophole first:</p>
   <pre class="code"><code>cands = [(<span class="tok-kw">None</span>, headroom)]                 <span class="tok-com"># candidate 0: leave the pair as-is</span>
 <span class="tok-kw">for</span> gm_id_pair <span class="tok-kw">in</span> model.lut.gm_id_axis:      <span class="tok-com"># then progressively weaker pairs</span>
-    ... w_p = <span class="tok-fn">_snap_w</span>(tech.width, <span class="tok-fn">abs</span>(s_ip.ids_a) / idw)
+    ... w_p = tech.width.<span class="tok-fn">snap</span>(<span class="tok-fn">abs</span>(s_ip.ids_a) / idw)
     vgs_p = <span class="tok-fn">abs</span>(model.<span class="tok-fn">vgs</span>(...))
     h = spec.vdd - (vcm + vgs_p) <span class="tok-kw">if</span> ip_dev.type == <span class="tok-str">"pmos"</span> <span class="tok-kw">else</span> (vcm - vgs_p) - spec.vss
     <span class="tok-kw">if</span> h &gt; headroom + <span class="tok-num">1e-9</span>: cands.<span class="tok-fn">append</span>((gm_id_pair, h))</code></pre>

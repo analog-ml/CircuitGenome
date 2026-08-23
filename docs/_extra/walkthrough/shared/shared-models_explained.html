@@ -286,13 +286,19 @@
 <span class="tok-kw">class</span> <span class="tok-fn">GridSpec</span>:
     min: <span class="tok-kw">float</span>    <span class="tok-com"># smallest legal value (µm for W/L, pF for cap)</span>
     max: <span class="tok-kw">float</span>    <span class="tok-com"># largest legal value</span>
-    step: <span class="tok-kw">float</span>   <span class="tok-com"># discretisation step</span></code></pre>
+    step: <span class="tok-kw">float</span>   <span class="tok-com"># discretisation step</span>
+
+    <span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
+        v = <span class="tok-fn">round</span>(x / self.step) * self.step
+        <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))</code></pre>
 
   <p>Analogy: you can't order lumber at any length — the yard sells it in fixed increments, with a shortest and longest board. <code>GridSpec</code> <em>is</em> that catalogue: "widths from 0.5 to 4.5 µm, in 0.5 µm steps." The solver is only ever allowed to pick a value that lands on a tick and stays inside the two ends.</p>
 
   <h3>Traced with real numbers</h3>
-  <p>Take a width grid <code>GridSpec(min=0.5, max=4.5, step=0.5)</code>. Suppose the sizer computes an ideal width of <code>2.34 µm</code>. It isn't legal — so it snaps to the nearest tick:</p>
-  <pre class="code"><code>round(2.34 / 0.5) * 0.5  =  round(4.68) * 0.5  =  5 * 0.5  =  2.5 µm</code></pre>
+  <p>Take a width grid <code>GridSpec(min=0.5, max=4.5, step=0.5)</code>. Suppose the sizer computes an ideal width of <code>2.34 µm</code>. It isn't legal — so <code>snap</code> moves it to the nearest tick:</p>
+  <pre class="code"><code>width.<span class="tok-fn">snap</span>(<span class="tok-num">2.34</span>)
+  round(2.34 / 0.5) * 0.5  =  round(4.68) * 0.5  =  5 * 0.5  =  2.5 µm
+  clamped into [0.5, 4.5]                                    ->  2.5 µm</code></pre>
 
   <figure class="fig">
     <svg viewBox="0 0 500 130" role="img" aria-label="A GridSpec drawn as a ruler; the asked-for 2.34 micron snaps to the nearest tick at 2.5">
@@ -321,7 +327,7 @@
     <figcaption>A <code>GridSpec</code> is just a ruler: <code>min</code> and <code>max</code> are the ends, <code>step</code> the tick spacing. Any computed value lands on the nearest tick.</figcaption>
   </figure>
 
-  <p>The same three-number record is reused for <em>three</em> different quantities in <code>TechParams</code>: transistor <code>width</code>, transistor <code>length</code>, and compensation <code>cap</code>. One tiny class, three jobs — that's the payoff of a well-chosen atom.</p>
+  <p>The same three-number record is reused for <em>three</em> different quantities in <code>TechParams</code>: transistor <code>width</code>, transistor <code>length</code>, and compensation <code>cap</code>. One tiny class, three jobs — that's the payoff of a well-chosen atom. Because <code>snap</code> is a method rather than a loose helper, all three rulers snap by the same rule, and a caller writes <code>tech.width.snap(w)</code> or <code>tech.length.snap(l)</code> without ever restating the arithmetic.</p>
 
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 meets the one atom that isn't just numbers — <code>SpiceLib</code>, a <em>pointer</em> to a foundry PDK on disk, and the reason a couple of extra fields ride alongside it.</p></blockquote>
 </section>
@@ -628,12 +634,12 @@
   <ul>
     <li><strong>No validation.</strong> Nothing here checks that <code>vdd &gt; vss</code> or that a width lands on the grid — these are dumb records; the surrounding stages enforce meaning.</li>
     <li><strong>Not actually immutable.</strong> They're plain dataclasses, not <code>frozen=True</code>. The docstring's "freely inspected or passed" is a <em>convention</em>, not an enforced guarantee — a stage <em>could</em> mutate one, and nothing would stop it.</li>
-    <li><strong>No behaviour.</strong> There are no methods. Any computation over these lives elsewhere; this file is deliberately inert so it can be imported anywhere without side effects.</li>
+    <li><strong>Almost no behaviour.</strong> The one method is <code>GridSpec.snap</code>, and it only reads the record's own three numbers — no other state, no side effects. Every real computation still lives elsewhere; this file stays inert enough to import anywhere.</li>
     <li><strong>Defaults, not intelligence.</strong> <code>corner="typical"</code>, <code>wl_units="m"</code>, ratios of <code>2.0</code>/<code>5.0</code> — reasonable starting points, but the file never reasons about whether they fit your process.</li>
   </ul>
 
   <h3>Why it's elegant</h3>
-  <p>The whole design rides one restraint: <strong>keep the data types free of logic so they can be the shared language of every stage</strong>. Small atoms (<code>MosfetParams</code>, <code>GridSpec</code>) compose into aggregates (<code>TechParams</code>, <code>SizingResult</code>); optional fields double as routers; <code>None</code> and empty collections carry meaning without flags. It's the least code in the module and the most important, because everything else agrees to speak through it.</p>
+  <p>The whole design rides one restraint: <strong>keep the data types free of logic so they can be the shared language of every stage</strong> — the lone exception being a rule like <code>snap</code> that is <em>about</em> the record and nothing else, which belongs with it rather than copied into five call sites. Small atoms (<code>MosfetParams</code>, <code>GridSpec</code>) compose into aggregates (<code>TechParams</code>, <code>SizingResult</code>); optional fields double as routers; <code>None</code> and empty collections carry meaning without flags. It's the least code in the module and the most important, because everything else agrees to speak through it.</p>
 
   <hr>
   <p><strong>In one sentence:</strong> <code>models.py</code> defines the logic-free dataclasses that are the typed seams of the sizer — small atoms (<code>MosfetParams</code>, <code>GridSpec</code>, <code>SpiceLib</code>) that compose into the incoming crates (<code>TechParams</code>, <code>SizingSpec</code>) and the outgoing crate (<code>SizingResult</code>, holding one <code>TransistorSizing</code> per device) — so every pipeline stage hands work to the next through a stable, named contract instead of a loose dictionary.</p>

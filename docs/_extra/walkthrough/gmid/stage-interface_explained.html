@@ -99,7 +99,7 @@
   <div class="label">Contents</div>
   <a href="#part-1">1 · Why this file exists</a>
   <a href="#part-2">2 · The pin, the window, the rule</a>
-  <a href="#part-3">3 · _snap_w() &amp; _rail_v()</a>
+  <a href="#part-3">3 · GridSpec.snap() &amp; _rail_v()</a>
   <a href="#part-4">4 · _pin_level()</a>
   <a href="#part-5">5 · _diode_level()</a>
   <a href="#part-6">6 · _stack_bound() — the two walls</a>
@@ -224,7 +224,7 @@
       <!-- snap / rail leaves under resize -->
       <g class="node" data-group="resize2">
         <rect x="235" y="272" width="150" height="42" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="310" y="292" text-anchor="middle" font-weight="600" font-size="12">_snap_w() · _rail_v()</text>
+        <text x="310" y="292" text-anchor="middle" font-weight="600" font-size="12">width.snap() · _rail_v()</text>
         <text x="310" y="307" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">grid &amp; rail primitives</text>
       </g>
     </svg>
@@ -291,18 +291,19 @@
 
 <!-- ================= PART 3 ================= -->
 <section class="part" id="part-3">
-  <h2>Part 3 · <code>_snap_w()</code> &amp; <code>_rail_v()</code> — the two leaves</h2>
+  <h2>Part 3 · <code>GridSpec.snap()</code> &amp; <code>_rail_v()</code> — the two leaves</h2>
 
   <blockquote><p><strong>The one job:</strong> two tiny primitives — snap a width to the manufacturing grid, and turn a rail's <em>name</em> into its <em>voltage</em>.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_snap_w</span>(tech: TechParams, w_um: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
-    g = tech.width
-    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(<span class="tok-fn">round</span>(w_um / g.step) * g.step, g.min), g.max))
+  <pre class="code"><code><span class="tok-com"># on GridSpec, in shared/models.py — called here as tech.width.snap(...)</span>
+<span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
+    v = <span class="tok-fn">round</span>(x / self.step) * self.step
+    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))
 
 <span class="tok-kw">def</span> <span class="tok-fn">_rail_v</span>(net: <span class="tok-kw">str</span>, spec: SizingSpec) -&gt; <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> spec.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> spec.vss</code></pre>
 
-  <p><code>_snap_w</code> is the lumber-yard rule: you can order boards in whole grid steps only. Ask for <code>2.34&nbsp;µm</code> on a <code>0.1&nbsp;µm</code> grid and you get <code>round(2.34/0.1)·0.1 = 2.3&nbsp;µm</code>, then it's clamped between <code>min</code> and <code>max</code>. Every width the repair invents passes through it, so nothing unbuildable escapes.</p>
+  <p><code>GridSpec.snap</code> is the lumber-yard rule: you can order boards in whole grid steps only. Ask for <code>2.34&nbsp;µm</code> on a <code>0.1&nbsp;µm</code> grid and you get <code>round(2.34/0.1)·0.1 = 2.3&nbsp;µm</code>, then it's clamped between <code>min</code> and <code>max</code>. Every width the repair invents passes through <code>tech.width.snap</code>, so nothing unbuildable escapes. It lives on the grid itself rather than in this file, so the width, length, and capacitance rulers all share one rule.</p>
 
   <p><code>_rail_v</code> is even smaller: the netlist calls the top rail <code>"vdd!"</code> and everything else is the bottom rail. This one line is the anchor every voltage calculation eventually bottoms out on — the base case of the recursion in Part&nbsp;5 and the rail exit in Part&nbsp;6 both call it.</p>
 </section>
@@ -535,7 +536,7 @@ PMOS  (anchor B, sgn=−1):  0.70 + 0.40 − 0.20          =  0.90 V   →  uppe
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_resize_at</span>(model, tech, dev, s, gm_id) -&gt; TransistorSizing | <span class="tok-kw">None</span>:
     idw = model.lut.<span class="tok-fn">id_per_w</span>(dev.type, gm_id, s.l_um)
     <span class="tok-kw">if</span> idw &lt;= <span class="tok-num">0</span>: <span class="tok-kw">return</span> <span class="tok-kw">None</span>
-    w = <span class="tok-fn">_snap_w</span>(tech, <span class="tok-fn">abs</span>(s.ids_a) / idw)          <span class="tok-com"># hold current, change width</span>
+    w = tech.width.<span class="tok-fn">snap</span>(<span class="tok-fn">abs</span>(s.ids_a) / idw)       <span class="tok-com"># hold current, change width</span>
     <span class="tok-kw">return</span> <span class="tok-fn">TransistorSizing</span>(ref=dev.ref, w_um=w, l_um=s.l_um, ids_a=s.ids_a,
         vgs_v=model.<span class="tok-fn">vgs</span>(dev.type, w, s.l_um, s.ids_a),
         vds_sat_v=model.<span class="tok-fn">vds_sat</span>(dev.type, w, s.l_um, s.ids_a))</code></pre>

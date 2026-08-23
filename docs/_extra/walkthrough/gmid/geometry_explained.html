@@ -521,7 +521,7 @@ gm/Id 15 → Vdsat 0.14  ≤ 0.15  → return (15, True)   <span class="tok-com"
         i_m = ids_map.get(m, <span class="tok-num">0.0</span>)
         <span class="tok-kw">if</span> i_m &lt;= <span class="tok-num">0</span>: <span class="tok-kw">continue</span>
         L[m] = L[ref0]
-        W[m] = <span class="tok-fn">snap_w</span>((i_m / i_ref) * W[ref0])       <span class="tok-com"># the ratio rule</span></code></pre>
+        W[m] = <span class="tok-fn">snap</span>((i_m / i_ref) * W[ref0])         <span class="tok-com"># the ratio rule</span></code></pre>
 
   <p>That last line is the whole function. Everything above it just finds the reference (<code>ref0</code>, the diode) inside each shared-gate family and its current <code>i_ref</code>. Note it also copies <code>L[ref0]</code> onto the output: a mirror only tracks accurately when both devices share the same length.</p>
 
@@ -540,7 +540,7 @@ gm/Id 15 → Vdsat 0.14  ≤ 0.15  → return (15, True)   <span class="tok-com"
   <h3>Traced with real numbers</h3>
   <p>Reference diode already sized at <code>W_ref = 4.0 µm</code> carrying <code>I_ref = 20 µA</code>. An output in the same family must carry <code>I_out = 50 µA</code>:</p>
   <pre class="code"><code>ratio = I_out / I_ref = 50 / 20 = 2.5
-W_out = snap_w(2.5 × 4.0) = snap_w(10.0) = 10.0 µm
+W_out = snap(2.5 × 4.0) = snap(10.0) = 10.0 µm
 L_out = L_ref                                    <span class="tok-com"># matched length</span></code></pre>
 
   <figure class="fig">
@@ -576,7 +576,7 @@ L_out = L_ref                                    <span class="tok-com"># matched
 
   <p>The fix: size the load mirror <em>slightly strong</em> (<code>_LOAD_CS_MARGIN = 1.05</code>). Now the load gently pulls the node toward its supply rail and it settles there, keeping the input pair saturated with the load right at the edge of saturation. The old uncascoded design provided this ~4% surplus <em>by accident</em>; this makes it an explicit design intent (issue&nbsp;#103).</p>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_apply_load_current_margin</span>(W, slot_transistors, snap_w):
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_apply_load_current_margin</span>(W, slot_transistors, snap):
     fd = <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span> (<span class="tok-str">"second_stage_p"</span>, ...))
     load = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors.get(<span class="tok-str">"load"</span>, []) <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
     tail = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors.get(<span class="tok-str">"tail_current"</span>, []) <span class="tok-kw">if</span> ...]
@@ -584,7 +584,7 @@ L_out = L_ref                                    <span class="tok-com"># matched
         <span class="tok-kw">return</span>                                   <span class="tok-com"># not the fragile case — do nothing</span>
     <span class="tok-kw">for</span> d <span class="tok-kw">in</span> load:
         <span class="tok-kw">if</span> d.ref <span class="tok-kw">in</span> W:
-            W[d.ref] = <span class="tok-fn">snap_w</span>(W[d.ref] * _LOAD_CS_MARGIN)</code></pre>
+            W[d.ref] = <span class="tok-fn">snap</span>(W[d.ref] * _LOAD_CS_MARGIN)</code></pre>
 
   <p>The three-part guard is strict on purpose: it fires <em>only</em> for a single-ended (not fully-differential, so <code>fd</code> is false), MOSFET-tailed, current-source load. Any other topology returns untouched — no harm.</p>
 
@@ -621,9 +621,8 @@ L_out = L_ref                                    <span class="tok-com"># matched
 mirror_tied  = <span class="tok-fn">_mirror_tied_refs</span>(all_transistors)      <span class="tok-com"># Part 4b</span>
 cascode_load = <span class="tok-fn">any</span>(intents[d.ref].role == CASCODE <span class="tok-kw">for</span> d <span class="tok-kw">in</span> ...load...)
 
-<span class="tok-kw">def</span> <span class="tok-fn">snap_w</span>(w_um):
-    v = <span class="tok-fn">round</span>(w_um / g.step) * g.step
-    <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, g.min), g.max))       <span class="tok-com"># snap to grid, clamp range</span></code></pre>
+<span class="tok-com"># the grid rule itself is tech.width.snap — a GridSpec method (shared/models.py):</span>
+<span class="tok-com">#   v = round(x / step) * step; clamped into [min, max]</span></code></pre>
 
   <h3>Steps 1+2 — the LUT division, per device</h3>
   <pre class="code"><code><span class="tok-kw">for</span> ref, (device, slot) <span class="tok-kw">in</span> all_transistors.items():
@@ -637,15 +636,15 @@ cascode_load = <span class="tok-fn">any</span>(intents[d.ref].role == CASCODE <s
             feasible = <span class="tok-kw">False</span>; warnings.<span class="tok-fn">append</span>(...)
     geo = model.<span class="tok-fn">geometry_for</span>(device.type, ids_map[ref], ti.role, ...,
                              gm_id_min=gm_id_min)               <span class="tok-com"># W = Id / (Id/W)</span>
-    W[ref] = <span class="tok-fn">snap_w</span>(geo.w_um)
+    W[ref] = tech.width.<span class="tok-fn">snap</span>(geo.w_um)
     L[ref] = geo.l_um</code></pre>
 
   <p>The long <code>if</code> is the swing-floor gate we built the bookkeepers for: apply a floor only to a device that (a) has a swing budget, (b) truly sits on the output, (c) is <em>not</em> a mirror output, and (d) is not a signal device under a cascode load (whose Vgs is a delicate stage-interface pin that must not move). Every excluded device is still checked later against the raw budget — nothing is silently skipped.</p>
 
   <h3>Steps 3–5 — the three patches, in order</h3>
   <pre class="code"><code><span class="tok-fn">_apply_symmetry</span>(W, L, slot_transistors, ids_map)        <span class="tok-com"># 3 · Part 5</span>
-<span class="tok-fn">_apply_mirror_ratios</span>(W, L, all_transistors, ids_map, snap_w)  <span class="tok-com"># 4 · Part 6</span>
-<span class="tok-fn">_apply_load_current_margin</span>(W, slot_transistors, snap_w)   <span class="tok-com"># 5 · Part 7</span></code></pre>
+<span class="tok-fn">_apply_mirror_ratios</span>(W, L, all_transistors, ids_map, tech.width.snap)  <span class="tok-com"># 4 · Part 6</span>
+<span class="tok-fn">_apply_load_current_margin</span>(W, slot_transistors, tech.width.snap)   <span class="tok-com"># 5 · Part 7</span></code></pre>
 
   <p>Order matters exactly once. Symmetry runs <em>before</em> mirror ratios. On the rare device that is both a matched-pair member and a mirror output, the mirror pass runs second and <strong>wins</strong> — and that is deliberate, because the mirror ratio is the bias-current-correctness fix. For plain matched pairs the two rules agree anyway, so ordering only decides the tie-break, never the value.</p>
 
@@ -691,7 +690,7 @@ cascode_load = <span class="tok-fn">any</span>(intents[d.ref].role == CASCODE <s
   <table>
     <thead><tr><th>Step</th><th>What it does</th><th>Helper</th></tr></thead>
     <tbody>
-      <tr><td>1+2</td><td>Per-device (W, L) from the LUT; snap W to grid</td><td><code>geometry_for</code> + <code>snap_w</code></td></tr>
+      <tr><td>1+2</td><td>Per-device (W, L) from the LUT; snap W to grid</td><td><code>geometry_for</code> + <code>tech.width.snap</code></td></tr>
       <tr><td>3</td><td>Matched pairs copy the anchor's geometry</td><td><code>_apply_symmetry</code></td></tr>
       <tr><td>4</td><td>Mirror outputs = ratio × reference W</td><td><code>_apply_mirror_ratios</code></td></tr>
       <tr><td>5</td><td>Knife-edge load gets +5% width</td><td><code>_apply_load_current_margin</code></td></tr>
