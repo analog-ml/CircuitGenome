@@ -1126,45 +1126,17 @@ def test_wideswing_telescopic_window_clears_by_construction():
     assert pin - floor >= 0.3
 
 
-@pytest.mark.skip(reason=(
-    "Follower-as-second-stage no longer enumerates: followers moved to the "
-    "output_stage category (buffered topologies) where they read the "
-    "wide-swing amplification-stage output (net_ampout), not the first-stage "
-    "telescopic mirror window. The stage_interface follower-pin repair this "
-    "test exercised is therefore vestigial for the second_stage path; revisit "
-    "if an output_stage interface check is added."))
-def test_stage_interface_repairs_follower_pin():
-    """Telescopic PMOS load + PMOS follower: the follower's pin level
-    (Vout − |Vgs|) starts far below the mirror stack; repair moves the
-    follower toward weak inversion (smaller |Vgs| → higher pin, spec-safe)
-    and the mirror toward a lower stack until both clear."""
-    result = _size_gf180({
-        "input_pair": "differential_pair_pmos",
-        "load": "telescopic_cascode_load_pmos",
-        "second_stage": "common_drain_pmos"})
-    assert result.bias_feasible
-    assert not any("stage interface" in w for w in result.warnings)
-    stack = (abs(result.transistors["mn3_load"].vgs_v)
-             + result.transistors["mn2_load"].vds_sat_v)
-    vout_q = (3.3 + 0.0) / 2.0
-    pin = vout_q - abs(result.transistors["mp1_second_stage"].vgs_v)
-    assert stack + 0.049 <= pin
-
-
-@pytest.mark.skip(reason=(
-    "Follower-as-second-stage no longer enumerates (followers are now "
-    "output_stage buffers reading the wide-swing net_ampout, not the "
-    "telescopic mirror window) — see test_stage_interface_repairs_follower_pin."))
 def test_stage_interface_rejects_unclosable_gap():
-    """At a 2.0 V supply the PMOS follower cannot pin the node above the
-    telescopic mirror stack at any LUT point: honest plan-time reject with an
-    explanatory warning instead of a wasted SPICE evaluation."""
+    """At a 1.5 V supply the NMOS common-source stage pins the first-stage
+    output ~0.6 V above the folded-cascode PMOS load's upper stack bound, and
+    no gm/Id assignment on either knob closes the gap: honest plan-time reject
+    with an explanatory warning instead of a wasted SPICE evaluation."""
     result = _size_gf180({
         "input_pair": "differential_pair_pmos",
-        "load": "telescopic_cascode_load_pmos",
-        "second_stage": "common_drain_pmos"}, vdd=2.0)
+        "load": "folded_cascode_load_pmos_input_single_output",
+        "second_stage": "common_source_nmos"}, vdd=1.5)
     assert not result.bias_feasible
-    assert any("stage interface" in w for w in result.warnings)
+    assert any("stage interface cannot bias" in w for w in result.warnings)
 
 
 def test_stage_interface_leaves_fitting_candidates_alone():
