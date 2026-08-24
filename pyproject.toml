@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "circuitgenome"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python toolkit for analog circuit topology synthesis and recognition, focused on op-amp design."
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -48,6 +48,7 @@ include = ["circuitgenome*"]
     "config/*.yaml",
     "config/models/*.npz",
     "config/models/*.pm",
-    "pdk/gf180/ngspice/*.ngspice",
-    "pdk/gf180/*.rst",
+    "pdk/*/ngspice/*.ngspice",
+    "pdk/*/ngspice/*.spice",
+    "pdk/*/*.rst",
 ]

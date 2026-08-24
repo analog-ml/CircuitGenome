@@ -301,9 +301,13 @@ wheels = [
 
 [[package]]
 name = "circuitgenome"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
+    { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "ortools" },
     { name = "pyyaml" },
 ]
@@ -317,6 +321,7 @@ viz = [
 
 [package.metadata]
 requires-dist = [
+    { name = "numpy", specifier = ">=1.21" },
     { name = "ortools", specifier = ">=9.8" },
     { name = "pyvis", marker = "extra == 'viz'", specifier = ">=0.3" },
     { name = "pyyaml", specifier = ">=6.0" },

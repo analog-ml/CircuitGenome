@@ -11,6 +11,13 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+## [0.3.0] – 2026-08-24
+
+A second real PDK and the fully-differential campaign: SKY130 1.8 V for the
+gm/Id sizer with a per-tech intent registry, the FD correctness work that took
+fully-differential circuits from a mis-sensed CMFB to SPICE-verified open-loop
+gain, CMRR and PSRR, and a recognizer that now reads *sized* netlists.
+
 ### Added
 
 - ✨ Recognizer parser accepts *sized* SPICE netlists — MOSFET `W/L/nf/m` params, `sky130_fd_pr__*`/foundry model names via a configurable model-name table, and preserved R/C value tokens; sizes ride along on `Device.params` and `recognize()` is unchanged ([#169](https://github.com/analog-ml/CircuitGenome/pull/169)).
@@ -20,6 +27,8 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Changed
 
+- ♻️ Consolidate `vcm` and `rail_v` onto `SizingSpec` — the input common mode and a supply net's DC level become single named definitions on the spec instead of copies scattered across the gm/Id modules; with [#206](https://github.com/analog-ml/CircuitGenome/pull/206) this closes the [#201](https://github.com/analog-ml/CircuitGenome/issues/201) deduplication umbrella ([#207](https://github.com/analog-ml/CircuitGenome/pull/207)).
+- ♻️ Consolidate the five grid-snap copies onto `GridSpec.snap` — one snap-then-clamp definition replaces the private `_snap_w`/`_snap_l` helpers in `bias.py`, `bias_levels.py`, `stage_interface.py` and friends ([#206](https://github.com/analog-ml/CircuitGenome/pull/206)).
 - ♻️ Decouple gm/Id techs from the Level-1 square-law schema — `MosfetParams.vth`/`mu_cox`/`lam` are now optional (a gm/Id PDK tech may omit the `nmos:`/`pmos:` blocks entirely) and `size_load_resistors` takes a LUT-sourced per-polarity seed; drops the honest-but-dead square-law placeholders sky130's degenerate-at-Lmin fit was forced to carry to satisfy a schema it never touches ([#195](https://github.com/analog-ml/CircuitGenome/pull/195)).
 - ♻️ Rename the stage-interface compatibility filter `second_stage` → `stage_interface` (module, `is_*_compatible`, call site) — behavior-neutral, closing the gap #144's doc-stub rename opened ([#178](https://github.com/analog-ml/CircuitGenome/pull/178)).
 
@@ -41,6 +50,8 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Docs
 
+- 📝 SKY130 designer survey (`examples/sky130_results/`) — for each of the 13 op-amp templates, how many synthesizable topologies meet the SKY130 1.8 V survey spec (45 dB, 2 MHz GBW, 60° PM, ≤ 2 mW), SPICE-verified with ngspice ([#205](https://github.com/analog-ml/CircuitGenome/pull/205)).
+- 📝 Restructure the `equations.py` walkthrough around the Shichman–Hodges square law — state the law once, derive every formula from it in a single pass, and map each to its CircuitGenome function (8 parts → 5) ([#204](https://github.com/analog-ml/CircuitGenome/pull/204)).
 - 📝 Code walkthroughs — 34 hand-authored, figure-rich HTML deep dives into the sizer and recognizer internals, shipped verbatim alongside the Sphinx docs (`html_extra_path`, ADR 0002) with a searchable landing page and module-page deep-dive links ([#173](https://github.com/analog-ml/CircuitGenome/pull/173)).
 - 📝 Sync the HTML code walkthroughs with #158/#190/#77/#155 (9 files, +67/−25) — living documents co-updated with the code they describe ([#198](https://github.com/analog-ml/CircuitGenome/pull/198)).
 - 📝 Document why the FD source-follower buffer slots are deliberately absent from `_FD_PAIRS` — `_apply_symmetry` groups a pair by `type` alone and would fuse the two same-polarity follower devices — plus a regression test locking the invariant ([#177](https://github.com/analog-ml/CircuitGenome/pull/177)).
@@ -51,6 +62,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Internal / Build
 
+- 🔧 Ignore `.claude/` and the `bsim4v5.out` ngspice scratch output, keeping local scratch files out of the untracked list ([#200](https://github.com/analog-ml/CircuitGenome/pull/200)).
 - 🧪 Lock in measured FD CMRR/PSRR (`test_fd_cmrr_psrr_measured`) — the #165/#167 CMFB output-sense rewire opened the `ac_clean` gate, so FD rejection metrics already flow through `simulate_metrics` (169.6/207.2 dB on the frozen three-stage FD); the FD half of #184 ([#197](https://github.com/analog-ml/CircuitGenome/pull/197)).
 - 🧪 Guard bias resistors off gate/current rails — across every enumerated 1-/2-stage-SE/2-stage-FD combination a constructed `r*_bias_gen` appears only on `cascode_*`/`tunable` rails and never on a `gate_*`/`current_*` rail, locking in the #100 single-global-`v_gate` resolution ([#188](https://github.com/analog-ml/CircuitGenome/pull/188)).
 - 🧪 Lock SPICE slew-rate and output-swing on the real device techs (ptm45 BSIM4, gf180mcu gm/Id), not just the generic Level-1 anchor (#63) ([#185](https://github.com/analog-ml/CircuitGenome/pull/185)).
@@ -205,6 +217,7 @@ the `recognize` CLI.
 - 📝 SR Milestone 2 design doc — primitive patterns & multi-level composition ([#43](https://github.com/analog-ml/CircuitGenome/pull/43)).
 - 📝 Remove MVP references and update recognizer coverage ([#50](https://github.com/analog-ml/CircuitGenome/pull/50)).
 
-[Unreleased]: https://github.com/analog-ml/CircuitGenome/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/analog-ml/CircuitGenome/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/analog-ml/CircuitGenome/releases/tag/v0.3.0
 [0.2.0]: https://github.com/analog-ml/CircuitGenome/releases/tag/v0.2.0
 [0.1.0]: https://github.com/analog-ml/CircuitGenome/releases/tag/v0.1.0
