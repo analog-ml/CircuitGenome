@@ -12,7 +12,7 @@ from circuitgenome.sizer.gmid.intent import (
     TransistorIntent,
     resolve_transistor_intents,
 )
-from circuitgenome.sizer.shared.loader import load_tech
+from circuitgenome.sizer import load_tech
 from circuitgenome.synthesizer.models import Device
 
 

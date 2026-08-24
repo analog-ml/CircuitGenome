@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from circuitgenome.sizer.shared.loader import load_tech
+from circuitgenome.sizer import load_tech
 
 _BASE = {
     "name": "t",

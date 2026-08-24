@@ -11,12 +11,9 @@ from pathlib import Path
 import pytest
 
 from circuitgenome.recognizer import assign_slots, parse, recognize
-from circuitgenome.sizer.shared import spice_sim
 from circuitgenome.sizer.shared.spice import deck, measure
 from circuitgenome.sizer.shared.device_model import build_device_model
-from circuitgenome.sizer.shared.loader import load_tech
-from circuitgenome.sizer.shared.models import SizingSpec
-from circuitgenome.sizer.sizer import size_circuit
+from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
 from circuitgenome.synthesizer.loader import load_topologies
 
 _CKT_DIR = (Path(__file__).resolve().parent.parent / "circuits"

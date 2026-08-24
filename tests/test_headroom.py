@@ -9,8 +9,7 @@ from circuitgenome.sizer.shared.device_model import (
     build_device_model,
 )
 from circuitgenome.sizer.gmid.bias import _apply_headroom, _tail_gm_id_for_headroom
-from circuitgenome.sizer.shared.loader import load_tech
-from circuitgenome.sizer.shared.models import SizingSpec, TransistorSizing
+from circuitgenome.sizer import load_tech, SizingSpec, TransistorSizing
 from circuitgenome.synthesizer.models import Device
 
 

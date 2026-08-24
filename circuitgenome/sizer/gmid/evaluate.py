@@ -8,7 +8,7 @@ tail on gd_tail, CMFB averager loading on the output).
 
 Analytical (ngspice-free) estimate: a deterministic sizing-quality signal for
 tests/programmatic callers.  The CLI measures PTM performance with ngspice
-(``spice_sim.simulate_metrics``) and displays that instead of these numbers.
+(``sizer.simulate_metrics``) and displays that instead of these numbers.
 """
 from __future__ import annotations
 

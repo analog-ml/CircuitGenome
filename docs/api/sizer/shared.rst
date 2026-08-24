@@ -11,7 +11,7 @@ models (Level-1 vs :doc:`shared/gmid_lut`) behind one interface;
 :doc:`shared/taxonomy` classifies each device by its functional role.
 :doc:`shared/preprocess` derives the per-device requirements consumed by both
 paths, :doc:`shared/metrics` evaluates the sized design analytically, and
-:doc:`shared/spice_sim` runs the ngspice verification and bias-soundness check.
+:doc:`shared/spice` runs the ngspice verification and bias-soundness check.
 
 .. toctree::
    :maxdepth: 1
@@ -22,7 +22,7 @@ paths, :doc:`shared/metrics` evaluates the sized design analytically, and
    shared/device_model
    shared/equations
    shared/gmid_lut
-   shared/spice_sim
+   shared/spice
    shared/taxonomy
    shared/preprocess
    shared/metrics

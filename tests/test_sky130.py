@@ -11,7 +11,7 @@ from pathlib import Path
 from circuitgenome.sizer.shared.spice import deck
 from circuitgenome.sizer.shared.device_model import build_device_model
 from circuitgenome.sizer.shared.gmid_lut import GmIdLut
-from circuitgenome.sizer.shared.loader import load_tech
+from circuitgenome.sizer import load_tech
 
 
 def test_sky130_tech_loads_lib_and_maps():

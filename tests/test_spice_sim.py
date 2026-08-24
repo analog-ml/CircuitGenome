@@ -1,4 +1,4 @@
-"""Tests for the ngspice metric-verification path (circuitgenome/sizer/spice_sim).
+"""Tests for the ngspice metric-verification path (circuitgenome/sizer/shared/spice).
 
 The simulation tests are skipped when ngspice is not on PATH.
 """
@@ -11,8 +11,14 @@ from circuitgenome.recognizer.functional_block_recognizer import assign_slots
 from circuitgenome.synthesizer.loader import load_topologies, load_modules
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
-from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
-from circuitgenome.sizer.shared import spice_sim
+from circuitgenome.sizer import (
+    check_bias_soundness,
+    load_tech,
+    ngspice_available,
+    simulate_metrics,
+    size_circuit,
+    SizingSpec,
+)
 from circuitgenome.sizer.shared.spice import deck, measure, rig
 
 
@@ -78,7 +84,7 @@ def test_deck_sinks_iref_for_pmos_referenced_dut():
 
 # --- simulation (requires ngspice) -----------------------------------------
 
-ngspice = pytest.mark.skipif(not spice_sim.ngspice_available(),
+ngspice = pytest.mark.skipif(not ngspice_available(),
                              reason="ngspice not installed")
 
 
@@ -87,7 +93,7 @@ def test_generic_level1_tracks_analytical():
     """Level-1 SPICE should roughly track the (Level-1) analytical formulas."""
     text, result, tech, spec = _active_load_two_stage_se("generic", 5.0, 80, 3.5e6)
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
     assert sim["power_w"] is not None and sim["power_w"] > 0
     # gain within ~20 dB and GBW within ~2x — loose, just a sanity envelope.
     assert sim["gain_db"] is not None
@@ -100,7 +106,7 @@ def test_generic_level1_tracks_analytical():
 def test_ptm_bsim4_runs():
     """The BSIM4 path runs and returns a (much lower) real-device gain."""
     text, result, tech, spec = _active_load_two_stage_se("ptm45", 1.0, 60, 5e5)
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
     assert sim["power_w"] is not None
     # Real 45nm gain is well below the optimistic Level-1 prediction.
     assert sim["gain_db"] is None or sim["gain_db"] < result.metrics["gain_db"]
@@ -126,7 +132,7 @@ def test_resistor_load_biases_in_spice():
                       gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=3.5e6)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.resistors  # load resistors were sized
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is not None  # circuit biases → AC measurable
 
 
@@ -156,7 +162,7 @@ def test_misbiased_circuit_reports_measured_gain_and_reason():
                       second_stage_current_ratio=2.5, gain_min_db=60,
                       gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=5e5)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
 
     # The folded-cascode stage can't bias at 1.0 V → measured gain ≤ 0 dB
     # (reported, not n/a); GBW/PM remain n/a; notes explain why.
@@ -193,7 +199,7 @@ def test_gnd_referenced_legs_bias_in_spice():
                       gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=3e5)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.solver_status == "GMID"
-    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
     assert ok and reason is None
 
 
@@ -224,7 +230,7 @@ def test_wideswing_telescopic_loads_bias_in_spice(input_pair, load):
                       gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=3e5)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.solver_status == "GMID"
-    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
     assert ok and reason is None
 
 
@@ -241,7 +247,7 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
 
     # genuinely biasing design (generic, 5 V) → sound
     text, result, tech, spec = _active_load_two_stage_se("generic", 5.0, 80, 3.5e6)
-    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
     assert ok and reason is None
 
     # circuit_0019: output stage current-mismatched → operating point rails
@@ -257,7 +263,7 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
                       phase_margin_min_deg=60, slew_rate_min_vps=5e5)
     tech = load_tech("ptm45")
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
-    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
     assert not ok and reason and "SPICE bias" in reason
 
 
@@ -313,7 +319,7 @@ def test_fd_bias_gate_passes_cm_regulated_cmfb_family():
                       second_stage_current_ratio=2.5, gain_min_db=60,
                       gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
-    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
     assert ok and reason is None, reason
 
 
@@ -335,7 +341,7 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
                       second_stage_current_ratio=2.5, gain_min_db=45,
                       gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
-    ok, reason = spice_sim.check_bias_soundness(text, result, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
     assert not ok and reason and "SPICE bias" in reason
 
 
@@ -369,7 +375,7 @@ def test_fd_two_stage_ac_metrics_are_real(cmfb):
                       output_swing_max_v=0.8, output_swing_min_v=0.2)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.solver_status == "GMID"
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is not None and sim["gain_db"] > 0
     assert sim["gbw_hz"] is not None and sim["gbw_hz"] > 0
     pm = sim["phase_margin_deg"]
@@ -462,7 +468,7 @@ def test_fd_three_stage_ac_metrics_are_real():
                       output_swing_min_v=0.2)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.solver_status == "GMID"
-    sim = spice_sim.simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
+    sim = simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
     assert sim["gain_db"] is not None and sim["gain_db"] > 0
     assert sim["gbw_hz"] is not None and sim["gbw_hz"] > 0
     pm = sim["phase_margin_deg"]
@@ -493,7 +499,7 @@ def test_fd_cmrr_psrr_measured():
                       output_swing_min_v=0.2)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.solver_status == "GMID"
-    sim = spice_sim.simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
+    sim = simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
 
     gain = sim["gain_db"]
     assert gain is not None and gain > 0
@@ -579,7 +585,7 @@ def test_implausible_pm_extraction_is_discarded():
     note naming the unsound response."""
     text, result, tech, spec = _resistor_tail_two_stage_se(
         "differential_ota_second_stage")
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is None
     assert sim["gbw_hz"] is None
     assert sim["phase_margin_deg"] is None
@@ -592,7 +598,7 @@ def test_honest_twin_measurement_unaffected():
     """The common-source twin of the regression circuit measures normally:
     positive gain and a physical phase margin."""
     text, result, tech, spec = _resistor_tail_two_stage_se("common_source_nmos")
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
     assert sim["gain_db"] is not None and sim["gain_db"] > 0
     pm = sim["phase_margin_deg"]
     assert pm is not None and 0 < pm <= 180
@@ -606,7 +612,7 @@ def test_new_metrics_measured_on_generic_two_stage():
     plausible values: CMRR/PSRR well above the gain floor, output swing inside
     the rails straddling mid-supply, slew rate near the analytical ibias/Cc."""
     text, result, tech, spec = _active_load_two_stage_se("generic", 5.0, 80, 3.5e6)
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
 
     assert sim["cmrr_db"] is not None and 20.0 < sim["cmrr_db"] < 200.0
     assert sim["psrr_db"] is not None and 20.0 < sim["psrr_db"] < 200.0
@@ -632,7 +638,7 @@ def test_slew_swing_measured_on_real_device_techs(tech, vdd):
     corner-dependent, so the bounds are loose (sign, straddles mid-supply,
     within an order of magnitude of the analytical ibias/Cc)."""
     text, result, tech_p, spec = _active_load_two_stage_se(tech, vdd, 50, 5e5)
-    sim = spice_sim.simulate_metrics(text, result, tech_p, spec)
+    sim = simulate_metrics(text, result, tech_p, spec)
     if sim["slew_rate_vps"] is None:
         pytest.skip(f"{tech} did not converge in this environment")
 
@@ -670,7 +676,7 @@ def test_cmrr_psrr_none_without_clean_gain():
                       second_stage_current_ratio=2.5, gain_min_db=60,
                       gbw_min_hz=2.5e6, phase_margin_min_deg=60, slew_rate_min_vps=5e5)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
 
     assert sim["gain_db"] is not None and sim["gain_db"] <= 0
     assert sim["cmrr_db"] is None
@@ -704,7 +710,7 @@ def test_fd_large_signal_metrics_stay_none():
                       second_stage_current_ratio=2.5, gain_min_db=50,
                       gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=1e6)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
-    sim = spice_sim.simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
 
     assert sim["slew_rate_vps"] is None
     assert sim["output_swing_max_v"] is None

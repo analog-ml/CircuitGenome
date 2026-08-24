@@ -8,7 +8,7 @@ two metric effects (degeneration on gm1, resistor-tail output conductance on
 CMRR).
 
 Sized values flow out through ``SizingResult.resistors`` and
-``spice_sim._inject_sizes`` replaces the placeholder, exactly like the load
+``spice.deck._inject_sizes`` replaces the placeholder, exactly like the load
 resistors.
 """
 from __future__ import annotations

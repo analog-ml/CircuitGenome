@@ -19,8 +19,7 @@ from circuitgenome.sizer.shared.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
 )
-from circuitgenome.sizer.shared.loader import load_tech
-from circuitgenome.sizer.shared.models import SizingSpec
+from circuitgenome.sizer import load_tech, SizingSpec
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.netlist import to_flat_spice
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits

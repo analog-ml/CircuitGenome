@@ -153,7 +153,7 @@
     <figcaption>Same five resistors. On the left every one reads 1 kΩ; on the right each carries the value its job demands. This module is the arrow in the middle.</figcaption>
   </figure>
 
-  <p>So <code>resistors.py</code> is a <strong>tailor</strong> that runs once after transistor sizing. It fits each non-load resistor to its role, and — because two of those resistors change how the finished amplifier <em>measures</em> — it also writes down two metric effects for the evaluation phase to honor. Its output flows out through <code>SizingResult.resistors</code>, and <code>spice_sim._inject_sizes</code> swaps the placeholder for the real value, exactly the way the load resistors are handled.</p>
+  <p>So <code>resistors.py</code> is a <strong>tailor</strong> that runs once after transistor sizing. It fits each non-load resistor to its role, and — because two of those resistors change how the finished amplifier <em>measures</em> — it also writes down two metric effects for the evaluation phase to honor. Its output flows out through <code>SizingResult.resistors</code>, and <code>spice.deck._inject_sizes</code> swaps the placeholder for the real value, exactly the way the load resistors are handled.</p>
 
   <h3>The cast of characters</h3>
   <p>The whole file is one public function, <code>size_resistors()</code>, plus four small helpers it leans on. Hover any box to trace who it calls.</p>

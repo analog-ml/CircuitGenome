@@ -11,6 +11,14 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Export the ngspice verification entry points from `circuitgenome.sizer` — `simulate_metrics`, `check_bias_soundness`, `ngspice_available`, `sized_netlist` and `pdk_netlist` now come through the sizer's own interface rather than a submodule path, so `circuitgenome.sizer` is the single import surface for both sizing and verification ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
+
+### Removed
+
+- 🔥 **Breaking**: drop `circuitgenome.sizer.shared.spice_sim`, the re-export shim over `sizer/shared/spice/` — `from circuitgenome.sizer.shared.spice_sim import ...` no longer resolves; import the same names from `circuitgenome.sizer` instead ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
+
 ## [0.3.0] – 2026-08-24
 
 A second real PDK and the fully-differential campaign: SKY130 1.8 V for the

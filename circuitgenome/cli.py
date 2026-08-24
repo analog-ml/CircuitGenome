@@ -239,7 +239,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
     # whose downstream stages don't bias. Automatic when ngspice is available; the
     # analytical verdict stands when it isn't.
     if result.transistors and result.bias_feasible:
-        from .sizer.shared.spice_sim import ngspice_available, check_bias_soundness
+        from .sizer import ngspice_available, check_bias_soundness
         if ngspice_available():
             ok, reason = check_bias_soundness(netlist_text, result, tech, spec)
             if not ok:
@@ -311,7 +311,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
             # the analytical metrics (square-law / single-pole) would mismatch it.
             # Measure performance directly with ngspice instead — the SPICE numbers
             # are the sole source of truth, with no analytical fallback.
-            from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
+            from .sizer import ngspice_available, simulate_metrics
             if not ngspice_available():
                 print(f"\nError: tech {tech.name} measures performance with ngspice, "
                       "which was not found on PATH. Install it (e.g. `brew install "
@@ -405,7 +405,7 @@ def _cmd_size(args: argparse.Namespace) -> None:
         print("\n(--simulate is redundant for this technology: the metrics above are "
               "already measured with ngspice.)")
     elif args.simulate:
-        from .sizer.shared.spice_sim import ngspice_available, simulate_metrics
+        from .sizer import ngspice_available, simulate_metrics
         print("\nSPICE verification (ngspice):")
         if not result.bias_feasible:
             print("  Bias point infeasible — 'analytical' not evaluated; the "

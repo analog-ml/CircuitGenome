@@ -318,8 +318,9 @@ analytically.
 
 .. code-block:: python
 
-   from circuitgenome.sizer import size_circuit, load_tech, SizingSpec
-   from circuitgenome.sizer.shared.spice_sim import ngspice_available, simulate_metrics
+   from circuitgenome.sizer import (
+       size_circuit, load_tech, SizingSpec, ngspice_available, simulate_metrics,
+   )
 
    # Reuse `parsed`, `sr_result`, `fbr_result`, `topology`, `netlist_text`
    # built in the example above.
@@ -352,7 +353,7 @@ analytically.
 
 The gm/Id LUT (``models/gf180mcu_gmid.npz``) is characterized at the ``typical``
 corner and drives sizing; the corner loop above re-measures the *sized* design.
-A :func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics` value is ``None``
+A :func:`~circuitgenome.sizer.shared.spice.simulate_metrics` value is ``None``
 when ngspice cannot extract that metric (gain/GBW/PM/slew/power are measured;
 CMRR/PSRR/output-swing are not).
 

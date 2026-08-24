@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import pytest
 
-from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
+from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TechParams
 from circuitgenome.sizer.shared.equations import (
     cmrr_db,
     gd,
@@ -19,7 +19,6 @@ from circuitgenome.sizer.shared.equations import (
     vds_sat,
     vgs_from_ids,
 )
-from circuitgenome.sizer.shared.models import TechParams
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice

@@ -595,7 +595,7 @@ as GF180MCU), the analytical estimate above would mismatch the device, so the CL
 grounds its report in ngspice instead:
 
 * **Feasibility verdict.**  A SPICE DC operating-point check
-  (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) classifies
+  (:func:`~circuitgenome.sizer.shared.spice.check_bias_soundness`) classifies
   the design as:
 
   * **INFEASIBLE** — the bias point cannot be established (the feedback operating
@@ -605,7 +605,7 @@ grounds its report in ngspice instead:
   * **FEASIBLE** — biases correctly and meets every measured spec.
 
 * **Measured metrics.**  When feasible, the CLI measures performance in ngspice
-  (:func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics`): open-loop gain,
+  (:func:`~circuitgenome.sizer.shared.spice.simulate_metrics`): open-loop gain,
   GBW, phase margin, slew rate (min of the rising and falling edges), quiescent
   power, CMRR, PSRR+, and output swing.  A metric ngspice cannot extract is shown
   as ``n/a`` (no analytical fallback), and ngspice is **required** — the command
