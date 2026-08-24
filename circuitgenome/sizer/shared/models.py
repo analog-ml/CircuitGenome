@@ -168,6 +168,20 @@ class SizingSpec:
     cmrr_min_db: float | None = None
     psrr_min_db: float | None = None
 
+    @property
+    def vcm(self) -> float:
+        """Input common mode — currently assumed to be the supply midpoint."""
+        return (self.vdd + self.vss) / 2.0
+
+    def rail_v(self, net: str) -> float:
+        """DC level of supply net ``net``.
+
+        Any net other than ``vdd!`` maps to ``vss``. Correct while every spec is
+        single-supply (``vss = 0.0``, so ``gnd! = 0 V``); a dual-supply spec would
+        need ``gnd!``/``"0"`` handled separately.
+        """
+        return self.vdd if net == "vdd!" else self.vss
+
 
 @dataclass
 class TransistorSizing:

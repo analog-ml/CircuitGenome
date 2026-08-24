@@ -93,7 +93,7 @@ def _apply_headroom(
     if not (s_ip and s_tc):
         return sizing, []
 
-    vcm = (spec.vdd + spec.vss) / 2.0
+    vcm = spec.vcm
     vgs_pair = abs(model.vgs(ip_dev.type, s_ip.w_um, s_ip.l_um, s_ip.ids_a))
     # PMOS pair sits above the gate (source toward vdd); NMOS pair below (toward vss).
     if ip_dev.type == "pmos":
@@ -203,7 +203,7 @@ def check_dc_operating_point(
         net_tail = ip_dev.terminals.get("s")
         s_ip = sizing.get(ip_dev.ref)
         if net_tail and s_ip:
-            vcm = (spec.vdd + spec.vss) / 2.0
+            vcm = spec.vcm
             vgs_pair = abs(model.vgs(ip_dev.type, s_ip.w_um, s_ip.l_um, s_ip.ids_a))
             headroom = (spec.vdd - (vcm + vgs_pair) if ip_dev.type == "pmos"
                         else (vcm - vgs_pair) - spec.vss)

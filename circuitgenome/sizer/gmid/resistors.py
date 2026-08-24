@@ -70,7 +70,7 @@ def size_resistors(
     gm1_factor = 1.0
     gd_tail_override: float | None = None
     gd_out_extra = 0.0
-    vcm = (spec.vdd + spec.vss) / 2.0
+    vcm = spec.vcm
 
     # --- Source degeneration (input-pair-slot resistors) ---
     ip = blocks.input_pair
@@ -198,7 +198,7 @@ def _bias_rail_target_v(rail_net: str, consumers: list[Device],
             continue
         sign = 1.0 if dev.type == "nmos" else -1.0
         if src in RAILS:
-            base = spec.vdd if src == "vdd!" else spec.vss
+            base = spec.rail_v(src)
         else:
             base = _stack_node_v(src, dev, consumers, sizing, spec)
             if base is None:
@@ -223,7 +223,7 @@ def _stack_node_v(node: str, consumer: Device, mosfets: list[Device],
     terminating rail).
     """
     sign = 1.0 if consumer.type == "nmos" else -1.0
-    vcm = (spec.vdd + spec.vss) / 2.0
+    vcm = spec.vcm
     acc = 0.0
     seen: set[str] = set()
     while node not in RAILS:
@@ -251,7 +251,7 @@ def _stack_node_v(node: str, consumer: Device, mosfets: list[Device],
         node = dev.terminals.get("s")
     if (consumer.type == "nmos") == (node == "vdd!"):
         return None  # stack terminated on the wrong supply
-    return (spec.vdd if node == "vdd!" else spec.vss) + sign * acc
+    return spec.rail_v(node) + sign * acc
 
 
 def _representative_bias_vgs(blocks: OpAmpBlocks,
