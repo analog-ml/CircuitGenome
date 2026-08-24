@@ -19,7 +19,7 @@ from ..shared.device_model import GmIdModel, GmIdPolicy
 from ..shared.gmid_lut import GmIdLut
 from ..shared.models import SizingSpec, TechParams
 from ..shared.preprocess import assign_ids, compute_requirements, size_load_resistors
-from .analyze import CircuitView
+from .analyze import GmIdCircuitView
 from .intent import GmIdIntent, TransistorIntent, resolve_transistor_intents
 
 
@@ -73,7 +73,7 @@ def _load_seed_v(tech: TechParams, intent: GmIdIntent) -> dict[str, float]:
     return {dt: lut.vgs(dt, intent.signal_gm_id, l_um) for dt in ("nmos", "pmos")}
 
 
-def assign_currents(view: CircuitView, spec: SizingSpec, tech: TechParams,
+def assign_currents(view: GmIdCircuitView, spec: SizingSpec, tech: TechParams,
                     intent: GmIdIntent) -> CurrentPlan:
     """Assign per-device quiescent currents and size the load resistors."""
     ids_map = assign_ids(view.slot_transistors, view.all_transistors, spec)
@@ -98,7 +98,7 @@ def _model_for(tech: TechParams, intent: GmIdIntent) -> GmIdModel:
 
 
 def plan_devices(
-    view: CircuitView,
+    view: GmIdCircuitView,
     currents: CurrentPlan,
     spec: SizingSpec,
     tech: TechParams,

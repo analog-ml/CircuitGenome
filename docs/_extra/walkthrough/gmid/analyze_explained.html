@@ -409,23 +409,21 @@ Mext            : nmos ✓, but ends no slot name                 → slot = Non
 <section class="part" id="part-4">
   <h2>Part 4 · <code>analyze_circuit()</code> — the assembly line</h2>
 
-  <blockquote><p><strong>The one job:</strong> run the seven helpers in the right order and pack their outputs into one <code>CircuitView</code>. It holds no logic of its own — it's pure orchestration.</p></blockquote>
+  <blockquote><p><strong>The one job:</strong> take the shared structural view and add the two things only the gm/Id pipeline needs — the block decomposition and the cascode refs.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">analyze_circuit</span>(fbr_result, topology) -> CircuitView:
-    slot_transistors = <span class="tok-fn">extract_slot_transistors</span>(fbr_result)
-    <span class="tok-fn">_adopt_orphan_mosfets</span>(slot_transistors, fbr_result, topology)   <span class="tok-com"># patch strays first!</span>
-    slot_resistors = <span class="tok-fn">extract_slot_resistors</span>(fbr_result)
-    <span class="tok-kw">return</span> <span class="tok-fn">CircuitView</span>(
-        slot_transistors=slot_transistors,
-        slot_resistors=slot_resistors,
-        all_transistors=<span class="tok-fn">deduplicate_devices</span>(slot_transistors),
-        blocks=<span class="tok-fn">build_blocks</span>(slot_transistors, slot_resistors),
-        cascode_refs=<span class="tok-fn">cascode_device_refs</span>(slot_transistors),
-        warnings=<span class="tok-fn">check_topology_match</span>(slot_transistors, topology.name),
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">analyze_circuit</span>(fbr_result, topology) -> GmIdCircuitView:
+    view = <span class="tok-fn">_analyze_structure</span>(fbr_result, topology)   <span class="tok-com"># shared/circuit_view.py</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">GmIdCircuitView</span>(
+        slot_transistors=view.slot_transistors,
+        slot_resistors=view.slot_resistors,
+        all_transistors=view.all_transistors,
+        warnings=view.warnings,
+        blocks=<span class="tok-fn">build_blocks</span>(view.slot_transistors, view.slot_resistors),
+        cascode_refs=<span class="tok-fn">cascode_device_refs</span>(view.slot_transistors),
     )</code></pre>
 
   <h3>The single most important line</h3>
-  <p>It's the <em>order</em> of the first two statements. <code>extract_slot_transistors()</code> builds the raw slot map; then <code>_adopt_orphan_mosfets()</code> patches it <strong>before anything else reads it</strong>. Every downstream call — dedup, blocks, cascode, warnings — takes <code>slot_transistors</code> as input, so the orphans must be adopted <em>first</em> or they'd be missing from all four derived views at once. Get this order wrong and an orphan silently vanishes from the roster, the floor-plan, the cascode set, and the warnings.</p>
+  <p>It lives one module up now, inside <code>shared/circuit_view.py</code>: the <em>order</em> in which the raw slot map is built and then patched. <code>_adopt_orphan_mosfets()</code> must run <strong>before anything else reads</strong> <code>slot_transistors</code>, because every derived view — the dedup map, the blocks, the cascode set, the warnings — takes it as input. Get that order wrong and an orphan silently vanishes from all of them at once. Putting it inside the shared view means both sizers inherit the right order instead of each having to remember it.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 640 300" role="img" aria-label="Assembly line: FBR and topology in, seven stations, one CircuitView out">

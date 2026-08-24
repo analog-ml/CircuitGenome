@@ -4,7 +4,7 @@
 sizer, as five phases with explicit hand-offs:
 
 1. **Analyze** (:mod:`.analyze`) — structural view: slots, blocks, cascodes,
-   topology-mismatch warnings → :class:`~.analyze.CircuitView`.
+   topology-mismatch warnings → :class:`~.analyze.GmIdCircuitView`.
 2. **Bias currents** (:mod:`.plan`) — per-device IDS from KCL + ``spec.ibias``
    and the rail-referenced load resistors → :class:`~.plan.CurrentPlan`.
 3. **Plan** (:mod:`.plan`) — per-stage gm requirements and compensation caps

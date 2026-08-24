@@ -15,12 +15,12 @@ from ..shared.metrics import evaluate_metrics
 from ..shared.models import SizingSpec, TechParams, TransistorSizing
 from ..shared.stage_chain import build_stage_chain
 from ..shared.taxonomy import RAILS
-from .analyze import CircuitView
+from .analyze import GmIdCircuitView
 from .plan import CurrentPlan, SizingPlan
 from .resistors import MetricModifiers
 
 
-def _driven_cs_device(view: CircuitView):
+def _driven_cs_device(view: GmIdCircuitView):
     """The next stage's signal device when it is a common-source stage (source
     on a rail), else ``None`` — the device the first-stage output must bias."""
     for slot in ("second_stage", "second_stage_p", "second_stage_n",
@@ -33,7 +33,7 @@ def _driven_cs_device(view: CircuitView):
 
 
 def _resistor_load_bias(
-    view: CircuitView, currents: CurrentPlan,
+    view: GmIdCircuitView, currents: CurrentPlan,
     sizing: dict[str, TransistorSizing], spec: SizingSpec,
 ) -> tuple[bool, list[str]]:
     """DC validity of a single-ended, rail-referenced resistor first-stage load.
@@ -83,7 +83,7 @@ def _resistor_load_bias(
 
 
 def evaluate_circuit(
-    view: CircuitView,
+    view: GmIdCircuitView,
     currents: CurrentPlan,
     plan: SizingPlan,
     sizing: dict[str, TransistorSizing],
@@ -98,7 +98,7 @@ def evaluate_circuit(
     gain-derived metrics are dropped rather than reported optimistically.
     """
     chain = build_stage_chain(
-        view.slot_transistors, view.all_transistors, sizing, plan.model, spec,
+        view, sizing, plan.model, spec,
         cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf, gd_load_r=currents.gd_load_r,
     )
     chain = modifiers.apply(chain)

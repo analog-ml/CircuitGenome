@@ -93,6 +93,7 @@
 <header>
   <h1>preprocess.py — explained</h1>
   <div class="subtitle"><code>circuitgenome/sizer/shared/preprocess.py</code> — the model-independent pre-sizing both sizers run <em>before</em> any geometry is chosen.</div>
+  <p style="margin-top:1em;padding:0.8em 1em;border-left:3px solid var(--fig-accent,#888);background:rgba(128,128,128,0.08);font-size:0.93rem;">The four <em>extraction</em> steps described in Parts&nbsp;2–5 (<code>extract_slot_transistors</code>, <code>extract_slot_resistors</code>, <code>check_topology_match</code>, <code>deduplicate_devices</code>) now live in <code>shared/circuit_view.py</code>, private behind <code>analyze_circuit(fbr, topology)</code>. The walk each one performs is unchanged; a sizer just asks for the whole structural view once instead of calling them in the right order itself.</p>
 </header>
 
 <nav id="toc">

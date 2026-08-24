@@ -1,6 +1,7 @@
-"""Model-independent pre-sizing: slot extraction, IDS assignment from KCL +
-``spec.ibias``, topology checks, load-resistor sizing, and the gm/VDS_sat
-requirements derived from the performance spec.
+"""Model-independent pre-sizing: IDS assignment from KCL + ``spec.ibias``,
+load-resistor sizing, and the gm/VDS_sat requirements derived from the
+performance spec.  The circuit's *structure* comes from
+:mod:`~circuitgenome.sizer.shared.circuit_view`.
 
 Shared by both the Level-1 analytical sizer and the gm/Id pipeline.  Output
 conductances come through a :class:`~.device_model.DeviceModel`, so the gm/Id
@@ -10,7 +11,6 @@ from __future__ import annotations
 
 import math
 
-from circuitgenome.recognizer.models import FunctionalBlockRecognitionResult
 from circuitgenome.synthesizer.models import Device
 
 from . import equations as eq
@@ -21,38 +21,11 @@ from .taxonomy import (
     HALF_BIAS_SLOTS,
     RAILS,
     SECOND_STAGE_SLOTS,
-    STAGE_SLOTS,
     THIRD_STAGE_SLOTS,
     is_signal_device,
 )
 
 
-def extract_slot_transistors(
-    fbr_result: FunctionalBlockRecognitionResult,
-) -> dict[str, list[Device]]:
-    """Return {slot_name: [mosfet_Device, ...]} from the FBR assignments."""
-    result: dict[str, list[Device]] = {}
-    for slot_name, sa in fbr_result.slot_assignments.items():
-        mosfets = [d for d in sa.structure.devices if d.type in ("nmos", "pmos")]
-        if mosfets:
-            result[slot_name] = mosfets
-    return result
-
-
-def extract_slot_resistors(
-    fbr_result: FunctionalBlockRecognitionResult,
-) -> dict[str, list[Device]]:
-    """Return {slot_name: [resistor_Device, ...]} from the FBR assignments."""
-    result: dict[str, list[Device]] = {}
-    for slot_name, sa in fbr_result.slot_assignments.items():
-        rs = [d for d in sa.structure.devices if d.type == "resistor"]
-        if rs:
-            result[slot_name] = rs
-    return result
-
-
-# Overdrive (V) used when sizing a load resistor so its DC drop biases the
-# driven device into conduction: V_node ≈ Vth + this.
 _RESISTOR_LOAD_OVERDRIVE = 0.15
 
 # Miller-compensation stability floor: Cc ≥ this fraction of CL keeps the
@@ -100,55 +73,6 @@ def size_load_resistors(
         if v > 0:
             out[r.ref] = v / branch_i
     return out
-
-
-def check_topology_match(
-    slot_transistors: dict[str, list[Device]], topology_name: str
-) -> list[str]:
-    """Warn when the netlist does not realise the chosen topology.
-
-    Every gain-stage slot of a valid circuit holds exactly one signal
-    transistor. A stage slot with **no** signal device (e.g. bias-generator
-    leftovers shoehorned into ``second_stage_p`` when a single-ended netlist is
-    sized against a fully-differential topology) signals a ``--topology``
-    mismatch — which would otherwise silently drop the gain/PM/PSRR metrics.
-    """
-    warnings: list[str] = []
-    for slot in sorted(STAGE_SLOTS):
-        devs = slot_transistors.get(slot)
-        if devs and not any(is_signal_device(d) for d in devs):
-            warnings.append(
-                f"stage slot '{slot}' has no signal transistor — the netlist may "
-                f"not match topology '{topology_name}' (check --topology, e.g. "
-                f"single-ended vs fully-differential)."
-            )
-    return warnings
-
-
-def deduplicate_devices(
-    slot_transistors: dict[str, list[Device]],
-) -> dict[str, tuple[Device, str]]:
-    """Return {ref: (Device, slot_name)} with each ref appearing once.
-
-    When a transistor appears in multiple slots (e.g. the tail mirror
-    reference appears in both ``tail_current`` and ``bias_gen``), the
-    *first* slot encountered wins for the purpose of iDS assignment.
-    Priority order: input_pair > load > tail_current > second_stage > bias_gen.
-    """
-    priority = ["input_pair", "load", "tail_current",
-                "second_stage", "second_stage_p", "second_stage_n",
-                "third_stage", "third_stage_p", "third_stage_n",
-                "output_stage", "output_stage_p", "output_stage_n", "bias_gen"]
-    ordered = sorted(
-        slot_transistors.keys(),
-        key=lambda s: priority.index(s) if s in priority else len(priority),
-    )
-    seen: dict[str, tuple[Device, str]] = {}
-    for slot in ordered:
-        for d in slot_transistors[slot]:
-            if d.ref not in seen:
-                seen[d.ref] = (d, slot)
-    return seen
 
 
 def _cascode_load_current_plan(

@@ -20,13 +20,10 @@ from ..shared import equations as eq
 from ..shared.device_model import Level1Model
 from ..shared.metrics import evaluate_metrics
 from ..shared.models import SizingResult, SizingSpec, TechParams, TransistorSizing
+from ..shared.circuit_view import analyze_circuit
 from ..shared.preprocess import (
     assign_ids,
-    check_topology_match,
     compute_requirements,
-    deduplicate_devices,
-    extract_slot_resistors,
-    extract_slot_transistors,
     size_load_resistors,
 )
 from ..shared.stage_chain import build_stage_chain
@@ -44,12 +41,13 @@ def size_level1(
     time_limit_s: float = 30.0,
 ) -> SizingResult:
     """Size a circuit with the Level-1 square-law model + CP-SAT geometry search."""
-    slot_transistors = extract_slot_transistors(fbr_result)
-    topology_warnings = check_topology_match(slot_transistors, topology.name)
-    all_transistors = deduplicate_devices(slot_transistors)
+    view = analyze_circuit(fbr_result, topology)
+    slot_transistors = view.slot_transistors
+    all_transistors = view.all_transistors
+    topology_warnings = view.warnings
     ids_map = assign_ids(slot_transistors, all_transistors, spec)
     # Size resistor loads (deterministic) and model them in the first-stage Rout.
-    resistors = size_load_resistors(extract_slot_resistors(fbr_result), spec, tech)
+    resistors = size_load_resistors(view.slot_resistors, spec, tech)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
 
     # Level-1 square-law model; discrete W/L via CP-SAT.
@@ -94,7 +92,7 @@ def size_level1(
         )
 
     chain = build_stage_chain(
-        slot_transistors, all_transistors, transistor_sizing, dev_model, spec,
+        view, transistor_sizing, dev_model, spec,
         cc_pf=cc_pf, cc2_pf=cc2_pf, gd_load_r=gd_load_r,
     )
     metrics, margins = evaluate_metrics(chain, spec)

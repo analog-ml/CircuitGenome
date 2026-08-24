@@ -18,6 +18,7 @@ from dataclasses import dataclass, replace
 
 from circuitgenome.synthesizer.models import Device
 
+from .circuit_view import CircuitView
 from .device_model import DeviceModel
 from .models import SizingSpec, TransistorSizing
 from .preprocess import _first_stage_gain_factor
@@ -177,8 +178,7 @@ def _first_present(slot_transistors: dict[str, list[Device]],
 
 
 def build_stage_chain(
-    slot_transistors: dict[str, list[Device]],
-    all_transistors: dict[str, tuple[Device, str]],
+    view: CircuitView,
     sizing: dict[str, TransistorSizing],
     model: DeviceModel,
     spec: SizingSpec,
@@ -198,7 +198,8 @@ def build_stage_chain(
     stage's output is the *next* stage's signal gate, not the pair's drain:
     on a folded cascode those are different nets.
     """
-    mosfets = [d for d, _slot in all_transistors.values()]
+    slot_transistors = view.slot_transistors
+    mosfets = [d for d, _slot in view.all_transistors.values()]
     ip_devs = slot_transistors.get("input_pair", [])
     tail_net = ip_devs[0].terminals.get("s") if ip_devs else None
     stop = frozenset({tail_net}) if tail_net else frozenset()

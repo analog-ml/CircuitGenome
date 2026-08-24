@@ -9,8 +9,9 @@ building blocks: :doc:`shared/loader` reads the technology and spec YAML into
 models (Level-1 vs :doc:`shared/gmid_lut`) behind one interface;
 :doc:`shared/equations` holds the closed-form small-signal formulas; and
 :doc:`shared/taxonomy` classifies each device by its functional role.
-:doc:`shared/preprocess` derives the per-device requirements consumed by both
-paths, :doc:`shared/stage_chain` extracts the per-stage ``gm``/``Rout`` a solved
+:doc:`shared/circuit_view` turns an FBR result into the structural view both
+sizers start from, :doc:`shared/preprocess` derives the per-device requirements
+consumed by both paths, :doc:`shared/stage_chain` extracts the per-stage ``gm``/``Rout`` a solved
 sizing presents, :doc:`shared/metrics` turns that chain into predicted metrics and
 spec margins, and :doc:`shared/spice` runs the ngspice verification and
 bias-soundness check.
@@ -26,6 +27,7 @@ bias-soundness check.
    shared/gmid_lut
    shared/spice
    shared/taxonomy
+   shared/circuit_view
    shared/preprocess
    shared/stage_chain
    shared/metrics
