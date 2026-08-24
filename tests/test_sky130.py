@@ -9,7 +9,6 @@ subcircuits — but its subckts take ``w=``/``l=`` in microns (the library sets
 from pathlib import Path
 
 from circuitgenome.sizer.shared.spice import deck
-from circuitgenome.sizer.shared.device_model import build_device_model
 from circuitgenome.sizer.shared.gmid_lut import GmIdLut
 from circuitgenome.sizer import load_tech
 
@@ -60,8 +59,8 @@ def test_sky130_device_translation_um_units():
 
 def test_sky130_dispatches_to_gmid_lut():
     tech = load_tech("sky130")
+    # A LUT is what routes a tech to the gm/Id pipeline (see size_circuit).
     assert tech.gmid_lut is not None and Path(tech.gmid_lut).exists()
-    assert build_device_model(tech).is_gmid
     lut = GmIdLut(tech.gmid_lut)
     # Physical spot checks at Lmin: nfet vgs near its ~0.72 V threshold at
     # moderate inversion, and both polarities within the 1.8 V supply.

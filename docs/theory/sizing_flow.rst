@@ -140,9 +140,10 @@ forward pass with grid snapping, matched-pair symmetry, and exact current-mirror
 ratios.
 
 The model is selected per-tech by
-:func:`~circuitgenome.sizer.shared.device_model.build_device_model`
-(:class:`~circuitgenome.sizer.shared.device_model.Level1Model` vs
-:class:`~circuitgenome.sizer.shared.device_model.GmIdModel`); the table interface is
+:func:`~circuitgenome.sizer.sizer.size_circuit`, which routes a LUT-bearing tech to
+the gm/Id pipeline (:class:`~circuitgenome.sizer.shared.device_model.GmIdModel`) and
+the card-less ``generic`` tech to Level-1
+(:class:`~circuitgenome.sizer.shared.device_model.Level1Model`); the table interface is
 :class:`~circuitgenome.sizer.shared.gmid_lut.GmIdLut` and the geometry pass is
 :func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid`.  The Level-1
 flow described below is unchanged for the card-less generic tech.

@@ -149,7 +149,7 @@
       <rect x="180" y="100" width="220" height="66" rx="10" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2.5"/>
       <text x="290" y="122" text-anchor="middle" font-size="13" font-weight="600">DeviceModel — the socket</text>
       <text x="290" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm · gds · vds_sat · vgs</text>
-      <text x="290" y="155" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm_ceiling · gds_estimate</text>
+      <text x="290" y="155" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm_ceiling · gds_estimate · realized_gm</text>
       <!-- two plugs -->
       <line x1="240" y1="166" x2="150" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
       <line x1="340" y1="166" x2="430" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
@@ -157,12 +157,12 @@
       <rect x="30" y="214" width="230" height="66" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="145" y="236" text-anchor="middle" font-size="13" font-weight="600">Level1Model</text>
       <text x="145" y="253" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square law — equations.*</text>
-      <text x="145" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">card-less tech · is_gmid = False</text>
+      <text x="145" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">card-less generic tech</text>
       <!-- right plug: GmId -->
       <rect x="320" y="214" width="240" height="66" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
       <text x="440" y="236" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">GmIdModel</text>
       <text x="440" y="253" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">LUT — GmIdLut(tech.gmid_lut)</text>
-      <text x="440" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">PTM nodes · is_gmid = True</text>
+      <text x="440" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">PTM nodes · foundry PDKs</text>
     </svg>
     <figcaption>One socket, two compliant plugs. The topology math on top never learns which backend answered — that is the entire point of the file.</figcaption>
   </figure>
@@ -170,7 +170,7 @@
   <p>This is the <strong>Strategy pattern</strong>: a fixed interface, swappable implementations chosen at runtime. Without it, every gain / GBW / CMRR formula in the sizer would need an <code>if gmid: … else: …</code> fork. With it, they write <code>model.gm(...)</code> once and forget which technology they're in.</p>
 
   <h3>The cast of characters</h3>
-  <p>The file holds two model classes, two little data holders, and one selector. Hover any box to trace who it calls.</p>
+  <p>The file holds two model classes and two little data holders; the selector that picks between them lives one layer up, in <code>size_circuit()</code>. Hover any box to trace who it calls.</p>
 
   <figure class="fig interactive">
     <svg viewBox="0 0 600 320" role="img" aria-label="Call graph of device_model.py">
@@ -189,7 +189,8 @@
       <!-- root -->
       <g class="node" data-group="root">
         <rect x="205" y="18" width="190" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-        <text x="300" y="43" text-anchor="middle" font-weight="600" font-size="13">build_device_model()</text>
+        <text x="300" y="36" text-anchor="middle" font-weight="600" font-size="12">size_circuit()</text>
+        <text x="300" y="50" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">routes on tech.gmid_lut</text>
       </g>
       <!-- Level1Model -->
       <g class="node" data-group="l1">
@@ -301,15 +302,17 @@
   <p>A <code>Protocol</code> is Python's version of a socket <em>spec sheet</em>. It lists method signatures with no bodies — anything that has these methods "fits," with no inheritance required (structural typing, aka duck typing made explicit).</p>
 
   <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">DeviceModel</span>(Protocol):
-    is_gmid: <span class="tok-kw">bool</span>
     <span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
     <span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
     <span class="tok-kw">def</span> <span class="tok-fn">vds_sat</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
     <span class="tok-kw">def</span> <span class="tok-fn">vgs</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
     <span class="tok-kw">def</span> <span class="tok-fn">gm_ceiling</span>(self, dtype, ids, l_um) -> <span class="tok-kw">float</span>: ...
-    <span class="tok-kw">def</span> <span class="tok-fn">gds_estimate</span>(self, dtype, ids, role) -> <span class="tok-kw">float</span>: ...</code></pre>
+    <span class="tok-kw">def</span> <span class="tok-fn">gds_estimate</span>(self, dtype, ids, role) -> <span class="tok-kw">float</span>: ...
+    <span class="tok-kw">def</span> <span class="tok-fn">realized_gm</span>(self, dtype, gm_req, ids) -> <span class="tok-kw">float</span>: ...</code></pre>
 
-  <p>The <code>...</code> bodies are literally the word "ellipsis" — the spec says <em>what</em>, never <em>how</em>. The lone data field <code>is_gmid</code> is a runtime flag callers use for the rare case where they genuinely must know which path they're on (like the bias-repair pass, which only makes sense for the LUT backend).</p>
+  <p>The <code>...</code> bodies are literally the word "ellipsis" — the spec says <em>what</em>, never <em>how</em>.</p>
+
+  <p>The odd one out is <code>realized_gm</code>. Every other method answers "what is this device doing?"; this one answers "if I <em>ask</em> for this gm, what will I actually <em>get</em>?" — and the two backends genuinely differ. CP-SAT constrains <code>gm ≥ gm_req</code> over an integer W grid, so Level-1 hands back the grid ceiling, which overshoots. The gm/Id pass computes W straight from the target and re-checks phase margin against the snapped result, so it hands back <code>gm_req</code> unchanged. Requirement derivation needs the delivered gm — the phase-margin gm2 is chained off the gm1 the input pair will really have — and asking the model keeps that fork out of the shared code.</p>
 
   <h3>Why is it called <code>_params()</code>? Because it just picks a drawer</h3>
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_params</span>(tech, dtype) -> MosfetParams:
@@ -329,7 +332,6 @@
   <p>This is the plug you build first because it is the simplest: each method is a one-line delegation to <code>equations.py</code>. The class exists so those loose functions present the <code>DeviceModel</code> face.</p>
 
   <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">Level1Model</span>:
-    is_gmid = <span class="tok-kw">False</span>
     <span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids):
         <span class="tok-kw">return</span> eq.<span class="tok-fn">gm</span>(<span class="tok-fn">_params</span>(self.tech, dtype).mu_cox, w_um, l_um, ids)
     <span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids):
@@ -587,16 +589,16 @@ W      = 100µ / 8µ     = 12.5 µm    →  GeomResult(W=12.5, L, gm/Id=15, capp
 <section class="part" id="part-8">
   <h2>Part 8 · The hidden idea: polymorphism, and one selector</h2>
 
-  <p>The last function is the smallest and does the most:</p>
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">build_device_model</span>(tech) -> DeviceModel:
-    <span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"gmid_lut"</span>, <span class="tok-kw">None</span>):
-        <span class="tok-kw">return</span> <span class="tok-fn">GmIdModel</span>(tech, <span class="tok-fn">GmIdLut</span>(tech.gmid_lut))
-    <span class="tok-kw">return</span> <span class="tok-fn">Level1Model</span>(tech)</code></pre>
+  <p>The selector is not in this file at all. It is the first branch <code>size_circuit()</code> takes, one layer up:</p>
+  <pre class="code"><code><span class="tok-com"># sizer/sizer.py — size_circuit()</span>
+<span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"gmid_lut"</span>, <span class="tok-kw">None</span>):
+    <span class="tok-kw">return</span> <span class="tok-fn">size_gmid</span>(...)     <span class="tok-com"># builds a GmIdModel</span>
+<span class="tok-kw">return</span> <span class="tok-fn">size_level1</span>(...)      <span class="tok-com"># builds a Level1Model</span></code></pre>
 
-  <p>One question — "does this tech ship a LUT?" — picks the plug. From that line on, the rest of the sizer holds a <code>DeviceModel</code> and never asks again.</p>
+  <p>One question — "does this tech ship a LUT?" — picks the <em>pipeline</em>, and the pipeline builds the matching plug. From that line on, the shared code holds a <code>DeviceModel</code> and never asks again.</p>
 
   <figure class="fig">
-    <svg viewBox="0 0 460 170" role="img" aria-label="build_device_model chooses GmIdModel when a LUT is present, else Level1Model">
+    <svg viewBox="0 0 460 170" role="img" aria-label="size_circuit routes to the gm/Id pipeline when a LUT is present, else the Level-1 pipeline">
       <polygon points="230,14 330,52 230,90 130,52" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="230" y="49" text-anchor="middle" font-size="11.5">tech.gmid_lut?</text>
       <text x="230" y="64" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">carries a table?</text>
@@ -607,9 +609,11 @@ W      = 100µ / 8µ     = 12.5 µm    →  GeomResult(W=12.5, L, gm/Id=15, capp
       <text x="118" y="100" font-size="11" fill="var(--fig-muted)">no</text>
       <text x="345" y="100" font-size="11" fill="var(--fig-muted)">yes</text>
       <rect x="20" y="114" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="95" y="138" text-anchor="middle" font-size="12">Level1Model</text>
+      <text x="95" y="132" text-anchor="middle" font-size="12">size_level1</text>
+      <text x="95" y="146" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">Level1Model</text>
       <rect x="290" y="114" width="150" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="365" y="138" text-anchor="middle" font-size="12" fill="var(--fig-accent2)">GmIdModel</text>
+      <text x="365" y="132" text-anchor="middle" font-size="12" fill="var(--fig-accent2)">size_gmid</text>
+      <text x="365" y="146" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">GmIdModel</text>
     </svg>
     <figcaption>The one branch in the whole story. After it, polymorphism carries the rest — no more forks anywhere downstream.</figcaption>
   </figure>

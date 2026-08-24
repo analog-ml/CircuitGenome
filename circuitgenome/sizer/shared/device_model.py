@@ -23,6 +23,7 @@ Two roles drive the gm/Id policy:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -43,8 +44,6 @@ class DeviceModel(Protocol):
     :class:`GmIdModel` from the LUT, so the topology math in
     :mod:`~circuitgenome.sizer.sizer` can call through one interface.
     """
-
-    is_gmid: bool
 
     def gm(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
         """Transconductance gm in A/V at the device's operating point."""
@@ -75,6 +74,17 @@ class DeviceModel(Protocol):
         """
         ...
 
+    def realized_gm(self, dtype: str, gm_req: float, ids: float) -> float:
+        """The gm in A/V that geometry will actually deliver for ``gm_req``.
+
+        A requirement derived from one stage feeds the next one's requirement
+        (PM needs the gm1 the input pair will really have, not the gm1 that was
+        asked for).  Where the geometry step rounds up to a discrete grid, the
+        delivered gm overshoots the request and the model says so; where it does
+        not, ``gm_req`` comes back unchanged.
+        """
+        ...
+
 
 def _params(tech: TechParams, dtype: str) -> MosfetParams:
     """Return the :class:`~.models.MosfetParams` for ``dtype`` (nmos/pmos)."""
@@ -86,8 +96,6 @@ def _params(tech: TechParams, dtype: str) -> MosfetParams:
 # --------------------------------------------------------------------------- #
 class Level1Model:
     """Shichman-Hodges primitives — byte-for-byte the current generic behaviour."""
-
-    is_gmid = False
 
     def __init__(self, tech: TechParams):
         """Bind the technology whose ``µCox``/``vth``/``λ`` drive the square law."""
@@ -117,6 +125,21 @@ class Level1Model:
     def gds_estimate(self, dtype, ids, role):
         """Geometry-free gds ``λ·|Id|`` — ``role`` is irrelevant under the square law."""
         return eq.gd(_params(self.tech, dtype).lam, ids)
+
+    def realized_gm(self, dtype, gm_req, ids):
+        """``gm_req`` inflated to the integer W grid CP-SAT will round up to.
+
+        CP-SAT constrains ``gm ≥ gm_req`` over integer W steps, so the solved
+        pair delivers the ceiling, not the request.  A downstream requirement
+        (the PM-derived gm2) must anticipate that or the built amplifier misses
+        the spec its own constraints were satisfied against.
+        """
+        p = _params(self.tech, dtype)
+        lhs = 2.0 * p.mu_cox * ids
+        l_min, w_step = self.tech.length.min, self.tech.width.step
+        w_um = math.ceil(gm_req ** 2 * l_min / (lhs * w_step)) * w_step
+        w_um = min(max(w_um, self.tech.width.min), self.tech.width.max)
+        return math.sqrt(lhs * w_um / l_min)
 
 
 # --------------------------------------------------------------------------- #
@@ -157,8 +180,6 @@ class GeomResult:
 
 class GmIdModel:
     """LUT-backed primitives + geometry inversion and L-policy."""
-
-    is_gmid = True
 
     def __init__(self, tech: TechParams, lut: GmIdLut, policy: GmIdPolicy | None = None):
         """Bind a tech, its gm/Id ``lut``, and an L-policy (default :class:`GmIdPolicy`)."""
@@ -220,6 +241,15 @@ class GmIdModel:
         gm = gm_id * abs(ids)
         return gm / self.lut.gm_gds(dtype, gm_id, l_um)
 
+    def realized_gm(self, dtype, gm_req, ids):
+        """``gm_req`` unchanged — geometry is computed from it, not searched.
+
+        The forward pass solves W from the gm/Id target and Phase 5 re-evaluates
+        PM from the snapped geometry, so there is no grid ceiling to anticipate
+        here.
+        """
+        return gm_req
+
     # -- geometry inversion (procedural sizer) -----------------------------
     def geometry_for(
         self, dtype: str, ids: float, role: str, gm_target: float | None = None,
@@ -257,10 +287,3 @@ class GmIdModel:
         idw = self.lut.id_per_w(dtype, gm_id, l_um)
         w_um = abs(ids) / idw if idw > 0 else self.tech.width.max
         return GeomResult(w_um=w_um, l_um=l_um, gm_id=gm_id, gm_id_capped=capped)
-
-
-def build_device_model(tech: TechParams) -> DeviceModel:
-    """Select the gm/Id model when the tech carries a LUT, else Level-1."""
-    if getattr(tech, "gmid_lut", None):
-        return GmIdModel(tech, GmIdLut(tech.gmid_lut))
-    return Level1Model(tech)

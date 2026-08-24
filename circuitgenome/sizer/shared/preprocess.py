@@ -399,24 +399,14 @@ def compute_requirements(
 
             # From PM: gm2 = gm1·CL / (Cc·tan(90°−PM)).
             if spec.phase_margin_min_deg and gm1_req > 0.0 and ip_devices:
-                if model.is_gmid:
-                    # Procedural geometry snaps then evaluates PM from the actual
-                    # geometry, so use gm1_req directly (no grid-ceiling inflation).
-                    gm1_eff = gm1_req
-                else:
-                    # Level-1 + CP-SAT: anticipate W rounding up to the grid by
-                    # using the worst-case (ceiling) gm1 from the integer W grid.
-                    ip_dev = ip_devices[0]
-                    ip_params = tech.nmos if ip_dev.type == "nmos" else tech.pmos
-                    ids_ip = spec.ibias / max(
-                        len([d for d in ip_devices if d.type == ip_dev.type]), 1
-                    )
-                    lhs = 2.0 * ip_params.mu_cox * ids_ip
-                    l_min = tech.length.min
-                    w_step = tech.width.step
-                    w_um = math.ceil(gm1_req ** 2 * l_min / (lhs * w_step)) * w_step
-                    w_um = min(max(w_um, tech.width.min), tech.width.max)
-                    gm1_eff = math.sqrt(lhs * w_um / l_min)
+                # gm2 follows the gm1 the pair will *actually* have, which the
+                # model knows: Level-1 overshoots to the integer W grid, gm/Id
+                # delivers the request.
+                ip_dev = ip_devices[0]
+                ids_ip = spec.ibias / max(
+                    len([d for d in ip_devices if d.type == ip_dev.type]), 1
+                )
+                gm1_eff = model.realized_gm(ip_dev.type, gm1_req, ids_ip)
                 pm_rad = math.radians(spec.phase_margin_min_deg)
                 gm2_req = max(
                     gm2_req,

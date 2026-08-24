@@ -61,7 +61,6 @@ def test_off_grid_length_interpolates(lut):
 def test_level1_model_matches_equations():
     tech = load_tech("generic")
     m = Level1Model(tech)
-    assert not m.is_gmid
     for dtype, p in (("nmos", tech.nmos), ("pmos", tech.pmos)):
         w, l, ids = 4.0, 0.5, 5e-6
         assert m.gm(dtype, w, l, ids) == eq.gm(p.mu_cox, w, l, ids)

@@ -15,8 +15,13 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 - ✨ Export the ngspice verification entry points from `circuitgenome.sizer` — `simulate_metrics`, `check_bias_soundness`, `ngspice_available`, `sized_netlist` and `pdk_netlist` now come through the sizer's own interface rather than a submodule path, so `circuitgenome.sizer` is the single import surface for both sizing and verification ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
 
+### Changed
+
+- ♻️ Close the `DeviceModel` seam — the `is_gmid` type flag and the four `isinstance(model, GmIdModel)` guards in `gmid/` are gone; the one branch that needed them (does the geometry step round gm up to a discrete grid?) becomes a `realized_gm()` method each backend answers for itself. Behaviour-preserving: sizing output is byte-identical on both paths ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
+
 ### Removed
 
+- 🔥 Drop `build_device_model()` — it had no production callers: `size_circuit` already routes on `tech.gmid_lut` and each pipeline constructs the model it needs. Fixes two docs that described the factory as the model selector ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
 - 🔥 **Breaking**: drop `circuitgenome.sizer.shared.spice_sim`, the re-export shim over `sizer/shared/spice/` — `from circuitgenome.sizer.shared.spice_sim import ...` no longer resolves; import the same names from `circuitgenome.sizer` instead ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
 
 ## [0.3.0] – 2026-08-24
