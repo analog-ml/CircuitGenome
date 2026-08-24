@@ -18,7 +18,7 @@ from .rig import _Topo
 def simulate_metrics(netlist_text: str, result: SizingResult,
                      tech: TechParams, spec: SizingSpec,
                      corner: str | None = None) -> dict[str, float | None]:
-    """Return SPICE-measured metrics, mirroring ``_evaluate_metrics`` keys.
+    """Return SPICE-measured metrics, mirroring ``evaluate_metrics`` keys.
 
     Keys: ``power_w``, ``gain_db``, ``gbw_hz``, ``phase_margin_deg``,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``,

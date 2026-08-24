@@ -8,7 +8,7 @@ margin, CMRR, …) are model-independent — only the device *primitives* differ
 * the **gm/Id** lookup table (:class:`~.gmid_lut.GmIdLut`), used for PTM nodes.
 
 Both implement :class:`DeviceModel` so ``compute_requirements`` and
-``_evaluate_metrics`` in :mod:`~circuitgenome.sizer.sizer` can stay single-source.
+``evaluate_metrics`` in :mod:`~circuitgenome.sizer.sizer` can stay single-source.
 ``Level1Model`` reproduces the existing numbers exactly (regression-safe);
 ``GmIdModel`` adds the LUT-backed primitives plus the geometry inversion and
 L-selection policy used by the procedural geometry pass.

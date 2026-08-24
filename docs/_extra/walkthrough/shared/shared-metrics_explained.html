@@ -92,7 +92,7 @@
 
 <header>
   <h1>metrics.py — explained</h1>
-  <div class="subtitle"><code>circuitgenome/sizer/shared/metrics.py</code> — turn a solved geometry into predicted op-amp metrics (gain, GBW, PM, CMRR…) through one DeviceModel, so the same code is exact for both sizers.</div>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/stage_chain.py</code> + <code>metrics.py</code> — turn a solved geometry into predicted op-amp metrics (gain, GBW, PM, CMRR…): first extract the small-signal chain through one DeviceModel, then do pure algebra over it.</div>
 </header>
 
 <nav id="toc">
@@ -332,14 +332,13 @@ gm      = min(0.6 mA/V, 0.5 mA/V) = 0.5 mA/V   <span class="tok-com"># clamped</
 
   <p>Analogy: two leaks draining the same bucket empty it faster together than either alone. The "resistance to going empty" is one over the total leak rate. That is literally <code>eq.rout</code>:</p>
 
-  <pre class="code"><code><span class="tok-com"># --- Load / input pair → Rout1 ---</span>
-gd_ip = <span class="tok-fn">_gds</span>(ip_devs[<span class="tok-num">0</span>], s_ip)          <span class="tok-com"># input-pair leak</span>
-<span class="tok-com"># gd_ld = _gds(load device)         # load leak</span>
-<span class="tok-kw">if</span> rout1_override <span class="tok-kw">is not None</span>:
-    rout1 = rout1_override            <span class="tok-com"># gm/Id pipeline: cascode-aware value</span>
-<span class="tok-kw">else</span>:
-    rout1 = (eq.<span class="tok-fn">rout</span>(gd_ip, gd_ld + gd_load_r)
-             <span class="tok-kw">if</span> (gd_ip + gd_ld + gd_load_r) &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>))</code></pre>
+  <pre class="code"><code><span class="tok-com"># stage_chain.py — Rout at a stage's output node</span>
+<span class="tok-kw">def</span> <span class="tok-fn">_rout</span>(net, extra_gd=<span class="tok-num">0.0</span>):
+    r = <span class="tok-fn">node_rout</span>(net, mosfets, model, sizing, stop)
+    g = (<span class="tok-num">1.0</span>/r <span class="tok-kw">if</span> r != inf <span class="tok-kw">else</span> <span class="tok-num">0.0</span>) + extra_gd
+    <span class="tok-kw">return</span> <span class="tok-num">1.0</span>/g <span class="tok-kw">if</span> g &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> inf</code></pre>
+
+  <p><code>extra_gd</code> is the first-stage load <em>resistor</em>, if there is one: <code>node_rout</code> walks transistors, so a passive load has to be added by hand.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 180" role="img" aria-label="Two output conductances add in parallel to set Rout">
@@ -363,9 +362,11 @@ gd_ip = <span class="tok-fn">_gds</span>(ip_devs[<span class="tok-num">0</span>]
     <figcaption>Both devices leak into the output node; their conductances add, and <code>Rout</code> is one over the sum. Here 6 µS + 4 µS → 100 kΩ.</figcaption>
   </figure>
 
-  <h3>The <code>_override</code> escape hatch — where the two sizers differ</h3>
+  <h3>Cascodes — why adding up <code>gds</code> is not enough</h3>
 
-  <p>Notice <code>rout1_override</code>. This is the <em>one</em> place the two physics models genuinely need different treatment. The Level-1 default just sums single-device <code>gds</code> values. But a gm/Id design may use a <strong>cascode</strong> — a stack of devices that multiply the output resistance far beyond one device's <code>gds</code>. So the gm/Id pipeline computes a cascode-aware <code>Rout</code> itself and passes it in through the override; when it is <code>None</code> (the Level-1 case), the simple estimate is used unchanged. Same escape hatch exists for <code>rout2</code> and <code>rout3</code>.</p>
+  <p>The parallel-leak picture is right only while every device sits with its source on a rail. A <strong>cascode</strong> breaks it: one transistor stands on another's drain, and the upper device's own <code>ro</code> gets multiplied by <code>1 + gm·R_below</code> — the resistance underneath it is <em>amplified</em>, not merely added. Summing two <code>gds</code> values misses that boost entirely, and on a telescopic load it misses it by more than two orders of magnitude.</p>
+
+  <p>So <code>node_rout</code> does not sum; it <strong>walks</strong>. Starting at the output node it takes every device draining there, and for each one follows the source terminal downward, compounding the boost at every step, until it reaches a rail or a net it has been told to treat as AC ground (the input pair's tail). The walk touches only <code>model.gm</code> and <code>model.gds</code>, so it is not gm/Id-specific: the square-law and LUT backends both get cascode-aware output resistances from the same code.</p>
 
   <h3>The same story, three times</h3>
   <p>The file repeats this pattern for each stage that exists:</p>
@@ -611,7 +612,7 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
     <li>Every formula here is <strong>analytical</strong> — a dominant-pole, first-order model. It is fast enough to guide a search over thousands of candidate sizings, but it is not the truth.</li>
     <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
     <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
-    <li>The cascode-aware output resistances arrive through <code>rout{1,2,3}_override</code> — this file does not compute them; the gm/Id pipeline does and passes them in.</li>
+    <li>Output resistances come from a <em>structural</em> walk of the device graph, so they are only as good as the recognised netlist: a device the FBR left unassigned is invisible to <code>node_rout</code> and its leak goes uncounted.</li>
     <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
   </ul>
 

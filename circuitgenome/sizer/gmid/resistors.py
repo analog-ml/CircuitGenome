@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from circuitgenome.synthesizer.models import Device
 
 from ..shared.models import SizingSpec, TechParams, TransistorSizing
+from ..shared.stage_chain import StageChain
 from ..shared.taxonomy import RAILS, is_signal_device
 from .blocks import OpAmpBlocks
 from .intent import GmIdIntent
@@ -45,6 +46,13 @@ class MetricModifiers:
     gm1_factor: float = 1.0
     gd_tail_override: float | None = None
     gd_out_extra: float = 0.0
+
+    def apply(self, chain: StageChain) -> StageChain:
+        """Return ``chain`` with the resistor network's effects folded in."""
+        return (chain
+                .with_first_stage_gm(self.gm1_factor)
+                .with_tail_conductance(self.gd_tail_override or 0.0)
+                .with_output_loading(self.gd_out_extra))
 
 
 def size_resistors(

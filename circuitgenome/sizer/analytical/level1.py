@@ -18,7 +18,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..shared import equations as eq
 from ..shared.device_model import Level1Model
-from ..shared.metrics import _evaluate_metrics
+from ..shared.metrics import evaluate_metrics
 from ..shared.models import SizingResult, SizingSpec, TechParams, TransistorSizing
 from ..shared.preprocess import (
     assign_ids,
@@ -29,6 +29,7 @@ from ..shared.preprocess import (
     extract_slot_transistors,
     size_load_resistors,
 )
+from ..shared.stage_chain import build_stage_chain
 from .constraints import build_model
 
 
@@ -92,10 +93,11 @@ def size_level1(
             vds_sat_v=dev_model.vds_sat(device.type, w_um, l_um, ids_a),
         )
 
-    metrics, margins = _evaluate_metrics(
-        transistor_sizing, slot_transistors, cc_pf, tech, spec, dev_model,
-        cc2_pf=cc2_pf, gd_load_r=gd_load_r,
+    chain = build_stage_chain(
+        slot_transistors, all_transistors, transistor_sizing, dev_model, spec,
+        cc_pf=cc_pf, cc2_pf=cc2_pf, gd_load_r=gd_load_r,
     )
+    metrics, margins = evaluate_metrics(chain, spec)
     return SizingResult(
         transistors=transistor_sizing,
         cc_pf=cc_pf,
