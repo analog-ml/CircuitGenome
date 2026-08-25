@@ -1,7 +1,7 @@
 Template Taxonomy
 =================
 
-.. automodule:: circuitgenome.sizer.shared.taxonomy
+.. automodule:: circuitgenome.sizer.physics.taxonomy
    :members:
    :undoc-members:
    :show-inheritance:

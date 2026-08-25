@@ -14,7 +14,7 @@ from circuitgenome.sizer.gmid.intent import (
     intent_for_tech,
     make_intent,
 )
-from circuitgenome.sizer.shared.device_model import (
+from circuitgenome.sizer.physics.device_model import (
     CASCODE,
     CURRENT_SOURCE,
     SIGNAL,

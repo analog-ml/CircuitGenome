@@ -4,12 +4,12 @@ from pathlib import Path
 import pytest
 
 import circuitgenome.sizer as _sz
-from circuitgenome.sizer.shared import equations as eq
-from circuitgenome.sizer.shared.device_model import Level1Model
-from circuitgenome.sizer.shared.gmid_lut import GmIdLut
+from circuitgenome.sizer.physics import equations as eq
+from circuitgenome.sizer.physics.device_model import Level1Model
+from circuitgenome.sizer.physics.gmid_lut import GmIdLut
 from circuitgenome.sizer import load_tech
 
-_LUT_PATH = Path(_sz.__file__).parent / "shared" / "config" / "models" / "ptm45_gmid.npz"
+_LUT_PATH = Path(_sz.__file__).parent / "config" / "models" / "ptm45_gmid.npz"
 
 
 @pytest.fixture(scope="module")

@@ -1,7 +1,7 @@
 Stage Chain
 ===========
 
-.. automodule:: circuitgenome.sizer.shared.stage_chain
+.. automodule:: circuitgenome.sizer.physics.stage_chain
    :members:
    :private-members:
    :undoc-members:

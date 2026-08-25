@@ -1,7 +1,6 @@
-"""Tests for the shared structural view."""
-import pytest
+"""Tests for the structural view both sizers start from."""
 
-from circuitgenome.sizer.shared.circuit_view import adoption_warnings
+from circuitgenome.sizer.physics.circuit_view import adoption_warnings
 
 
 def test_no_warning_when_nothing_was_adopted():

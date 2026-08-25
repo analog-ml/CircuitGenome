@@ -6,7 +6,7 @@ a **design choice** that selects its inversion region (strong ~5–8 /V, moderat
 explicit and layered, so the sizing flow reads top-down:
 
     Circuit intent (spec)            ── SizingSpec: gain, GBW, PM, swing, power …
-            │                           (the *what*; lives in shared.models)
+            │                           (the *what*; lives in sizer.models)
             ▼
     Functional-block intent          ── BlockIntent: per building block, the role,
             │                           gm/Id region, L multiple and the *rationale*.
@@ -69,8 +69,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from ..shared.device_model import CASCODE, CURRENT_SOURCE, SIGNAL
-from ..shared.taxonomy import is_signal_device
+from ..physics.device_model import CASCODE, CURRENT_SOURCE, SIGNAL
+from ..physics.taxonomy import is_signal_device
 
 # --- gm/Id inversion regions used as the block defaults (1/V) ----------------
 _MODERATE = 14.0        # signal nominal (pre-geometry estimate); real gm/Id is solved

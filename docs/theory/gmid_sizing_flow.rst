@@ -7,7 +7,7 @@ This page documents the **block-based gm/Id sizing pipeline**
 (:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid`), the path
 :func:`~circuitgenome.sizer.sizer.size_circuit` selects for technologies that
 carry a gm/Id lookup table (the ``gmid_lut`` field of
-:class:`~circuitgenome.sizer.shared.models.TechParams`, e.g. ``ptm45`` or the
+:class:`~circuitgenome.sizer.models.TechParams`, e.g. ``ptm45`` or the
 GF180MCU foundry PDK).  Unlike the Level-1 analytical flow — documented in
 :doc:`sizing_flow`, which *searches* integer W/L with CP-SAT — the gm/Id path
 **computes** geometry in a single deterministic forward pass: with ``Id`` fixed
@@ -38,8 +38,8 @@ tech ``ptm45``, a 1.0 V spec):
    from circuitgenome.synthesizer.loader import load_modules, load_topologies
    from circuitgenome.synthesizer.synthesizer import enumerate_circuits
    from circuitgenome.synthesizer.netlist import to_flat_spice
-   from circuitgenome.sizer.shared.loader import load_tech
-   from circuitgenome.sizer.shared.models import SizingSpec
+   from circuitgenome.sizer.loader import load_tech
+   from circuitgenome.sizer.models import SizingSpec
 
    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
    # a mirror-loaded variant (index 15) that biases cleanly at 1.0 V — see the note below
@@ -106,11 +106,11 @@ reads top-down (:mod:`circuitgenome.sizer.gmid.intent`):
    Transistor intent             TransistorIntent: the block intent resolved onto
                                   each device (role, gm/Id, L, block, why).
 
-Level 1 is :class:`~circuitgenome.sizer.shared.models.SizingSpec`; Level 2 is the
+Level 1 is :class:`~circuitgenome.sizer.models.SizingSpec`; Level 2 is the
 :data:`~circuitgenome.sizer.gmid.intent.DEFAULT_BLOCK_INTENTS` registry of
 :class:`~circuitgenome.sizer.gmid.intent.BlockIntent`; Level 3 is the per-device
 :class:`~circuitgenome.sizer.gmid.intent.TransistorIntent`, surfaced on
-:attr:`SizingResult.transistor_intents <circuitgenome.sizer.shared.models.SizingResult>`
+:attr:`SizingResult.transistor_intents <circuitgenome.sizer.models.SizingResult>`
 for explainability.
 
 Roles vs functional building blocks
@@ -257,7 +257,7 @@ topology-mismatch warning when a gain-stage slot holds no signal transistor.
 
    The slot names and bias-net conventions the whole sizer assumes about a
    template live in one place:
-   :mod:`circuitgenome.sizer.shared.taxonomy`.  A new topology whose slots
+   :mod:`circuitgenome.sizer.physics.taxonomy`.  A new topology whose slots
    follow those conventions needs no sizer changes; one that introduces new
    slot names is supported by extending the groups there.
 
@@ -267,9 +267,9 @@ Phase 2 — Bias currents: Ids by KCL + load resistors
 :func:`~circuitgenome.sizer.gmid.plan.assign_currents` fixes what *cannot* be
 chosen.  It walks the bias current (``spec.ibias``) and the per-stage current
 ratios to give every device its ``Id``
-(:func:`~circuitgenome.sizer.shared.preprocess.assign_ids`), and sets
+(:func:`~circuitgenome.sizer.physics.preprocess.assign_ids`), and sets
 rail-referenced load resistors so the first-stage output biases correctly
-(:func:`~circuitgenome.sizer.shared.preprocess.size_load_resistors`).  This is
+(:func:`~circuitgenome.sizer.physics.preprocess.size_load_resistors`).  This is
 what makes the rest deterministic: with ``Id`` fixed, the LUT turns a chosen
 gm/Id straight into geometry.
 
@@ -299,12 +299,12 @@ Phase 3 — Plan: requirements + per-device intent
 *achieved* and what is *chosen*, into a
 :class:`~circuitgenome.sizer.gmid.plan.SizingPlan`:
 
-* It builds the :class:`~circuitgenome.sizer.shared.device_model.GmIdModel`
-  (wrapping the :class:`~circuitgenome.sizer.shared.gmid_lut.GmIdLut` ``.npz``
+* It builds the :class:`~circuitgenome.sizer.physics.device_model.GmIdModel`
+  (wrapping the :class:`~circuitgenome.sizer.physics.gmid_lut.GmIdLut` ``.npz``
   table) with a ``GmIdPolicy`` translated from the role-level fallbacks in
   :class:`~circuitgenome.sizer.gmid.intent.GmIdIntent`.  This is the only place
   the model is instantiated.
-* :func:`~circuitgenome.sizer.shared.preprocess.compute_requirements` computes,
+* :func:`~circuitgenome.sizer.physics.preprocess.compute_requirements` computes,
   from the spec (GBW, gain, phase margin, load cap), each signal device's
   required gm and the compensation caps ``cc_pf`` / ``cc2_pf``, emitting ceiling
   warnings if a required gm/Id exceeds the weak-inversion limit.
@@ -344,10 +344,10 @@ Phase 4a — Size: assign geometry (LUT → W/L, symmetry, mirror ratios)
 forward pass, driven by each device's ``TransistorIntent``: (a) the LUT gives
 per-device (W, L) from ``Id`` + the block's gm/Id region and L (signal devices
 solve gm/Id from ``gm_req``); (b) snap W to grid via
-:meth:`~circuitgenome.sizer.shared.models.GridSpec.snap`; (c) *symmetry* — matched pairs
+:meth:`~circuitgenome.sizer.models.GridSpec.snap`; (c) *symmetry* — matched pairs
 share the anchor's geometry; (d) *mirror ratios* — each output W = exact current
 ratio × the diode reference's W.  Returns
-:class:`~circuitgenome.sizer.shared.models.TransistorSizing` (W, L, Vgs, Vdsat).
+:class:`~circuitgenome.sizer.models.TransistorSizing` (W, L, Vgs, Vdsat).
 
 .. code-block:: python
 
@@ -457,7 +457,7 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
 
    This is a fast **analytical pre-check**, and it is tail-focused: a SPICE DC
    bias-soundness check
-   (:func:`~circuitgenome.sizer.shared.spice.check_bias_soundness`) grounds the final
+   (:func:`~circuitgenome.sizer.verify.check_bias_soundness`) grounds the final
    verdict for PTM / foundry techs.  So ``bias_feasible = True`` is *necessary but not
    sufficient* — it does not yet check, e.g., second-stage headroom.  Remedies for a
    failure: raise the supply, lower the input common-mode, flip the input polarity, or use
@@ -520,7 +520,7 @@ Putting it together
 
 :func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid` runs exactly the five
 phases above and packages a
-:class:`~circuitgenome.sizer.shared.models.SizingResult` with
+:class:`~circuitgenome.sizer.models.SizingResult` with
 ``solver_status="GMID"``, the transistor sizings, resistors, compensation caps,
 metrics, the ``bias_feasible`` verdict, the resolved ``transistor_intents``, and
 the accumulated warnings (topology + ceiling + geometry + DC).  In practice you
@@ -550,6 +550,6 @@ See also
   used for the card-less ``generic`` technology.
 * :mod:`circuitgenome.sizer.gmid.intent` — the design-intent hierarchy
   (``GmIdIntent``, ``BlockIntent``, ``TransistorIntent``).
-* :mod:`circuitgenome.sizer.shared.taxonomy` — the slot/net naming conventions a
+* :mod:`circuitgenome.sizer.physics.taxonomy` — the slot/net naming conventions a
   circuit template must follow (the single point of extension for new templates).
 * :func:`circuitgenome.sizer.sizer.size_circuit` — the technology-routing entry point.

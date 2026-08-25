@@ -9,9 +9,9 @@ import math
 import pytest
 
 from circuitgenome.sizer import SizingSpec
-from circuitgenome.sizer.shared import equations as eq
-from circuitgenome.sizer.shared.metrics import evaluate_metrics
-from circuitgenome.sizer.shared.stage_chain import Stage, StageChain
+from circuitgenome.sizer.physics import equations as eq
+from circuitgenome.sizer.physics.metrics import evaluate_metrics
+from circuitgenome.sizer.physics.stage_chain import Stage, StageChain
 
 INF = float("inf")
 

@@ -17,10 +17,13 @@ Sizer
 - `CircuitGenome Sizer — full walkthrough <walkthrough/index.html>`__ — the
   entry point: the whole sizing pipeline end to end, linking into the three
   package tours below.
-- `Shared sizing core <walkthrough/shared/index.html>`__ — the machinery both
-  sizer paths use: technology loader, device model, gm/Id lookup tables,
-  metric evaluation, small-signal equations, device taxonomy, netlist
-  preprocessing, and the SPICE-simulation harness.
+- `Op-amp physics <walkthrough/physics/index.html>`__ — the relationships both
+  sizer paths must satisfy: the structural circuit view, device taxonomy, the
+  device-model seam, gm/Id lookup tables, small-signal equations, requirement
+  derivation, the stage chain, and metric evaluation.
+- `Technology loading <walkthrough/loader_explained.html>`__ and `the data
+  vocabulary <walkthrough/models_explained.html>`__ — the YAML door and the
+  typed records every stage passes around.
 - `Analytical (Level-1) sizer <walkthrough/analytical/index.html>`__ — the
   card-less square-law path: how device constraints linearise into a CP-SAT
   integer program.

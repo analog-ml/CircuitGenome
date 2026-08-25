@@ -24,6 +24,13 @@ carries a relative "← CircuitGenome docs" back-link so it is not a dead end.
   per-walkthrough descriptions are the searchable surface.
 - Filenames are stable, undated URLs; pages are living documents edited in
   place (dating via git). See the contributing guide for the co-update rule.
+- Stability is *within a package*. A walkthrough is named after the module it
+  explains, so renaming or splitting that module's package moves its page. When
+  that happens, a `<meta http-equiv="refresh">` stub is left at the old path so
+  published links keep working. The stubs are a migration aid, not a permanent
+  fixture: **remove them at 1.0**. As of the `sizer/shared` split into
+  `physics/` + `verify/` (#215) there are 11, under
+  `docs/_extra/walkthrough/shared/`.
 - The source dir is nested as `docs/_extra/walkthrough/` because
   `html_extra_path` copies directory *contents* into the output root — listing
   `walkthrough/` directly would overwrite Sphinx's own `index.html`.

@@ -8,8 +8,8 @@ subcircuits — but its subckts take ``w=``/``l=`` in microns (the library sets
 """
 from pathlib import Path
 
-from circuitgenome.sizer.shared.spice import deck
-from circuitgenome.sizer.shared.gmid_lut import GmIdLut
+from circuitgenome.sizer.verify import deck
+from circuitgenome.sizer.physics.gmid_lut import GmIdLut
 from circuitgenome.sizer import load_tech
 
 

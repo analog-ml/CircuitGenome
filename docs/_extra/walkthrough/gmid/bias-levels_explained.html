@@ -293,7 +293,7 @@
 
   <blockquote><p><strong>The one job:</strong> round a computed width to the nearest value the manufacturing grid allows, then clamp it into the legal range.</p></blockquote>
 
-  <p>The rule belongs to the grid, not to this file: it is a method on <code>GridSpec</code> in <code>shared/models.py</code>, and <code>bias_levels.py</code> asks the width ruler to apply it.</p>
+  <p>The rule belongs to the grid, not to this file: it is a method on <code>GridSpec</code> in <code>models.py</code>, and <code>bias_levels.py</code> asks the width ruler to apply it.</p>
 
   <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">GridSpec</span>:
     <span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:

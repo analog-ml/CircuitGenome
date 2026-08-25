@@ -166,7 +166,7 @@ def test_size_spice_model_without_lut_errors(capsys, tmp_path):
     """A SPICE-model tech with no gm/Id LUT exits cleanly instead of using
     Level-1. Synthesised from tech_ptm45.yaml with the gmid_lut line removed."""
     import circuitgenome.sizer as _sz
-    src = Path(_sz.__file__).parent / "shared" / "config" / "tech_ptm45.yaml"
+    src = Path(_sz.__file__).parent / "config" / "tech_ptm45.yaml"
     lines = [l for l in src.read_text().splitlines() if "gmid_lut" not in l]
     nolut = tmp_path / "tech_nolut.yaml"
     nolut.write_text("\n".join(lines) + "\n")

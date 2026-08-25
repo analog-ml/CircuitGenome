@@ -291,7 +291,7 @@
 
   <blockquote><p><strong>The one job:</strong> round a computed width to the nearest value the manufacturing grid actually allows, then clamp it into range.</p></blockquote>
 
-  <p>This one does not live in <code>bias.py</code> at all. Snapping belongs to the grid being snapped to, so it is a method on <code>GridSpec</code> (<code>shared/models.py</code>) and <code>bias.py</code> simply asks the width ruler to do it:</p>
+  <p>This one does not live in <code>bias.py</code> at all. Snapping belongs to the grid being snapped to, so it is a method on <code>GridSpec</code> (<code>models.py</code>) and <code>bias.py</code> simply asks the width ruler to do it:</p>
 
   <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">GridSpec</span>:
     <span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:

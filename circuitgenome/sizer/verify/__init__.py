@@ -1,7 +1,7 @@
-"""ngspice post-sizing verification of op-amp performance metrics.
+"""ngspice verification of a *sized* design.
 
 Re-simulates a *sized* circuit (W/L from
-:class:`~circuitgenome.sizer.shared.models.SizingResult`) in ngspice using the
+:class:`~circuitgenome.sizer.models.SizingResult`) in ngspice using the
 **same technology** as initial sizing, to cross-check the closed-form metrics
 from ``evaluate_metrics``.  For the card-less ``generic`` tech a Level-1 model
 is synthesised from ``mu_cox``/``vth``/``lam`` (so SPICE ≈ the analytical
@@ -11,6 +11,12 @@ delta reflects the Level-1-vs-device gap).
 This is **best-effort verification**, not sign-off: each metric is measured by
 an independent testbench and any that fails to converge/parse returns ``None``
 (printed as ``n/a``) instead of raising.
+
+This is a peer of the sizers, not a dependency of them: it consumes a
+:class:`~..models.SizingResult` rather than helping to produce one, and neither
+sizing pipeline imports it.  Its consumers are the CLI and the designer, which
+reach it through the sizer's own interface (``from circuitgenome.sizer import
+simulate_metrics``).
 
 Package layout:
     :mod:`.deck` — model emission, netlist parsing/sizing, ngspice runners

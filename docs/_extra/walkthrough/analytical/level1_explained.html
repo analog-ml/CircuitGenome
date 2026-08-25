@@ -145,7 +145,7 @@
       <!-- n1 preprocess -->
       <g class="node" data-group="pre">
         <rect x="10" y="110" width="165" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="92" y="132" text-anchor="middle" font-weight="600" font-size="12.5">shared.preprocess</text>
+        <text x="92" y="132" text-anchor="middle" font-weight="600" font-size="12.5">physics.preprocess</text>
         <text x="92" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">extract · dedup · requirements</text>
       </g>
       <!-- n2 model -->
@@ -170,7 +170,7 @@
       <g class="node" data-group="eval">
         <rect x="710" y="110" width="180" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
         <text x="800" y="132" text-anchor="middle" font-weight="600" font-size="12.5">_evaluate_metrics()</text>
-        <text x="800" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">shared.metrics</text>
+        <text x="800" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">physics.metrics</text>
       </g>
     </svg>
     <figcaption>One orchestrator, five helpers. Four are shared with the gm/Id sizer; only the teal box — <code>build_model()</code> — is special to Level-1.</figcaption>
@@ -294,7 +294,7 @@
 
   <blockquote><p><strong>The one job:</strong> turn the recognizer's messy output into three clean inputs the solver needs — <em>which</em> devices to size, <em>how much current</em> each carries, and <em>what target</em> each must hit.</p></blockquote>
 
-  <p>None of this code is Level-1-specific. The structure comes from <code>sizer.shared.circuit_view</code> and the requirements from <code>sizer.shared.preprocess</code> — both shared with the gm/Id sizer. Here is the whole prep block.</p>
+  <p>None of this code is Level-1-specific. The structure comes from <code>sizer.physics.circuit_view</code> and the requirements from <code>sizer.physics.preprocess</code> — both shared with the gm/Id sizer. Here is the whole prep block.</p>
 
   <pre class="code"><code>view      = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)   <span class="tok-com"># slots, dedup, warnings</span>
 ids_map   = <span class="tok-fn">assign_ids</span>(view.slot_transistors, view.all_transistors, spec)

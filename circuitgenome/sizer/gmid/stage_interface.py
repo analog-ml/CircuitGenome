@@ -52,9 +52,9 @@ families need is an FD ``.op`` verdict, tracked in issue #162.
 """
 from __future__ import annotations
 
-from ..shared.device_model import GmIdModel
-from ..shared.models import SizingSpec, TechParams, TransistorSizing
-from ..shared.taxonomy import RAILS
+from ..physics.device_model import GmIdModel
+from ..models import SizingSpec, TechParams, TransistorSizing
+from ..physics.taxonomy import RAILS
 from .blocks import OpAmpBlocks
 
 __all__ = ["check_stage_interface"]

@@ -1,8 +1,8 @@
 """Level-1 (square-law) sizing pipeline: discrete W/L via OR-Tools CP-SAT.
 
 Used for the card-less ``generic`` technology.  Reuses the shared preprocessing
-(:mod:`circuitgenome.sizer.shared.preprocess`) and metric evaluation
-(:mod:`circuitgenome.sizer.shared.metrics`); the discrete geometry search is built
+(:mod:`circuitgenome.sizer.physics.preprocess`) and metric evaluation
+(:mod:`circuitgenome.sizer.physics.metrics`); the discrete geometry search is built
 in :mod:`.constraints`.
 """
 from __future__ import annotations
@@ -16,17 +16,17 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
-from ..shared import equations as eq
-from ..shared.device_model import Level1Model
-from ..shared.metrics import evaluate_metrics
-from ..shared.models import SizingResult, SizingSpec, TechParams, TransistorSizing
-from ..shared.circuit_view import adoption_warnings, analyze_circuit
-from ..shared.preprocess import (
+from ..physics import equations as eq
+from ..physics.device_model import Level1Model
+from ..physics.metrics import evaluate_metrics
+from ..models import SizingResult, SizingSpec, TechParams, TransistorSizing
+from ..physics.circuit_view import adoption_warnings, analyze_circuit
+from ..physics.preprocess import (
     assign_ids,
     compute_requirements,
     size_load_resistors,
 )
-from ..shared.stage_chain import build_stage_chain
+from ..physics.stage_chain import build_stage_chain
 from .constraints import build_model
 
 

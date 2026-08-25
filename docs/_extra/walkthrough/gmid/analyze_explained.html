@@ -412,7 +412,7 @@ Mext            : nmos ✓, but ends no slot name                 → slot = Non
   <blockquote><p><strong>The one job:</strong> take the shared structural view and add the two things only the gm/Id pipeline needs — the block decomposition and the cascode refs.</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">analyze_circuit</span>(fbr_result, topology) -> GmIdCircuitView:
-    view = <span class="tok-fn">_analyze_structure</span>(fbr_result, topology)   <span class="tok-com"># shared/circuit_view.py</span>
+    view = <span class="tok-fn">_analyze_structure</span>(fbr_result, topology)   <span class="tok-com"># physics/circuit_view.py</span>
     <span class="tok-kw">return</span> <span class="tok-fn">GmIdCircuitView</span>(
         slot_transistors=view.slot_transistors,
         slot_resistors=view.slot_resistors,
@@ -423,7 +423,7 @@ Mext            : nmos ✓, but ends no slot name                 → slot = Non
     )</code></pre>
 
   <h3>The single most important line</h3>
-  <p>It lives one module up now, inside <code>shared/circuit_view.py</code>: the <em>order</em> in which the raw slot map is built and then patched. <code>_adopt_orphan_mosfets()</code> must run <strong>before anything else reads</strong> <code>slot_transistors</code>, because every derived view — the dedup map, the blocks, the cascode set, the warnings — takes it as input. Get that order wrong and an orphan silently vanishes from all of them at once. Putting it inside the shared view means both sizers inherit the right order instead of each having to remember it.</p>
+  <p>It lives one module up now, inside <code>physics/circuit_view.py</code>: the <em>order</em> in which the raw slot map is built and then patched. <code>_adopt_orphan_mosfets()</code> must run <strong>before anything else reads</strong> <code>slot_transistors</code>, because every derived view — the dedup map, the blocks, the cascode set, the warnings — takes it as input. Get that order wrong and an orphan silently vanishes from all of them at once. Putting it inside the shared view means both sizers inherit the right order instead of each having to remember it.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 640 300" role="img" aria-label="Assembly line: FBR and topology in, seven stations, one CircuitView out">

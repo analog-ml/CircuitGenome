@@ -1,7 +1,7 @@
 """Model-independent pre-sizing: IDS assignment from KCL + ``spec.ibias``,
 load-resistor sizing, and the gm/VDS_sat requirements derived from the
 performance spec.  The circuit's *structure* comes from
-:mod:`~circuitgenome.sizer.shared.circuit_view`.
+:mod:`~circuitgenome.sizer.physics.circuit_view`.
 
 Shared by both the Level-1 analytical sizer and the gm/Id pipeline.  Output
 conductances come through a :class:`~.device_model.DeviceModel`, so the gm/Id
@@ -15,7 +15,7 @@ from circuitgenome.synthesizer.models import Device
 
 from . import equations as eq
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel
-from .models import SizingSpec, TechParams
+from ..models import SizingSpec, TechParams
 from .taxonomy import (
     FULL_BIAS_SLOTS,
     HALF_BIAS_SLOTS,

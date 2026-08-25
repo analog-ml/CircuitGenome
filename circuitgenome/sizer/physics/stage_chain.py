@@ -5,7 +5,7 @@ phase margin" sits one small vocabulary: per-stage transconductance and output
 resistance, plus the handful of node conductances CMRR/PSRR need.  This module
 owns that vocabulary (:class:`StageChain`) and the extraction that produces it
 from a solved sizing (:func:`build_stage_chain`), so
-:mod:`~circuitgenome.sizer.shared.metrics` can be pure algebra over the chain.
+:mod:`~circuitgenome.sizer.physics.metrics` can be pure algebra over the chain.
 
 Output resistances come from :func:`node_rout`, a cascode-aware walk of the
 device graph: a cascode device boosts the resistance below it by ``1 + gm·R``,
@@ -20,7 +20,7 @@ from circuitgenome.synthesizer.models import Device
 
 from .circuit_view import CircuitView
 from .device_model import DeviceModel
-from .models import SizingSpec, TransistorSizing
+from ..models import SizingSpec, TransistorSizing
 from .preprocess import _first_stage_gain_factor
 from .taxonomy import RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device
 

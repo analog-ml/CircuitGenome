@@ -295,12 +295,12 @@
 
   <blockquote><p><strong>The one job:</strong> two tiny primitives — snap a width to the manufacturing grid, and turn a rail's <em>name</em> into its <em>voltage</em>.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-com"># on GridSpec, in shared/models.py — called here as tech.width.snap(...)</span>
+  <pre class="code"><code><span class="tok-com"># on GridSpec, in models.py — called here as tech.width.snap(...)</span>
 <span class="tok-kw">def</span> <span class="tok-fn">snap</span>(self, x: <span class="tok-kw">float</span>) -&gt; <span class="tok-kw">float</span>:
     v = <span class="tok-fn">round</span>(x / self.step) * self.step
     <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))
 
-<span class="tok-com"># on SizingSpec, in shared/models.py — called here as spec.rail_v(net)</span>
+<span class="tok-com"># on SizingSpec, in models.py — called here as spec.rail_v(net)</span>
 <span class="tok-kw">def</span> <span class="tok-fn">rail_v</span>(self, net: <span class="tok-kw">str</span>) -&gt; <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> self.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> self.vss</code></pre>
 

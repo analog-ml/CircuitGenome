@@ -18,7 +18,7 @@ sizer, as five phases with explicit hand-offs:
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
 
 The model-independent topology math is reused from the
-``circuitgenome.sizer.shared`` package rather than duplicated.
+``circuitgenome.sizer.physics`` package rather than duplicated.
 """
 from __future__ import annotations
 
@@ -29,9 +29,9 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
-from ..shared import equations as eq
-from ..shared.circuit_view import adoption_warnings
-from ..shared.models import SizingResult, SizingSpec, TechParams
+from ..physics import equations as eq
+from ..physics.circuit_view import adoption_warnings
+from ..models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
 from .bias_levels import tune_bias_levels

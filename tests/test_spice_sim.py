@@ -19,7 +19,7 @@ from circuitgenome.sizer import (
     size_circuit,
     SizingSpec,
 )
-from circuitgenome.sizer.shared.spice import deck, measure, rig
+from circuitgenome.sizer.verify import deck, measure, rig
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):

@@ -1,12 +1,12 @@
 """Tests for the procedural gm/Id geometry pass (no CP-SAT)."""
 import pytest
 
-from circuitgenome.sizer.shared.device_model import (
+from circuitgenome.sizer.physics.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
     GmIdModel,
 )
-from circuitgenome.sizer.shared.gmid_lut import GmIdLut
+from circuitgenome.sizer.physics.gmid_lut import GmIdLut
 from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
 from circuitgenome.sizer.gmid.intent import (
     TransistorIntent,
@@ -256,7 +256,7 @@ def test_swing_budget_skips_mirror_outputs(model, tech):
 def test_swing_budget_spares_driver_under_cascode_load(model, tech):
     """With a cascode first-stage load, the driver's V_GS is the stage
     interface pin — the swing floor must not move it."""
-    from circuitgenome.sizer.shared.device_model import CASCODE
+    from circuitgenome.sizer.physics.device_model import CASCODE
 
     d = Device(ref="mp1", type="pmos",
                terminals={"d": "out", "g": "mid", "s": "vdd!"})
