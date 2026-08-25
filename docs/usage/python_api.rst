@@ -248,7 +248,7 @@ Sizer (SZ)
 ----------
 
 The sizer takes the FBR result (from :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`)
-plus a :class:`~circuitgenome.sizer.shared.models.SizingSpec` and returns minimum
+plus a :class:`~circuitgenome.sizer.models.SizingSpec` and returns minimum
 W/L values for every transistor.
 
 .. code-block:: python
@@ -258,7 +258,7 @@ W/L values for every transistor.
    from circuitgenome.recognizer import parse, recognize
    from circuitgenome.recognizer.functional_block_recognizer import assign_slots
    # Public API is re-exported from the package root (internals live under
-   # circuitgenome.sizer.shared / .analytical / .gmid).
+   # circuitgenome.sizer.physics / .analytical / .gmid).
    from circuitgenome.sizer import size_circuit, load_tech, SizingSpec
 
    # 1. Build / load a netlist and run SR + FBR
@@ -312,7 +312,7 @@ gm/Id sizing with a foundry PDK (GF180MCU)
 A technology that carries a gm/Id LUT — the PTM nodes and the **GF180MCU** foundry
 PDK — sizes through the gm/Id pipeline instead of the Level-1 CP-SAT solver: the
 same :func:`~circuitgenome.sizer.sizer.size_circuit` call, just a different
-:func:`~circuitgenome.sizer.shared.loader.load_tech` name.  Performance is then
+:func:`~circuitgenome.sizer.loader.load_tech` name.  Performance is then
 **measured in ngspice** (BSIM4) across process corners rather than estimated
 analytically.
 
@@ -353,7 +353,7 @@ analytically.
 
 The gm/Id LUT (``models/gf180mcu_gmid.npz``) is characterized at the ``typical``
 corner and drives sizing; the corner loop above re-measures the *sized* design.
-A :func:`~circuitgenome.sizer.shared.spice.simulate_metrics` value is ``None``
+A :func:`~circuitgenome.sizer.verify.simulate_metrics` value is ``None``
 when ngspice cannot extract that metric (gain/GBW/PM/slew/power are measured;
 CMRR/PSRR/output-swing are not).
 

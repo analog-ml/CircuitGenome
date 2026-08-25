@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..shared.device_model import GmIdModel, GmIdPolicy
-from ..shared.gmid_lut import GmIdLut
-from ..shared.models import SizingSpec, TechParams
-from ..shared.preprocess import assign_ids, compute_requirements, size_load_resistors
+from ..physics.device_model import GmIdModel, GmIdPolicy
+from ..physics.gmid_lut import GmIdLut
+from ..models import SizingSpec, TechParams
+from ..physics.preprocess import assign_ids, compute_requirements, size_load_resistors
 from .analyze import GmIdCircuitView
 from .intent import GmIdIntent, TransistorIntent, resolve_transistor_intents
 

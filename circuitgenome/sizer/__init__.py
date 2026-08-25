@@ -25,15 +25,15 @@ The sized design is verified against ngspice through the same interface::
     if ngspice_available():
         measured = simulate_metrics(netlist_text, result, tech, spec)
 """
-from .shared.loader import load_spec, load_tech
-from .shared.models import (
+from .loader import load_spec, load_tech
+from .models import (
     SizingResult,
     SizingSpec,
     TechParams,
     TransistorSizing,
     UnsupportedTechError,
 )
-from .shared.spice import (
+from .verify import (
     check_bias_soundness,
     ngspice_available,
     pdk_netlist,

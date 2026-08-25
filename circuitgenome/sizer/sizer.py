@@ -4,7 +4,7 @@ Initial Sizing module — Layer 3 of the CircuitGenome pipeline.
 :func:`size_circuit` is the dispatcher: it routes a parsed netlist plus its
 Layer-2 :class:`~circuitgenome.recognizer.models.FunctionalBlockRecognitionResult`
 and a performance spec to the right sizer and returns a
-:class:`~.shared.models.SizingResult`.
+:class:`~.models.SizingResult`.
 
 * technologies with a gm/Id LUT → the block-based gm/Id pipeline
   (:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid`);
@@ -22,7 +22,7 @@ from circuitgenome.recognizer.models import (
 )
 from circuitgenome.synthesizer.models import TopologyTemplate
 
-from .shared.models import SizingResult, SizingSpec, TechParams, UnsupportedTechError
+from .models import SizingResult, SizingSpec, TechParams, UnsupportedTechError
 
 
 def size_circuit(
@@ -44,10 +44,10 @@ def size_circuit(
         :func:`~circuitgenome.recognizer.functional_block_recognizer.assign_slots`.
         Must use **topology mode** (not group-by-category).
     :param topology: Topology template corresponding to ``fbr_result``.
-    :param tech: Technology parameters (from :func:`~.shared.loader.load_tech`).
+    :param tech: Technology parameters (from :func:`~.loader.load_tech`).
     :param spec: Performance specification.
     :param time_limit_s: CP-SAT solver time limit in seconds (Level-1 path only).
-    :returns: :class:`~.shared.models.SizingResult` with per-transistor sizing,
+    :returns: :class:`~.models.SizingResult` with per-transistor sizing,
         compensation cap, computed metrics, and safety margins.
     """
     # gm/Id technologies (LUT present) use the block-based pipeline.

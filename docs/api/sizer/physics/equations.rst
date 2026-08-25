@@ -1,7 +1,7 @@
 Equations
 =========
 
-.. automodule:: circuitgenome.sizer.shared.equations
+.. automodule:: circuitgenome.sizer.physics.equations
    :members:
    :undoc-members:
    :show-inheritance:

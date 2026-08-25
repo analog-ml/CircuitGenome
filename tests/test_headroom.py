@@ -1,12 +1,12 @@
 """Tests for the DC headroom / saturation-budget pass (issue #76, cause A)."""
 import pytest
 
-from circuitgenome.sizer.shared.device_model import (
+from circuitgenome.sizer.physics.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
     GmIdModel,
 )
-from circuitgenome.sizer.shared.gmid_lut import GmIdLut
+from circuitgenome.sizer.physics.gmid_lut import GmIdLut
 from circuitgenome.sizer.gmid.bias import _apply_headroom, _tail_gm_id_for_headroom
 from circuitgenome.sizer import load_tech, SizingSpec, TransistorSizing
 from circuitgenome.synthesizer.models import Device

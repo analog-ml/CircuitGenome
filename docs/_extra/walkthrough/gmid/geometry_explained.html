@@ -621,7 +621,7 @@ L_out = L_ref                                    <span class="tok-com"># matched
 mirror_tied  = <span class="tok-fn">_mirror_tied_refs</span>(all_transistors)      <span class="tok-com"># Part 4b</span>
 cascode_load = <span class="tok-fn">any</span>(intents[d.ref].role == CASCODE <span class="tok-kw">for</span> d <span class="tok-kw">in</span> ...load...)
 
-<span class="tok-com"># the grid rule itself is tech.width.snap — a GridSpec method (shared/models.py):</span>
+<span class="tok-com"># the grid rule itself is tech.width.snap — a GridSpec method (models.py):</span>
 <span class="tok-com">#   v = round(x / step) * step; clamped into [min, max]</span></code></pre>
 
   <h3>Steps 1+2 — the LUT division, per device</h3>

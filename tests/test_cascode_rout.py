@@ -2,7 +2,7 @@
 import math
 
 from circuitgenome.sizer.gmid.blocks import cascode_device_refs
-from circuitgenome.sizer.shared.stage_chain import node_rout
+from circuitgenome.sizer.physics.stage_chain import node_rout
 from circuitgenome.synthesizer.models import Device
 
 

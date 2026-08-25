@@ -5,10 +5,10 @@
 ``CurrentPlan``/``SizingPlan``), Size (:mod:`.geometry`, :mod:`.bias`,
 :mod:`.resistors`), and Evaluate (:mod:`.evaluate`) — driven by the explicit
 per-block design intent in :mod:`.intent`.  The device primitives
-(:mod:`~circuitgenome.sizer.shared.gmid_lut`,
-:mod:`~circuitgenome.sizer.shared.device_model`) and the model-independent
-op-amp physics (:mod:`~circuitgenome.sizer.shared.preprocess`,
-:mod:`~circuitgenome.sizer.shared.metrics`) are reused from ``sizer.shared``;
+(:mod:`~circuitgenome.sizer.physics.gmid_lut`,
+:mod:`~circuitgenome.sizer.physics.device_model`) and the model-independent
+op-amp physics (:mod:`~circuitgenome.sizer.physics.preprocess`,
+:mod:`~circuitgenome.sizer.physics.metrics`) are reused from ``sizer.physics``;
 the Level-1 analytical sizer is left untouched.
 """
 from __future__ import annotations

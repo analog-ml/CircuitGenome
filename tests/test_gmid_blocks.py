@@ -4,7 +4,7 @@ from circuitgenome.sizer.gmid.blocks import (
     build_blocks,
     classify_load,
 )
-from circuitgenome.sizer.shared.taxonomy import is_signal_device
+from circuitgenome.sizer.physics.taxonomy import is_signal_device
 from circuitgenome.synthesizer.models import Device
 
 

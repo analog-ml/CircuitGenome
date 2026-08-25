@@ -29,15 +29,15 @@ Entry points
 ------------
 
 - :func:`~circuitgenome.sizer.sizer.size_circuit` — size a circuit against a
-  :class:`~circuitgenome.sizer.shared.models.SizingSpec`.
-- :func:`~circuitgenome.sizer.shared.loader.load_tech` /
-  :func:`~circuitgenome.sizer.shared.loader.load_spec` — load a technology
+  :class:`~circuitgenome.sizer.models.SizingSpec`.
+- :func:`~circuitgenome.sizer.loader.load_tech` /
+  :func:`~circuitgenome.sizer.loader.load_spec` — load a technology
   config or a performance spec.
 
 Performance specification
 -------------------------
 
-:class:`~circuitgenome.sizer.shared.models.SizingSpec` bundles the **operating
+:class:`~circuitgenome.sizer.models.SizingSpec` bundles the **operating
 point** (supply, bias, load, per-stage current ratios) with the **performance
 targets** the sizer solves against:
 
@@ -121,7 +121,7 @@ Supported technologies
 The sizer reads its device parameters from a technology YAML, selected with
 ``circuitgenome size --tech <file>`` (default: the built-in
 ``tech_generic``).  Built-in configs live in
-``circuitgenome/sizer/shared/config/``:
+``circuitgenome/sizer/config/``:
 
 .. list-table::
    :header-rows: 1
@@ -257,6 +257,10 @@ Further reading
    :maxdepth: 2
 
    ../api/sizer/theory
-   ../api/sizer/shared
+   ../api/sizer/sizer
+   ../api/sizer/models
+   ../api/sizer/loader
+   ../api/sizer/physics
    ../api/sizer/analytical
    ../api/sizer/gmid
+   ../api/sizer/verify

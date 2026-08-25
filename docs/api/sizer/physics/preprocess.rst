@@ -1,7 +1,7 @@
 Preprocessing
 =============
 
-.. automodule:: circuitgenome.sizer.shared.preprocess
+.. automodule:: circuitgenome.sizer.physics.preprocess
    :members:
    :private-members:
    :undoc-members:

@@ -11,6 +11,10 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+### Changed
+
+- ♻️ Split `sizer/shared/` by concept — `physics/` holds what both sizers stand on (circuit view, taxonomy, device model, equations, gm/Id LUT, requirement derivation, stage chain, metrics); `verify/` holds the ngspice rig, which consumes a `SizingResult` rather than helping produce one and is imported by neither sizer; `models.py`, `loader.py`, `config/` and `pdk/` move up to `sizer/` since every package uses them. `shared/` named a coupling relationship, not a concept, so 40% of it was used by neither sizer. Public imports are unchanged — `circuitgenome.sizer` still exports everything it did — and sizing output is byte-identical ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
+
 ### Added
 
 - ✨ Export the ngspice verification entry points from `circuitgenome.sizer` — `simulate_metrics`, `check_bias_soundness`, `ngspice_available`, `sized_netlist` and `pdk_netlist` now come through the sizer's own interface rather than a submodule path, so `circuitgenome.sizer` is the single import surface for both sizing and verification ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).

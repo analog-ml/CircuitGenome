@@ -17,9 +17,9 @@ from dataclasses import dataclass
 
 from circuitgenome.synthesizer.models import Device
 
-from ..shared.models import SizingSpec, TechParams, TransistorSizing
-from ..shared.stage_chain import StageChain
-from ..shared.taxonomy import RAILS, is_signal_device
+from ..models import SizingSpec, TechParams, TransistorSizing
+from ..physics.stage_chain import StageChain
+from ..physics.taxonomy import RAILS, is_signal_device
 from .blocks import OpAmpBlocks
 from .intent import GmIdIntent
 

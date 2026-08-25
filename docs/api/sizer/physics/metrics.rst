@@ -1,7 +1,7 @@
 Metric Evaluation
 =================
 
-.. automodule:: circuitgenome.sizer.shared.metrics
+.. automodule:: circuitgenome.sizer.physics.metrics
    :members:
    :private-members:
    :undoc-members:

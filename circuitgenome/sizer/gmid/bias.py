@@ -30,8 +30,8 @@ when the tail can't actually bias.
 """
 from __future__ import annotations
 
-from ..shared.device_model import GmIdModel
-from ..shared.models import SizingSpec, TechParams, TransistorSizing
+from ..physics.device_model import GmIdModel
+from ..models import SizingSpec, TechParams, TransistorSizing
 from .blocks import OpAmpBlocks
 
 __all__ = ["check_dc_operating_point"]

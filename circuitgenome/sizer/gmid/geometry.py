@@ -21,9 +21,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..shared.device_model import CASCODE, SIGNAL, GmIdModel
-from ..shared.models import TechParams, TransistorSizing
-from ..shared.taxonomy import STAGE_SLOTS
+from ..physics.device_model import CASCODE, SIGNAL, GmIdModel
+from ..models import TechParams, TransistorSizing
+from ..physics.taxonomy import STAGE_SLOTS
 from .blocks import LoadKind, classify_load
 
 if TYPE_CHECKING:

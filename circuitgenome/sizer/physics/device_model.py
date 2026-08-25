@@ -29,7 +29,7 @@ from typing import Protocol
 
 from . import equations as eq
 from .gmid_lut import GmIdLut
-from .models import MosfetParams, TechParams
+from ..models import MosfetParams, TechParams
 
 SIGNAL = "signal"
 CURRENT_SOURCE = "current_source"

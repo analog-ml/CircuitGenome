@@ -6,7 +6,7 @@ tail (current-mirror, cascode, resistor, plain current-source).  This is the
 structural layer beneath the Analyze phase (:mod:`.analyze`): the load kind
 drives the first-stage gain factor, the cascode detection feeds the DC
 headroom budget (:mod:`.bias`), and the shared
-:func:`~..shared.stage_chain.node_rout` gives the evaluation
+:func:`~..physics.stage_chain.node_rout` gives the evaluation
 phase its cascode-aware output resistance.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from enum import Enum
 
 from circuitgenome.synthesizer.models import Device
 
-from ..shared.taxonomy import (
+from ..physics.taxonomy import (
     RAILS,
     SECOND_STAGE_SLOTS,
     THIRD_STAGE_SLOTS,

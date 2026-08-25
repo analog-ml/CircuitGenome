@@ -4,7 +4,7 @@ import math
 import pytest
 
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TechParams
-from circuitgenome.sizer.shared.equations import (
+from circuitgenome.sizer.physics.equations import (
     cmrr_db,
     gd,
     gm,
@@ -374,7 +374,7 @@ def test_size_two_stage_cc_stability_floor(two_stage_fbr):
     SR only *upper*-bounds Cc, so Cc sits on the ~0.25·CL stability floor,
     keeping the GBW-side gm1 requirement clear of the weak-inversion ceiling.
     """
-    from circuitgenome.sizer.shared.preprocess import _CC_STABILITY_RATIO
+    from circuitgenome.sizer.physics.preprocess import _CC_STABILITY_RATIO
 
     parsed, sr_result, fbr_result, topology = two_stage_fbr
     tech = _tech()
@@ -845,8 +845,8 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
 def _fbr_pmos_cs_second_stage(topology_name: str):
     """Return the FBR tuple for the first variant whose second-stage signal
     transistor is a PMOS (a PMOS-common-source stage)."""
-    from circuitgenome.sizer.shared.circuit_view import analyze_circuit
-    from circuitgenome.sizer.shared.taxonomy import is_signal_device
+    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+    from circuitgenome.sizer.physics.taxonomy import is_signal_device
 
     modules = load_modules()
     topology = next(t for t in load_topologies() if t.name == topology_name)
@@ -906,7 +906,7 @@ def test_topology_mismatch_warns():
 def _config_dir():
     from pathlib import Path
     import circuitgenome.sizer as _sz
-    return Path(_sz.__file__).parent / "shared" / "config"
+    return Path(_sz.__file__).parent / "config"
 
 
 def test_ptm45_tech_loads_and_sizes(two_stage_fbr):
@@ -936,7 +936,7 @@ def test_ptm45_tech_loads_and_sizes(two_stage_fbr):
 
 def test_first_stage_gain_factor():
     """k_fs is 1.0 for a current-mirror/FD first stage, 0.5 for non-mirror SE."""
-    from circuitgenome.sizer.shared.preprocess import _first_stage_gain_factor
+    from circuitgenome.sizer.physics.preprocess import _first_stage_gain_factor
     from circuitgenome.synthesizer.models import Device
 
     mirror = {"load": [
@@ -978,8 +978,8 @@ def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
 # ---------------------------------------------------------------------------
 
 def _ids_plan(topology_name: str, variant_filter: dict[str, str]):
-    from circuitgenome.sizer.shared.circuit_view import analyze_circuit
-    from circuitgenome.sizer.shared.preprocess import assign_ids
+    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+    from circuitgenome.sizer.physics.preprocess import assign_ids
     _parsed, _sr, fbr_result, topology = _fbr(topology_name, variant_filter)
     view = analyze_circuit(fbr_result, topology)
     spec = SizingSpec(vdd=5.0, vss=0.0, ibias=20e-6, cl=5e-12)

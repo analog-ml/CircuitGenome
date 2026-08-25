@@ -1,6 +1,6 @@
 """Phase 5 — Evaluate: analytical performance metrics from the solved sizing.
 
-Builds the shared :class:`~..shared.stage_chain.StageChain` from the solved
+Builds the shared :class:`~circuitgenome.sizer.physics.stage_chain.StageChain` from the solved
 sizing, folds in the Phase-4 resistor-network effects (degeneration on gm1,
 resistor tail on gd_tail, CMFB averager loading on the output), and withholds
 the gain-derived metrics when the inter-stage DC bias makes them meaningless.
@@ -11,10 +11,10 @@ tests/programmatic callers.  The CLI measures PTM performance with ngspice
 """
 from __future__ import annotations
 
-from ..shared.metrics import evaluate_metrics
-from ..shared.models import SizingSpec, TechParams, TransistorSizing
-from ..shared.stage_chain import build_stage_chain
-from ..shared.taxonomy import RAILS
+from ..physics.metrics import evaluate_metrics
+from ..models import SizingSpec, TechParams, TransistorSizing
+from ..physics.stage_chain import build_stage_chain
+from ..physics.taxonomy import RAILS
 from .analyze import GmIdCircuitView
 from .plan import CurrentPlan, SizingPlan
 from .resistors import MetricModifiers

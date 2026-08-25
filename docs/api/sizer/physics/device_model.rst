@@ -1,7 +1,7 @@
 Device Model
 ============
 
-.. automodule:: circuitgenome.sizer.shared.device_model
+.. automodule:: circuitgenome.sizer.physics.device_model
    :members:
    :undoc-members:
    :show-inheritance:

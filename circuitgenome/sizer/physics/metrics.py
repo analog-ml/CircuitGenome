@@ -8,7 +8,7 @@ arguments — the chain they built and the spec they were asked to meet.
 from __future__ import annotations
 
 from . import equations as eq
-from .models import SizingSpec
+from ..models import SizingSpec
 from .stage_chain import StageChain
 
 

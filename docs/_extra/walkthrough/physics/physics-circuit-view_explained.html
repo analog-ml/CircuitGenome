@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>circuit_view.py &mdash; explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>circuit_view.py &mdash; explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/physics/circuit_view.py</code> &mdash; derive the circuit structure once, in the one order that is correct, and hand it over as a single value.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 · Part 1 &middot; Why this file even exists</a>
+  <a href="#part-2">2 · Slot extraction — the humble first step</a>
+  <a href="#part-3">3 · Part 3 &middot; _adopt_orphan_mosfets() &mdash; catching the strays</a>
+  <a href="#part-4">4 · check_topology_match() — the sanity inspector</a>
+  <a href="#part-5">5 · deduplicate_devices() — one ref, one home</a>
+  <a href="#part-6">6 · Part 6 &middot; analyze_circuit() &mdash; the assembly line</a>
+</nav>
+
+<main>
+
+<section class="part" id="part-1">
+  <h2>Part 1 &middot; Why this file even exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> turn the recognizer's output into the one structural picture every sizer starts from &mdash; which devices are in which slot, one entry per distinct device, and a warning if the circuit does not look like the topology it claims to be.</p></blockquote>
+
+  <p class="beat">The idea, before any code.</p>
+
+  <p>The recognizer hands over a pile of slot assignments. Before anyone can choose a width, four questions have to be answered: <em>which transistors are in each slot</em>, <em>which resistors</em>, <em>which devices are actually distinct</em> (a device can appear in two slots), and <em>does the shape match the template</em>.</p>
+
+  <p>None of that is hard. What is easy to get wrong is the <strong>order</strong>, because one step patches the slot map and three later steps read it. Do them in the wrong sequence and a device silently vanishes from the roster, the dedup map and the warnings at once &mdash; and an unsized transistor runs at the simulator's default geometry, which is nobody's intent.</p>
+
+  <p>So the four steps are private and the answer arrives as one value:</p>
+
+  <pre class="code"><code>view = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)
+view.slot_transistors   <span class="tok-com"># slot -&gt; [Device]</span>
+view.slot_resistors     <span class="tok-com"># slot -&gt; [Device]</span>
+view.all_transistors    <span class="tok-com"># ref  -&gt; (Device, owning slot)</span>
+view.warnings           <span class="tok-com"># topology-mismatch advisories</span></code></pre>
+
+  <p>A caller asks once and gets a consistent set. The gm/Id pipeline needs two more things &mdash; a typed block decomposition and the cascode refs &mdash; so it <em>extends</em> this view rather than assembling its own; see <code>gmid/analyze.py</code>.</p>
+
+</section>
+
+<section class="part" id="part-2">
+  <h2>Part 2 · Slot extraction — the humble first step</h2>
+
+  <blockquote><p><strong>The one job:</strong> the recognizer already grouped devices into named <em>slots</em> (<code>input_pair</code>, <code>load</code>, <code>tail_current</code>…); these two functions just fish the MOSFETs (or the resistors) out of each slot into a tidy <code>{slot: [devices]}</code> dictionary.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">extract_slot_transistors</span>(fbr_result) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">list</span>[Device]]:
+    result = {}
+    <span class="tok-kw">for</span> slot_name, sa <span class="tok-kw">in</span> fbr_result.slot_assignments.items():
+        mosfets = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> sa.structure.devices <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
+        <span class="tok-kw">if</span> mosfets:
+            result[slot_name] = mosfets
+    <span class="tok-kw">return</span> result</code></pre>
+
+  <p>Analogy: the recognizer handed us a set of labeled drawers (a drawer marked <code>input_pair</code>, one marked <code>load</code>, …). Each drawer is a jumble of parts. This function walks every drawer and keeps only the transistors, skipping caps, resistors, and anything else. <code>extract_slot_resistors</code> is the identical walk, but it keeps <code>type == "resistor"</code> instead.</p>
+
+  <p>The one subtlety: <strong>a slot with no matching device is dropped, not stored as an empty list.</strong> That's the <code>if mosfets:</code> guard. So later code can write <code>slot_transistors.get("load", [])</code> and trust that a present key always has at least one device — a small invariant that removes a lot of "is it empty?" checks downstream.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 260" role="img" aria-label="Slot assignments filtered into transistors-per-slot and resistors-per-slot">
+      <text x="90" y="24" text-anchor="middle" font-size="12" font-weight="600">slot_assignments</text>
+      <!-- three drawers -->
+      <g font-size="10.5" text-anchor="middle">
+        <rect x="20" y="40" width="140" height="52" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="56" font-weight="600">input_pair</text>
+        <text x="90" y="72" fill="var(--fig-muted)">M1 nmos · M2 nmos</text>
+        <text x="90" y="86" fill="var(--fig-muted)">(2 devices)</text>
+        <rect x="20" y="100" width="140" height="52" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="116" font-weight="600">load</text>
+        <text x="90" y="132" fill="var(--fig-muted)">R1 resistor</text>
+        <text x="90" y="146" fill="var(--fig-muted)">M3 pmos</text>
+        <rect x="20" y="160" width="140" height="52" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="90" y="176" font-weight="600">bias_gen</text>
+        <text x="90" y="192" fill="var(--fig-muted)">Cc cap only</text>
+        <text x="90" y="206" fill="var(--fig-muted)">(no mosfet)</text>
+      </g>
+      <!-- arrows -->
+      <line x1="165" y1="66" x2="240" y2="66" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="203" y="56" text-anchor="middle" font-size="10" fill="var(--fig-accent)">keep mos</text>
+      <line x1="165" y1="126" x2="240" y2="126" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="165" y1="186" x2="240" y2="186" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="205" y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">empty → dropped</text>
+      <!-- output transistor dict -->
+      <g font-size="10.5" text-anchor="middle">
+        <text x="360" y="24" font-weight="600">extract_slot_transistors →</text>
+        <rect x="250" y="40" width="230" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="365" y="59">input_pair: [M1, M2]</text>
+        <rect x="250" y="78" width="230" height="30" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+        <text x="365" y="97">load: [M3]</text>
+        <text x="365" y="128" font-size="10" fill="var(--fig-muted)">bias_gen absent — no mosfet to keep</text>
+      </g>
+      <!-- resistor dict -->
+      <g font-size="10.5" text-anchor="middle">
+        <text x="360" y="168" font-weight="600">extract_slot_resistors →</text>
+        <rect x="250" y="182" width="230" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="365" y="201">load: [R1]</text>
+      </g>
+    </svg>
+    <figcaption>One pass, one type filter. A slot survives only if it actually holds a device of the wanted kind — so present keys are never empty.</figcaption>
+  </figure>
+
+  <p>That empty-drop rule is the whole cleverness. Everything that follows leans on it.</p>
+</section>
+
+<section class="part" id="part-3">
+  <h2>Part 3 &middot; <code>_adopt_orphan_mosfets()</code> &mdash; catching the strays</h2>
+
+  <blockquote><p><strong>The one job:</strong> a transistor the recognizer could not place belongs to <em>some</em> slot. Find it a home before anything else reads the slot map.</p></blockquote>
+
+  <p>Pattern matching is not perfect. A device can fall out of every slot when its structure is ambiguous &mdash; two identical parallel diodes on one net &mdash; or incomplete, like a load whose expected partner has been pruned away. The consequence is silent and bad: a device in no slot never gets sized, so ngspice runs it at its default W/L and the measured circuit is not the designed one. Worse, the analytical metrics never see its output conductance, so the predicted gain comes out <em>higher</em> than the real circuit can deliver.</p>
+
+  <p>This is not a rare safety net, but it is a narrow one. Sweeping all 13 topologies &mdash; 4,540 circuits &mdash; strays appear in 162 of them, and every single one belongs to a <em>two-stage</em> fully-differential topology: 54 of 400 plain, 108 of 400 buffered. The three-stage fully-differential topologies are clean, as is everything single-ended. The shape is always the same: CMFB has been pruned, the <code>load</code> slot no longer matches, and both load transistors arrive here as orphans. Sizing one such circuit with this pass disabled reports about 5&nbsp;dB more gain, from exactly those two uncounted devices.</p>
+
+  <p>Synthesized netlists name every device <code>{ref}_{slot_name}</code>, so an orphan carries its own address:</p>
+
+  <pre class="code"><code>slot = <span class="tok-fn">next</span>((s <span class="tok-kw">for</span> s <span class="tok-kw">in</span> slot_names <span class="tok-kw">if</span> dev.ref.endswith(<span class="tok-str">"_"</span> + s)), <span class="tok-kw">None</span>)
+<span class="tok-kw">if</span> slot <span class="tok-kw">is not None</span>:
+    slot_transistors.setdefault(slot, []).append(dev)</code></pre>
+
+  <p>Slot names are tried longest-first, so <code>second_stage_p</code> wins over <code>second_stage</code>. A device whose ref matches no slot &mdash; a hand-written or foundry netlist, which has no such convention &mdash; is left alone rather than guessed at.</p>
+
+  <h3>Why it runs second, not fifth</h3>
+  <p>This is the ordering constraint the whole module is arranged around. The raw slot map is built first; this pass patches it; and only then do dedup and the topology check read it. Both sizers inherit that order for free by calling <code>analyze_circuit</code>, instead of each having to remember it.</p>
+
+  <h3>It reports, it does not paper over</h3>
+  <p>An adoption means functional-block recognition could not place a device the netlist plainly contains. Sizing is correct afterwards, but the gap is real &mdash; and the rescue only works because <em>synthesized</em> netlists name devices <code>{ref}_{slot}</code>. Hand the same circuit in from outside with different ref names and nothing saves it.</p>
+
+  <p>So the pass returns what it adopted, the view carries it as <code>view.adopted</code>, and each sizer turns that into a warning on its result. It is deliberately <em>not</em> folded into <code>view.warnings</code>: a consumer that reads the first warning to explain why a candidate failed to bias should not be handed a recognizer advisory instead.</p>
+
+</section>
+
+<section class="part" id="part-4">
+  <h2>Part 4 · <code>check_topology_match()</code> — the sanity inspector</h2>
+
+  <blockquote><p><strong>The one job:</strong> catch the case where the netlist you handed in does not actually realize the topology you asked to size for — and say so, loudly, instead of silently producing garbage gain/PM numbers.</p></blockquote>
+
+  <p>Analogy: you asked the builder for a two-car garage, but the blueprint clearly shows one car space. Rather than pour a foundation that half-fits, the inspector stops and says "this blueprint doesn't match the order." That's this function.</p>
+
+  <p>The tell-tale sign of a valid gain stage: <strong>every stage slot holds exactly one <em>signal</em> transistor</strong> — a device whose gate is driven by the previous stage's output, not a bias rail. If a stage slot exists but contains <em>no</em> signal device (just bias-generator leftovers shoved in), the netlist doesn't match the chosen topology.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">check_topology_match</span>(slot_transistors, topology_name) -> <span class="tok-kw">list</span>[<span class="tok-kw">str</span>]:
+    warnings = []
+    <span class="tok-kw">for</span> slot <span class="tok-kw">in</span> <span class="tok-fn">sorted</span>(STAGE_SLOTS):
+        devs = slot_transistors.get(slot)
+        <span class="tok-kw">if</span> devs <span class="tok-kw">and not</span> <span class="tok-fn">any</span>(<span class="tok-fn">is_signal_device</span>(d) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devs):
+            warnings.append(<span class="tok-str">f"stage slot '{slot}' has no signal transistor …"</span>)
+    <span class="tok-kw">return</span> warnings</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 520 190" role="img" aria-label="Decision: does the stage slot contain a signal transistor?">
+      <polygon points="180,15 300,55 180,95 60,55" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="180" y="50" text-anchor="middle" font-size="11">stage slot holds a</text>
+      <text x="180" y="66" text-anchor="middle" font-size="11">signal transistor?</text>
+      <line x1="120" y1="78" x2="80" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <line x1="240" y1="78" x2="320" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="92" y="106" font-size="10" fill="var(--fig-muted)">yes</text>
+      <text x="292" y="106" font-size="10" fill="var(--fig-muted)">no</text>
+      <rect x="20" y="122" width="130" height="44" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+      <text x="85" y="142" text-anchor="middle" font-size="11">valid gain stage</text>
+      <text x="85" y="158" text-anchor="middle" font-size="10" fill="var(--fig-good)">no warning</text>
+      <rect x="255" y="122" width="245" height="44" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="377" y="141" text-anchor="middle" font-size="11">topology mismatch</text>
+      <text x="377" y="157" text-anchor="middle" font-size="10" fill="var(--fig-bad)">warn: check --topology</text>
+    </svg>
+    <figcaption>An occupied stage slot with only bias devices means single-ended vs fully-differential was mixed up — worth a warning, not silence.</figcaption>
+  </figure>
+
+  <p>Why does this matter so much? Because the downstream gain, phase-margin, and PSRR math <em>reads</em> the second/third-stage signal device. If that device is missing, those metrics would silently drop out and the sizer would happily report numbers for a circuit it never actually sized. A concrete trigger: sizing a single-ended netlist against a fully-differential <code>--topology</code>, where a bias-generator leftover gets shoehorned into <code>second_stage_p</code>. The function doesn't fix it — it just refuses to be silent about it.</p>
+
+  <p>Note the <code>if devs and …</code>: an <em>absent</em> stage slot is fine (a two-stage amp simply has no third stage). Only a slot that exists <em>but has no signal device</em> trips the warning.</p>
+</section>
+
+<section class="part" id="part-5">
+  <h2>Part 5 · <code>deduplicate_devices()</code> — one ref, one home</h2>
+
+  <blockquote><p><strong>The one job:</strong> a single physical transistor can appear in two slots at once; before we assign it a current, decide which slot "owns" it — the higher-priority slot wins.</p></blockquote>
+
+  <p>Analogy: an employee is listed on two org charts (they help two teams). For <em>payroll</em>, you must pick exactly one home team so they don't get paid twice. This function picks that home team using a fixed priority list.</p>
+
+  <p>The classic collision: a tail-mirror <strong>reference</strong> transistor legitimately shows up in both <code>tail_current</code> and <code>bias_gen</code>. If we assigned current from both slots we'd double-count. So we impose an order and let the <em>first</em> slot encountered win.</p>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">deduplicate_devices</span>(slot_transistors) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">tuple</span>[Device, <span class="tok-kw">str</span>]]:
+    priority = [<span class="tok-str">"input_pair"</span>, <span class="tok-str">"load"</span>, <span class="tok-str">"tail_current"</span>,
+                <span class="tok-str">"second_stage"</span>, …, <span class="tok-str">"bias_gen"</span>]
+    ordered = <span class="tok-fn">sorted</span>(slot_transistors.keys(),
+        key=<span class="tok-kw">lambda</span> s: priority.index(s) <span class="tok-kw">if</span> s <span class="tok-kw">in</span> priority <span class="tok-kw">else</span> <span class="tok-fn">len</span>(priority))
+    seen = {}
+    <span class="tok-kw">for</span> slot <span class="tok-kw">in</span> ordered:
+        <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors[slot]:
+            <span class="tok-kw">if</span> d.ref <span class="tok-kw">not in</span> seen:
+                seen[d.ref] = (d, slot)     <span class="tok-com"># first (highest-priority) slot wins</span>
+    <span class="tok-kw">return</span> seen</code></pre>
+
+  <p>The two-line trick worth admiring: <code>sorted(..., key=priority.index)</code> walks the slots in priority order, and <code>if d.ref not in seen</code> means a ref is claimed exactly once — by whichever high-priority slot reached it first. Unknown slots sort to the very end (<code>len(priority)</code>), so they only ever claim refs nobody else wanted.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 540 210" role="img" aria-label="A shared reference transistor claimed by the higher-priority slot">
+      <!-- two slots both containing MR -->
+      <rect x="20" y="30" width="150" height="60" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="52" text-anchor="middle" font-size="11" font-weight="600">tail_current</text>
+      <text x="95" y="70" text-anchor="middle" font-size="10" fill="var(--fig-muted)">priority #3</text>
+      <text x="95" y="84" text-anchor="middle" font-size="10">holds MR</text>
+      <rect x="20" y="120" width="150" height="60" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="142" text-anchor="middle" font-size="11" font-weight="600">bias_gen</text>
+      <text x="95" y="160" text-anchor="middle" font-size="10" fill="var(--fig-muted)">priority #13 (last)</text>
+      <text x="95" y="174" text-anchor="middle" font-size="10">also lists MR</text>
+      <!-- arrows -->
+      <line x1="172" y1="60" x2="300" y2="95" stroke="var(--fig-good)" stroke-width="2.5" marker-end="url(#ar)"/>
+      <text x="230" y="66" text-anchor="middle" font-size="10" fill="var(--fig-good)">wins ✓</text>
+      <line x1="172" y1="150" x2="300" y2="112" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <text x="238" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">skipped (already seen)</text>
+      <!-- result -->
+      <rect x="305" y="80" width="215" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="412" y="98" text-anchor="middle" font-size="11" font-weight="600">seen["MR"] = (MR, "tail_current")</text>
+      <text x="412" y="113" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">counted once, in tail_current</text>
+    </svg>
+    <figcaption>MR sits in two slots; priority order lets <code>tail_current</code> claim it first, so <code>bias_gen</code>'s copy is skipped and never double-counted.</figcaption>
+  </figure>
+
+  <p>The output shape — <code>{ref: (Device, slot)}</code> — is exactly what the next pass wants: a flat list of every unique transistor, each tagged with the one slot that decides its current.</p>
+</section>
+
+<section class="part" id="part-6">
+  <h2>Part 6 &middot; <code>analyze_circuit()</code> &mdash; the assembly line</h2>
+
+  <blockquote><p><strong>The one job:</strong> run the four steps in the one correct order and hand back a single value. It holds no logic of its own.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">analyze_circuit</span>(fbr_result, topology) -&gt; CircuitView:
+    slot_transistors = <span class="tok-fn">_extract_slot_transistors</span>(fbr_result)
+    adopted = <span class="tok-fn">_adopt_orphan_mosfets</span>(slot_transistors, fbr_result, topology)
+    <span class="tok-kw">return</span> <span class="tok-fn">CircuitView</span>(
+        slot_transistors=slot_transistors,
+        slot_resistors=<span class="tok-fn">_extract_slot_resistors</span>(fbr_result),
+        all_transistors=<span class="tok-fn">_deduplicate_devices</span>(slot_transistors),
+        warnings=<span class="tok-fn">_check_topology_match</span>(slot_transistors, topology.name),
+        adopted=adopted,
+    )</code></pre>
+
+  <p>Every helper it calls is underscore-private. That is the point: the module's interface is this one function, so there is no way for a caller to run three of the four steps, or to run them out of order. Everything downstream &mdash; requirement derivation, the stage chain, the gm/Id block view &mdash; takes the finished <code>CircuitView</code>.</p>
+
+  <h3>What it honestly does <em>not</em> do</h3>
+  <ul>
+    <li>It reads structure only. Not one current, width or voltage is decided here &mdash; that is <a href="physics-preprocess_explained.html"><code>preprocess.py</code></a> and the sizers.</li>
+    <li>The topology check is <strong>advisory</strong>. A mismatch produces a warning, never a refusal: an unusual circuit is still sized, and the caller decides what the warning is worth.</li>
+    <li>Orphan adoption only works where refs carry slot suffixes, i.e. synthesized netlists. An external netlist with a genuinely unplaceable device still loses it.</li>
+  </ul>
+
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

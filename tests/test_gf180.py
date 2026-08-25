@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from circuitgenome.recognizer import assign_slots, parse, recognize
-from circuitgenome.sizer.shared.spice import deck, measure
+from circuitgenome.sizer.verify import deck, measure
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
 from circuitgenome.synthesizer.loader import load_topologies
 
