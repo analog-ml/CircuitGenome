@@ -24,6 +24,10 @@ Sizer
 - `Technology loading <walkthrough/loader_explained.html>`__ and `the data
   vocabulary <walkthrough/models_explained.html>`__ — the YAML door and the
   typed records every stage passes around.
+- `ngspice verification <walkthrough/verify/index.html>`__ — the simulated
+  bench: building a runnable deck from a sized netlist, finding the circuit's
+  input polarity by experiment, the six metric testbenches, and the DC
+  bias-soundness verdict.
 - `Analytical (Level-1) sizer <walkthrough/analytical/index.html>`__ — the
   card-less square-law path: how device constraints linearise into a CP-SAT
   integer program.
