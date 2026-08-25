@@ -20,7 +20,7 @@ from ..shared import equations as eq
 from ..shared.device_model import Level1Model
 from ..shared.metrics import evaluate_metrics
 from ..shared.models import SizingResult, SizingSpec, TechParams, TransistorSizing
-from ..shared.circuit_view import analyze_circuit
+from ..shared.circuit_view import adoption_warnings, analyze_circuit
 from ..shared.preprocess import (
     assign_ids,
     compute_requirements,
@@ -55,7 +55,8 @@ def size_level1(
     gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
     )
-    all_warnings = topology_warnings + gm_ceiling_warnings
+    all_warnings = (topology_warnings + gm_ceiling_warnings
+                    + adoption_warnings(view.adopted))
 
     cp_mdl, W_vars, L_vars = build_model(
         all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech

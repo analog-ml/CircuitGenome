@@ -29,18 +29,23 @@ class CircuitView:
     :param all_transistors: deduplicated ref -> (Device, owning slot); a device
         appearing in several slots is attributed to the highest-priority one.
     :param warnings: topology-mismatch advisories from the structural check.
+    :param adopted: ``(ref, slot)`` for every MOSFET the FBR left unplaced that
+        was attributed by its ref suffix.  Reported rather than folded into
+        ``warnings`` so a caller controls where the advisory lands: it is a
+        recognition gap, not an explanation for anything downstream.
     """
     slot_transistors: dict[str, list[Device]] = field(default_factory=dict)
     slot_resistors: dict[str, list[Device]] = field(default_factory=dict)
     all_transistors: dict[str, tuple[Device, str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    adopted: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _adopt_orphan_mosfets(
     slot_transistors: dict[str, list[Device]],
     fbr_result: FunctionalBlockRecognitionResult,
     topology: TopologyTemplate,
-) -> None:
+) -> list[tuple[str, str]]:
     """Attribute slot-suffixed MOSFETs the FBR left unassigned to their slot.
 
     Pattern matching can leave a device out of every slot when its structure
@@ -51,7 +56,11 @@ def _adopt_orphan_mosfets(
     device ``{ref}_{slot_name}``, so orphans are attributed -- and therefore
     sized -- by their ref suffix; devices whose ref matches no slot (external
     netlists) are left alone.
+
+    Returns the ``(ref, slot)`` pairs adopted, so the caller can surface them:
+    an adoption is a *recognition* gap being patched, not a normal step.
     """
+    adopted: list[tuple[str, str]] = []
     assigned = {d.ref for devs in slot_transistors.values() for d in devs}
     slot_names = sorted((s.name for s in topology.slots), key=len, reverse=True)
     candidates = [d for s in fbr_result.unassigned_structures for d in s.devices]
@@ -63,6 +72,8 @@ def _adopt_orphan_mosfets(
         if slot is not None:
             assigned.add(dev.ref)
             slot_transistors.setdefault(slot, []).append(dev)
+            adopted.append((dev.ref, slot))
+    return adopted
 
 def _extract_slot_transistors(
     fbr_result: FunctionalBlockRecognitionResult,
@@ -141,6 +152,30 @@ def _deduplicate_devices(
     return seen
 
 
+def adoption_warnings(adopted: list[tuple[str, str]]) -> list[str]:
+    """Advisory for every MOSFET that had to be rescued by its ref suffix.
+
+    Adoption is not a normal step: it means functional-block recognition could
+    not place a device that the netlist plainly contains.  Sizing is correct
+    afterwards, but the gap is real and only synthesized netlists (whose refs
+    carry a ``_{slot}`` suffix) can be rescued this way — so it is reported
+    rather than applied silently.
+    """
+    if not adopted:
+        return []
+    by_slot: dict[str, list[str]] = {}
+    for ref, slot in adopted:
+        by_slot.setdefault(slot, []).append(ref)
+    detail = "; ".join(f"{', '.join(sorted(refs))} -> '{slot}'"
+                       for slot, refs in sorted(by_slot.items()))
+    return [
+        f"functional-block recognition left {len(adopted)} MOSFET(s) unplaced; "
+        f"they were attributed by ref suffix and sized ({detail}). Sizing is "
+        f"correct, but this is a recognizer gap: an external netlist without "
+        f"slot-suffixed refs would leave these devices unsized."
+    ]
+
+
 def analyze_circuit(
     fbr_result: FunctionalBlockRecognitionResult, topology: TopologyTemplate
 ) -> CircuitView:
@@ -150,10 +185,11 @@ def analyze_circuit(
     place still reaches the sizer that will size it.
     """
     slot_transistors = _extract_slot_transistors(fbr_result)
-    _adopt_orphan_mosfets(slot_transistors, fbr_result, topology)
+    adopted = _adopt_orphan_mosfets(slot_transistors, fbr_result, topology)
     return CircuitView(
         slot_transistors=slot_transistors,
         slot_resistors=_extract_slot_resistors(fbr_result),
         all_transistors=_deduplicate_devices(slot_transistors),
         warnings=_check_topology_match(slot_transistors, topology.name),
+        adopted=adopted,
     )

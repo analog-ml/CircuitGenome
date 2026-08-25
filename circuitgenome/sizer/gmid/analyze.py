@@ -38,6 +38,7 @@ def analyze_circuit(
         slot_resistors=view.slot_resistors,
         all_transistors=view.all_transistors,
         warnings=view.warnings,
+        adopted=view.adopted,
         blocks=build_blocks(view.slot_transistors, view.slot_resistors),
         cascode_refs=cascode_device_refs(view.slot_transistors),
     )

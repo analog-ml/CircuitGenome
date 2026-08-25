@@ -198,7 +198,9 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 
   <blockquote><p><strong>The one job:</strong> a transistor the recognizer could not place belongs to <em>some</em> slot. Find it a home before anything else reads the slot map.</p></blockquote>
 
-  <p>Pattern matching is not perfect. A device can fall out of every slot when its structure is ambiguous &mdash; two identical parallel diodes on one net &mdash; or incomplete, like a bias leg whose expected partner lives in a different slot. The consequence is silent and bad: a device in no slot never gets sized, so ngspice runs it at its default W/L and the measured circuit is not the designed one.</p>
+  <p>Pattern matching is not perfect. A device can fall out of every slot when its structure is ambiguous &mdash; two identical parallel diodes on one net &mdash; or incomplete, like a load whose expected partner has been pruned away. The consequence is silent and bad: a device in no slot never gets sized, so ngspice runs it at its default W/L and the measured circuit is not the designed one. Worse, the analytical metrics never see its output conductance, so the predicted gain comes out <em>higher</em> than the real circuit can deliver.</p>
+
+  <p>This is not a rare safety net, but it is a narrow one. Sweeping all 13 topologies &mdash; 4,540 circuits &mdash; strays appear in 162 of them, and every single one belongs to a <em>two-stage</em> fully-differential topology: 54 of 400 plain, 108 of 400 buffered. The three-stage fully-differential topologies are clean, as is everything single-ended. The shape is always the same: CMFB has been pruned, the <code>load</code> slot no longer matches, and both load transistors arrive here as orphans. Sizing one such circuit with this pass disabled reports about 5&nbsp;dB more gain, from exactly those two uncounted devices.</p>
 
   <p>Synthesized netlists name every device <code>{ref}_{slot_name}</code>, so an orphan carries its own address:</p>
 
@@ -210,6 +212,11 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 
   <h3>Why it runs second, not fifth</h3>
   <p>This is the ordering constraint the whole module is arranged around. The raw slot map is built first; this pass patches it; and only then do dedup and the topology check read it. Both sizers inherit that order for free by calling <code>analyze_circuit</code>, instead of each having to remember it.</p>
+
+  <h3>It reports, it does not paper over</h3>
+  <p>An adoption means functional-block recognition could not place a device the netlist plainly contains. Sizing is correct afterwards, but the gap is real &mdash; and the rescue only works because <em>synthesized</em> netlists name devices <code>{ref}_{slot}</code>. Hand the same circuit in from outside with different ref names and nothing saves it.</p>
+
+  <p>So the pass returns what it adopted, the view carries it as <code>view.adopted</code>, and each sizer turns that into a warning on its result. It is deliberately <em>not</em> folded into <code>view.warnings</code>: a consumer that reads the first warning to explain why a candidate failed to bias should not be handed a recognizer advisory instead.</p>
 
 </section>
 
@@ -311,12 +318,13 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">analyze_circuit</span>(fbr_result, topology) -&gt; CircuitView:
     slot_transistors = <span class="tok-fn">_extract_slot_transistors</span>(fbr_result)
-    <span class="tok-fn">_adopt_orphan_mosfets</span>(slot_transistors, fbr_result, topology)   <span class="tok-com"># patch strays first</span>
+    adopted = <span class="tok-fn">_adopt_orphan_mosfets</span>(slot_transistors, fbr_result, topology)
     <span class="tok-kw">return</span> <span class="tok-fn">CircuitView</span>(
         slot_transistors=slot_transistors,
         slot_resistors=<span class="tok-fn">_extract_slot_resistors</span>(fbr_result),
         all_transistors=<span class="tok-fn">_deduplicate_devices</span>(slot_transistors),
         warnings=<span class="tok-fn">_check_topology_match</span>(slot_transistors, topology.name),
+        adopted=adopted,
     )</code></pre>
 
   <p>Every helper it calls is underscore-private. That is the point: the module's interface is this one function, so there is no way for a caller to run three of the four steps, or to run them out of order. Everything downstream &mdash; requirement derivation, the stage chain, the gm/Id block view &mdash; takes the finished <code>CircuitView</code>.</p>
