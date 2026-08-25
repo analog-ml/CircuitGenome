@@ -13,7 +13,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Changed
 
-- ♻️ Split `sizer/shared/` by concept — `physics/` holds what both sizers stand on (circuit view, taxonomy, device model, equations, gm/Id LUT, requirement derivation, stage chain, metrics); `verify/` holds the ngspice rig, which consumes a `SizingResult` rather than helping produce one and is imported by neither sizer; `models.py`, `loader.py`, `config/` and `pdk/` move up to `sizer/` since every package uses them. `shared/` named a coupling relationship, not a concept, so 40% of it was used by neither sizer. Public imports are unchanged — `circuitgenome.sizer` still exports everything it did — and sizing output is byte-identical ([#XXX](https://github.com/analog-ml/CircuitGenome/pull/XXX)).
+- ♻️ Split `sizer/shared/` by concept — `physics/` holds what both sizers stand on (circuit view, taxonomy, device model, equations, gm/Id LUT, requirement derivation, stage chain, metrics); `verify/` holds the ngspice rig, which consumes a `SizingResult` rather than helping produce one and is imported by neither sizer; `models.py`, `loader.py`, `config/` and `pdk/` move up to `sizer/` since every package uses them. `shared/` named a coupling relationship, not a concept, so 40% of it was used by neither sizer. Public imports are unchanged — `circuitgenome.sizer` still exports everything it did — and sizing output is byte-identical ([#215](https://github.com/analog-ml/CircuitGenome/pull/215)).
 
 ### Added
 
