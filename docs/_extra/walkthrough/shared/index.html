@@ -120,22 +120,29 @@
 
     <!-- consumers depend on the interface -->
     <a href="shared-preprocess_explained.html">
-      <rect x="170" y="360" width="220" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="280" y="382" text-anchor="middle" font-weight="600" font-size="12.5">preprocess.py</text>
-      <text x="280" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">model-independent pre-sizing</text>
+      <rect x="30" y="360" width="240" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="150" y="382" text-anchor="middle" font-weight="600" font-size="12.5">preprocess.py</text>
+      <text x="150" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">currents, gm targets, caps</text>
+    </a>
+    <a href="shared-stage-chain_explained.html">
+      <rect x="310" y="360" width="240" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="430" y="382" text-anchor="middle" font-weight="600" font-size="12.5">stage_chain.py</text>
+      <text x="430" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">extract the small-signal chain</text>
     </a>
     <a href="shared-metrics_explained.html">
-      <rect x="470" y="360" width="220" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="580" y="382" text-anchor="middle" font-weight="600" font-size="12.5">metrics.py</text>
-      <text x="580" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">metrics from solved sizing</text>
+      <rect x="590" y="360" width="240" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="710" y="382" text-anchor="middle" font-weight="600" font-size="12.5">metrics.py</text>
+      <text x="710" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">algebra over the chain</text>
     </a>
-    <!-- depends-on arrows from consumers up to the interface -->
-    <path d="M280,360 L280,320 L400,320 L400,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <path d="M580,360 L580,320 L460,320 L460,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <text x="430" y="336" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">both call the interface, never the concrete model</text>
+    <!-- depends-on arrows from the two model consumers up to the interface -->
+    <path d="M150,360 L150,320 L395,320 L395,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <path d="M430,360 L430,320 L465,320 L465,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <!-- metrics needs no model at all: it reads the chain -->
+    <path d="M550,386 L590,386" fill="none" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="430" y="336" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">these two call the interface, never the concrete model</text>
 
   </svg>
-  <figcaption>One <code>DeviceModel</code> interface, two swappable implementations (square law / LUT). Every consumer is written against the interface, so one codebase serves both sizers. Click any box to open its walkthrough.</figcaption>
+  <figcaption>One <code>DeviceModel</code> interface, two swappable implementations (square law / LUT). Consumers are written against the interface, so one codebase serves both sizers &mdash; and <code>metrics.py</code> needs no model at all, because <code>stage_chain.py</code> has already reduced the circuit to numbers. Click any box to open its walkthrough.</figcaption>
 </figure>
 
 <h2>All pages</h2>
@@ -146,8 +153,10 @@
   <a class="card" href="shared-gmid-lut_explained.html"><span class="fn">gmid_lut.py</span><div class="role">gm/Id LUT + bilinear interpolation (measured BSIM4)</div><span class="phase">primitive</span></a>
   <a class="card" href="shared-device-model_explained.html"><span class="fn">device_model.py</span><div class="role">The keystone — DeviceModel interface unifying both primitives</div><span class="phase">keystone</span></a>
   <a class="card" href="shared-loader_explained.html"><span class="fn">loader.py</span><div class="role">Load tech params + specs from YAML into typed objects</div><span class="phase">boundary</span></a>
-  <a class="card" href="shared-preprocess_explained.html"><span class="fn">preprocess.py</span><div class="role">Model-independent pre-sizing: KCL, slots, requirements</div><span class="phase">shared core</span></a>
-  <a class="card" href="shared-metrics_explained.html"><span class="fn">metrics.py</span><div class="role">Performance metrics from a solved sizing</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-circuit-view_explained.html"><span class="fn">circuit_view.py</span><div class="role">The circuit's structure, derived once in the one correct order</div><span class="phase">structure</span></a>
+  <a class="card" href="shared-preprocess_explained.html"><span class="fn">preprocess.py</span><div class="role">Model-independent pre-sizing: KCL, gm targets, caps</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-stage-chain_explained.html"><span class="fn">stage_chain.py</span><div class="role">Extract the per-stage gm/Rout a solved sizing presents</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-metrics_explained.html"><span class="fn">metrics.py</span><div class="role">Predicted metrics and spec margins, as algebra over the chain</div><span class="phase">shared core</span></a>
 </div>
 
 <p style="color:var(--muted);font-size:0.9rem;margin-top:2em;">Generated by the <code>explain-code-with-fig</code> skill · intuition-first walkthroughs with hand-authored SVG figures · light/dark toggle top-right.</p>
