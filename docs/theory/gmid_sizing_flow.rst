@@ -457,7 +457,7 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
 
    This is a fast **analytical pre-check**, and it is tail-focused: a SPICE DC
    bias-soundness check
-   (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) grounds the final
+   (:func:`~circuitgenome.sizer.shared.spice.check_bias_soundness`) grounds the final
    verdict for PTM / foundry techs.  So ``bias_feasible = True`` is *necessary but not
    sufficient* — it does not yet check, e.g., second-stage headroom.  Remedies for a
    failure: raise the supply, lower the input common-mode, flip the input polarity, or use

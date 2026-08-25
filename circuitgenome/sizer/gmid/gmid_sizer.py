@@ -4,7 +4,7 @@
 sizer, as five phases with explicit hand-offs:
 
 1. **Analyze** (:mod:`.analyze`) — structural view: slots, blocks, cascodes,
-   topology-mismatch warnings → :class:`~.analyze.CircuitView`.
+   topology-mismatch warnings → :class:`~.analyze.GmIdCircuitView`.
 2. **Bias currents** (:mod:`.plan`) — per-device IDS from KCL + ``spec.ibias``
    and the rail-referenced load resistors → :class:`~.plan.CurrentPlan`.
 3. **Plan** (:mod:`.plan`) — per-stage gm requirements and compensation caps
@@ -30,6 +30,7 @@ from circuitgenome.recognizer.models import (
 from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..shared import equations as eq
+from ..shared.circuit_view import adoption_warnings
 from ..shared.models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
@@ -91,7 +92,7 @@ def size_gmid(
         solver_status="GMID",
         cc2_pf=plan.cc2_pf,
         warnings=(view.warnings + plan.warnings + geom_warnings + dc_warnings
-                  + si_warnings + eval_notes),
+                  + si_warnings + eval_notes + adoption_warnings(view.adopted)),
         resistors={**currents.load_resistors, **extra_r},
         bias_feasible=bias_feasible,
         transistor_intents=plan.tintents,

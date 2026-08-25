@@ -5,12 +5,10 @@ from circuitgenome.sizer.shared.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
     GmIdModel,
-    Level1Model,
-    build_device_model,
 )
+from circuitgenome.sizer.shared.gmid_lut import GmIdLut
 from circuitgenome.sizer.gmid.bias import _apply_headroom, _tail_gm_id_for_headroom
-from circuitgenome.sizer.shared.loader import load_tech
-from circuitgenome.sizer.shared.models import SizingSpec, TransistorSizing
+from circuitgenome.sizer import load_tech, SizingSpec, TransistorSizing
 from circuitgenome.synthesizer.models import Device
 
 
@@ -21,9 +19,7 @@ def tech():
 
 @pytest.fixture(scope="module")
 def model(tech):
-    m = build_device_model(tech)
-    assert isinstance(m, GmIdModel)
-    return m
+    return GmIdModel(tech, GmIdLut(tech.gmid_lut))
 
 
 def _size(model, dtype, ids, role, gm_target=None):
@@ -87,11 +83,3 @@ def test_headroom_ok_at_high_supply(model, tech):
     sized, warns = _apply_headroom(model, slot, allt, ids, sizing, spec, tech)
     assert warns == []
     assert sized["m1_tail_current"].w_um == w0  # untouched
-
-
-def test_level1_model_skips_headroom(tech):
-    # Headroom pass is gm/Id-only; Level-1 returns no warnings.
-    m = Level1Model(load_tech("generic"))
-    slot = {"input_pair": [], "tail_current": []}
-    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=1e-5, cl=1e-12)
-    assert _apply_headroom(m, slot, {}, {}, {}, spec, tech) == ({}, [])

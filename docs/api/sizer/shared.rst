@@ -9,9 +9,12 @@ building blocks: :doc:`shared/loader` reads the technology and spec YAML into
 models (Level-1 vs :doc:`shared/gmid_lut`) behind one interface;
 :doc:`shared/equations` holds the closed-form small-signal formulas; and
 :doc:`shared/taxonomy` classifies each device by its functional role.
-:doc:`shared/preprocess` derives the per-device requirements consumed by both
-paths, :doc:`shared/metrics` evaluates the sized design analytically, and
-:doc:`shared/spice_sim` runs the ngspice verification and bias-soundness check.
+:doc:`shared/circuit_view` turns an FBR result into the structural view both
+sizers start from, :doc:`shared/preprocess` derives the per-device requirements
+consumed by both paths, :doc:`shared/stage_chain` extracts the per-stage ``gm``/``Rout`` a solved
+sizing presents, :doc:`shared/metrics` turns that chain into predicted metrics and
+spec margins, and :doc:`shared/spice` runs the ngspice verification and
+bias-soundness check.
 
 .. toctree::
    :maxdepth: 1
@@ -22,7 +25,9 @@ paths, :doc:`shared/metrics` evaluates the sized design analytically, and
    shared/device_model
    shared/equations
    shared/gmid_lut
-   shared/spice_sim
+   shared/spice
    shared/taxonomy
+   shared/circuit_view
    shared/preprocess
+   shared/stage_chain
    shared/metrics

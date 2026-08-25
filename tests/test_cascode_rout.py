@@ -1,7 +1,8 @@
 """Tests for cascode-aware output resistance and the CASCODE sizing role."""
 import math
 
-from circuitgenome.sizer.gmid.blocks import cascode_device_refs, node_rout
+from circuitgenome.sizer.gmid.blocks import cascode_device_refs
+from circuitgenome.sizer.shared.stage_chain import node_rout
 from circuitgenome.synthesizer.models import Device
 
 

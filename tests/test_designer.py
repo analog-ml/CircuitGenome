@@ -8,9 +8,7 @@ import pytest
 
 from circuitgenome.designer import design
 from circuitgenome.designer.designer import _evaluate_candidate, _margins
-from circuitgenome.sizer.shared.loader import load_tech
-from circuitgenome.sizer.shared.models import SizingSpec
-from circuitgenome.sizer.shared.spice_sim import ngspice_available
+from circuitgenome.sizer import load_tech, ngspice_available, SizingSpec
 from circuitgenome.synthesizer import enumerate_circuits, to_flat_spice
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 

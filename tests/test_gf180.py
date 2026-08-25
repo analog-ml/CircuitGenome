@@ -11,12 +11,8 @@ from pathlib import Path
 import pytest
 
 from circuitgenome.recognizer import assign_slots, parse, recognize
-from circuitgenome.sizer.shared import spice_sim
 from circuitgenome.sizer.shared.spice import deck, measure
-from circuitgenome.sizer.shared.device_model import build_device_model
-from circuitgenome.sizer.shared.loader import load_tech
-from circuitgenome.sizer.shared.models import SizingSpec
-from circuitgenome.sizer.sizer import size_circuit
+from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
 from circuitgenome.synthesizer.loader import load_topologies
 
 _CKT_DIR = (Path(__file__).resolve().parent.parent / "circuits"
@@ -32,9 +28,8 @@ def test_gf180_tech_loads_lib_and_device_map():
     assert tech.spice_lib.corner == "typical"
     assert set(tech.spice_lib.corners) == {"typical", "ss", "ff", "sf", "fs"}
     assert tech.device_map == {"nmos": "nmos_3p3", "pmos": "pmos_3p3"}
+    # A LUT is what routes a tech to the gm/Id pipeline (see size_circuit).
     assert tech.gmid_lut is not None
-    # A LUT-bearing tech dispatches to the gm/Id device model.
-    assert build_device_model(tech).is_gmid
 
 
 def test_gf180_emit_model_selects_corner():

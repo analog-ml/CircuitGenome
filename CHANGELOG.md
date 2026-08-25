@@ -11,6 +11,21 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Export the ngspice verification entry points from `circuitgenome.sizer` — `simulate_metrics`, `check_bias_soundness`, `ngspice_available`, `sized_netlist` and `pdk_netlist` now come through the sizer's own interface rather than a submodule path, so `circuitgenome.sizer` is the single import surface for both sizing and verification ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+
+### Changed
+
+- ♻️ Derive the circuit's structure once, in one place — `shared/circuit_view.py` owns `CircuitView` and `analyze_circuit(fbr, topology)`; the four extraction steps behind it (`extract_slot_transistors`, `extract_slot_resistors`, `deduplicate_devices`, `check_topology_match`) become private to it, so a sizer asks once instead of making four calls in the right order. The gm/Id pipeline's `GmIdCircuitView` extends it with the block decomposition and cascode refs, keeping `gmid/blocks.py` out of the shared core. Orphan adoption now runs for both sizers rather than only gm/Id ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+- ♻️ Evaluate metrics from an explicit **stage chain** — `shared/stage_chain.py` extracts the per-stage `gm`/`Rout` (plus tail and load conductances, compensation caps and supply currents) a solved sizing presents, and `shared/metrics.evaluate_metrics(chain, spec)` is pure algebra over it. Replaces a 14-parameter function whose 8 keyword "overrides" existed so the gm/Id path could correct the shared implementation from outside ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+- ♻️ Close the `DeviceModel` seam — the `is_gmid` type flag and the four `isinstance(model, GmIdModel)` guards in `gmid/` are gone; the one branch that needed them (does the geometry step round gm up to a discrete grid?) becomes a `realized_gm()` method each backend answers for itself. Behaviour-preserving: sizing output is byte-identical on both paths ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+
+### Removed
+
+- 🔥 Drop `build_device_model()` — it had no production callers: `size_circuit` already routes on `tech.gmid_lut` and each pipeline constructs the model it needs. Fixes two docs that described the factory as the model selector ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+- 🔥 **Breaking**: drop `circuitgenome.sizer.shared.spice_sim`, the re-export shim over `sizer/shared/spice/` — `from circuitgenome.sizer.shared.spice_sim import ...` no longer resolves; import the same names from `circuitgenome.sizer` instead ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+
 ## [0.3.0] – 2026-08-24
 
 A second real PDK and the fully-differential campaign: SKY130 1.8 V for the
@@ -33,6 +48,10 @@ gain, CMRR and PSRR, and a recognizer that now reads *sized* netlists.
 - ♻️ Rename the stage-interface compatibility filter `second_stage` → `stage_interface` (module, `is_*_compatible`, call site) — behavior-neutral, closing the gap #144's doc-stub rename opened ([#178](https://github.com/analog-ml/CircuitGenome/pull/178)).
 
 ### Fixed
+
+- 🐛 Report when the sizer has to rescue an unplaced MOSFET — `_adopt_orphan_mosfets` attributes a device the FBR could not slot by its `_{slot}` ref suffix, which happens on 162 of the 4,540 enumerated circuits — all of them in the two *two-stage* fully-differential topologies (54/400 plain, 108/400 buffered), where a pruned CMFB stops the `load` slot matching and both load transistors arrive unplaced. It had been doing this silently since it was added; the rescue is now surfaced as a warning on `SizingResult`, because it masks a recognizer gap that an external netlist without slot-suffixed refs would not survive — such a circuit sizes with two devices missing and over-reports gain by ~5 dB ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+
+- 🐛 Cascode-aware output resistance on the **analytical** path — `node_rout` (a walk of the device graph that compounds each cascode's `1 + gm·R` boost) moves into the shared core, so the Level-1 sizer no longer estimates `Rout` as a sum of two single-device `gds`. Reported gain rises ~7.9 dB on folded-cascode loads and CMRR ~38.7 dB on cascode tails; geometry and CP-SAT constraints are unaffected (they derive from `compute_requirements`, which runs pre-geometry), and the gm/Id path is byte-identical since it already did this walk ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
 
 - 🐛 Flag un-measurable analytical open-loop gain — advisory `OPEN_LOOP_GAIN_CEILING_DB`/`open_loop_measurable` on `SizingResult` so consumers can deprioritise three-stage topologies that report ~178 dB analytically then rail to 0 dB on every SPICE corner while `bias_feasible` stays `True` ([#194](https://github.com/analog-ml/CircuitGenome/pull/194)).
 - 🐛 Reserve the gm/Id `output_stage` intent block for the source-follower buffer (fixed gm/Id = 15, L = 1× min); a third *gain* stage now maps to `gain_stage`, aligning sizer terminology with the synthesizer/recognizer (where `output_stage` is specifically a unity-gain `common_drain_*` follower) ([#172](https://github.com/analog-ml/CircuitGenome/pull/172)).

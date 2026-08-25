@@ -294,15 +294,13 @@
 
   <blockquote><p><strong>The one job:</strong> turn the recognizer's messy output into three clean inputs the solver needs — <em>which</em> devices to size, <em>how much current</em> each carries, and <em>what target</em> each must hit.</p></blockquote>
 
-  <p>None of this code is Level-1-specific. It is imported wholesale from <code>sizer.shared.preprocess</code>, the same module the gm/Id sizer uses. Here is the whole prep block.</p>
+  <p>None of this code is Level-1-specific. The structure comes from <code>sizer.shared.circuit_view</code> and the requirements from <code>sizer.shared.preprocess</code> — both shared with the gm/Id sizer. Here is the whole prep block.</p>
 
-  <pre class="code"><code>slot_transistors  = <span class="tok-fn">extract_slot_transistors</span>(fbr_result)
-topology_warnings = <span class="tok-fn">check_topology_match</span>(slot_transistors, topology.name)
-all_transistors   = <span class="tok-fn">deduplicate_devices</span>(slot_transistors)
-ids_map           = <span class="tok-fn">assign_ids</span>(slot_transistors, all_transistors, spec)
+  <pre class="code"><code>view      = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)   <span class="tok-com"># slots, dedup, warnings</span>
+ids_map   = <span class="tok-fn">assign_ids</span>(view.slot_transistors, view.all_transistors, spec)
 
 <span class="tok-com"># Size resistor loads (deterministic) and fold them into first-stage Rout.</span>
-resistors = <span class="tok-fn">size_load_resistors</span>(<span class="tok-fn">extract_slot_resistors</span>(fbr_result), spec, tech)
+resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors, spec, tech)
 gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(resistors.values())) <span class="tok-kw">if</span> resistors <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
 
 dev_model = <span class="tok-fn">Level1Model</span>(tech)

@@ -76,14 +76,12 @@ def _apply_headroom(
 ) -> tuple[dict[str, TransistorSizing], list[str]]:
     """Check/repair tail saturation headroom; return ``(sizing, warnings)``.
 
-    Only active for :class:`~.device_model.GmIdModel` (the gm/Id path).  Never
-    mutates the input ``sizing`` — a repaired tail mirror group (and, when
-    needed, a weaker-inversion input pair) comes back in a new mapping (kept
-    even when the snapped repair leaves a small residual, so the tail sits as
-    close to fitting as the table allows).
+    Part of the gm/Id pipeline, so ``model`` is always a
+    :class:`~.device_model.GmIdModel`.  Never mutates the input ``sizing`` — a
+    repaired tail mirror group (and, when needed, a weaker-inversion input pair)
+    comes back in a new mapping (kept even when the snapped repair leaves a
+    small residual, so the tail sits as close to fitting as the table allows).
     """
-    if not isinstance(model, GmIdModel):
-        return sizing, []
     ip = slot_transistors.get("input_pair", [])
     tc = slot_transistors.get("tail_current", [])
     if not (ip and tc):
@@ -174,7 +172,7 @@ def _apply_headroom(
 
 
 def check_dc_operating_point(
-    model,
+    model: GmIdModel,
     blocks: OpAmpBlocks,
     slot_transistors: dict[str, list],
     all_transistors: dict[str, tuple],
@@ -188,9 +186,6 @@ def check_dc_operating_point(
     The returned ``sizing`` reflects any tail headroom repair; the input mapping
     is never mutated.
     """
-    if not isinstance(model, GmIdModel):
-        return sizing, [], True
-
     sizing, warnings = _apply_headroom(
         model, slot_transistors, all_transistors, ids_map, sizing, spec, tech)
     bias_feasible = not any("headroom" in w for w in warnings)

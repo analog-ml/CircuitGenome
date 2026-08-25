@@ -5,7 +5,8 @@ gain stages, tail, bias, compensation) and classifies the *kind* of each load /
 tail (current-mirror, cascode, resistor, plain current-source).  This is the
 structural layer beneath the Analyze phase (:mod:`.analyze`): the load kind
 drives the first-stage gain factor, the cascode detection feeds the DC
-headroom budget (:mod:`.bias`), and :func:`node_rout` gives the evaluation
+headroom budget (:mod:`.bias`), and the shared
+:func:`~..shared.stage_chain.node_rout` gives the evaluation
 phase its cascode-aware output resistance.
 """
 from __future__ import annotations
@@ -56,55 +57,6 @@ def cascode_device_refs(slot_transistors: dict[str, list[Device]]) -> set[str]:
             if src not in RAILS and src in drains and not is_signal_device(d):
                 out.add(d.ref)
     return out
-
-
-# --------------------------------------------------------------------------- #
-# Cascode-aware output resistance
-# --------------------------------------------------------------------------- #
-def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
-    """Resistance (Ω) looking into ``device``'s drain, cascode-aware.
-
-    A cascode device (source on another device's drain) boosts its own ``ro`` by
-    ``1 + gm·R_source`` where ``R_source`` is the resistance below it; a device
-    whose source is a rail or in ``stop`` (e.g. the input-pair tail node, an AC
-    ground for the differential half-circuit) contributes just ``ro``.  Shallow
-    recursion handles multi-high stacks.
-    """
-    s = sizing.get(device.ref)
-    if s is None:
-        return float("inf")
-    gds = model.gds(device.type, s.w_um, s.l_um, s.ids_a)
-    ro = 1.0 / gds if gds > 0 else float("inf")
-    src = device.terminals.get("s")
-    if src in RAILS or src in stop or src is None:
-        return ro
-    below = by_drain.get(src)
-    if below is not None and below.ref != device.ref and below.type == device.type:
-        gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
-        r_src = _looking_in_drain(below, by_drain, model, sizing, stop)
-        return ro * (1.0 + gm * r_src) if r_src != float("inf") else float("inf")
-    return ro
-
-
-def node_rout(out_net: str, mosfets: list[Device], model, sizing,
-              stop: frozenset = frozenset()) -> float:
-    """Cascode-aware output resistance (Ω) at ``out_net`` = parallel of every
-    device whose drain is ``out_net`` (each looking-in, cascode-boosted).
-
-    ``stop`` lists nets to treat as AC ground (typically the input-pair tail node)
-    so the input pair contributes ``ro``, not a tail-degenerated cascode.
-    """
-    by_drain: dict[str, Device] = {}
-    for d in mosfets:
-        if d.type in ("nmos", "pmos"):
-            by_drain.setdefault(d.terminals.get("d"), d)
-    g = 0.0
-    for d in mosfets:
-        if d.type in ("nmos", "pmos") and d.terminals.get("d") == out_net:
-            r = _looking_in_drain(d, by_drain, model, sizing, stop)
-            if r > 0:
-                g += 1.0 / r
-    return 1.0 / g if g > 0 else float("inf")
 
 
 def classify_load(mosfets: list[Device], resistors: list[Device]) -> LoadKind:

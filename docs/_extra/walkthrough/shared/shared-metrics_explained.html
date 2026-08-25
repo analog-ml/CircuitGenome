@@ -92,300 +92,42 @@
 
 <header>
   <h1>metrics.py — explained</h1>
-  <div class="subtitle"><code>circuitgenome/sizer/shared/metrics.py</code> — turn a solved geometry into predicted op-amp metrics (gain, GBW, PM, CMRR…) through one DeviceModel, so the same code is exact for both sizers.</div>
+  <div class="subtitle"><code>circuitgenome/sizer/shared/metrics.py</code> — pure algebra over a StageChain: the predicted op-amp metrics and their spec margins.</div>
 </header>
 
 <nav id="toc">
   <div class="label">Contents</div>
-  <a href="#part-1">1 · Why this file exists</a>
-  <a href="#part-2">2 · The DeviceModel seam</a>
-  <a href="#part-3">3 · _sz, _gm, _gds</a>
-  <a href="#part-4">4 · Building each stage's Rout</a>
-  <a href="#part-5">5 · Gain — the product</a>
-  <a href="#part-6">6 · GBW, phase margin, slew</a>
-  <a href="#part-7">7 · Power, swing, CMRR, PSRR</a>
-  <a href="#part-8">8 · The hidden idea &amp; limits</a>
+  <a href="#part-1">1 · Why this file even exists</a>
+  <a href="#part-2">2 · Gain — the product of the stages</a>
+  <a href="#part-3">3 · GBW, phase margin, slew rate — the dynamics</a>
+  <a href="#part-4">4 · Power, output swing, CMRR, PSRR</a>
+  <a href="#part-5">5 · The hidden idea, the limits, and one sentence</a>
 </nav>
 
 <main>
 
-<!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
 
-  <blockquote><p><strong>The one job:</strong> the sizer has already chosen every transistor's width, length and current. Given that <em>solved geometry</em>, what performance does the amplifier actually deliver — its gain, bandwidth, phase margin, slew rate, power, swing, CMRR and PSRR — and does each number clear its spec?</p></blockquote>
+  <blockquote><p><strong>The one job:</strong> given a <code>StageChain</code> — the small-signal numbers already extracted from a solved sizing — compute what the amplifier delivers (gain, bandwidth, phase margin, slew rate, power, swing, CMRR, PSRR) and how much room each number has against its spec.</p></blockquote>
 
   <p class="beat">Here is the whole story without a line of code.</p>
 
   <p>Sizing an op-amp is like assembling a team: you pick the players (transistors), give each a role and a budget (current). But picking the team is not the same as knowing how it will <em>perform</em> on game day. Someone still has to compute the <strong>report card</strong>.</p>
 
-  <p>That is all <code>metrics.py</code> is — a report card generator. It reads the finished sizing and computes the numbers a circuit designer actually cares about, then compares each against the target to produce a <strong>margin</strong> (how much headroom you have, positive means "meets spec").</p>
+  <p>That is all <code>metrics.py</code> is — a report card generator. It takes the chain that <a href="shared-stage-chain_explained.html"><code>stage_chain.py</code></a> extracted and computes the numbers a circuit designer cares about, then compares each against the target to produce a <strong>margin</strong> (how much headroom you have, positive always means "meets spec").</p>
 
-  <figure class="fig">
-    <svg viewBox="0 0 560 180" role="img" aria-label="A solved sizing goes in, a report card of metrics comes out">
-      <defs>
-        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
-      </defs>
-      <rect x="20" y="52" width="140" height="76" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="90" y="80" text-anchor="middle" font-size="13" font-weight="600">solved sizing</text>
-      <text x="90" y="99" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">W, L, Ids per device</text>
-      <text x="90" y="114" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Cc, spec, tech</text>
-      <rect x="210" y="46" width="140" height="88" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="280" y="82" text-anchor="middle" font-size="13" font-weight="600">_evaluate_</text>
-      <text x="280" y="100" text-anchor="middle" font-size="13" font-weight="600">metrics()</text>
-      <text x="280" y="120" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the report card</text>
-      <rect x="400" y="30" width="150" height="52" rx="10" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
-      <text x="475" y="52" text-anchor="middle" font-size="12" font-weight="600">metrics</text>
-      <text x="475" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gain, GBW, PM…</text>
-      <rect x="400" y="98" width="150" height="52" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-      <text x="475" y="120" text-anchor="middle" font-size="12" font-weight="600">margins</text>
-      <text x="475" y="138" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">metric − spec</text>
-      <line x1="160" y1="90" x2="210" y2="90" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
-      <line x1="350" y1="82" x2="398" y2="60" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
-      <line x1="350" y1="98" x2="398" y2="120" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
-    </svg>
-    <figcaption>Two dictionaries come out: the raw <code>metrics</code>, and the <code>margins</code> that say by how much each metric beats (or misses) its spec.</figcaption>
-  </figure>
+  <p>What makes it small is what it <em>does not</em> do. It never touches a <code>Device</code>, a <code>TechParams</code> or a <code>DeviceModel</code> — those are all upstream. Its entire interface is two arguments:</p>
 
-  <p>But here is the twist that makes this file interesting. There are <strong>two different sizers</strong> in CircuitGenome — a simple Level-1 one (geometry-free <code>λ·Id</code> physics) and a gm/Id one (lookup tables from real device curves). A naïve design would need <em>two</em> report-card generators, one per physics model. This file needs only one.</p>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">evaluate_metrics</span>(chain: StageChain, spec: SizingSpec):
+    <span class="tok-str">"""-> (metrics, margins)"""</span></code></pre>
 
-  <p>The trick: every small-signal number it needs — <code>gm</code>, <code>gds</code> — is fetched through a single object, the <strong>DeviceModel</strong>, evaluated <em>at the solved geometry</em>. Swap the model, and the exact same arithmetic below becomes exact for the other physics. One codebase, two sizers, no duplication. That is the hidden idea, and Part 2 is entirely about it.</p>
+  <p>Two rules run through everything below. A metric that cannot be computed is <strong>omitted</strong>, never faked — a missing key is more honest than a wrong number. And a margin appears only when the spec actually constrains that metric, always signed so <strong>positive means met</strong>, whether the spec is a floor (gain) or a ceiling (power).</p>
 
-  <h3>The cast of characters</h3>
-  <p>Only one public function — <code>_evaluate_metrics()</code> — plus three tiny local helpers and two neighbours it leans on. Hover any box to trace who talks to whom.</p>
-
-  <figure class="fig interactive">
-    <svg viewBox="0 0 600 360" role="img" aria-label="Call graph of metrics.py">
-      <!-- edges -->
-      <line class="edge" data-group="sz"    x1="255" y1="64" x2="90"  y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-      <line class="edge" data-group="gm"    x1="285" y1="64" x2="230" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-      <line class="edge" data-group="gds"   x1="315" y1="64" x2="375" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-      <line class="edge" data-group="kfs"   x1="345" y1="64" x2="518" y2="118" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-      <line class="edge" data-group="model" x1="290" y1="64" x2="210" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-      <line class="edge" data-group="eq"    x1="310" y1="64" x2="410" y2="238" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-      <line class="edge" data-group="gm"    x1="230" y1="164" x2="205" y2="236" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
-      <line class="edge" data-group="gds"   x1="375" y1="164" x2="255" y2="236" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
-      <!-- root -->
-      <g class="node" data-group="root">
-        <rect x="200" y="20" width="200" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-        <text x="300" y="47" text-anchor="middle" font-weight="600" font-size="13">_evaluate_metrics()</text>
-      </g>
-      <!-- _sz -->
-      <g class="node" data-group="sz">
-        <rect x="20" y="118" width="140" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="90" y="138" text-anchor="middle" font-weight="600" font-size="12.5">_sz()</text>
-        <text x="90" y="154" text-anchor="middle" font-size="10" fill="var(--fig-muted)">look up a sizing</text>
-      </g>
-      <!-- _gm -->
-      <g class="node" data-group="gm">
-        <rect x="168" y="118" width="130" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="233" y="138" text-anchor="middle" font-weight="600" font-size="12.5">_gm()</text>
-        <text x="233" y="154" text-anchor="middle" font-size="10" fill="var(--fig-muted)">gm, capped</text>
-      </g>
-      <!-- _gds -->
-      <g class="node" data-group="gds">
-        <rect x="306" y="118" width="130" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="371" y="138" text-anchor="middle" font-weight="600" font-size="12.5">_gds()</text>
-        <text x="371" y="154" text-anchor="middle" font-size="10" fill="var(--fig-muted)">output conductance</text>
-      </g>
-      <!-- k_fs -->
-      <g class="node" data-group="kfs">
-        <rect x="444" y="118" width="146" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="517" y="138" text-anchor="middle" font-weight="600" font-size="12.5">k_fs factor</text>
-        <text x="517" y="154" text-anchor="middle" font-size="9" fill="var(--fig-muted)">_first_stage_gain_factor</text>
-      </g>
-      <!-- DeviceModel -->
-      <g class="node" data-group="model">
-        <rect x="110" y="238" width="190" height="52" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-        <text x="205" y="260" text-anchor="middle" font-weight="600" font-size="13">DeviceModel</text>
-        <text x="205" y="277" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">params @ solved geometry</text>
-      </g>
-      <!-- equations -->
-      <g class="node" data-group="eq">
-        <rect x="320" y="238" width="190" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-        <text x="415" y="260" text-anchor="middle" font-weight="600" font-size="13">eq.*  (equations.py)</text>
-        <text x="415" y="277" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">textbook formulas → metrics</text>
-      </g>
-    </svg>
-    <figcaption>The orchestrator on top; three private helpers below it; and the two neighbours everything routes through — the <strong>DeviceModel</strong> (the swappable-physics seam) and <strong>equations.py</strong> (the formulas). The dashed edges show that <code>_gm</code>/<code>_gds</code> are just thin wrappers over the model.</figcaption>
-  </figure>
-
-  <p>We will learn it in reading order, not file order: first the <em>seam</em> (Part 2), then the three helpers (Part 3), then how a stage's resistance is built (Part 4), and only then the metrics themselves — gain, then dynamics, then the rest.</p>
-
-  <blockquote><p><strong>Looking ahead:</strong> Part 2 answers the question that makes this whole file possible — <em>how can one function be exact for two completely different physics models?</em></p></blockquote>
 </section>
 
-<!-- ================= PART 2 ================= -->
 <section class="part" id="part-2">
-  <h2>Part 2 · The DeviceModel seam (the idea behind the file)</h2>
-
-  <blockquote><p><strong>The one job of this Part:</strong> understand why the metrics code never mentions <code>λ</code> or a lookup table directly — it only ever asks a <code>DeviceModel</code> for <code>gm</code> and <code>gds</code> at the geometry already chosen.</p></blockquote>
-
-  <p>Think of a <strong>universal power adapter</strong>. Your laptop does not care whether the wall socket behind the adapter is European or American — it just asks the adapter for "clean DC," and the adapter hides the difference. The <code>DeviceModel</code> is that adapter. The metrics code plugs into it and asks for two things:</p>
-
-  <ul>
-    <li><code>model.gm(type, W, L, Ids)</code> — the small-signal <em>transconductance</em>: how strongly this device turns a gate voltage into a drain current.</li>
-    <li><code>model.gds(type, W, L, Ids)</code> — the small-signal <em>output conductance</em>: how "leaky" the device is, i.e. how far it falls short of an ideal current source.</li>
-  </ul>
-
-  <p>Behind that adapter sit two completely different physics engines — but the metrics code cannot tell them apart:</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 560 250" role="img" aria-label="One metrics code plugs into DeviceModel, which has two swappable physics backends">
-      <rect x="180" y="20" width="200" height="48" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="280" y="41" text-anchor="middle" font-size="13" font-weight="600">_evaluate_metrics()</text>
-      <text x="280" y="58" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">asks only: gm, gds</text>
-      <line x1="280" y1="68" x2="280" y2="96" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
-      <rect x="170" y="96" width="220" height="46" rx="10" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2.5"/>
-      <text x="280" y="118" text-anchor="middle" font-size="13" font-weight="600">DeviceModel  (the adapter)</text>
-      <text x="280" y="134" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">evaluated at the SOLVED geometry</text>
-      <line x1="230" y1="142" x2="150" y2="182" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
-      <line x1="330" y1="142" x2="410" y2="182" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
-      <rect x="30" y="182" width="235" height="52" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="147" y="204" text-anchor="middle" font-size="12.5" font-weight="600">Level-1 backend</text>
-      <text x="147" y="222" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm=√(2·µCox·W/L·Id), gds=λ·Id</text>
-      <rect x="295" y="182" width="235" height="52" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="412" y="204" text-anchor="middle" font-size="12.5" font-weight="600">gm/Id backend</text>
-      <text x="412" y="222" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">lookup table from real curves</text>
-    </svg>
-    <figcaption>Same top box, two possible bottom boxes. Because the numbers are read <em>at the geometry the sizer already solved</em>, both backends are exact — not an approximation of each other.</figcaption>
-  </figure>
-
-  <p>Why is this "exact" and not just "roughly consistent"? Because the metrics are evaluated <strong>after</strong> the geometry is frozen. The Level-1 backend evaluates its <code>λ·Id</code> physics at that <code>(W, L, Id)</code>; the gm/Id backend looks up its table at that same <code>(W, L, Id)</code>. Neither is guessing — each reports <em>its own</em> truth at the solved point. The arithmetic downstream (multiply gm by Rout, take a log) is physics-agnostic.</p>
-
-  <p>Look at how the module docstring says exactly this:</p>
-
-  <pre class="code"><code><span class="tok-com"># from the module docstring</span>
-<span class="tok-str">"""Performance-metric evaluation from a solved sizing.
-
-Small-signal parameters come through a DeviceModel evaluated at the
-*solved* geometry, so the same code is exact for both Level-1
-(geometry-free λ·Id) and gm/Id (LUT).  Shared by both sizers.
-"""</span></code></pre>
-
-  <blockquote><p><strong>The takeaway:</strong> the file's power is a design decision, not an algorithm — route <em>all</em> physics through one <code>gm</code>/<code>gds</code> interface, and one report card serves both sizers exactly.</p></blockquote>
-</section>
-
-<!-- ================= PART 3 ================= -->
-<section class="part" id="part-3">
-  <h2>Part 3 · <code>_sz</code>, <code>_gm</code>, <code>_gds</code> — the three tiny helpers</h2>
-
-  <blockquote><p><strong>The one job:</strong> three one-liners that turn "a device plus its sizing" into the two small-signal numbers everything else is built from — with one safety clamp on <code>gm</code>.</p></blockquote>
-
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_sz</span>(ref: <span class="tok-kw">str</span>) -> TransistorSizing | <span class="tok-kw">None</span>:
-    <span class="tok-kw">return</span> transistor_sizing.get(ref)
-
-<span class="tok-kw">def</span> <span class="tok-fn">_gm</span>(d: Device, s: TransistorSizing) -> <span class="tok-kw">float</span>:
-    <span class="tok-kw">return</span> <span class="tok-fn">min</span>(model.<span class="tok-fn">gm</span>(d.type, s.w_um, s.l_um, s.ids_a),
-               model.<span class="tok-fn">gm_ceiling</span>(d.type, s.ids_a, s.l_um))
-
-<span class="tok-kw">def</span> <span class="tok-fn">_gds</span>(d: Device, s: TransistorSizing) -> <span class="tok-kw">float</span>:
-    <span class="tok-kw">return</span> model.<span class="tok-fn">gds</span>(d.type, s.w_um, s.l_um, s.ids_a)</code></pre>
-
-  <p><code>_sz</code> is a dictionary lookup: given a device reference like <code>"M1"</code>, hand back its solved sizing (or <code>None</code> if it was never sized). <code>_gds</code> is a pure pass-through to the model. The interesting one is <code>_gm</code>, and it is interesting because of that <code>min(…)</code>.</p>
-
-  <h3>Why the <code>min</code>? The weak-inversion ceiling</h3>
-
-  <p>The Level-1 square-law formula <code>gm = √(2·µCox·(W/L)·Id)</code> has no upper limit — make the device wide enough and it promises unbounded transconductance. But real physics says <code>gm</code> can never exceed <code>Id / (n·φt)</code>, roughly <code>gm/Id ≤ 25 /V</code> at room temperature (the weak-inversion limit). Left unchecked, the square-law formula would let the sizer <em>promise a gm the device can only reach by sliding into weak inversion</em> — a gm the amplifier will never actually deliver.</p>
-
-  <p>So <code>_gm</code> takes the smaller of the two: the formula's value, or the physical ceiling <code>gm_ceiling = 25 · |Id|</code>.</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 520 190" role="img" aria-label="gm is the minimum of the square-law value and the physical ceiling">
-      <text x="260" y="22" text-anchor="middle" font-size="12.5" font-weight="600">min( square-law gm , ceiling 25·Id )</text>
-      <!-- case A: formula below ceiling -->
-      <text x="130" y="52" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">narrow device</text>
-      <rect x="70" y="60" width="120" height="30" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
-      <text x="130" y="80" text-anchor="middle" font-size="11">formula = 0.6 mA/V</text>
-      <line x1="70" y1="108" x2="190" y2="108" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
-      <text x="130" y="126" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ceiling = 0.5 mA/V</text>
-      <text x="130" y="150" text-anchor="middle" font-size="11" fill="var(--fig-bad)">picks ceiling: 0.5 ✗ formula</text>
-      <line x1="255" y1="55" x2="255" y2="155" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 4"/>
-      <!-- case B -->
-      <text x="390" y="52" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">honest device</text>
-      <rect x="330" y="90" width="120" height="30" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-      <text x="390" y="110" text-anchor="middle" font-size="11">formula = 0.4 mA/V</text>
-      <line x1="330" y1="70" x2="450" y2="70" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
-      <text x="390" y="64" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ceiling = 0.5 mA/V</text>
-      <text x="390" y="150" text-anchor="middle" font-size="11" fill="var(--fig-good)">picks formula: 0.4 ✓</text>
-    </svg>
-    <figcaption>When the square-law formula over-promises (left), the clamp pulls it down to the physical ceiling; when it is honest (right), the formula wins. Either way, <code>gm</code> stays believable.</figcaption>
-  </figure>
-
-  <h3>A number, traced</h3>
-  <p>Say a device carries <code>Id = 20 µA</code>, and the square-law formula returns <code>0.6 mA/V</code>:</p>
-  <pre class="code"><code>ceiling = 25 × 20e-6 = 500e-6 = 0.5 mA/V
-gm      = min(0.6 mA/V, 0.5 mA/V) = 0.5 mA/V   <span class="tok-com"># clamped</span></code></pre>
-
-  <p>Note the ceiling depends on <code>Id</code> (and length), <em>not</em> width — you cannot buy more <code>gm</code> per amp of current than physics allows, no matter how wide you go. With these three helpers in hand, every metric below is just arithmetic on <code>gm</code> and <code>gds</code>.</p>
-</section>
-
-<!-- ================= PART 4 ================= -->
-<section class="part" id="part-4">
-  <h2>Part 4 · Building each stage's <code>Rout</code></h2>
-
-  <blockquote><p><strong>The one job:</strong> for each gain stage, gather its signal transistor's <code>gm</code> and the stage's total output resistance <code>Rout</code> — the two numbers a stage's voltage gain is made of.</p></blockquote>
-
-  <p>A gain stage is a signal transistor pushing current into a resistance. Its gain is <code>gm · Rout</code>. We already have <code>gm</code>. Where does <code>Rout</code> come from? From the transistors fighting to hold the output node — every device connected there leaks a little (its <code>gds</code>), and leaks in parallel <strong>add as conductances</strong>:</p>
-
-  <div class="eq-center"><span class="boxed-eq">R<sub>out</sub>&nbsp;=&nbsp;1&nbsp;/&nbsp;(g<sub>ds,top</sub>&nbsp;+&nbsp;g<sub>ds,bot</sub>)</span></div>
-
-  <p>Analogy: two leaks draining the same bucket empty it faster together than either alone. The "resistance to going empty" is one over the total leak rate. That is literally <code>eq.rout</code>:</p>
-
-  <pre class="code"><code><span class="tok-com"># --- Load / input pair → Rout1 ---</span>
-gd_ip = <span class="tok-fn">_gds</span>(ip_devs[<span class="tok-num">0</span>], s_ip)          <span class="tok-com"># input-pair leak</span>
-<span class="tok-com"># gd_ld = _gds(load device)         # load leak</span>
-<span class="tok-kw">if</span> rout1_override <span class="tok-kw">is not None</span>:
-    rout1 = rout1_override            <span class="tok-com"># gm/Id pipeline: cascode-aware value</span>
-<span class="tok-kw">else</span>:
-    rout1 = (eq.<span class="tok-fn">rout</span>(gd_ip, gd_ld + gd_load_r)
-             <span class="tok-kw">if</span> (gd_ip + gd_ld + gd_load_r) &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>))</code></pre>
-
-  <figure class="fig">
-    <svg viewBox="0 0 520 180" role="img" aria-label="Two output conductances add in parallel to set Rout">
-      <line x1="60" y1="30" x2="180" y2="30" stroke="var(--fig-stroke)" stroke-width="3"/>
-      <text x="120" y="22" text-anchor="middle" font-size="11" fill="var(--fig-muted)">Vdd</text>
-      <rect x="80" y="42" width="80" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="120" y="62" text-anchor="middle" font-size="11">load</text>
-      <text x="168" y="61" font-size="10.5" fill="var(--fig-muted)">gds_top = 6 µS</text>
-      <line x1="120" y1="72" x2="120" y2="100" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <circle cx="120" cy="100" r="4" fill="var(--fig-accent)"/>
-      <text x="120" y="94" text-anchor="middle" font-size="10.5" fill="var(--fig-accent)">out</text>
-      <rect x="80" y="108" width="80" height="30" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="120" y="128" text-anchor="middle" font-size="11">drive</text>
-      <text x="168" y="127" font-size="10.5" fill="var(--fig-muted)">gds_bot = 4 µS</text>
-      <line x1="60" y1="150" x2="180" y2="150" stroke="var(--fig-stroke)" stroke-width="3"/>
-      <line x1="285" y1="90" x2="335" y2="90" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
-      <rect x="345" y="62" width="160" height="56" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="425" y="86" text-anchor="middle" font-size="12">Rout = 1/(6+4) µS</text>
-      <text x="425" y="106" text-anchor="middle" font-size="12" font-weight="600">= 100 kΩ</text>
-    </svg>
-    <figcaption>Both devices leak into the output node; their conductances add, and <code>Rout</code> is one over the sum. Here 6 µS + 4 µS → 100 kΩ.</figcaption>
-  </figure>
-
-  <h3>The <code>_override</code> escape hatch — where the two sizers differ</h3>
-
-  <p>Notice <code>rout1_override</code>. This is the <em>one</em> place the two physics models genuinely need different treatment. The Level-1 default just sums single-device <code>gds</code> values. But a gm/Id design may use a <strong>cascode</strong> — a stack of devices that multiply the output resistance far beyond one device's <code>gds</code>. So the gm/Id pipeline computes a cascode-aware <code>Rout</code> itself and passes it in through the override; when it is <code>None</code> (the Level-1 case), the simple estimate is used unchanged. Same escape hatch exists for <code>rout2</code> and <code>rout3</code>.</p>
-
-  <h3>The same story, three times</h3>
-  <p>The file repeats this pattern for each stage that exists:</p>
-  <table>
-    <thead><tr><th>Stage</th><th>Signal transistor gives</th><th>Rout from</th><th>When absent</th></tr></thead>
-    <tbody>
-      <tr><td>1 · input pair</td><td><code>gm1</code></td><td>input-pair + load gds</td><td>always present</td></tr>
-      <tr><td>2 · second stage</td><td><code>gm2</code></td><td>nmos + pmos gds</td><td><code>rout2 = ∞</code></td></tr>
-      <tr><td>3 · third stage</td><td><code>gm3</code></td><td>nmos + pmos gds</td><td><code>rout3 = ∞</code></td></tr>
-    </tbody>
-  </table>
-
-  <p>Two things to note. First, "which device is the signal transistor?" is decided by <code>is_signal_device(d)</code> — the other device in the stage is the current-source load, whose <code>gds</code> we also grab (for PSRR later). Second, when a stage does not exist, its <code>Rout</code> is set to <code>float("inf")</code> — a clean sentinel that makes the gain code below simply skip that stage.</p>
-
-  <blockquote><p><strong>Why <code>inf</code> is elegant:</strong> an absent stage has no output node to load, so its "resistance" is infinite. Using <code>inf</code> lets the gain logic test <code>rout &lt; inf</code> to mean "this stage is real" — the physics and the code agree.</p></blockquote>
-</section>
-
-<!-- ================= PART 5 ================= -->
-<section class="part" id="part-5">
-  <h2>Part 5 · Gain — the product of the stages</h2>
+  <h2>Part 2 · Gain — the product of the stages</h2>
 
   <blockquote><p><strong>The one job:</strong> multiply each stage's <code>gm · Rout</code> together to get the total open-loop DC gain, then convert to decibels.</p></blockquote>
 
@@ -449,9 +191,8 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
   <p>Even when it <em>is</em> reported, <code>gain_db</code> is an un-derated cascade product — a single-point upper bound. Above the open-loop ceiling callers receive an advisory <code>open_loop_measurable = False</code> flag (#155), because a bench that can't hold mid-rail will measure ~0 dB no matter how healthy the DC bias looks.</p>
 </section>
 
-<!-- ================= PART 6 ================= -->
-<section class="part" id="part-6">
-  <h2>Part 6 · GBW, phase margin, slew rate — the dynamics</h2>
+<section class="part" id="part-3">
+  <h2>Part 3 · GBW, phase margin, slew rate — the dynamics</h2>
 
   <blockquote><p><strong>The one job:</strong> from the input-pair <code>gm</code> and the compensation capacitor <code>Cc</code>, predict how fast the amplifier is (GBW), how stable it is (phase margin), and how fast it can swing (slew rate).</p></blockquote>
 
@@ -530,9 +271,8 @@ PM    = 90° − arctan(0.5) = 90° − 26.57° = 63.4°</code></pre>
   <p>Same <code>Cc</code> that stabilizes the loop also caps the slew rate — one component, three metrics, all traced back to it.</p>
 </section>
 
-<!-- ================= PART 7 ================= -->
-<section class="part" id="part-7">
-  <h2>Part 7 · Power, output swing, CMRR, PSRR</h2>
+<section class="part" id="part-4">
+  <h2>Part 4 · Power, output swing, CMRR, PSRR</h2>
 
   <blockquote><p><strong>The one job:</strong> finish the report card — how much power it burns, how far the output can swing, and how well it rejects common-mode and supply noise.</p></blockquote>
 
@@ -580,11 +320,10 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
   <p>The name of the function is honest about its status — <code>psrr_db_approx</code>. It is a first-order estimate; accurate PSRR needs a simulator, which brings us to the limits.</p>
 </section>
 
-<!-- ================= PART 8 ================= -->
-<section class="part" id="part-8">
-  <h2>Part 8 · The hidden idea, the limits, and one sentence</h2>
+<section class="part" id="part-5">
+  <h2>Part 5 · The hidden idea, the limits, and one sentence</h2>
 
-  <p>Step back from the eight metrics and one structure remains. Every single line above is one expression in one variable's language: it reads a small-signal parameter through the <code>DeviceModel</code> at the solved geometry, then feeds it to a textbook formula. Written as one idea:</p>
+  <p>Step back from the eight metrics and one structure remains. Every single line above is one expression in one variable's language: it reads a number off the <code>StageChain</code> and feeds it to a textbook formula. Written as one idea:</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -604,22 +343,22 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
     </span>
   </div>
 
-  <p>Because <code>Model</code> is the only physics-dependent term and it is evaluated at the frozen geometry, swapping Level-1 for gm/Id changes <em>what the numbers are</em> without changing <em>a single line that computes them</em>. That is the whole reason this file is called <code>shared</code>.</p>
+  <p>The chain is the only physics-dependent term, and it was already resolved to floats upstream. Swapping Level-1 for gm/Id changes <em>what those numbers are</em> without changing <em>a single line that computes with them</em> &mdash; and because a chain is just a value, a formula here can be tested by handing it six floats instead of a circuit.</p>
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li>Every formula here is <strong>analytical</strong> — a dominant-pole, first-order model. It is fast enough to guide a search over thousands of candidate sizings, but it is not the truth.</li>
     <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
     <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
-    <li>The cascode-aware output resistances arrive through <code>rout{1,2,3}_override</code> — this file does not compute them; the gm/Id pipeline does and passes them in.</li>
+    <li>It trusts the chain completely. If <a href="shared-stage-chain_explained.html"><code>stage_chain.py</code></a> mis-read a stage's output node, nothing here can notice &mdash; the numbers are simply wrong together.</li>
     <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
   </ul>
 
   <h3>Why it's elegant</h3>
-  <p>The cleverness is not in any one formula — they are all standard analog textbook results. It is in the <strong>seam</strong>: by insisting that every small-signal number flow through one <code>gm</code>/<code>gds</code> interface at the solved geometry, the author collapsed what could have been two parallel metric engines into one, and made "add a new physics backend" a change that touches this file <em>zero</em> times.</p>
+  <p>The cleverness is not in any one formula &mdash; they are all standard analog textbook results. It is in the <strong>seam</strong>: by insisting that a circuit be reduced to a chain of numbers <em>before</em> any formula runs, what could have been two parallel metric engines collapsed into one. Adding a new physics backend touches this file <em>zero</em> times, and so does adding a new corrective term &mdash; degeneration, a resistor tail, a CMFB load all reshape the chain upstream rather than adding a parameter here.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>metrics.py</code> turns a solved transistor sizing into the op-amp's predicted report card — gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin — by routing every small-signal number through a single <code>DeviceModel</code> evaluated at the frozen geometry, so the exact same analytical code is correct for both the Level-1 and the gm/Id sizer.</p>
+  <p><strong>In one sentence:</strong> <code>metrics.py</code> turns a <code>StageChain</code> into the op-amp's predicted report card &mdash; gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin &mdash; using nothing but arithmetic, so the exact same code is correct for both the Level-1 and the gm/Id sizer and can be tested without a circuit.</p>
 </section>
 
 </main>

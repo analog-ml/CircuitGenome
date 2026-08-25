@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import pytest
 
-from circuitgenome.sizer import load_tech, size_circuit, SizingSpec
+from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TechParams
 from circuitgenome.sizer.shared.equations import (
     cmrr_db,
     gd,
@@ -19,7 +19,6 @@ from circuitgenome.sizer.shared.equations import (
     vds_sat,
     vgs_from_ids,
 )
-from circuitgenome.sizer.shared.models import TechParams
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -846,7 +845,7 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
 def _fbr_pmos_cs_second_stage(topology_name: str):
     """Return the FBR tuple for the first variant whose second-stage signal
     transistor is a PMOS (a PMOS-common-source stage)."""
-    from circuitgenome.sizer.shared.preprocess import extract_slot_transistors
+    from circuitgenome.sizer.shared.circuit_view import analyze_circuit
     from circuitgenome.sizer.shared.taxonomy import is_signal_device
 
     modules = load_modules()
@@ -855,7 +854,7 @@ def _fbr_pmos_cs_second_stage(topology_name: str):
         parsed = parse(to_flat_spice(circuit))
         sr_result = recognize(parsed)
         fbr_result = assign_slots(sr_result, topology)
-        slot_t = extract_slot_transistors(fbr_result)
+        slot_t = analyze_circuit(fbr_result, topology).slot_transistors
         ss = slot_t.get("second_stage", [])
         signal = next((d for d in ss if is_signal_device(d)), None)
         # Require an active (transistor) load so the high three-stage gain target
@@ -979,12 +978,12 @@ def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
 # ---------------------------------------------------------------------------
 
 def _ids_plan(topology_name: str, variant_filter: dict[str, str]):
-    from circuitgenome.sizer.shared.preprocess import (
-        assign_ids, deduplicate_devices, extract_slot_transistors)
-    _parsed, _sr, fbr_result, _topology = _fbr(topology_name, variant_filter)
-    slot_transistors = extract_slot_transistors(fbr_result)
+    from circuitgenome.sizer.shared.circuit_view import analyze_circuit
+    from circuitgenome.sizer.shared.preprocess import assign_ids
+    _parsed, _sr, fbr_result, topology = _fbr(topology_name, variant_filter)
+    view = analyze_circuit(fbr_result, topology)
     spec = SizingSpec(vdd=5.0, vss=0.0, ibias=20e-6, cl=5e-12)
-    return assign_ids(slot_transistors, deduplicate_devices(slot_transistors), spec)
+    return assign_ids(view.slot_transistors, view.all_transistors, spec)
 
 
 def test_folded_cascode_load_current_plan():

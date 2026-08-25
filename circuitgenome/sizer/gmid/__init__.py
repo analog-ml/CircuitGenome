@@ -1,7 +1,7 @@
 """Block-based gm/Id sizing pipeline (separate from the Level-1 CP-SAT sizer).
 
 :func:`size_gmid` runs five phases with typed hand-offs — Analyze
-(:mod:`.analyze` → ``CircuitView``), Bias currents and Plan (:mod:`.plan` →
+(:mod:`.analyze` → ``GmIdCircuitView``), Bias currents and Plan (:mod:`.plan` →
 ``CurrentPlan``/``SizingPlan``), Size (:mod:`.geometry`, :mod:`.bias`,
 :mod:`.resistors`), and Evaluate (:mod:`.evaluate`) — driven by the explicit
 per-block design intent in :mod:`.intent`.  The device primitives

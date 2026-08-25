@@ -5,14 +5,14 @@ from circuitgenome.sizer.shared.device_model import (
     CURRENT_SOURCE,
     SIGNAL,
     GmIdModel,
-    build_device_model,
 )
+from circuitgenome.sizer.shared.gmid_lut import GmIdLut
 from circuitgenome.sizer.gmid.geometry import assign_geometry_gmid
 from circuitgenome.sizer.gmid.intent import (
     TransistorIntent,
     resolve_transistor_intents,
 )
-from circuitgenome.sizer.shared.loader import load_tech
+from circuitgenome.sizer import load_tech
 from circuitgenome.synthesizer.models import Device
 
 
@@ -23,9 +23,7 @@ def tech():
 
 @pytest.fixture(scope="module")
 def model(tech):
-    m = build_device_model(tech)
-    assert isinstance(m, GmIdModel)
-    return m
+    return GmIdModel(tech, GmIdLut(tech.gmid_lut))
 
 
 def _snap_w(tech, w):

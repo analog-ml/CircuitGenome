@@ -290,7 +290,7 @@ def _check_fd_interface(
 
 
 def check_stage_interface(
-    model,
+    model: GmIdModel,
     blocks: OpAmpBlocks,
     sizing: dict[str, TransistorSizing],
     gm_req_map: dict[str, float],
@@ -303,8 +303,6 @@ def check_stage_interface(
     fitting gm/Id) comes back in a new mapping.  ``feasible`` is ``False``
     only when no LUT point clears the raw bounds.
     """
-    if not isinstance(model, GmIdModel):
-        return sizing, [], True
     if blocks.is_fully_differential:
         return _check_fd_interface(model, blocks, sizing, gm_req_map, spec, tech)
     if not blocks.has_cascode_load():

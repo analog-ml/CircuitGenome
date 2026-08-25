@@ -211,7 +211,7 @@ def tune_bias_levels(
     blocks: OpAmpBlocks,
     ids_map: dict[str, float],
     sizing: dict[str, TransistorSizing],
-    model,
+    model: GmIdModel,
     spec: SizingSpec,
     tech: TechParams,
 ) -> tuple[dict[str, TransistorSizing], dict[str, float]]:
@@ -222,8 +222,6 @@ def tune_bias_levels(
     from :func:`~.resistors.size_resistors` (which cannot derive a level for
     a ``mid`` net and falls back to its representative value).
     """
-    if not isinstance(model, GmIdModel):
-        return sizing, {}
     bg = blocks.blocks.get("bias_gen")
     if bg is None or not bg.mosfets:
         return sizing, {}

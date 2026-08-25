@@ -211,7 +211,7 @@ class SizingResult:
     :param metrics: Computed performance metrics, e.g.
         ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``. Analytical (model-based,
         ngspice-free) estimate; for PTM the CLI measures and displays ngspice
-        values (``spice_sim.simulate_metrics``) instead.  Note ``gain_db`` is an
+        values (``sizer.simulate_metrics``) instead.  Note ``gain_db`` is an
         **un-derated single-point upper bound** — the naive per-stage cascade
         product with no efficiency derate — so it over-estimates multi-stage DC
         gain and is not open-loop-measurable above the ceiling flagged by

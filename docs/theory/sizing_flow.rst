@@ -140,9 +140,10 @@ forward pass with grid snapping, matched-pair symmetry, and exact current-mirror
 ratios.
 
 The model is selected per-tech by
-:func:`~circuitgenome.sizer.shared.device_model.build_device_model`
-(:class:`~circuitgenome.sizer.shared.device_model.Level1Model` vs
-:class:`~circuitgenome.sizer.shared.device_model.GmIdModel`); the table interface is
+:func:`~circuitgenome.sizer.sizer.size_circuit`, which routes a LUT-bearing tech to
+the gm/Id pipeline (:class:`~circuitgenome.sizer.shared.device_model.GmIdModel`) and
+the card-less ``generic`` tech to Level-1
+(:class:`~circuitgenome.sizer.shared.device_model.Level1Model`); the table interface is
 :class:`~circuitgenome.sizer.shared.gmid_lut.GmIdLut` and the geometry pass is
 :func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid`.  The Level-1
 flow described below is unchanged for the card-less generic tech.
@@ -595,7 +596,7 @@ as GF180MCU), the analytical estimate above would mismatch the device, so the CL
 grounds its report in ngspice instead:
 
 * **Feasibility verdict.**  A SPICE DC operating-point check
-  (:func:`~circuitgenome.sizer.shared.spice_sim.check_bias_soundness`) classifies
+  (:func:`~circuitgenome.sizer.shared.spice.check_bias_soundness`) classifies
   the design as:
 
   * **INFEASIBLE** — the bias point cannot be established (the feedback operating
@@ -605,7 +606,7 @@ grounds its report in ngspice instead:
   * **FEASIBLE** — biases correctly and meets every measured spec.
 
 * **Measured metrics.**  When feasible, the CLI measures performance in ngspice
-  (:func:`~circuitgenome.sizer.shared.spice_sim.simulate_metrics`): open-loop gain,
+  (:func:`~circuitgenome.sizer.shared.spice.simulate_metrics`): open-loop gain,
   GBW, phase margin, slew rate (min of the rising and falling edges), quiescent
   power, CMRR, PSRR+, and output swing.  A metric ngspice cannot extract is shown
   as ``n/a`` (no analytical fallback), and ngspice is **required** — the command

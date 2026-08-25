@@ -30,12 +30,16 @@ from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
 from ..recognizer import assign_slots, parse, recognize
-from ..sizer import SizingSpec, TechParams, load_spec, load_tech, size_circuit
-from ..sizer.shared.spice_sim import (
+from ..sizer import (
+    SizingSpec,
+    TechParams,
     check_bias_soundness,
+    load_spec,
+    load_tech,
     ngspice_available,
     pdk_netlist,
     simulate_metrics,
+    size_circuit,
     sized_netlist,
 )
 from ..synthesizer import enumerate_circuits, to_flat_spice

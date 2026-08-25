@@ -72,7 +72,7 @@
 <h2>The architecture — one interface, two implementations</h2>
 
 <figure class="fig">
-  <svg viewBox="0 0 860 500" role="img" aria-label="The shared sizing core architecture centered on the DeviceModel abstraction">
+  <svg viewBox="0 0 860 428" role="img" aria-label="The shared sizing core architecture centered on the DeviceModel abstraction">
     <defs>
       <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
       <marker id="arO" viewBox="0 0 12 12" refX="6" refY="6" markerWidth="11" markerHeight="11" orient="auto"><circle cx="6" cy="6" r="4.5" fill="var(--fig-bg)" stroke="context-stroke" stroke-width="1.5"/></marker>
@@ -120,28 +120,29 @@
 
     <!-- consumers depend on the interface -->
     <a href="shared-preprocess_explained.html">
-      <rect x="170" y="360" width="220" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="280" y="382" text-anchor="middle" font-weight="600" font-size="12.5">preprocess.py</text>
-      <text x="280" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">model-independent pre-sizing</text>
+      <rect x="30" y="360" width="240" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="150" y="382" text-anchor="middle" font-weight="600" font-size="12.5">preprocess.py</text>
+      <text x="150" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">currents, gm targets, caps</text>
+    </a>
+    <a href="shared-stage-chain_explained.html">
+      <rect x="310" y="360" width="240" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="430" y="382" text-anchor="middle" font-weight="600" font-size="12.5">stage_chain.py</text>
+      <text x="430" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">extract the small-signal chain</text>
     </a>
     <a href="shared-metrics_explained.html">
-      <rect x="470" y="360" width="220" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="580" y="382" text-anchor="middle" font-weight="600" font-size="12.5">metrics.py</text>
-      <text x="580" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">metrics from solved sizing</text>
+      <rect x="590" y="360" width="240" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="710" y="382" text-anchor="middle" font-weight="600" font-size="12.5">metrics.py</text>
+      <text x="710" y="399" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">algebra over the chain</text>
     </a>
-    <!-- depends-on arrows from consumers up to the interface -->
-    <path d="M280,360 L280,320 L400,320 L400,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <path d="M580,360 L580,320 L460,320 L460,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <text x="430" y="336" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">both call the interface, never the concrete model</text>
+    <!-- depends-on arrows from the two model consumers up to the interface -->
+    <path d="M150,360 L150,320 L395,320 L395,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <path d="M430,360 L430,320 L465,320 L465,208" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <!-- metrics needs no model at all: it reads the chain -->
+    <path d="M550,386 L590,386" fill="none" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="430" y="336" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">these two call the interface, never the concrete model</text>
 
-    <!-- verification facade -->
-    <a href="shared-spice-sim_explained.html">
-      <rect x="300" y="440" width="260" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2" stroke-dasharray="6 4"/>
-      <text x="430" y="460" text-anchor="middle" font-weight="600" font-size="12">spice_sim.py</text>
-      <text x="430" y="475" text-anchor="middle" font-size="10" fill="var(--fig-muted)">facade → spice/ ngspice verification</text>
-    </a>
   </svg>
-  <figcaption>One <code>DeviceModel</code> interface, two swappable implementations (square law / LUT). Every consumer is written against the interface, so one codebase serves both sizers. Click any box to open its walkthrough.</figcaption>
+  <figcaption>One <code>DeviceModel</code> interface, two swappable implementations (square law / LUT). Consumers are written against the interface, so one codebase serves both sizers &mdash; and <code>metrics.py</code> needs no model at all, because <code>stage_chain.py</code> has already reduced the circuit to numbers. Click any box to open its walkthrough.</figcaption>
 </figure>
 
 <h2>All pages</h2>
@@ -152,9 +153,10 @@
   <a class="card" href="shared-gmid-lut_explained.html"><span class="fn">gmid_lut.py</span><div class="role">gm/Id LUT + bilinear interpolation (measured BSIM4)</div><span class="phase">primitive</span></a>
   <a class="card" href="shared-device-model_explained.html"><span class="fn">device_model.py</span><div class="role">The keystone — DeviceModel interface unifying both primitives</div><span class="phase">keystone</span></a>
   <a class="card" href="shared-loader_explained.html"><span class="fn">loader.py</span><div class="role">Load tech params + specs from YAML into typed objects</div><span class="phase">boundary</span></a>
-  <a class="card" href="shared-preprocess_explained.html"><span class="fn">preprocess.py</span><div class="role">Model-independent pre-sizing: KCL, slots, requirements</div><span class="phase">shared core</span></a>
-  <a class="card" href="shared-metrics_explained.html"><span class="fn">metrics.py</span><div class="role">Performance metrics from a solved sizing</div><span class="phase">shared core</span></a>
-  <a class="card" href="shared-spice-sim_explained.html"><span class="fn">spice_sim.py</span><div class="role">Facade over the spice/ ngspice verification subpackage</div><span class="phase">verification</span></a>
+  <a class="card" href="shared-circuit-view_explained.html"><span class="fn">circuit_view.py</span><div class="role">The circuit's structure, derived once in the one correct order</div><span class="phase">structure</span></a>
+  <a class="card" href="shared-preprocess_explained.html"><span class="fn">preprocess.py</span><div class="role">Model-independent pre-sizing: KCL, gm targets, caps</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-stage-chain_explained.html"><span class="fn">stage_chain.py</span><div class="role">Extract the per-stage gm/Rout a solved sizing presents</div><span class="phase">shared core</span></a>
+  <a class="card" href="shared-metrics_explained.html"><span class="fn">metrics.py</span><div class="role">Predicted metrics and spec margins, as algebra over the chain</div><span class="phase">shared core</span></a>
 </div>
 
 <p style="color:var(--muted);font-size:0.9rem;margin-top:2em;">Generated by the <code>explain-code-with-fig</code> skill · intuition-first walkthroughs with hand-authored SVG figures · light/dark toggle top-right.</p>
