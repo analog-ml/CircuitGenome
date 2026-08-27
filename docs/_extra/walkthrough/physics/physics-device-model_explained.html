@@ -112,10 +112,9 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
+<p><strong>TLDR:</strong> <code>device_model.py</code> defines a single small-signal <code>DeviceModel</code> socket and two interchangeable plugs — a regression-safe Level-1 square law and a silicon-calibrated gm/Id lookup table so that CircuitGenome's model-independent op-amp topology math is written once and serves both technologies through one polymorphic interface. Adding a third technology model tomorrow means writing a third plug and touching nothing else.</p>
+  <blockquote><p><strong>Main task:</strong> give the op-amp sizer <em>one</em> way to ask a transistor "what's your gm? your gds? your Vdsat?" — so the same topology math works whether those answers come from a textbook square law or from a measured lookup table.</p></blockquote>
 
-  <blockquote><p><strong>The one job:</strong> give the op-amp sizer <em>one</em> way to ask a transistor "what's your gm? your gds? your Vdsat?" — so the same topology math works whether those answers come from a textbook square law or from a measured lookup table.</p></blockquote>
-
-  <p class="beat">Here is the whole idea before a single line of code.</p>
 
   <p>An op-amp designer computes performance from a handful of relationships that are <strong>the same for every technology</strong>:</p>
 
@@ -125,14 +124,12 @@
 
   <p>CircuitGenome has two ways to produce those primitives:</p>
   <ul>
-    <li>the <strong>Level-1 square law</strong> (the Shichman-Hodges equations in <code>equations.py</code>), for a card-less generic technology, and</li>
-    <li>a <strong>gm/Id lookup table</strong> (<code>GmIdLut</code>), pre-extracted from real BSIM4 simulations, for PTM process nodes.</li>
+    <li>the <strong>Square law</strong> (the Shichman-Hodges equations in <code>equations.py</code>), and</li>
+    <li>a <strong>gm/Id lookup table</strong> (<code>GmIdLut</code>), pre-extracted from real BSIM4 simulations.</li>
   </ul>
 
-  <h3>The analogy: a universal wall socket</h3>
-  <p>Think of a <strong>standardized wall socket</strong>. Your laptop charger and your lamp both end in the same plug shape. The wall doesn't know or care which appliance you push in — it exposes one contract (two flat pins + ground), and any compliant plug works.</p>
 
-  <p><code>DeviceModel</code> <em>is</em> that socket. It defines six pins — <code>gm</code>, <code>gds</code>, <code>vds_sat</code>, <code>vgs</code>, <code>gm_ceiling</code>, <code>gds_estimate</code> — and declares nothing about <em>how</em> they're computed. Then two plugs are built to fit it: <code>Level1Model</code> (square law) and <code>GmIdModel</code> (LUT). The sizer only ever talks to the socket.</p>
+  <p><code>DeviceModel</code> <em>is</em> is a shared <strong>interface</strong> for both <code>Level1Model</code> (square law) and <code>GmIdModel</code> (LUT). The sizer only ever talks to the <code>DeviceModel</code>.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 580 300" role="img" aria-label="One interface, two implementations: topology math plugs into DeviceModel, which two backends satisfy">
@@ -147,7 +144,7 @@
       <text x="300" y="84" font-size="10.5" fill="var(--fig-muted)">asks through one interface</text>
       <!-- the socket / interface -->
       <rect x="180" y="100" width="220" height="66" rx="10" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2.5"/>
-      <text x="290" y="122" text-anchor="middle" font-size="13" font-weight="600">DeviceModel — the socket</text>
+      <text x="290" y="122" text-anchor="middle" font-size="13" font-weight="600">DeviceModel</text>
       <text x="290" y="140" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm · gds · vds_sat · vgs</text>
       <text x="290" y="155" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm_ceiling · gds_estimate · realized_gm</text>
       <!-- two plugs -->
@@ -167,7 +164,7 @@
     <figcaption>One socket, two compliant plugs. The topology math on top never learns which backend answered — that is the entire point of the file.</figcaption>
   </figure>
 
-  <p>This is the <strong>Strategy pattern</strong>: a fixed interface, swappable implementations chosen at runtime. Without it, every gain / GBW / CMRR formula in the sizer would need an <code>if gmid: … else: …</code> fork. With it, they write <code>model.gm(...)</code> once and forget which technology they're in.</p>
+  <p>This is the <strong>Strategy pattern</strong>: a fixed interface, swappable implementations chosen at runtime.</p>
 
   <h3>The cast of characters</h3>
   <p>The file holds two model classes and two little data holders; the selector that picks between them lives one layer up, in <code>size_circuit()</code>. Hover any box to trace who it calls.</p>
@@ -238,12 +235,11 @@
     <figcaption>The selector on top; two backends satisfy the dashed Protocol contract. The gm/Id side carries the extra geometry machinery. We learn it socket-first, then each plug.</figcaption>
   </figure>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the socket and names its six pins — what each primitive actually <em>means</em> in a circuit — before we watch either backend fill them in.</p></blockquote>
 </section>
 
 <!-- ================= PART 2 ================= -->
 <section class="part" id="part-2">
-  <h2>Part 2 · The five primitives (what the socket promises)</h2>
+  <h2>Part 2 · The five primitives </h2>
 
   <p class="beat">Before any implementation, you only need to understand the <em>questions</em> the interface can answer. Every one takes a device (<code>dtype</code> = nmos/pmos), its geometry (<code>W</code>, <code>L</code> in µm), and its current (<code>Id</code> in A), and returns one small-signal number.</p>
 
@@ -297,9 +293,9 @@
 <section class="part" id="part-3">
   <h2>Part 3 · The <code>Protocol</code> &amp; <code>_params()</code></h2>
 
-  <blockquote><p><strong>The one job:</strong> write down the socket's shape as a Python <code>Protocol</code>, and give both backends one shared line for "fetch the nmos-or-pmos parameter block."</p></blockquote>
+  <blockquote><p><strong>The one job:</strong> write down the "agreed" shape as a Python <code>Protocol</code>, and give both backends one shared line for "fetch the nmos-or-pmos parameter block."</p></blockquote>
 
-  <p>A <code>Protocol</code> is Python's version of a socket <em>spec sheet</em>. It lists method signatures with no bodies — anything that has these methods "fits," with no inheritance required (structural typing, aka duck typing made explicit).</p>
+  <p>A <code>Protocol</code> lists method signatures with no bodies — anything that has these methods "fits," with no inheritance required.</p>
 
   <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">DeviceModel</span>(Protocol):
     <span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids) -> <span class="tok-kw">float</span>: ...
@@ -318,16 +314,14 @@
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_params</span>(tech, dtype) -> MosfetParams:
     <span class="tok-kw">return</span> tech.nmos <span class="tok-kw">if</span> dtype == <span class="tok-str">"nmos"</span> <span class="tok-kw">else</span> tech.pmos</code></pre>
 
-  <p>A technology carries two parameter blocks — one for NMOS, one for PMOS. Like a filing cabinet with two labeled drawers. Every primitive starts by opening the right drawer: <code>_params(self.tech, "pmos")</code> hands back the PMOS <code>µCox</code>, <code>Vth</code>, <code>λ</code>. It is a one-line utility, but it is the seam that keeps every method polarity-correct without repeating the ternary five times.</p>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;4 fills the socket with its simplest plug — <code>Level1Model</code>, which is a thin, regression-safe wrapper over the textbook square-law equations.</p></blockquote>
 </section>
 
 <!-- ================= PART 4 ================= -->
 <section class="part" id="part-4">
   <h2>Part 4 · <code>Level1Model</code> — the square-law backend</h2>
 
-  <blockquote><p><strong>The one job:</strong> answer every primitive from the Shichman-Hodges square law, reproducing the existing generic-tech numbers byte-for-byte.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> answer every primitive from the Shichman-Hodges square law, reproducing the existing generic-tech numbers byte-for-byte.</p></blockquote>
 
   <p>This is the plug you build first because it is the simplest: each method is a one-line delegation to <code>equations.py</code>. The class exists so those loose functions present the <code>DeviceModel</code> face.</p>
 
@@ -337,50 +331,11 @@
     <span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids):
         <span class="tok-kw">return</span> eq.<span class="tok-fn">gd</span>(<span class="tok-fn">_params</span>(self.tech, dtype).lam, ids)</code></pre>
 
-  <p>The star primitive is <code>gm</code>. The square law says transconductance grows with the square root of both the device's shape and its current:</p>
 
-  <div class="eq-center">
-    <span class="boxed-eq">
-      <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">
-        <mrow><mi>gm</mi><mo>=</mo>
-          <msqrt><mrow><mn>2</mn><mo>·</mo><mi>µCox</mi><mo>·</mo>
-          <mfrac><mi>W</mi><mi>L</mi></mfrac><mo>·</mo>
-          <mo>|</mo><msub><mi>I</mi><mi>d</mi></msub><mo>|</mo></mrow></msqrt>
-        </mrow>
-      </math>
-    </span>
-  </div>
-
-  <h3>Traced with real numbers</h3>
-  <p>Take an NMOS with <code>µCox = 200 µA/V²</code>, <code>W = 10 µm</code>, <code>L = 1 µm</code>, <code>Id = 100 µA</code>:</p>
-  <pre class="code"><code>gm = √(2 · 200e-6 · (10/1) · 100e-6)
-   = √(4e-7)
-   = 6.32e-4 A/V  =  632 µS</code></pre>
-
-  <figure class="fig">
-    <svg viewBox="0 0 560 120" role="img" aria-label="Square-law gm pipeline: inputs feed the formula, which outputs gm">
-      <g text-anchor="middle" font-size="12">
-        <rect x="20" y="42" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="95" y="60">µCox, W/L, Id</text>
-        <text x="95" y="75" font-size="10" fill="var(--fig-muted)">200µ · 10 · 100µ</text>
-        <rect x="215" y="42" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="290" y="62">√(2·µCox·(W/L)·Id)</text>
-        <text x="290" y="76" font-size="10" fill="var(--fig-muted)">= √(4e-7)</text>
-        <rect x="410" y="42" width="140" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-        <text x="480" y="66" font-weight="600">gm = 632 µS</text>
-      </g>
-      <g stroke="var(--fig-stroke)" stroke-width="2">
-        <line x1="170" y1="62" x2="215" y2="62" marker-end="url(#arrow)"/>
-        <line x1="365" y1="62" x2="410" y2="62" marker-end="url(#arrow)"/>
-      </g>
-    </svg>
-    <figcaption>A pure formula pipeline — no table, no interpolation. Same inputs always give the same 632 µS.</figcaption>
-  </figure>
 
   <h3>Two tells that this is the "cheap" model</h3>
   <p>Look at <code>gds</code>: it returns <code>eq.gd(λ, Id) = λ·|Id|</code> and <strong>ignores W and L entirely</strong>. Under Level-1, output conductance is purely current-proportional — geometry doesn't enter. That's a known limitation of the square law, faithfully preserved.</p>
-  <p>And <code>gm_ceiling</code> returns <code>eq.gm_ceiling(ids) = 25·|Id|</code>, independent of dtype <em>and</em> L. It's the weak-inversion limit baked in as a flat heuristic. Finally, <code>gds_estimate</code> just returns <code>λ·|Id|</code> again — the docstring says it plainly: <em>"role is irrelevant under the square law."</em> The Level-1 world has no role-dependence because its primitives don't depend on operating point.</p>
-
+  <p>And <code>gm_ceiling</code> returns <code>eq.gm_ceiling(ids) = 25·|Id|</code>, independent of dtype <em>and</em> L. It's the weak-inversion limit baked in as a flat heuristic.
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;5 swaps in the richer plug — <code>GmIdModel</code> — where every primitive is a <em>measured</em> lookup and the geometry finally matters.</p></blockquote>
 </section>
 
@@ -388,9 +343,9 @@
 <section class="part" id="part-5">
   <h2>Part 5 · <code>GmIdModel</code> — LUT-backed primitives</h2>
 
-  <blockquote><p><strong>The one job:</strong> answer the same six questions, but from a table of real BSIM4 behaviour indexed by the device's <em>operating point</em>, not a textbook formula.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> answer the same six questions, but from a table of real BSIM4 behaviour indexed by the device's <em>operating point</em>, not a textbook formula.</p></blockquote>
 
-  <p>The gm/Id method sizes a transistor by its <strong>transconductance efficiency</strong> <code>gm/Id</code> — a single knob that says how deep into weak or strong inversion the device sits. The lookup table <code>GmIdLut</code> stores, for each <code>(gm/Id, L)</code> point, the measured <code>id/W</code>, intrinsic gain <code>gm/gds</code>, <code>Vdsat</code>, and <code>Vgs</code>.</p>
+  <p>The gm/Id method sizes a transistor by its <strong>transconductance efficiency</strong> <code>gm/Id</code>.</p>
 
   <h3>The single most important method: <code>_gm_id_at()</code></h3>
   <p>Every primitive here first needs to know <em>where on the table</em> a solved device sits. Geometry gives us <code>(W, L, Id)</code>; the table is indexed by <code>gm/Id</code>. So we invert:</p>
@@ -436,18 +391,6 @@
     gm = gm_id * <span class="tok-fn">abs</span>(ids)
     <span class="tok-kw">return</span> gm / self.lut.<span class="tok-fn">gm_gds</span>(dtype, gm_id, l_um)</code></pre>
 
-  <p><code>gm</code> is just the identity <code>gm = (gm/Id)·Id</code>. And <code>gds = gm / (gm/gds)</code> — the table hands back the <em>intrinsic gain</em> <code>gm/gds</code>, so we divide. Compare to Level-1: here <code>gds</code> genuinely depends on geometry, because <code>gm/gds</code> is read at the device's real operating point and length.</p>
-
-  <h3>Traced with real numbers</h3>
-  <pre class="code"><code>gm/Id (from table)   = 15 /V     at Id/W = 10 µA/µm, L = 1 µm
-gm    = 15 · 100µA   = 1.50 mA/V
-gm/gds (from table)  = 20        intrinsic gain
-gds   = 1.50m / 20   = 75 µS
-Vdsat (from table)   = 0.12 V
-Vgs   (from table)   = +0.45 V   (NMOS → positive)</code></pre>
-
-  <p>The <code>vgs</code> method adds one careful touch: the table stores a <em>magnitude</em>, so the code re-applies the sign from the threshold — <code>mag if vth >= 0 else -mag</code> — giving <code>+</code> for NMOS, <code>−</code> for PMOS. That sign convention is exactly what the Level-1 <code>vgs_from_ids</code> also produces, so the socket's contract holds across both plugs.</p>
-
   <blockquote><p><strong>Looking ahead:</strong> the gm/Id plug has two extra powers Level-1 lacks — a <em>policy</em> for choosing L by role (Part&nbsp;6) and full <em>geometry inversion</em> (Part&nbsp;7). Those are what let it not just <em>measure</em> devices but <em>size</em> them.</p></blockquote>
 </section>
 
@@ -455,7 +398,7 @@ Vgs   (from table)   = +0.45 V   (NMOS → positive)</code></pre>
 <section class="part" id="part-6">
   <h2>Part 6 · <code>GmIdPolicy</code> &amp; role-based length</h2>
 
-  <blockquote><p><strong>The one job:</strong> decide a device's channel length and nominal gm/Id from what it is <em>for</em> — a signal device, a current source, or a cascode — via a small table of tunable knobs.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> decide a device's channel length and nominal gm/Id from what it is <em>for</em> — a signal device, a current source, or a cascode — via a small table of tunable knobs.</p></blockquote>
 
   <p>Remember <code>gds_estimate</code> from Part 2 — the geometry-free question. To answer it, the model needs a sensible default operating point <em>before</em> W/L exist. That default comes from the device's <strong>role</strong>. Two (well, three) roles drive everything:</p>
 
@@ -589,83 +532,18 @@ W      = 100µ / 8µ     = 12.5 µm    →  GeomResult(W=12.5, L, gm/Id=15, capp
 <section class="part" id="part-8">
   <h2>Part 8 · The hidden idea: polymorphism, and one selector</h2>
 
-  <p>The selector is not in this file at all. It is the first branch <code>size_circuit()</code> takes, one layer up:</p>
-  <pre class="code"><code><span class="tok-com"># sizer/sizer.py — size_circuit()</span>
-<span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"gmid_lut"</span>, <span class="tok-kw">None</span>):
-    <span class="tok-kw">return</span> <span class="tok-fn">size_gmid</span>(...)     <span class="tok-com"># builds a GmIdModel</span>
-<span class="tok-kw">return</span> <span class="tok-fn">size_level1</span>(...)      <span class="tok-com"># builds a Level1Model</span></code></pre>
-
-  <p>One question — "does this tech ship a LUT?" — picks the <em>pipeline</em>, and the pipeline builds the matching plug. From that line on, the shared code holds a <code>DeviceModel</code> and never asks again.</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 460 170" role="img" aria-label="size_circuit routes to the gm/Id pipeline when a LUT is present, else the Level-1 pipeline">
-      <polygon points="230,14 330,52 230,90 130,52" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="230" y="49" text-anchor="middle" font-size="11.5">tech.gmid_lut?</text>
-      <text x="230" y="64" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">carries a table?</text>
-      <g stroke="var(--fig-stroke)" stroke-width="2">
-        <line x1="160" y1="74" x2="100" y2="112" marker-end="url(#arrow)"/>
-        <line x1="300" y1="74" x2="360" y2="112" marker-end="url(#arrow)"/>
-      </g>
-      <text x="118" y="100" font-size="11" fill="var(--fig-muted)">no</text>
-      <text x="345" y="100" font-size="11" fill="var(--fig-muted)">yes</text>
-      <rect x="20" y="114" width="150" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="95" y="132" text-anchor="middle" font-size="12">size_level1</text>
-      <text x="95" y="146" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">Level1Model</text>
-      <rect x="290" y="114" width="150" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="365" y="132" text-anchor="middle" font-size="12" fill="var(--fig-accent2)">size_gmid</text>
-      <text x="365" y="146" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">GmIdModel</text>
-    </svg>
-    <figcaption>The one branch in the whole story. After it, polymorphism carries the rest — no more forks anywhere downstream.</figcaption>
-  </figure>
-
-  <h3>The hidden idea, named</h3>
-  <p>Although the file never writes the word, its entire reason to exist is <strong>polymorphism</strong>: the topology relationships are model-independent, so if the <em>primitives</em> hide behind one interface, a single sizing-and-metrics codebase serves both technologies. The clean way to see it is to run the <em>same</em> single-stage gain formula through each backend and watch only the numbers differ:</p>
-
-  <div class="eq-center"><span class="boxed-eq">A<sub>v</sub>&nbsp;=&nbsp;gm&nbsp;·&nbsp;r<sub>out</sub>&nbsp;=&nbsp;gm&nbsp;/&nbsp;gds</span></div>
-
-  <figure class="fig">
-    <svg viewBox="0 0 540 210" role="img" aria-label="Same gain formula, two backends: Level-1 gives 63, gm/Id gives 20">
-      <text x="140" y="24" text-anchor="middle" font-size="13" font-weight="600">Level1Model</text>
-      <text x="400" y="24" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">GmIdModel</text>
-      <!-- left column -->
-      <rect x="20" y="36" width="240" height="150" rx="10" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <g font-size="12">
-        <text x="40" y="62">gm  = √(2·µCox·(W/L)·Id)</text>
-        <text x="40" y="82" fill="var(--fig-muted)">    = 632 µS</text>
-        <text x="40" y="106">gds = λ·Id  = 0.1·100µ</text>
-        <text x="40" y="126" fill="var(--fig-muted)">    = 10 µS</text>
-        <text x="40" y="152" font-weight="600">Aᵥ = 632 / 10</text>
-        <text x="40" y="172" font-weight="600" fill="var(--fig-accent)">   = 63.2</text>
-      </g>
-      <!-- right column -->
-      <rect x="280" y="36" width="240" height="150" rx="10" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <g font-size="12">
-        <text x="300" y="62">gm  = (gm/Id)·Id = 15·100µ</text>
-        <text x="300" y="82" fill="var(--fig-muted)">    = 1.50 mA/V</text>
-        <text x="300" y="106">gds = gm / (gm/gds)</text>
-        <text x="300" y="126" fill="var(--fig-muted)">    = 1.5m/20 = 75 µS</text>
-        <text x="300" y="152" font-weight="600">Aᵥ = 1.5m / 75µ</text>
-        <text x="300" y="172" font-weight="600" fill="var(--fig-accent2)">   = 20  (= gm/gds)</text>
-      </g>
-    </svg>
-    <figcaption>Identical formula <code>Aᵥ = gm/gds</code>. Level-1's optimistic λ gives 63; the LUT's measured intrinsic gain gives a realistic 20. The sizer's code is byte-identical either way.</figcaption>
-  </figure>
-
-  <p>That is the whole payoff. The gain, GBW, phase-margin, and CMRR code in <code>sizer.py</code> calls <code>model.gm(...)</code> and <code>model.gds(...)</code> and never learns which plug answered — yet the LUT path returns the honest, silicon-calibrated number while the Level-1 path stays regression-identical to the legacy behaviour.</p>
+  <p>The reason for this file to exist is <strong>polymorphism</strong>: the topology relationships are model-independent, so if the <em>primitives</em> hide behind one interface, a single sizing-and-metrics codebase serves both technologies. </p>
+  <p>That is the whole payoff. The performance calcualtion code in <code>sizer.py</code> calls <code>model.gm(...)</code> and <code>model.gds(...)</code> and never need to know learns which model answered.</p>
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li><code>Level1Model</code>'s <code>gds</code> ignores geometry entirely (<code>λ·Id</code>), and its <code>gm_ceiling</code> is a flat <code>25·Id</code> heuristic — the known price of the square law, kept for regression safety.</li>
-    <li>Only <code>GmIdModel</code> carries <code>geometry_for</code>, <code>role_length</code>, and a policy — Level-1 has no notion of role, because its primitives don't depend on operating point.</li>
-    <li>The gm/Id path is only as good as its committed table; outside the table's <code>(gm/Id, L)</code> range it clamps to the axis edges rather than extrapolating.</li>
     <li>The primitives are small-signal <em>evaluations</em>; whether a stacked device actually fits under the supply is a separate concern (that's <code>bias.py</code>).</li>
   </ul>
 
-  <h3>Why it's elegant</h3>
-  <p>One <code>Protocol</code>, one selector, and a strict discipline that the six primitives are the <em>only</em> thing that differs between technologies. Everything model-independent — every op-amp formula worth writing — is written exactly once, against the socket. Adding a third technology model tomorrow means writing a third plug and touching nothing else.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>device_model.py</code> defines a single small-signal <code>DeviceModel</code> socket and two interchangeable plugs — a regression-safe Level-1 square law and a silicon-calibrated gm/Id lookup table (which also knows how to invert a gm target back into a (W, L)) — so that CircuitGenome's model-independent op-amp topology math is written once and serves both technologies through one polymorphic interface.</p>
+  
 </section>
 
 </main>

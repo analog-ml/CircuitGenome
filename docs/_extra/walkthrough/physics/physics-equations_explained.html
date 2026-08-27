@@ -109,12 +109,12 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-
-  <blockquote><p><strong>The one job:</strong> be the pocket calculator of analog design — turn a transistor's current and size into its small-signal behavior (<code>gm</code>, <code>gd</code>, <code>Vdsat</code>), and turn those, in turn, into the numbers a spec sheet cares about (gain, bandwidth, phase margin, CMRR).</p></blockquote>
+  <p><strong>TLDR:</strong> <code>equations.py</code> is a two-shelf calculator — the bottom shelf rearranges one Level-1 square law into <code>gm</code>, <code>gd</code>, and <code>Vdsat</code>, and the top shelf turns those three (plus a capacitor) into every op-amp spec (e.g., gain, bandwidth, phase margin, slew rate, CMRR, PSRR, power) with the deliberate design that the performance math is model-independent, so square-law and measured <code>gm/Id</code> devices flow through the exact same formulas.</p>
+  <blockquote><p><strong>Main task:</strong> be the pocket calculator of analog design — turn a transistor's current and size into its small-signal behavior (<code>gm</code>, <code>gd</code>, <code>Vdsat</code>), and turn those, in turn, into the numbers a spec sheet cares about (gain, bandwidth, phase margin, CMRR).</p></blockquote>
 
   <p>An op-amp sizer has to answer two very different kinds of question. First, the <strong>device</strong> question: "I've decided this transistor carries 100&nbsp;µA and is 10× wide — so how strong is it, how leaky is it, how much voltage room does it eat?" Second, the <strong>circuit</strong> question: "given a handful of those devices wired into a two-stage amplifier, what gain and bandwidth do I actually get?"</p>
 
-  <p>Think of it as a two-shelf toolbox. The bottom shelf holds <strong>device primitives</strong> — tiny formulas from the 1968 Shichman–Hodges "square law," the simplest textbook model of a MOSFET. The top shelf holds <strong>op-amp metrics</strong> — the performance formulas every analog course writes on the board. The magic is that the top shelf only ever asks the bottom shelf for three things: <code>gm</code>, <code>gd</code>, and a capacitor. Nothing else.</p>
+  <p>Think of it as a two-shelf toolbox. The bottom shelf holds <strong>device primitives</strong> (1968 Shichman–Hodges "square law") . The top shelf holds <strong>op-amp metrics</strong>. The magic is that the top shelf only ever asks the bottom shelf for three things: <code>gm</code>, <code>gd</code>, and a capacitor. Nothing else.</p>
 
   <figure class="fig interactive">
     <svg viewBox="0 0 660 392" role="img" aria-label="Two families: device primitives feed op-amp metrics">
@@ -209,14 +209,14 @@
     <figcaption>Bottom shelf feeds top shelf. Every metric on the right is built from the three primitives on the left — never anything more. We'll learn the left family first, then the right.</figcaption>
   </figure>
 
-  <p>There is no call graph in the usual sense — these are all <strong>leaf functions</strong>, pure math with no side effects. What matters is the data-flow the arrow shows: primitives produce numbers, metrics consume them.</p>
+  <p>What matters here is the data-flow the arrow shows: primitives produce numbers, metrics consume them.</p>
 </section>
 
 <!-- ================= PART 2 ================= -->
 <section class="part" id="part-2">
   <h2>Part 2 · One square law, and every equation that falls out of it</h2>
 
-  <p class="beat">You need exactly one equation to understand this file. Here it is, and here is every formula derived from it — in one pass, up front.</p>
+  <p class="beat">You need exactly one equation to understand this file.</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -311,9 +311,9 @@
 
   <p>The same six moves in words, with the nuance the boxes cannot carry:</p>
   <ol>
-    <li><strong>Solve for the overdrive.</strong> Invert the parabola and a square root appears: <code>overdrive = √(2·|I|·L / (µCox·W))</code>. A Level-1 identity makes this <em>also</em> the minimum drain room the device needs to stay saturated — same number, two roles. → <code>vds_sat</code></li>
+    <li><strong>Solve for the overdrive.</strong> → <code>vds_sat</code></li>
     <li><strong>Stack it on the threshold.</strong> To carry that current the gate must sit a threshold <em>plus</em> an overdrive above the source. → <code>vgs_from_ids</code></li>
-    <li><strong>Differentiate.</strong> Take d<code>I<sub>DS</sub></code>/d<code>V<sub>GS</sub></code> and the square disappears, leaving <code>gm = µCox·(W/L)·overdrive</code>; substitute the overdrive back in terms of current and you get the √ form the code uses. → <code>gm</code></li>
+    <li><strong>Differentiate.</strong>  → <code>gm</code></li>
     <li><strong>Cap it.</strong> The square law over-promises efficiency near weak inversion, where real physics holds <code>gm/I<sub>DS</sub> ≤ 1/(n·φt)</code> ≈ 25&nbsp;/V. → <code>gm_ceiling</code></li>
     <li><strong>Add channel-length modulation.</strong> The square law's <code>(1 + λ·V<sub>DS</sub>)</code> correction says current sags with drain voltage; the slope of that sag is the output conductance <code>gd = λ·|I|</code>. → <code>gd</code></li>
     <li><strong>Parallel two leaks.</strong> A stage's output node is squeezed between a top load and a bottom drive device, both leaking into it; conductances in parallel add. → <code>rout</code></li>
@@ -322,7 +322,7 @@
   <p>Those six give the bridge to the top shelf: a stage's voltage gain is <code>Av = gm · rout</code> — strength times stiffness. From there, <strong>every metric is built from <code>gm</code>, <code>gd</code>, and a capacitor</strong>, and none of them mentions <code>µCox</code>, <code>W/L</code>, or <code>V<sub>th</sub></code> ever again.</p>
 
   <h3>The full equation catalog</h3>
-  <p>Every formula this file implements, and the function that implements it. The rest of the walkthrough adds intuition and code — it does not re-derive any of these.</p>
+  <p>Every formula this file implements, and the function that implements it.</p>
 
   <table>
     <thead><tr><th>Equation</th><th>Where it comes from</th><th>Function</th></tr></thead>
@@ -354,35 +354,9 @@
   <h2>Part 3 · The device primitives in code</h2>
 
   <h3><code>gm</code> — how strong is the transistor?</h3>
-  <p><code>gm</code> is the <strong>gain of a faucet</strong>: turn the handle a little (gate voltage), how much extra water flows (current)? In amps per volt, it is literally the slope of the square-law curve wherever you happen to be sitting.</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">gm</span>(mu_cox, w_um, l_um, ids_a) -> <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> math.<span class="tok-fn">sqrt</span>(<span class="tok-num">2.0</span> * mu_cox * (w_um / l_um) * <span class="tok-fn">abs</span>(ids_a))</code></pre>
-
-  <figure class="fig">
-    <svg viewBox="0 0 480 250" role="img" aria-label="gm is the slope of the square-law curve at the operating point">
-      <line x1="55" y1="30" x2="55" y2="200" stroke="var(--fig-muted)" stroke-width="1.5"/>
-      <line x1="55" y1="200" x2="450" y2="200" stroke="var(--fig-muted)" stroke-width="1.5"/>
-      <text x="36" y="40" font-size="11" fill="var(--fig-muted)">IDS</text>
-      <text x="452" y="197" font-size="11" fill="var(--fig-muted)">VGS</text>
-      <!-- parabola -->
-      <path d="M140,200 C 240,196 295,140 335,88 L 400,40" fill="none" stroke="var(--fig-muted)" stroke-width="2"/>
-      <!-- operating point -->
-      <circle cx="335" cy="88" r="4.5" fill="var(--fig-accent)"/>
-      <!-- tangent line -->
-      <line x1="250" y1="150" x2="410" y2="34" stroke="var(--fig-accent)" stroke-width="2.5"/>
-      <!-- slope triangle -->
-      <line x1="335" y1="88" x2="395" y2="88" stroke="var(--fig-accent2)" stroke-width="1.6" stroke-dasharray="3 3"/>
-      <line x1="395" y1="88" x2="395" y2="44" stroke="var(--fig-accent2)" stroke-width="1.6" stroke-dasharray="3 3"/>
-      <text x="365" y="102" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">ΔVGS</text>
-      <text x="415" y="68" font-size="10" fill="var(--fig-accent2)">ΔIDS</text>
-      <text x="150" y="150" font-size="12" fill="var(--fig-accent)" font-weight="600">gm = slope</text>
-      <text x="150" y="168" font-size="11" fill="var(--fig-accent)">= ΔIDS / ΔVGS</text>
-    </svg>
-    <figcaption>gm is the steepness of the tangent at your operating point. Push further up the curve (more current) and the tangent steepens — hence gm grows with √IDS.</figcaption>
-  </figure>
-
-  <p>The consequence to remember: <code>gm</code> scales as <strong>√I<sub>DS</sub></strong>, so <em>doubling</em> strength costs <em>quadrupling</em> current. That square-root wall is why analog designers obsess over efficiency — and why the next function exists.</p>
 
   <h3><code>gm_ceiling</code> — the square law lies at the top</h3>
   <p>Pushed hard, the square law happily quotes an efficiency the device can only reach by sliding into weak inversion. The flat <code>25 /V</code> roof (from <code>n ≈ 1.5</code>, <code>φt ≈ 25.9 mV</code>, matching measured <code>gm/Id ≈ 25</code> on real PTM devices) is the honesty check a caller clamps against.</p>
@@ -392,24 +366,9 @@
 <span class="tok-kw">def</span> <span class="tok-fn">gm_ceiling</span>(ids_a) -> <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> _GM_OVER_ID_MAX * <span class="tok-fn">abs</span>(ids_a)</code></pre>
 
-  <figure class="fig">
-    <svg viewBox="0 0 460 120" role="img" aria-label="Computed gm sits well under the physical ceiling">
-      <text x="112" y="34" text-anchor="end" font-size="11" fill="var(--fig-muted)">computed</text>
-      <rect x="120" y="22" width="76" height="24" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-      <text x="204" y="39" font-size="11" fill="var(--fig-accent)">gm = 632 µS</text>
-      <text x="112" y="82" text-anchor="end" font-size="11" fill="var(--fig-muted)">cap</text>
-      <rect x="120" y="70" width="300" height="24" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="270" y="87" text-anchor="middle" font-size="11">ceiling = 25 · IDS = 2500 µS</text>
-      <line x1="196" y1="18" x2="196" y2="98" stroke="var(--fig-good)" stroke-width="1.5" stroke-dasharray="4 3"/>
-      <text x="230" y="112" font-size="10.5" fill="var(--fig-good)">632 &lt; 2500 → this device is honest ✓</text>
-    </svg>
-    <figcaption>gm_ceiling(100 µA) = 2.5 mS. A 632 µS device at that current is comfortably legal; a caller clamps any square-law gm that tries to exceed this line.</figcaption>
-  </figure>
+
 
   <h3><code>gd</code> — the pinhole leak</h3>
-  <p>An ideal current source pushes the same current at any voltage. Real transistors aren't ideal — squeeze the drain and the channel shortens a hair, letting a little more current through. Think of a <em>sealed tank with a pinhole</em>. A short transistor has big <code>λ</code> (leaky); a long one has small <code>λ</code> (tight).</p>
-
-  <p><strong>Conductance and resistance are one fact read two ways:</strong> <code>r = 1/gd</code>, and <code>gd = 1/r</code>. A device leaking <code>gd = 10 µS</code> <em>is</em> a 100 kΩ resistor from drain to source — same device, reciprocal units. Conductance is the form worth carrying here, because leaks that share a node add directly (<code>gd_top + gd_bot</code>) while resistances in parallel do not. That is exactly why <code>rout</code> below sums the conductances first and inverts <em>once</em>, at the end.</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">gd</span>(lam, ids_a) -> <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> lam * <span class="tok-fn">abs</span>(ids_a)</code></pre>
@@ -421,47 +380,6 @@
     total = gd_top + gd_bot
     <span class="tok-kw">return</span> <span class="tok-num">1.0</span> / total <span class="tok-kw">if</span> total &gt; <span class="tok-num">0.0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)</code></pre>
 
-  <figure class="fig">
-    <svg viewBox="0 0 500 230" role="img" aria-label="Two stacked devices leaking into a shared output node, modeled as two resistors in parallel">
-      <!-- left: circuit -->
-      <line x1="40" y1="30" x2="180" y2="30" stroke="var(--fig-stroke)" stroke-width="2.5"/>
-      <text x="110" y="22" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Vdd</text>
-      <rect x="70" y="44" width="80" height="34" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="110" y="60" text-anchor="middle" font-size="11">top load</text>
-      <text x="110" y="72" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">gd_top 10µS</text>
-      <line x1="110" y1="78" x2="110" y2="110" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <circle cx="110" cy="110" r="4" fill="var(--fig-accent)"/>
-      <text x="120" y="107" font-size="10" fill="var(--fig-accent)">Vout</text>
-      <line x1="110" y1="110" x2="110" y2="142" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <rect x="70" y="142" width="80" height="34" rx="5" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="110" y="158" text-anchor="middle" font-size="11">bot drive</text>
-      <text x="110" y="170" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">gd_bot 10µS</text>
-      <line x1="40" y1="190" x2="180" y2="190" stroke="var(--fig-stroke)" stroke-width="2.5"/>
-      <text x="110" y="206" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Vss</text>
-      <!-- arrow -->
-      <line x1="200" y1="110" x2="250" y2="110" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#arD)"/>
-      <defs>
-        <marker id="arD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
-      </defs>
-      <!-- right: parallel resistor model -->
-      <line x1="290" y1="30" x2="430" y2="30" stroke="var(--fig-stroke)" stroke-width="2.5"/>
-      <text x="360" y="22" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Vdd</text>
-      <rect x="345" y="46" width="30" height="46" fill="none" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="410" y="72" font-size="10" fill="var(--fig-accent2)">1/gd_top</text>
-      <line x1="360" y1="92" x2="360" y2="120" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <circle cx="360" cy="120" r="4" fill="var(--fig-accent)"/>
-      <text x="300" y="123" font-size="10" fill="var(--fig-accent)">Vout</text>
-      <line x1="360" y1="120" x2="360" y2="140" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <rect x="345" y="140" width="30" height="46" fill="none" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="410" y="166" font-size="10" fill="var(--fig-accent2)">1/gd_bot</text>
-      <line x1="290" y1="190" x2="430" y2="190" stroke="var(--fig-stroke)" stroke-width="2.5"/>
-      <text x="360" y="206" text-anchor="middle" font-size="10" fill="var(--fig-muted)">Vss</text>
-    </svg>
-    <figcaption>Two leaks pulling on one node = two resistors in parallel. Add the conductances, invert once. The stiffer the node (bigger rout), the more voltage gain the stage delivers.</figcaption>
-  </figure>
-
-  <p>The guard matters: a caller passing zero total conductance (a perfect, lossless node) gets <code>inf</code> rather than a division by zero — the honest answer for "infinite gain, if only the world were ideal." The stiffer the node, the more gain the stage delivers, since <code>Av = gm · rout</code>.</p>
-
   <h3><code>vds_sat</code> and <code>vgs_from_ids</code> — the voltage room</h3>
   <p>Two questions, one square root: how much drain room does this device need to keep working, and how high must the gate be held to push this current?</p>
 
@@ -472,30 +390,9 @@
     overdrive = math.<span class="tok-fn">sqrt</span>(<span class="tok-num">2.0</span> * <span class="tok-fn">abs</span>(ids_a) * l_um / (mu_cox * w_um))
     <span class="tok-kw">return</span> math.<span class="tok-fn">copysign</span>(<span class="tok-fn">abs</span>(vth) + overdrive, vth)</code></pre>
 
-  <figure class="fig">
-    <svg viewBox="0 0 460 220" role="img" aria-label="Gate voltage as threshold plus overdrive stacked above the source">
-      <!-- baseline source -->
-      <line x1="80" y1="188" x2="300" y2="188" stroke="var(--fig-stroke)" stroke-width="2.5"/>
-      <text x="306" y="192" font-size="11" fill="var(--fig-muted)">source = 0 V</text>
-      <!-- Vth block -->
-      <rect x="120" y="108" width="120" height="80" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="180" y="152" text-anchor="middle" font-size="12">Vth = 0.40 V</text>
-      <!-- overdrive block -->
-      <rect x="120" y="45" width="120" height="63" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="180" y="72" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">overdrive</text>
-      <text x="180" y="88" text-anchor="middle" font-size="11" fill="var(--fig-accent2)">= 0.316 V</text>
-      <!-- top line -->
-      <line x1="80" y1="45" x2="300" y2="45" stroke="var(--fig-accent)" stroke-width="2.5" stroke-dasharray="6 4"/>
-      <text x="306" y="49" font-size="11" fill="var(--fig-accent)">VGS = 0.716 V</text>
-      <!-- also equals vds_sat note -->
-      <path d="M255,45 L255,108" stroke="var(--fig-accent2)" stroke-width="1.6"/>
-      <path d="M250,45 L260,45 M250,108 L260,108" stroke="var(--fig-accent2)" stroke-width="1.6"/>
-      <text x="268" y="80" font-size="10" fill="var(--fig-accent2)">= vds_sat</text>
-    </svg>
-    <figcaption>Threshold first, overdrive stacked on top. The gate sits Vth + overdrive above the source; the overdrive slice is simultaneously the drain room the device needs.</figcaption>
-  </figure>
 
-  <p>One subtlety worth naming: <code>math.copysign(..., vth)</code>. The magnitude is always <code>|Vth| + overdrive</code>, but the <strong>sign is copied from Vth</strong> — positive for NMOS, negative for PMOS. A two-character trick that makes one function correct for both device flavors.</p>
+
+  <p>One subtlety worth naming: <code>math.copysign(..., vth)</code>. The magnitude is always <code>|Vth| + overdrive</code>, but the <strong>sign is copied from Vth</strong> — positive for NMOS, negative for PMOS.</p>
 
   <table>
     <thead><tr><th>Quantity</th><th class="num">Typical value</th></tr></thead>
@@ -526,7 +423,6 @@
     <span class="tok-kw">return</span> gm1_a_v / (<span class="tok-num">2.0</span> * math.pi * cc_f)</code></pre>
 
   <h3><code>slew_rate_vps</code> — the large-signal speed limit</h3>
-  <blockquote><p><strong>The one job:</strong> how fast can the output ramp when the input steps hard and the tail current is all you've got to charge Cc?</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">slew_rate_vps</span>(ibias_a, cc_f) -> <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> ibias_a / cc_f</code></pre>
@@ -534,38 +430,10 @@
   <p>When the input step is big, the input pair fully steers the tail current <code>IBias</code> into <code>Cc</code>, and the output climbs no faster than that fixed current allows — a bucket brigade at a fixed pour rate. Notice the family resemblance: GBW and SR share the <em>same</em> <code>Cc</code>. Small-signal speed divides <code>gm1</code> by it; large-signal speed divides the tail current by it. One capacitor sets both limits.</p>
 
   <h3><code>phase_margin_two_stage_deg</code> — will it ring or settle?</h3>
-  <p>Feedback is a promise to correct errors, but every stage adds delay, and delay is phase lag. If the signal comes back a full <code>180°</code> out of step <em>while the loop still has gain</em>, the correction becomes reinforcement and the circuit rings. Phase margin is how far from that cliff you are at the unity-gain frequency — like pushing a swing: in time it grows smoothly, a half-cycle late you fight yourself.</p>
+  <p>Feedback is a promise to correct errors, but every stage adds delay, and delay is phase lag. If the signal comes back a full <code>180°</code> out of step <em>while the loop still has gain</em>, the correction becomes reinforcement and the circuit rings. Phase margin is how far from that cliff you are at the unity-gain frequency.</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">phase_margin_two_stage_deg</span>(gm1, gm2, cc_f, cl_f) -> <span class="tok-kw">float</span>:
     <span class="tok-kw">return</span> <span class="tok-num">90.0</span> - math.<span class="tok-fn">degrees</span>(math.<span class="tok-fn">atan</span>(gm1 * cl_f / (gm2 * cc_f)))</code></pre>
-
-  <figure class="fig">
-    <svg viewBox="0 0 500 240" role="img" aria-label="Bode phase curve and the phase margin gap at the unity-gain frequency">
-      <line x1="60" y1="30" x2="60" y2="200" stroke="var(--fig-muted)" stroke-width="1.5"/>
-      <line x1="60" y1="200" x2="460" y2="200" stroke="var(--fig-muted)" stroke-width="1.5"/>
-      <text x="446" y="216" font-size="10" fill="var(--fig-muted)">freq (log)</text>
-      <!-- phase gridlines -->
-      <line x1="60" y1="40" x2="460" y2="40" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 3"/>
-      <text x="36" y="44" font-size="10" fill="var(--fig-muted)">0°</text>
-      <line x1="60" y1="120" x2="460" y2="120" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 3"/>
-      <text x="30" y="124" font-size="10" fill="var(--fig-muted)">−90°</text>
-      <line x1="60" y1="190" x2="460" y2="190" stroke="var(--fig-bad)" stroke-width="1.2" stroke-dasharray="4 3"/>
-      <text x="26" y="194" font-size="10" fill="var(--fig-bad)">−180°</text>
-      <!-- phase curve -->
-      <path d="M60,45 C 180,50 250,110 320,130 C 380,146 430,170 455,182" fill="none" stroke="var(--fig-accent)" stroke-width="2.5"/>
-      <!-- GBW vertical -->
-      <line x1="320" y1="40" x2="320" y2="200" stroke="var(--fig-accent2)" stroke-width="1.2" stroke-dasharray="3 3"/>
-      <text x="320" y="216" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">at GBW</text>
-      <circle cx="320" cy="130" r="4.5" fill="var(--fig-accent)"/>
-      <!-- PM bracket from curve(-112 ~ y130) to -180 (y190) -->
-      <path d="M348,130 L348,190" stroke="var(--fig-good)" stroke-width="2"/>
-      <path d="M343,130 L353,130 M343,190 L353,190" stroke="var(--fig-good)" stroke-width="2"/>
-      <text x="356" y="164" font-size="11" fill="var(--fig-good)">PM ≈ 68°</text>
-    </svg>
-    <figcaption>At the unity-gain frequency the phase has fallen to about −112°. The green gap up to the −180° cliff is the phase margin — here a healthy 68°.</figcaption>
-  </figure>
-
-  <p>Read it as "start at an ideal <code>90°</code>, then subtract the lag from the non-dominant pole at <code>gm2/CL</code>." The closer that pole creeps to the unity-gain frequency, the bigger the arctan bite; push the second stage harder (bigger <code>gm2</code>) or lean on more <code>Cc</code>, and the lag shrinks. 60° is the usual target.</p>
 
   <h3><code>phase_margin_three_stage_deg</code> — two lags to subtract</h3>
   <p>A nested-Miller three-stage amplifier has <em>two</em> non-dominant poles, so the same idea subtracts two arctan lags instead of one, both referenced to <code>ωt = gm1/Cc1</code>.</p>
@@ -603,7 +471,7 @@
 <section class="part" id="part-5">
   <h2>Part 5 · The hidden idea, and the honest limits</h2>
 
-  <p>Look back at the catalog in Part&nbsp;2. Every metric is built from <code>gm</code>, <code>gd</code>, and a capacitor — and <strong>not one of them mentions <code>µCox</code>, <code>W/L</code>, or <code>Vth</code>.</strong> The device physics vanishes the moment you cross from the bottom shelf to the top. That is not an accident; it is the whole architecture.</p>
+  <p>Look back at the catalog in Part&nbsp;2. Every metric is built from <code>gm</code>, <code>gd</code>, and a capacitor — and <strong>not one of them mentions <code>µCox</code>, <code>W/L</code>, or <code>Vth</code>.</strong> The device physics vanishes the moment you cross from the bottom shelf to the top. It is the whole architecture.</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -627,14 +495,14 @@
 
   <h3>What this file honestly does <em>not</em> do</h3>
   <ul>
-    <li>The primitives are <strong>Level-1 square law</strong> — a teaching model. Real short-channel devices (BSIM) show velocity saturation, mobility degradation, and a soft weak-to-strong transition the square law can't capture. That's exactly why the PTM path uses a measured LUT instead.</li>
+    <li>The primitives are <strong> Shichman–Hodges square law</strong> — a teaching model. Real short-channel devices (BSIM) show velocity saturation, mobility degradation, and a soft weak-to-strong transition the square law can't capture. That's exactly why the PTM path uses a measured LUT instead.</li>
     <li><code>gm_ceiling</code> is a blunt patch (a flat <code>25 /V</code> cap) bolted on <em>because</em> the square law over-promises efficiency near weak inversion.</li>
     <li>The metric formulas are <strong>single-/dominant-pole approximations</strong>: internal mirror poles are neglected, PSRR is explicitly labeled rough, and phase margin assumes a clean pole ordering. They size the first cut; SPICE grounds the final verdict.</li>
     <li>Every function is pure arithmetic with SI-unit assumptions baked into the names — pass millimetres where micrometres are expected and it will happily return nonsense.</li>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>equations.py</code> is a two-shelf calculator — the bottom shelf rearranges one Level-1 square law into <code>gm</code>, <code>gd</code>, and <code>Vdsat</code>, and the top shelf turns those three (plus a capacitor) into every op-amp spec — gain, bandwidth, phase margin, slew rate, CMRR, PSRR, power — with the deliberate design that the performance math is model-independent, so square-law and measured <code>gm/Id</code> devices flow through the exact same formulas.</p>
+
 </section>
 
 </main>

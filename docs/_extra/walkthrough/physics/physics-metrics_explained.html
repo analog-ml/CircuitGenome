@@ -108,21 +108,21 @@
 
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
+  <p><strong>TLDR:</strong> <code>metrics.py</code> turns a <code>StageChain</code> into the op-amp's predicted report card &mdash; gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin &mdash; using nothing but arithmetic (textbook formula), so the exact same code is correct for both the Level-1 and the gm/Id sizer and can be tested without a circuit.</p>
 
-  <blockquote><p><strong>The one job:</strong> given a <code>StageChain</code> — the small-signal numbers already extracted from a solved sizing — compute what the amplifier delivers (gain, bandwidth, phase margin, slew rate, power, swing, CMRR, PSRR) and how much room each number has against its spec.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> given a <code>StageChain</code> — the small-signal numbers already extracted from a solved sizing — compute what the amplifier delivers (gain, bandwidth, phase margin, slew rate, power, swing, CMRR, PSRR) and how much room each number has against its spec.</p></blockquote>
 
   <p class="beat">Here is the whole story without a line of code.</p>
 
-  <p>Sizing an op-amp is like assembling a team: you pick the players (transistors), give each a role and a budget (current). But picking the team is not the same as knowing how it will <em>perform</em> on game day. Someone still has to compute the <strong>report card</strong>.</p>
 
-  <p>That is all <code>metrics.py</code> is — a report card generator. It takes the chain that <a href="physics-stage-chain_explained.html"><code>stage_chain.py</code></a> extracted and computes the numbers a circuit designer cares about, then compares each against the target to produce a <strong>margin</strong> (how much headroom you have, positive always means "meets spec").</p>
+  <p> <code>metrics.py</code> is a report card generator. It takes the chain that <a href="physics-stage-chain_explained.html"><code>stage_chain.py</code></a> extracted and computes the performance metrics, then compares each against the target to produce a <strong>margin</strong>.</p>
 
-  <p>What makes it small is what it <em>does not</em> do. It never touches a <code>Device</code>, a <code>TechParams</code> or a <code>DeviceModel</code> — those are all upstream. Its entire interface is two arguments:</p>
+  <p> It never touches a <code>Device</code>, a <code>TechParams</code> or a <code>DeviceModel</code> — those are all upstream. Its entire interface is two arguments:</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">evaluate_metrics</span>(chain: StageChain, spec: SizingSpec):
     <span class="tok-str">"""-> (metrics, margins)"""</span></code></pre>
 
-  <p>Two rules run through everything below. A metric that cannot be computed is <strong>omitted</strong>, never faked — a missing key is more honest than a wrong number. And a margin appears only when the spec actually constrains that metric, always signed so <strong>positive means met</strong>, whether the spec is a floor (gain) or a ceiling (power).</p>
+  <p>A metric that cannot be computed is <strong>omitted</strong>, never faked — a missing key is more honest than a wrong number. And a margin appears only when the spec actually constrains that metric, always signed so <strong>positive means met</strong>, whether the spec is a floor (gain) or a ceiling (power).</p>
 
 </section>
 
@@ -131,7 +131,7 @@
 
   <blockquote><p><strong>The one job:</strong> multiply each stage's <code>gm · Rout</code> together to get the total open-loop DC gain, then convert to decibels.</p></blockquote>
 
-  <p>This is the headline metric. Cascade three amplifiers and their gains <strong>multiply</strong> — like gears, where the final speed-up is the product of every gear ratio. The DC gain is:</p>
+  <p>The DC gain is:</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -157,26 +157,6 @@
 <span class="tok-kw">if</span> <span class="tok-fn">all</span>(g &gt; <span class="tok-num">0</span> <span class="tok-kw">for</span> g <span class="tok-kw">in</span> stage_gains):
     gain_db = eq.<span class="tok-fn">open_loop_gain_db</span>(stage_gains)   <span class="tok-com"># 20·log10(∏)</span></code></pre>
 
-  <p>See how the <code>rout &lt; inf</code> sentinel from Part 4 does the work: the code picks the two-, or one-stage form automatically. And <code>k_fs</code> — the first-stage gain factor — is <code>0.5</code> for a single-ended non-mirror first stage (which throws away half the signal) and <code>1.0</code> for a mirror or fully-differential front end that keeps all of it.</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 540 150" role="img" aria-label="Stage gains multiply into total gain">
-      <rect x="20" y="46" width="120" height="58" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="80" y="70" text-anchor="middle" font-size="12" font-weight="600">stage 1</text>
-      <text x="80" y="88" text-anchor="middle" font-size="11">gm1·Rout1 = 100</text>
-      <text x="152" y="80" text-anchor="middle" font-size="16" fill="var(--fig-muted)">×</text>
-      <rect x="170" y="46" width="120" height="58" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="230" y="70" text-anchor="middle" font-size="12" font-weight="600">stage 2</text>
-      <text x="230" y="88" text-anchor="middle" font-size="11">gm2·Rout2 = 100</text>
-      <line x1="300" y1="75" x2="345" y2="75" stroke="var(--fig-accent)" stroke-width="2.5" marker-end="url(#ar)"/>
-      <rect x="355" y="40" width="165" height="70" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
-      <text x="437" y="64" text-anchor="middle" font-size="12">A0 = 100 × 100</text>
-      <text x="437" y="82" text-anchor="middle" font-size="12">= 10 000</text>
-      <text x="437" y="100" text-anchor="middle" font-size="12" font-weight="600">= 80 dB</text>
-    </svg>
-    <figcaption>Two 40-dB stages don't add to 40 — they multiply to 10 000, which is 80 dB. Decibels turn the product into a sum you can read at a glance.</figcaption>
-  </figure>
-
   <h3>Traced by hand</h3>
   <p>Using our running two-stage design — <code>gm1 = 1 mA/V</code>, <code>Rout1 = 100 kΩ</code>, <code>gm2 = 4 mA/V</code>, <code>Rout2 = 25 kΩ</code>, mirror front end so <code>k_fs = 1</code>:</p>
   <pre class="code"><code>stage 1: 1.0e-3 × 100e3 = 100
@@ -192,9 +172,9 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
 </section>
 
 <section class="part" id="part-3">
-  <h2>Part 3 · GBW, phase margin, slew rate — the dynamics</h2>
+  <h2>Part 3 · GBW, phase margin, slew rate </h2>
 
-  <blockquote><p><strong>The one job:</strong> from the input-pair <code>gm</code> and the compensation capacitor <code>Cc</code>, predict how fast the amplifier is (GBW), how stable it is (phase margin), and how fast it can swing (slew rate).</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> from the input-pair <code>gm</code> and the compensation capacitor <code>Cc</code>, predict how fast the amplifier is (GBW), how stable it is (phase margin), and how fast it can swing (slew rate).</p></blockquote>
 
   <p>Gain tells you how <em>strong</em> the amplifier is; this Part tells you how <em>fast and stable</em> it is. All three numbers hinge on one component: the Miller compensation capacitor <code>Cc</code>, which deliberately slows the amplifier down to keep it from oscillating.</p>
 
@@ -204,33 +184,8 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
     gbw = eq.<span class="tok-fn">unity_gain_bw</span>(gm1_loop, cc_f)     <span class="tok-com"># gm1 / (2π·Cc)</span></code></pre>
 
   <h3>GBW — the gain-bandwidth product</h3>
-  <p>The gain rolls off at <code>−20 dB/decade</code> from a low-frequency pole, and hits unity (0 dB) at:</p>
   <div class="eq-center"><span class="boxed-eq">GBW&nbsp;=&nbsp;g<sub>m1</sub>&nbsp;/&nbsp;(2π&nbsp;·&nbsp;C<sub>c</sub>)</span></div>
 
-  <figure class="fig">
-    <svg viewBox="0 0 520 210" role="img" aria-label="Bode magnitude sketch: 80 dB rolling off to unity gain at GBW">
-      <!-- axes -->
-      <line x1="55" y1="30" x2="55" y2="170" stroke="var(--fig-muted)" stroke-width="1.5"/>
-      <line x1="55" y1="170" x2="470" y2="170" stroke="var(--fig-muted)" stroke-width="1.5"/>
-      <text x="30" y="46" font-size="10.5" fill="var(--fig-muted)">dB</text>
-      <text x="455" y="188" font-size="10.5" fill="var(--fig-muted)">log f</text>
-      <!-- 0 dB line -->
-      <line x1="55" y1="150" x2="470" y2="150" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="3 3"/>
-      <text x="20" y="154" font-size="10" fill="var(--fig-muted)">0</text>
-      <text x="20" y="46" font-size="10" fill="var(--fig-muted)">80</text>
-      <!-- gain curve: flat 80dB to dominant pole, then -20/dec to 0dB at GBW, then steeper -->
-      <path d="M55,42 L130,42 L360,150 L420,186" fill="none" stroke="var(--fig-accent)" stroke-width="2.5"/>
-      <!-- dominant pole marker -->
-      <line x1="130" y1="42" x2="130" y2="170" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 3"/>
-      <text x="130" y="185" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">dominant pole</text>
-      <!-- GBW marker at 0 dB crossing (x=360,y=150) -->
-      <circle cx="360" cy="150" r="4" fill="var(--fig-accent2)"/>
-      <line x1="360" y1="150" x2="360" y2="170" stroke="var(--fig-accent2)" stroke-width="1.5"/>
-      <text x="360" y="185" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)">GBW ≈ 159 MHz</text>
-      <text x="235" y="90" font-size="10.5" fill="var(--fig-accent)">−20 dB / decade</text>
-    </svg>
-    <figcaption>The magnitude falls from 80 dB at −20 dB/decade and crosses unity gain at the GBW — the single frequency the amplifier can no longer amplify.</figcaption>
-  </figure>
 
   <p>Traced: <code>gm1_loop = 1 × 1 mA/V = 1e-3</code>, <code>Cc = 1 pF = 1e-12 F</code>:</p>
   <pre class="code"><code>GBW = 1e-3 / (2π × 1e-12) = 1e-3 / 6.283e-12 ≈ 1.59e8 Hz = 159 MHz</code></pre>
@@ -274,7 +229,7 @@ PM    = 90° − arctan(0.5) = 90° − 26.57° = 63.4°</code></pre>
 <section class="part" id="part-4">
   <h2>Part 4 · Power, output swing, CMRR, PSRR</h2>
 
-  <blockquote><p><strong>The one job:</strong> finish the report card — how much power it burns, how far the output can swing, and how well it rejects common-mode and supply noise.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> finish the report card — how much power it burns, how far the output can swing, and how well it rejects common-mode and supply noise.</p></blockquote>
 
   <h3>Power — add up every leg's current</h3>
   <p>Quiescent power is simply the supply voltage times the total current drawn. The code assembles the supply-current list one leg at a time — the tail, the second (and third) stage scaled by how many slots it fills, plus a bias-generator approximation:</p>
@@ -323,7 +278,7 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
 <section class="part" id="part-5">
   <h2>Part 5 · The hidden idea, the limits, and one sentence</h2>
 
-  <p>Step back from the eight metrics and one structure remains. Every single line above is one expression in one variable's language: it reads a number off the <code>StageChain</code> and feeds it to a textbook formula. Written as one idea:</p>
+  <p>Every single line above is one expression in one variable's language: it reads a number off the <code>StageChain</code> and feeds it to a textbook formula. Written as one idea:</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -350,7 +305,6 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
     <li>Every formula here is <strong>analytical</strong> — a dominant-pole, first-order model. It is fast enough to guide a search over thousands of candidate sizings, but it is not the truth.</li>
     <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
     <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
-    <li>It trusts the chain completely. If <a href="physics-stage-chain_explained.html"><code>stage_chain.py</code></a> mis-read a stage's output node, nothing here can notice &mdash; the numbers are simply wrong together.</li>
     <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
   </ul>
 
@@ -358,7 +312,6 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
   <p>The cleverness is not in any one formula &mdash; they are all standard analog textbook results. It is in the <strong>seam</strong>: by insisting that a circuit be reduced to a chain of numbers <em>before</em> any formula runs, what could have been two parallel metric engines collapsed into one. Adding a new physics backend touches this file <em>zero</em> times, and so does adding a new corrective term &mdash; degeneration, a resistor tail, a CMFB load all reshape the chain upstream rather than adding a parameter here.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>metrics.py</code> turns a <code>StageChain</code> into the op-amp's predicted report card &mdash; gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin &mdash; using nothing but arithmetic, so the exact same code is correct for both the Level-1 and the gm/Id sizer and can be tested without a circuit.</p>
 </section>
 
 </main>
