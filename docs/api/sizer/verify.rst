@@ -10,6 +10,10 @@ one, and neither pipeline imports it.  Its entry points are re-exported from
 :mod:`circuitgenome.sizer`, so callers write
 ``from circuitgenome.sizer import simulate_metrics``.
 
+A figure-rich tour of how the bench is built and why each measurement is rigged
+the way it is: `ngspice verification walkthrough
+<../../walkthrough/verify/index.html>`__.
+
 .. automodule:: circuitgenome.sizer.verify
    :members:
    :undoc-members:

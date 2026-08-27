@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>simulate.py &mdash; explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>simulate.py &mdash; explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/verify/simulate.py</code> &mdash; ninety-five lines of orchestration, most of them about what to do when a measurement fails.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 &middot; Why this file exists</a>
+  <a href="#part-2">2 &middot; The shape of the result</a>
+  <a href="#part-3">3 &middot; Every bench in its own try</a>
+  <a href="#part-4">4 &middot; What the benches share</a>
+  <a href="#part-5">5 &middot; Limits, and one sentence</a>
+</nav>
+
+<main>
+
+<section class="part" id="part-1">
+
+  <h2>Part 1 &middot; Why this file exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> run all six benches on one circuit and return one dictionary &mdash; without ever letting a failed bench take down the ones that would have worked.</p></blockquote>
+
+  <p class="beat">Ninety-five lines, almost all of them about failure.</p>
+
+  <p>The real work happens elsewhere: <a href="verify-deck_explained.html"><code>deck.py</code></a> builds the DUT, <a href="verify-rig_explained.html"><code>rig.py</code></a> wraps it, <a href="verify-measure_explained.html"><code>measure.py</code></a> measures it. This file's contribution is the <em>discipline</em> around those calls &mdash; the order they run in, what gets shared between them, and what happens when one of them doesn't work.</p>
+
+  <p>That last part is most of the file, and it is not incidental. ngspice fails to converge on real circuits for real reasons. A verification pass that raises on the first non-convergence is useless for a designer sweeping thousands of candidates: one awkward circuit and the whole run dies.</p>
+
+  <div class="eq-center"><span class="boxed-eq">six benches&nbsp;&rarr;&nbsp;<strong>nine keys, some possibly <code>None</code>, plus notes</strong></span></div>
+
+</section>
+
+<section class="part" id="part-2">
+
+  <h2>Part 2 &middot; Nine keys, pre-declared</h2>
+
+  <blockquote><p><strong>The one job:</strong> promise the caller a fixed set of keys, whatever happens.</p></blockquote>
+
+  <p>The output dict is written out in full before a single simulation runs:</p>
+
+  <pre class="code"><code>out = {
+    <span class="tok-str">"power_w"</span>: <span class="tok-kw">None</span>, <span class="tok-str">"gain_db"</span>: <span class="tok-kw">None</span>, <span class="tok-str">"gbw_hz"</span>: <span class="tok-kw">None</span>,
+    <span class="tok-str">"phase_margin_deg"</span>: <span class="tok-kw">None</span>, <span class="tok-str">"slew_rate_vps"</span>: <span class="tok-kw">None</span>,
+    <span class="tok-str">"output_swing_max_v"</span>: <span class="tok-kw">None</span>, <span class="tok-str">"output_swing_min_v"</span>: <span class="tok-kw">None</span>,
+    <span class="tok-str">"cmrr_db"</span>: <span class="tok-kw">None</span>, <span class="tok-str">"psrr_db"</span>: <span class="tok-kw">None</span>,
+}</code></pre>
+
+  <p>Two consequences fall out of that one decision.</p>
+
+  <p>First, the keys <strong>mirror <code>evaluate_metrics()</code></strong> exactly &mdash; the analytical estimate and the measurement speak the same vocabulary, so comparing them is a dict lookup rather than a translation layer. That is the whole point of the package.</p>
+
+  <p>Second, a caller never has to ask whether a key exists. It always does. The only question is whether it is <code>None</code>, and <code>None</code> has exactly one meaning throughout:</p>
+
+  <blockquote><p><strong><code>None</code> means "not measured". It never means "measured as zero".</strong></p></blockquote>
+
+  <p>An amplifier with no gain and an amplifier whose gain measurement failed are very different findings, and collapsing them into <code>0.0</code> would lose that distinction permanently.</p>
+
+</section>
+
+<section class="part" id="part-3">
+
+  <h2>Part 3 &middot; Every bench in its own <code>try</code></h2>
+
+  <blockquote><p><strong>The one job:</strong> a bench that throws should cost you that one metric, and nothing else.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_oops</span>(bench, e):
+    notes.append(<span class="tok-str">f"{bench} bench failed: {<span class="tok-fn">type</span>(e).__name__}: {e}"</span>)
+
+<span class="tok-kw">try</span>:
+    out[<span class="tok-str">"power_w"</span>] = _measure_power(*args)
+<span class="tok-kw">except</span> <span class="tok-fn">Exception</span> <span class="tok-kw">as</span> e:
+    _oops(<span class="tok-str">"power"</span>, e)</code></pre>
+
+  <p>That pattern repeats for all six. It is deliberately the broadest possible catch, and the exception type and message are preserved in the note rather than discarded &mdash; so a failure is visible and debuggable without being fatal.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 240" role="img" aria-label="Six independent benches; one failing does not stop the others">
+      <g font-size="11" text-anchor="middle">
+        <rect x="30" y="40" width="108" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="84" y="60" font-weight="600">power</text>
+        <text x="84" y="75" font-size="9.5" fill="var(--fig-accent2)">1.2 mW</text>
+
+        <rect x="152" y="40" width="108" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="206" y="60" font-weight="600">AC</text>
+        <text x="206" y="75" font-size="9.5" fill="var(--fig-accent2)">62 dB</text>
+
+        <rect x="274" y="40" width="108" height="44" rx="7" fill="var(--fig-bg)" stroke="var(--fig-accent)" stroke-width="2.5" stroke-dasharray="5 3"/>
+        <text x="328" y="60" font-weight="600" fill="var(--fig-accent)">slew</text>
+        <text x="328" y="75" font-size="9.5" fill="var(--fig-accent)">raised!</text>
+
+        <rect x="396" y="40" width="108" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="450" y="60" font-weight="600">swing</text>
+        <text x="450" y="75" font-size="9.5" fill="var(--fig-accent2)">0.3 &ndash; 4.6 V</text>
+
+        <rect x="518" y="40" width="108" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="572" y="60" font-weight="600">CMRR</text>
+        <text x="572" y="75" font-size="9.5" fill="var(--fig-accent2)">58 dB</text>
+
+        <rect x="640" y="40" width="90" height="44" rx="7" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="685" y="60" font-weight="600">PSRR</text>
+        <text x="685" y="75" font-size="9.5" fill="var(--fig-accent2)">51 dB</text>
+      </g>
+      <g stroke="var(--fig-muted)" stroke-width="2" fill="none">
+        <path d="M84,84 L84,120 M206,84 L206,120 M450,84 L450,120 M572,84 L572,120 M685,84 L685,120"/>
+      </g>
+      <path d="M328,84 L328,120" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="4 3" fill="none"/>
+      <rect x="60" y="122" width="640" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="380" y="141" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-accent2)">eight numbers measured, one None, one note</text>
+      <text x="380" y="158" text-anchor="middle" font-size="10" fill="var(--fig-muted)">"slew-rate bench failed: RuntimeError: ngspice exited 1"</text>
+      <text x="380" y="200" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">The alternative &mdash; one exception escaping &mdash; would have returned nothing at all</text>
+      <text x="380" y="216" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">about a circuit whose power, gain, swing and rejection were all perfectly measurable.</text>
+    </svg>
+    <figcaption>Isolation is the reason the benches were kept separate in the first place. Six decks cost six process launches; they buy the property that no single failure is contagious.</figcaption>
+  </figure>
+
+</section>
+
+<section class="part" id="part-4">
+
+  <h2>Part 4 &middot; What the benches share, and the order that forces</h2>
+
+  <blockquote><p><strong>The one job:</strong> the benches are independent, but two facts have to travel between them &mdash; so the running order is not arbitrary.</p></blockquote>
+
+  <p>Everything common is computed once, up front, and passed as a tuple:</p>
+
+  <pre class="code"><code>name, ports, body = _parse_subckt(netlist_text)
+unsized = unsized_mos_refs(body, result)
+body    = _inject_sizes(body, result)
+body_dut = _dut(tech, name, body, corner)
+args = (name, ports, body_dut, _Topo(ports), vdd, ibias, vcm)</code></pre>
+
+  <p>One DUT block, built once, reused by all six. But two things are <em>discovered</em> rather than computed, and both come out of the AC bench:</p>
+
+  <table>
+    <thead><tr><th>Discovered</th><th>Who needs it</th><th>What happens without it</th></tr></thead>
+    <tbody>
+      <tr><td><code>polarity</code></td><td>slew, swing, CMRR, PSRR</td><td>each would re-run the polarity search itself</td></tr>
+      <tr><td><code>ac_clean</code></td><td>CMRR, PSRR</td><td>ratios against a corrupt A<sub>dm</sub></td></tr>
+    </tbody>
+  </table>
+
+  <p>Hence the order: <strong>AC runs second</strong>, right after power, and everything that depends on it comes later. Slew and swing accept <code>polarity=None</code> and fall back to trying both, so they still run if AC failed &mdash; but CMRR and PSRR are hard-gated:</p>
+
+  <pre class="code"><code><span class="tok-com"># CMRR/PSRR are relative to the differential gain: without a clean Adm</span>
+<span class="tok-com"># measurement the ratio is garbage-on-garbage, so they stay None.</span>
+<span class="tok-kw">if</span> ac_clean:
+    &hellip;</code></pre>
+
+  <p>Note what <code>ac_clean</code> means: <code>reason is None</code> &mdash; not merely that the AC bench returned a number. A circuit measured at &minus;3&nbsp;dB gain returns a perfectly real number with a reason attached, and that is <em>not</em> a basis for a rejection ratio.</p>
+
+  <h3>The extra key</h3>
+  <p>When anything has gone sideways, one more key appears:</p>
+  <pre class="code"><code><span class="tok-kw">if</span> notes:
+    out[<span class="tok-str">"notes"</span>] = notes   <span class="tok-com"># advisory, not a metric</span></code></pre>
+  <p>It carries bench failures, the unsized-MOSFET warning, and &mdash; when the AC sweep found no gain &mdash; the bias diagnostic from <a href="verify-op_explained.html"><code>op.py</code></a> explaining which devices were in triode. It is the only key that is not a number, and the only one that is sometimes absent.</p>
+
+</section>
+
+<section class="part" id="part-5">
+
+  <h2>Part 5 &middot; What it honestly does not do</h2>
+
+  <ul>
+    <li>It does not judge. Nothing here compares a measurement to a spec; that is the caller's job. This function reports what the circuit did.</li>
+    <li>It runs one corner per call. Sweeping corners means calling it repeatedly with different <code>corner</code> values &mdash; which is exactly what the CLI does.</li>
+    <li>Six benches means six ngspice launches. Deliberate, but it makes this the slowest thing in the pipeline by a wide margin.</li>
+    <li>The broad <code>except Exception</code> catches genuine bugs as readily as convergence failures. The note preserves the exception type, which is usually enough to tell them apart &mdash; but a <code>TypeError</code> in a bench will be reported as a measurement failure rather than crashing, and it is on the reader to notice.</li>
+    <li>It never raises. For a caller that <em>wants</em> an exception on an unsized device, <code>sized_netlist()</code> is the strict path.</li>
+  </ul>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>simulate_metrics()</code> builds the DUT once, runs six independent benches over it in an order set by the two facts the AC sweep discovers, and returns the same nine keys the analytical estimate uses &mdash; with <code>None</code> wherever a measurement could not be made, and a note saying why.</p>
+
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

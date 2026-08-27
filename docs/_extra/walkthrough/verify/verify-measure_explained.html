@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>measure.py &mdash; explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  .beat { margin:0.2em 0; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>measure.py &mdash; explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/verify/measure.py</code> &mdash; six testbenches, six circuit states, and the judgement calls that keep a plausible-looking number from being wrong.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 &middot; Why this file exists</a>
+  <a href="#part-2">2 &middot; Finding the polarity</a>
+  <a href="#part-3">3 &middot; The AC sweep</a>
+  <a href="#part-4">4 &middot; _pm_plausible &mdash; the honesty check</a>
+  <a href="#part-5">5 &middot; The fully-differential bench</a>
+  <a href="#part-6">6 &middot; Slew rate</a>
+  <a href="#part-7">7 &middot; Output swing</a>
+  <a href="#part-8">8 &middot; CMRR and PSRR</a>
+  <a href="#part-9">9 &middot; Limits, and one sentence</a>
+</nav>
+
+<main>
+
+<section class="part" id="part-1">
+
+  <h2>Part 1 &middot; Why this file exists</h2>
+
+  <blockquote><p><strong>The one job:</strong> put the sized circuit into six different states, and read one number (or three) out of each.</p></blockquote>
+
+  <p class="beat">You cannot measure all of this at once, and the file does not try.</p>
+
+  <p>Quiescent power wants a DC operating point. Gain wants a small-signal sweep <em>about</em> that point. Slew rate wants a large step that deliberately leaves the small-signal regime. Output swing wants the input ramped across the supply. CMRR and PSRR want the same AC sweep as gain, with the stimulus moved somewhere else entirely.</p>
+
+  <p>Those are six incompatible requests. So there are six benches, each assembling its own deck through <a href="verify-rig_explained.html"><code>rig.py</code></a> and running its own ngspice invocation. The cost is six process launches; the payoff is that a circuit whose AC sweep will not converge still reports honest power and swing.</p>
+
+  <table>
+    <thead><tr><th>Bench</th><th>Analysis</th><th>Yields</th></tr></thead>
+    <tbody>
+      <tr><td><code>_measure_power</code></td><td><code>op</code></td><td><code>power_w</code></td></tr>
+      <tr><td><code>_measure_ac</code></td><td><code>ac dec 30 1e-3 1e10</code></td><td><code>gain_db</code>, <code>gbw_hz</code>, <code>phase_margin_deg</code> &mdash; and the <strong>polarity</strong></td></tr>
+      <tr><td><code>_measure_sr</code></td><td><code>tran</code> (large pulse)</td><td><code>slew_rate_vps</code></td></tr>
+      <tr><td><code>_measure_swing</code></td><td><code>dc</code> sweep</td><td><code>output_swing_max_v</code>, <code>output_swing_min_v</code></td></tr>
+      <tr><td><code>_measure_cmrr</code></td><td><code>ac</code>, stimulus on the input CM</td><td><code>cmrr_db</code></td></tr>
+      <tr><td><code>_measure_psrr</code></td><td><code>ac</code>, stimulus on VDD</td><td><code>psrr_db</code></td></tr>
+    </tbody>
+  </table>
+
+  <p>The AC bench is first among equals: it is the only one that <em>discovers</em> something the others need.</p>
+
+</section>
+
+<section class="part" id="part-2">
+
+  <h2>Part 2 &middot; Which input is the non-inverting one?</h2>
+
+  <blockquote><p><strong>The one job:</strong> the netlist has <code>in1</code> and <code>in2</code> and no opinion about which is which. Find out by experiment, before measuring anything.</p></blockquote>
+
+  <p>Close a feedback loop around the wrong input and you have not built an amplifier &mdash; you have built a latch. The output slams to a rail and stays there. Every subsequent measurement is then a careful characterisation of a circuit sitting in a corner.</p>
+
+  <p>So the AC bench tries both assignments and asks a blunt DC question of each:</p>
+
+  <pre class="code"><code><span class="tok-kw">for</span> inp, inn <span class="tok-kw">in</span> _POLARITIES:               <span class="tok-com"># (in1,in2) then (in2,in1)</span>
+    &hellip;
+    dc = _deck(&hellip;, <span class="tok-str">"op\nlet vchk=&hellip;\nwrdata __OUT__ vchk"</span>)
+    vchk = <span class="tok-fn">float</span>(_run(dc, [<span class="tok-str">"vchk"</span>]).flatten()[-<span class="tok-num">1</span>])
+    ok = (<span class="tok-fn">abs</span>(vchk) &lt; <span class="tok-num">0.3</span>*vdd) <span class="tok-kw">if</span> topo.fd <span class="tok-kw">else</span> (<span class="tok-num">0.1</span>*vdd &lt; vchk &lt; <span class="tok-num">0.9</span>*vdd)</code></pre>
+
+  <p>Negative feedback holds the output near the common mode. A latched output sits near a rail. That one comparison separates them &mdash; and for a fully-differential circuit the equivalent question is whether the <em>difference</em> is near zero.</p>
+
+  <h3>Settling is necessary, not sufficient</h3>
+  <p>A branch that settles still might not be the right one, so the winner is chosen by a two-key rank:</p>
+
+  <pre class="code"><code>rank = (_pm_plausible(pm), gain_db)
+<span class="tok-kw">if</span> best_rank <span class="tok-kw">is</span> <span class="tok-kw">None</span> <span class="tok-kw">or</span> rank &gt; best_rank:
+    best, best_rank, best_pol = (gain_db, gbw, pm), rank, (inp, inn)</code></pre>
+
+  <p>Plausibility <strong>first</strong>, gain only as a tie-break. That ordering is the whole point: a corrupted branch can easily report a <em>higher</em> gain than the honest one, and ranking on gain alone would hand the measurement to the artefact. The winning polarity is then returned so the slew, swing, CMRR and PSRR benches never have to rediscover it.</p>
+
+</section>
+
+<section class="part" id="part-3">
+
+  <h2>Part 3 &middot; The AC sweep, and two decisions inside it</h2>
+
+  <blockquote><p><strong>The one job:</strong> sweep frequency, find where the gain crosses 0&nbsp;dB, and read the phase there.</p></blockquote>
+
+  <p>The deck dumps real and imaginary parts and NumPy does the rest &mdash; magnitude by <code>hypot</code>, phase by <code>unwrap(arctan2(&hellip;))</code>. Two choices in those few lines are worth pulling out, because both were bugs at some point.</p>
+
+  <h3>Starting at 1 mHz, not 1 Hz</h3>
+  <pre class="code"><code>ac dec 30 1e-3 1e10</code></pre>
+  <p>A high-gain multi-stage amplifier can have a dominant pole well below 1&nbsp;Hz. Start the sweep at 1&nbsp;Hz and your first sample is already <em>past</em> it: the "DC" gain you report is rolled off, and &mdash; worse &mdash; the phase baseline is skewed by tens of degrees, which lands directly in the phase margin. Starting three decades lower makes the first sample a genuine DC value.</p>
+
+  <h3>Phase measured relative to its own DC value</h3>
+  <pre class="code"><code>phase = np.degrees(np.unwrap(np.arctan2(im, re)))
+phase -= phase[<span class="tok-num">0</span>]                <span class="tok-com"># &larr; the baseline is the sweep's own DC phase</span></code></pre>
+  <p>An inverting configuration starts at &plusmn;180&deg;, a non-inverting one at 0&deg;. Subtracting the first sample removes that unknown offset, so what remains is <em>excess</em> phase &mdash; the part the poles contributed. Then:</p>
+
+  <div class="eq-center"><span class="boxed-eq">PM&nbsp;=&nbsp;180&deg;&nbsp;+&nbsp;phase(f<sub>0dB</sub>)</span></div>
+
+  <p>Excess phase is negative on a stable amplifier, so PM lands below 180&deg;. The 0-dB crossing itself is found by linear interpolation in log-frequency between the samples that straddle it, and the phase is interpolated at the same fraction.</p>
+
+</section>
+
+<section class="part" id="part-4">
+
+  <h2>Part 4 &middot; <code>_pm_plausible()</code> &mdash; telling a bad circuit from a bad measurement</h2>
+
+  <blockquote><p><strong>The one job:</strong> decide whether a phase margin is physically possible &mdash; and if it isn't, work out which <em>kind</em> of impossible.</p></blockquote>
+
+  <pre class="code"><code><span class="tok-kw">return</span> pm <span class="tok-kw">is</span> <span class="tok-kw">None</span> <span class="tok-kw">or</span> <span class="tok-num">0.0</span> &lt; pm &lt;= <span class="tok-num">180.0</span></code></pre>
+
+  <p>One line, three outcomes, and the distinction between them is the difference between a bug report and a design verdict:</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 780 190" role="img" aria-label="Phase margin ranges and what each means">
+      <line x1="60" y1="96" x2="720" y2="96" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <g font-size="10.5" fill="var(--fig-muted)" text-anchor="middle">
+        <text x="60" y="118">&le; 0&deg;</text>
+        <text x="390" y="118">(0&deg;, 180&deg;]</text>
+        <text x="720" y="118">&gt; 180&deg;</text>
+      </g>
+      <rect x="60" y="82" width="180" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+      <rect x="250" y="82" width="280" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <rect x="540" y="82" width="180" height="28" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="150" y="101" text-anchor="middle" font-size="11" font-weight="600">artefact</text>
+      <text x="390" y="101" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">usable measurement</text>
+      <text x="630" y="101" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent)">RHP response</text>
+
+      <text x="150" y="42" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">corrupted sweep &mdash;</text>
+      <text x="150" y="56" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">wrong polarity settled,</text>
+      <text x="150" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">or an unwrap glitch</text>
+
+      <text x="630" y="42" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">phase <em>leads</em> on a falling</text>
+      <text x="630" y="56" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gain: non-minimum-phase.</text>
+      <text x="630" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">A real design fault.</text>
+
+      <text x="390" y="152" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Both extremes discard the measurement &mdash; but only one of them is the circuit's fault,</text>
+      <text x="390" y="167" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">and the returned <tspan font-family="ui-monospace,monospace">reason</tspan> string says which.</text>
+    </svg>
+    <figcaption>A phase margin above 180&deg; is not noise. It means the loop gain has a right-half-plane contribution — Miller-family compensation wrapped around a non-inverting stage will do it — and the message names that specifically rather than reporting "unmeasurable".</figcaption>
+  </figure>
+
+  <p>Note also what happens to the gain when the PM is implausible: it is <strong>discarded too</strong>. The gain and the phase came off the same sweep, so if the phase is meaningless the gain is meaningless with it. Reporting a confident-looking gain from a sweep you have just declared corrupt would be the worst of both worlds.</p>
+
+  <p>Separately, a <em>plausible</em> measurement of a circuit that simply does not amplify &mdash; gain &le; 0&nbsp;dB &mdash; <strong>is</strong> reported, with a reason attached. That is a real property of a mis-biased design, and hiding it would be dishonest in the other direction.</p>
+
+</section>
+
+<section class="part" id="part-5">
+
+  <h2>Part 5 &middot; <code>_loop_fb()</code> &mdash; and why the FD bench was rebuilt</h2>
+
+  <blockquote><p><strong>The one job:</strong> hold the inputs at the right DC bias without shorting out the AC stimulus &mdash; differently for single-ended and fully-differential circuits.</p></blockquote>
+
+  <p>Single-ended is the textbook trick: a huge inductor closes the loop at DC (setting the bias) and is an open at AC; a huge capacitor grounds the inverting input at AC. The loop is closed for biasing and open for measuring.</p>
+
+  <p>Fully-differential used to tie <code>outp</code>&rarr;<code>inn</code> and <code>outn</code>&rarr;<code>inp</code>. That is now understood to have been wrong in three separate ways:</p>
+
+  <ul>
+    <li>It <strong>invented an output common mode</strong> for circuits that have a real CMFB loop to do that job. Against a real CM loop the tie network is bistable, and at tight headroom ngspice picks its degenerate all-off solution &mdash; healthy sky130 circuits were measuring &minus;79&nbsp;dB.</li>
+    <li>It made the FD DC sanity check <strong>vacuous</strong>: the ties force <code>outp == outn</code>, so "did the outputs split apart?" could never be true.</li>
+    <li>It measured a circuit nobody would build.</li>
+  </ul>
+
+  <p>The rebuilt bench anchors both inputs at Vcm and lets the CMFB own the output CM &mdash; the standard FD arrangement. And it uses <em>resistors</em> to do it, not inductors, for a reason worth knowing:</p>
+
+  <pre class="code"><code>fb = (<span class="tok-str">f"Vocm ocm 0 {vcm}\nVicm icm 0 {vcm}\n"</span>
+      <span class="tok-str">f"R1 icm inp {_RH}\nR2 icm inn {_RH}\n"</span> + drive)</code></pre>
+
+  <p>Two inductor anchors plus a 0&nbsp;V differential drive would form a loop of three DC shorts &mdash; singular, which ngspice "regularises" into garbage bias. Resistors avoid that, and cost nothing: MOS gates draw no DC current, so the drop across <code>_RH</code> is exactly zero and the inputs sit precisely at Vcm.</p>
+
+  <p>The FD drive also deliberately omits AC-coupling capacitors on the inputs &mdash; they would short out the very differential signal being applied.</p>
+
+</section>
+
+<section class="part" id="part-6">
+
+  <h2>Part 6 &middot; Slew rate &mdash; measuring the plateau, not the tail</h2>
+
+  <blockquote><p><strong>The one job:</strong> find the <em>current-limited</em> rate the output can move, which is not the same as the average rate it moved.</p></blockquote>
+
+  <p>Slew rate is what happens when the input step is big enough that the tail current saturates: the output ramps at a roughly constant <code>I/C</code> and the small-signal model no longer applies. The textbook measurement is the 20%&ndash;80% average of a large step.</p>
+
+  <p>That average is only correct if the whole 20&ndash;80 window sits inside the ramp. On an amplifier whose transient ends in a slow pole-zero-doublet <strong>settling tail</strong>, the 80% mark lands in the tail, and the "slew rate" collapses to the settling speed &mdash; measured 0.7&nbsp;V/&micro;s against a real current-limited plateau roughly forty times higher.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 230" role="img" aria-label="A step response with a fast ramp then a slow settling tail; a fixed-span secant finds the ramp">
+      <line x1="60" y1="190" x2="710" y2="190" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <line x1="60" y1="30" x2="60" y2="190" stroke="var(--fig-stroke)" stroke-width="1.5"/>
+      <text x="46" y="36" text-anchor="end" font-size="10" fill="var(--fig-muted)">V</text>
+      <text x="706" y="206" text-anchor="end" font-size="10" fill="var(--fig-muted)">t</text>
+      <path d="M60,180 L250,60 Q340,40 460,44 Q590,48 700,46" fill="none" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+      <text x="150" y="120" font-size="10.5" fill="var(--fig-accent2)" transform="rotate(-32 150 120)">current-limited ramp</text>
+      <text x="520" y="72" font-size="10.5" fill="var(--fig-muted)">slow settling tail</text>
+
+      <line x1="60" y1="180" x2="220" y2="79" stroke="var(--fig-accent)" stroke-width="2.5" stroke-dasharray="5 3"/>
+      <text x="120" y="62" font-size="10.5" font-weight="600" fill="var(--fig-accent)">fixed-span secant</text>
+      <text x="120" y="76" font-size="9.5" fill="var(--fig-muted)">20% of the swing &rarr; stays in the ramp</text>
+
+      <line x1="60" y1="180" x2="470" y2="55" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="3 4"/>
+      <text x="420" y="130" font-size="10.5" fill="var(--fig-muted)">20&ndash;80% average &rarr;</text>
+      <text x="420" y="144" font-size="10.5" fill="var(--fig-muted)">80% lands in the tail</text>
+    </svg>
+    <figcaption>The fix is to fix the <em>voltage</em> span rather than the endpoints: for every start sample, find the first later sample that has moved 20% of the total swing, and keep the steepest such secant. Short enough to stay inside the ramp, wide enough to skip the sub-sample feedthrough spike at the edge.</figcaption>
+  </figure>
+
+  <p>The running extreme (<code>np.maximum.accumulate</code>) is used to locate that crossing, so end-of-edge ringing cannot cut a window short. And the reported figure is the <strong>minimum of the rising and falling edges</strong> &mdash; an amplifier is only as fast as its slower direction.</p>
+
+</section>
+
+<section class="part" id="part-7">
+
+  <h2>Part 7 &middot; Output swing &mdash; not through a unity buffer</h2>
+
+  <blockquote><p><strong>The one job:</strong> find how far the output can actually go, without accidentally measuring the input stage instead.</p></blockquote>
+
+  <p>The obvious rig is a unity-gain buffer with a swept input. It measures the wrong thing. In a buffer the input rides <em>with</em> the output, so the sweep stops when either the output saturates <strong>or the input leaves its common-mode range</strong> &mdash; and the result is the intersection of two unrelated limits, reported as one.</p>
+
+  <p>So the bench uses an inverting &minus;1 network instead, with the non-inverting input pinned at CM:</p>
+
+  <pre class="code"><code>fb = (<span class="tok-str">f"Rfb out inn 10meg\nRin src inn 10meg\n"</span>
+      <span class="tok-str">f"Vp inp 0 dc {vcm}\nVin src 0 dc {vcm}\n"</span>)   <span class="tok-com"># sweep Vin, not the input pin</span></code></pre>
+
+  <p>The input stage now sits still while the output is driven across the supply. Ten-megohm resistors keep the DUT's output effectively unloaded.</p>
+
+  <h3>Reading the edges: the tracking region</h3>
+  <p>You cannot just take the extremes of <code>v(out)</code> &mdash; past saturation the output stops following and the curve flattens at whatever the rail allows. Instead the bench finds where the loop is still <em>working</em>:</p>
+
+  <pre class="code"><code>slope = np.gradient(vo, vin)
+track = slope &lt;= -<span class="tok-num">0.7</span>            <span class="tok-com"># inverting: a tracking loop has slope ~ -1</span>
+&hellip;                              <span class="tok-com"># walk outward from CM while track holds</span>
+<span class="tok-kw">return</span> <span class="tok-fn">float</span>(vo[lo]), <span class="tok-fn">float</span>(vo[hi])</code></pre>
+
+  <p>It starts at the CM sample and expands in both directions while the slope stays near &minus;1. The values at the edges of that contiguous region are the reachable extremes. If the loop is not even tracking at CM, this polarity is wrong and the bench moves on.</p>
+
+</section>
+
+<section class="part" id="part-8">
+
+  <h2>Part 8 &middot; CMRR and PSRR &mdash; ratios, and what that implies</h2>
+
+  <blockquote><p><strong>The one job:</strong> measure the gain from somewhere the signal should <em>not</em> get in, and compare it to the gain from where it should.</p></blockquote>
+
+  <p>Both are differences of decibels against the differential gain measured earlier:</p>
+
+  <div class="eq-center"><span class="boxed-eq">CMRR&nbsp;=&nbsp;A<sub>dm</sub>&nbsp;&minus;&nbsp;A<sub>cm</sub>&nbsp;&nbsp;&nbsp;&nbsp;PSRR<sup>+</sup>&nbsp;=&nbsp;A<sub>dm</sub>&nbsp;&minus;&nbsp;A<sub>vdd</sub></span></div>
+
+  <p>The rigs are the gain bench with the stimulus relocated. For CMRR the 1&nbsp;V AC rides on the input common mode (SE: on the <code>cm</code> node itself; FD: both gates AC-coupled to one source). For PSRR it rides on VDD &mdash; which is the entire purpose of <code>_rig()</code>'s <code>sup_ac</code> flag.</p>
+
+  <h3>Why they are gated on a clean AC measurement</h3>
+  <p>Both are <em>relative</em> to <code>adm_db</code>. If the differential gain came from a corrupted sweep, the ratio is garbage divided by garbage &mdash; and it will still print as a confident-looking number. So the orchestrator only runs these two when the AC bench reported a clean, positive-gain result:</p>
+
+  <pre class="code"><code><span class="tok-kw">if</span> ac_clean:                      <span class="tok-com"># reason is None &rarr; positive gain, uncorrupted sweep</span>
+    out[<span class="tok-str">"cmrr_db"</span>] = _measure_cmrr(&hellip;, adm_db=out[<span class="tok-str">"gain_db"</span>])
+    out[<span class="tok-str">"psrr_db"</span>] = _measure_psrr(&hellip;, adm_db=out[<span class="tok-str">"gain_db"</span>])</code></pre>
+
+  <p>Each also guards its own denominator: an <code>acm</code> or <code>avdd</code> that comes back as numerical zero means nothing was measured, not that rejection was infinite, so the result is <code>None</code> rather than a spectacular figure.</p>
+
+</section>
+
+<section class="part" id="part-9">
+
+  <h2>Part 9 &middot; What it honestly does not do</h2>
+
+  <ul>
+    <li><strong>Slew rate and output swing are single-ended only.</strong> Both return <code>None</code> for a fully-differential circuit &mdash; the rigs have not been built.</li>
+    <li>PSRR is positive-supply only. There is no PSRR&minus;.</li>
+    <li>Every measurement is at one operating point and one corner. Corners are re-measured by calling the whole thing again with a different <code>corner</code>, not by sweeping inside a bench.</li>
+    <li>The polarity search tries exactly two assignments. That is all a two-input amplifier has, but it does mean a circuit that settles under <em>neither</em> yields nothing at all &mdash; correctly, since there is no configuration in which it works.</li>
+    <li>None of these is sign-off. They are a fast, independent cross-check on the analytical estimate; a real design still needs a real verification flow.</li>
+  </ul>
+
+  <hr>
+  <p><strong>In one sentence:</strong> <code>measure.py</code> puts one sized circuit into six different states to read nine numbers off it &mdash; discovering the input polarity by experiment first, refusing to report gain from a sweep whose phase is physically impossible, and measuring slew and swing with rigs chosen so they cannot quietly measure something else instead.</p>
+
+</section>
+
+</main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>
