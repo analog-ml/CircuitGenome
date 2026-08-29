@@ -29,6 +29,15 @@ from .taxonomy import RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_de
 # --------------------------------------------------------------------------- #
 # Cascode-aware output resistance
 # --------------------------------------------------------------------------- #
+def _by_drain(mosfets: list[Device]) -> dict[str, Device]:
+    """Net -> the MOSFET whose drain sits on it (first wins, for the walk)."""
+    by_drain: dict[str, Device] = {}
+    for d in mosfets:
+        if d.type in ("nmos", "pmos"):
+            by_drain.setdefault(d.terminals.get("d"), d)
+    return by_drain
+
+
 def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
     """Resistance (Ω) looking into ``device``'s drain, cascode-aware.
 
@@ -62,10 +71,7 @@ def node_rout(out_net: str, mosfets: list[Device], model, sizing,
     ``stop`` lists nets to treat as AC ground (typically the input-pair tail node)
     so the input pair contributes ``ro``, not a tail-degenerated cascode.
     """
-    by_drain: dict[str, Device] = {}
-    for d in mosfets:
-        if d.type in ("nmos", "pmos"):
-            by_drain.setdefault(d.terminals.get("d"), d)
+    by_drain = _by_drain(mosfets)
     g = 0.0
     for d in mosfets:
         if d.type in ("nmos", "pmos") and d.terminals.get("d") == out_net:
@@ -100,15 +106,18 @@ class StageChain:
         first stage's gain and to its role in GBW/PM, **not** to the raw ``gm``
         CMRR uses.
     :param gd_tail: tail-source output conductance in A/V (CMRR).
-    :param gd_output_load: output conductance in A/V of the load device on the
+    :param gd_output_load: output conductance in A/V of the load branch on the
         output-driving stage's output node (PSRR) — the second stage's load on
         a multi-stage chain, the first stage's own load on a single-stage one.
+        Cascode-aware on a single stage, and ``1/R`` for a resistor load, so
+        every load family reports it (issue #228).
     :param mirror_pole_hz: current-mirror node pole in Hz, ``None`` when the
         chain has no diode-connected mirror load or the tech supplies no
-        ``cox``.  The first non-dominant pole of a **load**-compensated
-        single-stage OTA, so it sets that topology's phase margin; a
-        Miller-compensated chain has its own non-dominant pole at the output
-        and ignores this one.
+        ``cox`` — see :func:`_mirror_pole_hz` for the two single-stage load
+        families that deliberately land there.  The first non-dominant pole of
+        a **load**-compensated single-stage OTA, so it sets that topology's
+        phase margin; a Miller-compensated chain has its own non-dominant pole
+        at the output and ignores this one.
     :param cc_pf: Miller compensation cap, ``None`` when uncompensated.
     :param cc2_pf: second compensation cap (three-stage), ``None`` otherwise.
     :param supply_currents: per-branch quiescent currents in A (power).
@@ -187,6 +196,54 @@ def _first_present(slot_transistors: dict[str, list[Device]],
     return []
 
 
+def _signal_path_nets(ip_devs: list[Device],
+                      mosfets: list[Device]) -> frozenset[str]:
+    """Every net the input pair drives, walking up through cascodes above it.
+
+    Starts at the pair's own drains and repeatedly adds the drain of any MOSFET
+    *sourcing* from a net already in the set -- which is exactly what a cascode
+    device does.  The result is the signal path from the pair to wherever it
+    ends, and it is the one structural fact that separates the two branches
+    meeting on a single stage's output node: the branch that came up from the
+    pair, and the branch that came from a rail (issue #228).
+    """
+    nets = {d.terminals.get("d") for d in ip_devs} - {None}
+    for _ in range(len(mosfets)):          # bounded: each pass adds ≥1 net
+        grown = {d.terminals.get("d") for d in mosfets
+                 if d.terminals.get("s") in nets} - {None}
+        if grown <= nets:
+            break
+        nets |= grown
+    return frozenset(nets)
+
+
+def _single_ended_output_net(load_devs: list[Device], signal_nets: frozenset[str],
+                             mosfets: list[Device]) -> str | None:
+    """The net a single-stage load presents as the amplifier output, or ``None``.
+
+    The output is where the input pair's signal path *ends*: a net in
+    ``signal_nets`` that no further device sources from, that gates nothing,
+    and whose devices are not diode-connected.  The last two exclusions drop
+    the mirror reference node, which also terminates a signal path -- on a
+    telescopic or folded cascode both legs terminate, and only one of them is
+    the output (issue #228).
+
+    ``None`` when the rule does not single one out.  That happens exactly for a
+    **resistor** load: with no load device there is no diode leg to exclude, so
+    both of the pair's drains terminate identically.  They are also
+    interchangeable -- the two halves are symmetric -- so the caller's fallback
+    to the pair's own drain is the right answer, and returning ``None`` keeps
+    it the documented one instead of a coin flip between two equal nets.
+    """
+    gates = {d.terminals.get("g") for d in mosfets}
+    sources = {d.terminals.get("s") for d in mosfets}
+    diodes = {d.terminals.get("d") for d in load_devs
+              if d.terminals.get("g") and d.terminals.get("g") == d.terminals.get("d")}
+    ends = [n for n in signal_nets
+            if n not in sources and n not in gates and n not in diodes]
+    return ends[0] if len(ends) == 1 else None
+
+
 def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
                    model, sizing) -> float | None:
     """Current-mirror node pole in Hz, or ``None`` when there is none.
@@ -197,11 +254,26 @@ def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
     ``gm/(2π·ΣCgs)``.  This is the first non-dominant pole of a
     load-compensated single-stage OTA (issue #221).
 
-    ``None`` when the load has no diode-connected device (a resistor or a
-    folded-cascode load), when that device is unsized, or when the technology
-    supplies no ``cox`` for ``Cgs`` -- each a case where the pole genuinely
-    cannot be placed, and the caller withholds phase margin rather than
-    inventing one.
+    ``None`` when the load has no diode-connected device, when that device is
+    unsized, or when the technology supplies no ``cox`` for ``Cgs`` -- each a
+    case where the pole genuinely cannot be placed, and the caller withholds
+    phase margin rather than inventing one.
+
+    Two single-stage load families fall in that hole, and the omission is
+    deliberate in both (issue #228):
+
+    * **Resistor loads** have no internal node at all.  In this model such a
+      stage is genuinely single-pole, so the phase margin is exactly 90° for
+      *every* sizing -- a statement about the model, not about the design, and
+      one that would pass any ``phase_margin_min_deg`` a spec could set.
+    * **Wide-swing telescopic loads** bias their cascode gates from a level
+      rail instead of diode-connecting them.  A non-dominant pole does exist
+      there, at the cascode *source* node (``1/gm_cascode`` against that node's
+      capacitance), but the sizer models only ``Cgs`` -- and at a cascode
+      source the junction capacitance of the current source below it is the
+      larger term.  The pole can be bounded, not placed, so it is not reported.
+
+    Neither is "no non-dominant pole"; both are "no pole this model can place".
     """
     diode = next((d for d in load_devs
                   if d.terminals.get("g")
@@ -242,7 +314,9 @@ def build_stage_chain(
     The input pair's source is the tail node, treated as an AC ground so the
     pair contributes ``ro`` rather than a tail-degenerated cascode.  The first
     stage's output is the *next* stage's signal gate, not the pair's drain:
-    on a folded cascode those are different nets.
+    on a folded cascode those are different nets.  With no next stage the
+    output node is resolved structurally instead — again not the pair's drain,
+    for the same reason (issue #228).
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
@@ -276,8 +350,17 @@ def build_stage_chain(
 
     # --- Stage 1: input pair into the first-stage output node ---
     out1 = next((d.terminals.get("g") for d in signal_devs if d is not None), None)
+    signal_nets = frozenset()
     if out1 is None and ip_devs:
-        out1 = ip_devs[0].terminals.get("d")   # one-stage: the pair's own drain
+        # One-stage: the amplifier's output node is where the pair's signal
+        # path ends.  On a mirror or resistor load that is the pair's own drain
+        # (the fallback); on a folded or telescopic cascode load it is one
+        # cascode further up, and measuring at the pair's drain would report
+        # the cascode *source* -- a low-impedance node -- as the output (#228).
+        signal_nets = _signal_path_nets(ip_devs, mosfets)
+        out1 = (_single_ended_output_net(slot_transistors.get("load", []),
+                                         signal_nets, mosfets)
+                or ip_devs[0].terminals.get("d"))
     stages = [Stage(gm=_gm(ip_devs[0]) if ip_devs else 0.0,
                     rout=_rout(out1, gd_load_r))]
 
@@ -293,6 +376,15 @@ def build_stage_chain(
     # -- where the mirror is the load, and both its devices are gate-driven, so
     # the not-a-signal-device test that picks a second-stage load finds nothing
     # and the device on the output node is taken instead (issue #221).
+    #
+    # Two devices meet on a single stage's output node, and only one of them is
+    # the load: the other came up from the input pair (the cascode above it on
+    # a telescopic or folded load), so it is excluded by ``signal_nets``.  The
+    # load's conductance is read cascode-aware rather than as a bare ``gds`` --
+    # a stacked load presents ``1/(ro·(1+gm·R))`` to the rail, and cascoding a
+    # load improves supply rejection rather than, as a bare top-device ``gds``
+    # would say, degrading it.  A load with no stack reduces to ``gds``
+    # unchanged (issue #228).
     gd_output_load = 0.0
     if slot_devs:
         for d in slot_devs[0]:
@@ -300,10 +392,17 @@ def build_stage_chain(
             if s is not None and not is_signal_device(d):
                 gd_output_load = model.gds(d.type, s.w_um, s.l_um, s.ids_a)
     else:
+        by_drain = _by_drain(mosfets)
         for d in slot_transistors.get("load", []):
-            s = sizing.get(d.ref)
-            if s is not None and d.terminals.get("d") == out1:
-                gd_output_load = model.gds(d.type, s.w_um, s.l_um, s.ids_a)
+            if (sizing.get(d.ref) is None or d.terminals.get("d") != out1
+                    or d.terminals.get("s") in signal_nets):
+                continue
+            r = _looking_in_drain(d, by_drain, model, sizing, stop)
+            gd_output_load = 1.0 / r if 0.0 < r < float("inf") else 0.0
+        # A resistor load has no device to read: the output-node conductance is
+        # exactly 1/R, which the sizer already solved for and passed in here.
+        if gd_output_load == 0.0:
+            gd_output_load = gd_load_r
 
     # --- Tail conductance (CMRR): the full stack down to the rail ---
     gd_tail = 0.0
