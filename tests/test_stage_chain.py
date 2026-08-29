@@ -91,10 +91,90 @@ def test_three_stage_uses_the_three_stage_phase_margin():
 
 
 # --------------------------------------------------------------------------- #
+# The load-compensated single-stage path (issue #221)
+# --------------------------------------------------------------------------- #
+def _one_stage(**kw):
+    """A single-stage chain with a placeable mirror pole well past the GBW."""
+    base = dict(mirror_pole_hz=1e9, gd_output_load=1e-7, gd_tail=1e-7,
+                supply_currents=(10e-6,))
+    base.update(kw)
+    return _chain((1e-3, 1e6), **base)
+
+
+def test_single_stage_reports_every_performance_metric():
+    """A one-stage OTA is load-compensated, not unmodellable (issue #221)."""
+    m, _ = evaluate_metrics(_one_stage(), _spec())
+    assert set(m) >= {"gain_db", "gbw_hz", "phase_margin_deg",
+                      "slew_rate_vps", "cmrr_db", "psrr_db"}
+
+
+def test_single_stage_gbw_and_slew_are_set_by_cl_not_cc():
+    """With no Miller cap, CL is what gm1 drives and what the tail charges."""
+    m, _ = evaluate_metrics(_one_stage(), _spec(cl=20e-12))
+    assert m["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 20e-12))
+    assert m["slew_rate_vps"] == pytest.approx(eq.slew_rate_vps(10e-6, 20e-12))
+
+
+def test_single_stage_gbw_and_slew_scale_inversely_with_cl():
+    small = evaluate_metrics(_one_stage(), _spec(cl=5e-12))[0]
+    large = evaluate_metrics(_one_stage(), _spec(cl=20e-12))[0]
+    assert large["gbw_hz"] == pytest.approx(small["gbw_hz"] / 4.0)
+    assert large["slew_rate_vps"] == pytest.approx(small["slew_rate_vps"] / 4.0)
+
+
+def test_single_stage_slew_scales_with_the_tail_current():
+    lo = evaluate_metrics(_one_stage(), _spec(ibias=10e-6))[0]
+    hi = evaluate_metrics(_one_stage(), _spec(ibias=20e-6))[0]
+    assert hi["slew_rate_vps"] == pytest.approx(2.0 * lo["slew_rate_vps"])
+
+
+def test_single_stage_phase_margin_comes_from_the_mirror_pole():
+    m, _ = evaluate_metrics(_one_stage(mirror_pole_hz=1e8), _spec())
+    assert m["phase_margin_deg"] == pytest.approx(
+        eq.phase_margin_single_stage_deg(eq.unity_gain_bw(1e-3, 20e-12), 1e8))
+
+
+def test_single_stage_phase_margin_falls_as_the_mirror_pole_closes_in():
+    """A mirror pole near the GBW is exactly what this metric exists to catch."""
+    far = evaluate_metrics(_one_stage(mirror_pole_hz=1e9), _spec())[0]
+    near = evaluate_metrics(_one_stage(mirror_pole_hz=1e7), _spec())[0]
+    assert far["phase_margin_deg"] > near["phase_margin_deg"]
+    assert far["phase_margin_deg"] < 90.0
+
+
+def test_single_stage_phase_margin_withheld_without_a_mirror_pole():
+    """A resistor-loaded stage has no mirror node — omitted, not faked at 90."""
+    m, _ = evaluate_metrics(_one_stage(mirror_pole_hz=None), _spec())
+    assert "phase_margin_deg" not in m
+    assert "gbw_hz" in m and "slew_rate_vps" in m
+
+
+def test_single_stage_psrr_uses_the_input_pair_against_its_own_load():
+    m, _ = evaluate_metrics(_one_stage(gd_output_load=1e-7), _spec())
+    assert m["psrr_db"] == pytest.approx(eq.psrr_db_approx(1e-3, 1e-7))
+
+
+def test_single_stage_psrr_takes_the_k_fs_single_ended_penalty():
+    """PSRR rides the same loop transconductance the gain does."""
+    full = evaluate_metrics(_one_stage(), _spec())[0]
+    half = evaluate_metrics(_one_stage(k_fs=0.5), _spec())[0]
+    assert half["psrr_db"] == pytest.approx(full["psrr_db"] - 20 * math.log10(2.0))
+
+
+def test_a_miller_cap_still_wins_when_a_mirror_pole_is_present():
+    """Multi-stage chains keep the Miller formulas untouched (issue #221)."""
+    chain = _chain((1e-3, 1e6), (2e-3, 5e5), cc_pf=2.0, mirror_pole_hz=1e8)
+    m, _ = evaluate_metrics(chain, _spec())
+    assert m["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12))
+    assert m["phase_margin_deg"] == pytest.approx(
+        eq.phase_margin_two_stage_deg(1e-3, 2e-3, 2e-12, 20e-12))
+
+
+# --------------------------------------------------------------------------- #
 # Withholding a non-existent operating point (issue #148)
 # --------------------------------------------------------------------------- #
 def test_withheld_drops_gain_derived_metrics_only():
-    kw = dict(cc_pf=2.0, gd_tail=1e-7, gd_stage2_load=1e-7,
+    kw = dict(cc_pf=2.0, gd_tail=1e-7, gd_output_load=1e-7,
               supply_currents=(10e-6, 25e-6))
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), **kw)
     live, _ = evaluate_metrics(chain, _spec())

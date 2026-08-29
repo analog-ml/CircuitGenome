@@ -20,7 +20,12 @@ def evaluate_metrics(
     A margin is present only when the spec constrains that metric, and is
     always signed so **positive means the spec is met**.  A metric the chain
     cannot support (no compensation cap, a railed operating point, an absent
-    stage) is omitted rather than reported as zero.
+    stage, a mirror pole that cannot be placed) is omitted rather than reported
+    as zero.
+
+    Stage count picks the compensation regime, not the metric set: single- and
+    multi-stage chains alike report gain, GBW, phase margin, slew rate, CMRR
+    and PSRR (issue #221).
     """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
@@ -54,7 +59,13 @@ def evaluate_metrics(
         if all(g > 0 for g in stage_gains):
             _record("gain_db", eq.open_loop_gain_db(stage_gains), spec.gain_min_db)
 
-    # --- GBW, phase margin, slew rate: all need the Miller cap ---
+    # --- GBW, phase margin, slew rate ---
+    # Two compensation regimes, deliberately not sharing a formula (#221).  A
+    # multi-stage chain is Miller-compensated: the dominant pole is at Cc and
+    # the non-dominant one at the output.  A single-stage OTA is *load*
+    # compensated: CL itself sets the dominant pole and the non-dominant one is
+    # the mirror node.  The roles of CL and the internal node are exchanged
+    # between them, so each regime gets its own branch.
     cc_f = (chain.cc_pf * 1e-12) if chain.cc_pf else None
     cc2_f = (chain.cc2_pf * 1e-12) if chain.cc2_pf else None
     if cc_f and len(stages) > 1 and gm1 > 0:
@@ -75,6 +86,22 @@ def evaluate_metrics(
         # point does not invalidate it (#148 gates only gain-derived metrics).
         _record("slew_rate_vps", eq.slew_rate_vps(spec.ibias, cc_f),
                 spec.slew_rate_min_vps)
+    elif len(stages) == 1 and gm1 > 0 and spec.cl > 0:
+        # Load-compensated: every equation above still applies with CL in the
+        # place of Cc, because CL is what the tail current drives and what sets
+        # the dominant pole.  Phase margin is the exception -- it needs the
+        # mirror pole, which the chain reports only when it can be placed.
+        if chain.gain_measurable:
+            gbw = eq.unity_gain_bw(gm1_loop, spec.cl)
+            _record("gbw_hz", gbw, spec.gbw_min_hz)
+            if chain.mirror_pole_hz:
+                _record("phase_margin_deg",
+                        eq.phase_margin_single_stage_deg(
+                            gbw, chain.mirror_pole_hz),
+                        spec.phase_margin_min_deg)
+
+        _record("slew_rate_vps", eq.slew_rate_vps(spec.ibias, spec.cl),
+                spec.slew_rate_min_vps)
 
     # --- Power (always available; a railed output still burns current) ---
     _record("power_w",
@@ -93,10 +120,14 @@ def evaluate_metrics(
     if chain.gain_measurable and gm1 > 0 and chain.gd_tail > 0:
         _record("cmrr_db", eq.cmrr_db(gm1, chain.gd_tail), spec.cmrr_min_db)
 
-    # --- PSRR (approximate, from the second stage and its load) ---
-    if (chain.gain_measurable and len(stages) > 1
-            and stages[1].gm > 0 and chain.gd_stage2_load > 0):
-        _record("psrr_db", eq.psrr_db_approx(stages[1].gm, chain.gd_stage2_load),
+    # --- PSRR (approximate, from the output-driving stage and its load) ---
+    # Supply ripple reaches the output through the load device's gds and is
+    # rejected in proportion to that stage's own gm — the second stage on a
+    # multi-stage chain, the input pair itself on a single-stage one, where the
+    # single-ended tap costs the same factor k_fs the gain sees (#221).
+    gm_out = stages[1].gm if len(stages) > 1 else gm1_loop
+    if chain.gain_measurable and gm_out > 0 and chain.gd_output_load > 0:
+        _record("psrr_db", eq.psrr_db_approx(gm_out, chain.gd_output_load),
                 spec.psrr_min_db)
 
     return metrics, margins

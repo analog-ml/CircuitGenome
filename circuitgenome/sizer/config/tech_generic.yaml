@@ -4,15 +4,21 @@
 name: generic_parameterized
 description: "Generic CMOS — replace with actual PDK values before use"
 
+# cox (F/µm²) is εox/tox at tox ≈ 5.76 nm, the oxide thickness that makes the
+# mu_cox values below self-consistent: µn = 270e-6/6.0e-3 ≈ 450 cm²/Vs and
+# µp = 90e-6/6.0e-3 ≈ 150 cm²/Vs, both textbook for a 0.25µm process.  Used
+# only for Cgs = (2/3)·W·L·Cox, which places a single-stage OTA's mirror pole.
 nmos:
   mu_cox: 270.0e-6   # A/V²  (µn·Cox, process transconductance parameter)
   vth: 0.5           # V     (threshold voltage, positive for NMOS)
   lam: 0.04          # 1/V   (channel-length modulation coefficient, positive)
+  cox: 6.0e-15       # F/µm² (gate-oxide capacitance per area, tox ≈ 5.76 nm)
 
 pmos:
   mu_cox: 90.0e-6    # A/V²  (µp·Cox)
   vth: -0.5          # V     (threshold voltage, negative for PMOS)
   lam: 0.05          # 1/V
+  cox: 6.0e-15       # F/µm²
 
 width:
   min: 1.0           # µm

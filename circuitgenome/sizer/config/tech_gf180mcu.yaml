@@ -26,12 +26,19 @@ gmid_lut: models/gf180mcu_gmid.npz   # gm/Id LUT (drives sizing)
 # bias seed is read from the LUT (the driven signal device's Vgs), so no
 # hand-curated vth is required. gamma/phi are retained for the body-effect
 # model (issue #106).
+# cox (F/µm²) = εox/toxe from the corner library's nmos_3p3/pmos_3p3 model
+# cards (epsrox=3.9, toxe=8.0 nm nmos / 7.9 nm pmos).  It is not a square-law
+# parameter: it feeds only Cgs = (2/3)·W·L·Cox, which places a single-stage
+# OTA's mirror pole (issue #221).  Cross-checked against the LUT's ft-implied
+# Cgg = gm/(2π·ft) — agreement is within ~5-50% across the L axis.
 nmos:
   gamma: 0.3101          # √V   body-effect coefficient γ (issue #106)
   phi: 0.3650            # V    surface potential 2φF
+  cox: 4.316e-15         # F/µm² (toxe = 8.0 nm)
 pmos:
   gamma: 0.5220          # √V   body-effect coefficient γ (issue #106)
   phi: 0.4900            # V    surface potential 2φF
+  cox: 4.371e-15         # F/µm² (toxe = 7.9 nm)
 
 width:
   min: 0.22

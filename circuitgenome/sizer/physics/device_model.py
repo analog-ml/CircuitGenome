@@ -57,6 +57,15 @@ class DeviceModel(Protocol):
         """Minimum \\|VDS\\| for saturation in V."""
         ...
 
+    def cgs(self, dtype: str, w_um: float, l_um: float) -> float:
+        """Gate-source capacitance in F, or ``0.0`` when the tech has no ``cox``.
+
+        Bias-independent in both backends: it comes from the geometry and the
+        process ``Cox`` alone (see :func:`~.equations.cgs`), which is why it
+        takes no current.
+        """
+        ...
+
     def vgs(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
         """Gate-source voltage in V (signed: +ve NMOS, −ve PMOS)."""
         ...
@@ -112,6 +121,10 @@ class Level1Model:
     def vds_sat(self, dtype, w_um, l_um, ids):
         """Square-law saturation overdrive (:func:`~.equations.vds_sat`)."""
         return eq.vds_sat(_params(self.tech, dtype).mu_cox, w_um, l_um, ids)
+
+    def cgs(self, dtype, w_um, l_um):
+        """``(2/3)·W·L·Cox`` from the tech's ``cox`` (:func:`~.equations.cgs`)."""
+        return eq.cgs(_params(self.tech, dtype).cox, w_um, l_um)
 
     def vgs(self, dtype, w_um, l_um, ids):
         """Square-law gate-source voltage (:func:`~.equations.vgs_from_ids`)."""
@@ -223,6 +236,15 @@ class GmIdModel:
     def vds_sat(self, dtype, w_um, l_um, ids):
         """Saturation overdrive ``VDS,sat`` read from the LUT (V)."""
         return self.lut.vdsat(dtype, self._gm_id_at(dtype, w_um, l_um, ids), l_um)
+
+    def cgs(self, dtype, w_um, l_um):
+        """``(2/3)·W·L·Cox`` from the tech's ``cox`` (:func:`~.equations.cgs`).
+
+        Read from ``cox`` rather than inverted out of the LUT's ``ft``: the two
+        agree to within tens of percent on the PDK nodes, and taking the process
+        constant keeps this primitive identical across both backends.
+        """
+        return eq.cgs(_params(self.tech, dtype).cox, w_um, l_um)
 
     def vgs(self, dtype, w_um, l_um, ids):
         """Gate-source voltage from the LUT, signed +ve NMOS / −ve PMOS."""

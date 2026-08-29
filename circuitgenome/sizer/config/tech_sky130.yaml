@@ -34,12 +34,19 @@ gmid_lut: models/sky130_gmid.npz   # gm/Id LUT (drives sizing)
 # is omitted too — the load-resistor bias seed is now read from the LUT (the
 # driven signal device's Vgs), so no hand-curated vth is required. gamma/phi are
 # retained for the body-effect model (issue #106).
+# cox (F/µm²) = εox/toxe from the tt corner cards (toxe = 4.148 nm nfet /
+# 4.23 nm pfet).  Not a square-law parameter: it feeds only
+# Cgs = (2/3)·W·L·Cox, which places a single-stage OTA's mirror pole (issue
+# #221).  Cross-checked against the LUT's ft-implied Cgg = gm/(2π·ft) —
+# agreement is within ~10% over most of the L axis.
 nmos:
   gamma: 0.4625          # √V   body-effect coefficient γ (issue #106)
   phi: 0.9600            # V    surface potential 2φF
+  cox: 8.325e-15         # F/µm² (toxe = 4.148 nm)
 pmos:
   gamma: 0.4859          # √V   body-effect coefficient γ (issue #106)
   phi: 0.8950            # V    surface potential 2φF
+  cox: 8.163e-15         # F/µm² (toxe = 4.23 nm)
 
 width:               # bins cover W in [0.36(n)/0.42(p), 100) µm; 0.42 fits both.
   min: 0.42          # max is 99, NOT 100: the model bin wmax=100µm is an
