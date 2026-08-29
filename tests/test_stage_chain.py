@@ -15,6 +15,7 @@ from circuitgenome.synthesizer.models import Device
 from circuitgenome.sizer.physics.stage_chain import (
     Stage,
     StageChain,
+    _source_degeneration_r,
     _tail_current_net,
 )
 
@@ -126,6 +127,40 @@ def test_tail_node_ignores_resistors_not_on_the_pair_source():
 
 def test_tail_node_of_a_pairless_chain_is_none():
     assert _tail_current_net(None, []) is None
+
+
+# --------------------------------------------------------------------------- #
+# The degeneration resistance each pair leg sees (issue #226)
+# --------------------------------------------------------------------------- #
+def _mos(ref, src):
+    return Device(ref=ref, type="pmos", terminals={"d": "o", "g": "in", "s": src})
+
+
+def test_each_leg_gets_its_own_degeneration_resistance():
+    """The tail is a virtual ground for the differential half-circuit, so each
+    leg sees its own R -- not the 2R across both."""
+    devs = [_mos("m1", "s1"), _mos("m2", "s2")]
+    rs = [_res("r1", "s1", "net_tail"), _res("r2", "net_tail", "s2")]
+    assert _source_degeneration_r(devs, rs, {"r1": 500.0, "r2": 500.0}) == {
+        "s1": 500.0, "s2": 500.0}
+
+
+def test_unsized_degeneration_resistors_boost_nothing():
+    """The synthesizer's 1 kΩ placeholder is not a degeneration value.
+
+    `size_resistors` leaves r1/r2 alone when the intent asks for no
+    degeneration; reading a boost out of the placeholder would inflate `ro`
+    for a pair that is not actually degenerated.
+    """
+    devs = [_mos("m1", "s1")]
+    assert _source_degeneration_r(devs, [_res("r1", "s1", "net_tail")], {}) == {}
+
+
+def test_degeneration_ignores_resistors_off_the_pair_sources():
+    """A compensation or bias resistor in the slot is not source degeneration."""
+    devs = [_mos("m1", "s1")]
+    rs = [_res("rc", "net_a", "net_b")]
+    assert _source_degeneration_r(devs, rs, {"rc": 500.0}) == {}
 
 
 # --------------------------------------------------------------------------- #

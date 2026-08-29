@@ -497,11 +497,17 @@ load is a cascode it first computes the output resistance cascode-aware
 (:func:`~circuitgenome.sizer.gmid.blocks.node_rout` — the ``gm·ro·ro`` boost a
 single-``gds`` estimate misses, treating the input-pair tail node as AC ground),
 and it applies the Phase-4c :class:`~circuitgenome.sizer.gmid.resistors.MetricModifiers`.
+The Phase-4c resistor *values* go in alongside them: a source-degeneration
+resistor is degeneration in the same sense a cascode is, so it boosts the pair's
+own ``ro`` by ``1 + gm·R`` — the other half of the effect ``gm1_factor``
+derates, and one the modifiers cannot carry because it lands *inside* the
+first stage's parallel combination rather than on top of it.
 
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.evaluate import evaluate_circuit
-   metrics, margins, notes = evaluate_circuit(view, currents, plan, sizing, modifiers, spec, tech)
+   metrics, margins, notes = evaluate_circuit(view, currents, plan, sizing, modifiers,
+                                             spec, tech, resistor_ohms=extra_r)
    print({k: round(v, 2) for k, v in metrics.items()})
 
 .. code-block:: text

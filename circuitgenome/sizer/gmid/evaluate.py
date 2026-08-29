@@ -90,16 +90,22 @@ def evaluate_circuit(
     modifiers: MetricModifiers,
     spec: SizingSpec,
     tech: TechParams,
+    resistor_ohms: dict[str, float] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], list[str]]:
     """Return ``(metrics, margins, notes)`` for the solved sizing.
 
     ``notes`` surfaces the resistor-load DC-bias advisories (:func:`
     _resistor_load_bias`); when that operating point is invalid the
     gain-derived metrics are dropped rather than reported optimistically.
+    ``resistor_ohms`` is the sized resistor network from :func:`size_resistors`;
+    the chain walk needs the input-pair degeneration values, which no
+    :class:`MetricModifiers` field can carry because the ``ro`` boost lands
+    inside ``Rout1``'s parallel combination rather than on top of it.
     """
     chain = build_stage_chain(
         view, sizing, plan.model, spec,
         cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf, gd_load_r=currents.gd_load_r,
+        resistor_ohms=resistor_ohms,
     )
     chain = modifiers.apply(chain)
     invalid, notes = _resistor_load_bias(view, currents, sizing, spec)

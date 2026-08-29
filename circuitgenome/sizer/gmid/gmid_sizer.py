@@ -82,7 +82,8 @@ def size_gmid(
 
     # Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.
     metrics, margins, eval_notes = evaluate_circuit(
-        view, currents, plan, sizing, modifiers, spec, tech)
+        view, currents, plan, sizing, modifiers, spec, tech,
+        resistor_ohms=extra_r)
 
     return SizingResult(
         transistors=sizing,
