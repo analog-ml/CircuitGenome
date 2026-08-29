@@ -1,6 +1,8 @@
 """Tests for cascode-aware output resistance and the CASCODE sizing role."""
 import math
 
+import pytest
+
 from circuitgenome.sizer.gmid.blocks import cascode_device_refs
 from circuitgenome.sizer.physics.stage_chain import node_rout
 from circuitgenome.synthesizer.models import Device
@@ -62,3 +64,44 @@ def test_node_rout_parallel_and_tail_stop():
     # so rout = 1 MΩ ∥ 1 MΩ = 500 kΩ.
     r = node_rout("out", [load, ip], model, sizing, frozenset({"net_tail"}))
     assert abs(r - 0.5e6) < 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Source degeneration boosts ro the same way a cascode does (issue #226)
+# --------------------------------------------------------------------------- #
+def test_node_rout_degeneration_boost():
+    """A sized degeneration R raises the pair's own ro by 1 + gm·R."""
+    model = _FakeModel(gm=1e-3, gds=1e-6)                       # ro = 1 MΩ
+    sizing = {"m_ip": _Sz()}
+    ip = D("m_ip", "pmos", g="in", d="out", s="s1")
+    # gm·R = 1e-3 · 500 = 0.5, the default degeneration_factor.
+    r = node_rout("out", [ip], model, sizing, frozenset({"net_tail"}), {"s1": 500.0})
+    assert math.isclose(r, 1e6 * 1.5, rel_tol=1e-9)
+
+
+def test_degeneration_outranks_the_ac_ground_stop():
+    """`stop` pins the pair's *source*; with degeneration the ground is one
+    resistor further down, so the boost must win over the stop shortcut.
+
+    Before #226 the stop branch returned a bare ro here and the load-diluted
+    boost the same resistor produces was lost, so `gain_db` carried the full
+    1/(1+gm·R) derate with none of the ro it buys back.
+    """
+    model = _FakeModel(gm=1e-3, gds=1e-6)
+    sizing = {"m_load": _Sz(), "m_ip": _Sz()}
+    load = D("m_load", "nmos", g="b", d="out", s="0")            # ro = 1 MΩ
+    ip = D("m_ip", "pmos", g="in", d="out", s="s1")
+    devs, stop = [load, ip], frozenset({"s1"})
+    assert node_rout("out", devs, model, sizing, stop) == pytest.approx(0.5e6)
+    boosted = node_rout("out", devs, model, sizing, stop, {"s1": 500.0})
+    assert boosted == pytest.approx(1.0 / (1.0 / 1e6 + 1.0 / 1.5e6))
+
+
+def test_degeneration_boost_only_lifts_its_own_leg():
+    """r1 sits on one leg; the other pair device keeps its bare ro."""
+    model = _FakeModel(gm=1e-3, gds=1e-6)
+    sizing = {"m_a": _Sz(), "m_b": _Sz()}
+    a = D("m_a", "pmos", g="in1", d="out", s="s1")
+    b = D("m_b", "pmos", g="in2", d="out", s="s2")
+    r = node_rout("out", [a, b], model, sizing, frozenset(), {"s1": 500.0})
+    assert r == pytest.approx(1.0 / (1.0 / 1.5e6 + 1.0 / 1e6))

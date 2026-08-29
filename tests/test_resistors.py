@@ -143,10 +143,20 @@ def test_tunable_leg_fallback_when_no_level_derivable():
 
 
 # --- integration ----------------------------------------------------------
-def test_degeneration_reduces_gain():
+def test_degeneration_reduces_gain_by_less_than_the_gm_derate():
+    """Degeneration costs gain, but not the whole 1/(1+gm·R) (issue #226).
+
+    Both halves of the first-order effect are modelled: gm falls by 1+gm·R
+    (`with_first_stage_gm`) and the pair's own ro rises by the same 1+gm·R
+    (`node_rout`'s degeneration branch). Driving an ideal load they would
+    cancel; the finite load dilutes the ro boost, so a real penalty survives
+    -- strictly between "gain-neutral" and the gm-derate-only 3.52 dB this
+    test used to pin. Measured here: 1.32 dB on ptm45, 2.38 dB on gf180mcu.
+    """
     plain = _size(input_pair="differential_pair_pmos").metrics["gain_db"]
     degen = _size(input_pair="differential_pair_pmos_degenerated").metrics["gain_db"]
-    assert plain - degen == pytest.approx(20 * math.log10(1.5), abs=0.2)
+    gm_only = 20 * math.log10(1.5)
+    assert 0.2 < plain - degen < gm_only - 0.5
 
 
 def test_degenerated_pair_reports_cmrr():
