@@ -177,6 +177,34 @@ def _first_present(slot_transistors: dict[str, list[Device]],
     return []
 
 
+def _tail_current_net(pair_source: str | None,
+                      ip_resistors: list[Device]) -> str | None:
+    """The net the tail current source's drain actually sits on.
+
+    For a plain differential pair that is the pair's own source net.  A
+    **source-degenerated** pair puts a resistor between each device's source
+    and the shared tail node, so the pair's source is one hop short of it:
+    nothing but a resistor touches that net, and a MOSFET-only walk like
+    :func:`node_rout` finds no drain there and reports infinite resistance --
+    which read as "no tail" and withheld CMRR for every degenerated pair with
+    a transistor tail (issue #224).
+
+    Hopping the series resistor costs 0.02 dB of CMRR to ignore in the other
+    direction: the degeneration R is ~0.25% of a simple mirror tail's ``ro``
+    (5.1 kΩ against 2.05 MΩ on GF180) and ~0.0006% of a cascode tail's, so the
+    series term is dropped and only the node resolution is corrected.
+    """
+    if pair_source is None:
+        return None
+    for r in ip_resistors:
+        t1, t2 = r.terminals.get("t1"), r.terminals.get("t2")
+        if t1 == pair_source and t2:
+            return t2
+        if t2 == pair_source and t1:
+            return t1
+    return pair_source
+
+
 def build_stage_chain(
     view: CircuitView,
     sizing: dict[str, TransistorSizing],
@@ -193,10 +221,12 @@ def build_stage_chain(
     loads the first stage's output node, which ``node_rout`` — a walk over
     MOSFETs — cannot see.
 
-    The input pair's source is the tail node, treated as an AC ground so the
-    pair contributes ``ro`` rather than a tail-degenerated cascode.  The first
-    stage's output is the *next* stage's signal gate, not the pair's drain:
-    on a folded cascode those are different nets.
+    The input pair's source is treated as an AC ground so the pair contributes
+    ``ro`` rather than a tail-degenerated cascode.  That net is the tail node
+    only for a plain pair; a source-degenerated one reaches its tail through a
+    resistor, which :func:`_tail_current_net` hops for the CMRR conductance
+    (issue #224).  The first stage's output is the *next* stage's signal gate,
+    not the pair's drain: on a folded cascode those are different nets.
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
@@ -249,9 +279,16 @@ def build_stage_chain(
                 gd_stage2_load = model.gds(d.type, s.w_um, s.l_um, s.ids_a)
 
     # --- Tail conductance (CMRR): the full stack down to the rail ---
+    # Resolved from the pair's source *through* any degeneration resistor, so
+    # the walk starts on the net the tail device's drain is really on (#224).
+    # Deliberately not reused for ``stop`` above: that set wants the pair's own
+    # source pinned as AC ground, and degeneration is already modelled
+    # separately as a gm derate (``with_first_stage_gm``).
+    tail_current_net = _tail_current_net(
+        tail_net, view.slot_resistors.get("input_pair", []))
     gd_tail = 0.0
-    if slot_transistors.get("tail_current") and tail_net:
-        r_tail = node_rout(tail_net, mosfets, model, sizing, frozenset())
+    if slot_transistors.get("tail_current") and tail_current_net:
+        r_tail = node_rout(tail_current_net, mosfets, model, sizing, frozenset())
         gd_tail = 1.0 / r_tail if r_tail and r_tail != float("inf") else 0.0
 
     # --- Output swing: the second stage's Vdsat per polarity ---

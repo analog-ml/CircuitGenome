@@ -7,6 +7,8 @@ from circuitgenome.recognizer import assign_slots, parse, recognize
 from circuitgenome.sizer.gmid.blocks import build_blocks
 from circuitgenome.sizer.gmid.intent import GmIdIntent
 from circuitgenome.sizer.gmid.resistors import size_resistors
+from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+from circuitgenome.sizer.physics.stage_chain import _tail_current_net
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TransistorSizing
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -145,6 +147,69 @@ def test_degeneration_reduces_gain():
     plain = _size(input_pair="differential_pair_pmos").metrics["gain_db"]
     degen = _size(input_pair="differential_pair_pmos_degenerated").metrics["gain_db"]
     assert plain - degen == pytest.approx(20 * math.log10(1.5), abs=0.2)
+
+
+def test_degenerated_pair_reports_cmrr():
+    """A degenerated pair must not lose CMRR to its own resistors (issue #224).
+
+    `tail_net` is the pair's source net, which a degenerated pair separates
+    from the real tail node by r1/r2. `node_rout` walks MOSFETs only, so it
+    found no drain there, returned inf, and `gd_tail` fell to 0 -- withholding
+    CMRR for every degenerated pair with a transistor tail, on every template.
+    """
+    degen = _size(input_pair="differential_pair_pmos_degenerated")
+    assert "cmrr_db" in degen.metrics
+
+
+def test_degeneration_costs_cmrr_only_the_gm_derate():
+    """Same tail conductance either way -- only gm1 is derated.
+
+    Pins that the resistor hop resolves to the *same* node the plain pair
+    uses: any error in the resolved node would move `gd_tail` and show up
+    here as a delta other than the 1/(1+gm*R) gm derate.
+    """
+    plain = _size(input_pair="differential_pair_pmos").metrics["cmrr_db"]
+    degen = _size(input_pair="differential_pair_pmos_degenerated").metrics["cmrr_db"]
+    assert plain - degen == pytest.approx(20 * math.log10(1.5), abs=0.2)
+
+
+def test_tail_node_resolves_onto_a_tail_device_for_every_pair_variant():
+    """Coverage guard for the node `gd_tail` is measured at (issue #224).
+
+    Structural, not numeric: for every (input_pair, tail_current) combination
+    the catalog enumerates, the net `_tail_current_net` resolves to must be a
+    net some tail-slot device actually drains onto. A degenerated pair failed
+    this for every transistor tail -- the resolved net held only resistors, so
+    the MOSFET-only `node_rout` walk returned inf and CMRR was withheld.
+
+    Asserting the topology rather than the metric keeps this independent of
+    whether any particular variant combination biases up.
+    """
+    mods = load_modules()
+    combos, failures = 0, []
+    for tname in ("one_stage_opamp", _TOPO):
+        topo = next(t for t in load_topologies() if t.name == tname)
+        seen = set()
+        for c in enumerate_circuits(topo, mods):
+            ip, tail = c.variant_map.get("input_pair"), c.variant_map.get("tail_current")
+            if not (ip and tail) or (ip.name, tail.name) in seen:
+                continue
+            seen.add((ip.name, tail.name))
+            parsed = parse(to_flat_spice(c))
+            view = analyze_circuit(assign_slots(recognize(parsed), topo), topo)
+            tail_devs = view.slot_transistors.get("tail_current", [])
+            ip_devs = view.slot_transistors.get("input_pair", [])
+            if not tail_devs or not ip_devs:
+                continue          # resistor tail: gd_tail comes from 1/R instead
+            combos += 1
+            net = _tail_current_net(ip_devs[0].terminals.get("s"),
+                                    view.slot_resistors.get("input_pair", []))
+            if net not in {d.terminals.get("d") for d in tail_devs}:
+                failures.append(f"{tname}/{ip.name}/{tail.name} -> {net}")
+    assert combos, "no transistor-tail combinations enumerated"
+    assert not failures, (
+        f"resolved tail node carries no tail device drain in "
+        f"{len(failures)}/{combos} combinations: {failures[:6]}")
 
 
 def test_resistor_tail_and_bias_sized():
