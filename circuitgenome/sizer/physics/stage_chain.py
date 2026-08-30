@@ -14,6 +14,7 @@ which a per-device ``gds`` sum cannot see.  It reads only ``model.gm`` and
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 
 from circuitgenome.synthesizer.models import Device
@@ -99,7 +100,15 @@ class StageChain:
         first stage's gain and to its role in GBW/PM, **not** to the raw ``gm``
         CMRR uses.
     :param gd_tail: tail-source output conductance in A/V (CMRR).
-    :param gd_stage2_load: second-stage load output conductance in A/V (PSRR).
+    :param gd_output_load: output conductance in A/V of the load device on the
+        output-driving stage's output node (PSRR) — the second stage's load on
+        a multi-stage chain, the first stage's own load on a single-stage one.
+    :param mirror_pole_hz: current-mirror node pole in Hz, ``None`` when the
+        chain has no diode-connected mirror load or the tech supplies no
+        ``cox``.  The first non-dominant pole of a **load**-compensated
+        single-stage OTA, so it sets that topology's phase margin; a
+        Miller-compensated chain has its own non-dominant pole at the output
+        and ignores this one.
     :param cc_pf: Miller compensation cap, ``None`` when uncompensated.
     :param cc2_pf: second compensation cap (three-stage), ``None`` otherwise.
     :param supply_currents: per-branch quiescent currents in A (power).
@@ -112,7 +121,8 @@ class StageChain:
     stages: tuple[Stage, ...]
     k_fs: float = 1.0
     gd_tail: float = 0.0
-    gd_stage2_load: float = 0.0
+    gd_output_load: float = 0.0
+    mirror_pole_hz: float | None = None
     cc_pf: float | None = None
     cc2_pf: float | None = None
     supply_currents: tuple[float, ...] = ()
@@ -175,6 +185,42 @@ def _first_present(slot_transistors: dict[str, list[Device]],
         if name in slot_transistors:
             return slot_transistors[name]
     return []
+
+
+def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
+                   model, sizing) -> float | None:
+    """Current-mirror node pole in Hz, or ``None`` when there is none.
+
+    A diode-connected load device pins its own node at ``1/gm``; the
+    capacitance that node drives is the gate capacitance of every device it
+    gates -- itself and the mirror devices copying it -- so the pole sits at
+    ``gm/(2π·ΣCgs)``.  This is the first non-dominant pole of a
+    load-compensated single-stage OTA (issue #221).
+
+    ``None`` when the load has no diode-connected device (a resistor or a
+    folded-cascode load), when that device is unsized, or when the technology
+    supplies no ``cox`` for ``Cgs`` -- each a case where the pole genuinely
+    cannot be placed, and the caller withholds phase margin rather than
+    inventing one.
+    """
+    diode = next((d for d in load_devs
+                  if d.terminals.get("g")
+                  and d.terminals.get("g") == d.terminals.get("d")), None)
+    if diode is None:
+        return None
+    s = sizing.get(diode.ref)
+    if s is None:
+        return None
+    gm = model.gm(diode.type, s.w_um, s.l_um, s.ids_a)
+    net = diode.terminals["g"]
+    c_f = 0.0
+    for d in mosfets:
+        sd = sizing.get(d.ref)
+        if sd is not None and d.terminals.get("g") == net:
+            c_f += model.cgs(d.type, sd.w_um, sd.l_um)
+    if gm <= 0.0 or c_f <= 0.0:
+        return None
+    return gm / (2.0 * math.pi * c_f)
 
 
 def build_stage_chain(
@@ -240,13 +286,24 @@ def build_stage_chain(
         stages.append(Stage(gm=_gm(sig) if sig is not None else 0.0,
                             rout=_rout(sig.terminals.get("d") if sig else None)))
 
-    # --- Second-stage load conductance (PSRR) ---
-    gd_stage2_load = 0.0
+    # --- Output-stage load conductance (PSRR) ---
+    # Multi-stage: the second stage's current-source load, whose gds is the
+    # path supply ripple takes to the output node.  Single-stage: the output
+    # node *is* the first stage's, so the same role is played by the load slot
+    # -- where the mirror is the load, and both its devices are gate-driven, so
+    # the not-a-signal-device test that picks a second-stage load finds nothing
+    # and the device on the output node is taken instead (issue #221).
+    gd_output_load = 0.0
     if slot_devs:
         for d in slot_devs[0]:
             s = sizing.get(d.ref)
             if s is not None and not is_signal_device(d):
-                gd_stage2_load = model.gds(d.type, s.w_um, s.l_um, s.ids_a)
+                gd_output_load = model.gds(d.type, s.w_um, s.l_um, s.ids_a)
+    else:
+        for d in slot_transistors.get("load", []):
+            s = sizing.get(d.ref)
+            if s is not None and d.terminals.get("d") == out1:
+                gd_output_load = model.gds(d.type, s.w_um, s.l_um, s.ids_a)
 
     # --- Tail conductance (CMRR): the full stack down to the rail ---
     gd_tail = 0.0
@@ -278,7 +335,9 @@ def build_stage_chain(
         stages=tuple(stages),
         k_fs=_first_stage_gain_factor(slot_transistors),
         gd_tail=gd_tail,
-        gd_stage2_load=gd_stage2_load,
+        gd_output_load=gd_output_load,
+        mirror_pole_hz=_mirror_pole_hz(
+            slot_transistors.get("load", []), mosfets, model, sizing),
         cc_pf=cc_pf,
         cc2_pf=cc2_pf,
         supply_currents=tuple(supply),

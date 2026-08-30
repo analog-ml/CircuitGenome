@@ -74,7 +74,8 @@ targets** the sizer solves against:
      - Minimum phase margin (dominant-pole model)
    * - ``slew_rate_min_vps``
      - V/s
-     - Minimum slew rate (``ibias / Cc``)
+     - Minimum slew rate (``ibias / Cc``; ``ibias / CL`` on a
+       load-compensated single stage)
    * - ``cmrr_min_db``
      - dB
      - Minimum common-mode rejection ratio

@@ -11,6 +11,10 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ## [Unreleased]
 
+### Fixed
+
+- 🐛 Single-stage OTAs get GBW, phase margin, slew rate and PSRR — `evaluate_metrics` gated all four behind a Miller-compensated multi-stage assumption, so `one_stage_opamp` returned 3 metrics against 7 for every other template. A single stage is *load* compensated, not uncompensated: `CL` sets the dominant pole, so GBW is `gm1/(2π·CL)` and slew is `I_tail/CL`. Phase margin needed the one piece of genuinely new physics — the mirror-node pole `gm/(2π·ΣCgs)` — which brings a new optional per-polarity `cox` (F/µm²) to the tech configs, read from each PDK's `toxe` and cross-checked against the gm/Id LUT's `ft`-implied `Cgg`. The Miller branch is untouched and multi-stage output is byte-identical; a chain whose mirror pole cannot be placed (resistor load, or a tech with no `cox`) still withholds phase margin rather than reporting zero ([#223](https://github.com/analog-ml/CircuitGenome/pull/223)).
+
 ### Docs
 
 - 📝 Walkthroughs for `sizer/verify/` — six figure-rich pages covering the ngspice bench: building a runnable deck from a generic sized netlist (three model idioms, the PDK subcircuit rewrite and the operating-point handle that moves with it), the shared rig and its bias-current-direction heuristic, the six metric testbenches, the DC bias-soundness verdict, and the orchestrator's failure discipline. The verification path was the only sizer package with no walkthrough ([#218](https://github.com/analog-ml/CircuitGenome/pull/218)).
