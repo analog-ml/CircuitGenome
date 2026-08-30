@@ -852,8 +852,8 @@
 
   <pre class="code"><code><span class="tok-kw">@dataclass</span>
 <span class="tok-kw">class</span> <span class="tok-fn">OpAmpBlocks</span>:
-    blocks: <span class="tok-fn">dict</span>[<span class="tok-kw">str</span>, Block]
-    is_fully_differential: <span class="tok-kw">bool</span>
+    blocks: <span class="tok-fn">dict</span>[<span class="tok-kw">str</span>, Block] = <span class="tok-fn">field</span>(default_factory=<span class="tok-fn">dict</span>)
+    is_fully_differential: <span class="tok-kw">bool</span> = <span class="tok-kw">False</span>
 
     <span class="tok-kw">@property</span>
     <span class="tok-kw">def</span> <span class="tok-fn">input_pair</span>(self): <span class="tok-kw">return</span> self.blocks.get(<span class="tok-str">"input_pair"</span>)

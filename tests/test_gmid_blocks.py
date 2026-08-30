@@ -1,6 +1,8 @@
 """Tests for the gm/Id functional-block view (circuitgenome/sizer/gmid/analyze)."""
 from circuitgenome.sizer.gmid.analyze import (
+    GmIdCircuitView,
     LoadKind,
+    OpAmpBlocks,
     build_blocks,
     classify_load,
 )
@@ -67,3 +69,20 @@ def test_tail_is_cascode():
     assert casc.tail.is_cascode
     # No tail slot at all → nothing to classify (resistor-tail / degenerate case).
     assert build_blocks({"input_pair": ip}, {}).tail is None
+
+
+def test_default_construction_is_the_empty_decomposition():
+    """``GmIdCircuitView``'s ``blocks`` default must be constructible.
+
+    It is declared ``field(default_factory=OpAmpBlocks)``, so ``OpAmpBlocks``
+    has to work with no arguments or building a view without one raises
+    ``TypeError``.  Every accessor degrades to "absent" rather than blowing up.
+    """
+    view = GmIdCircuitView()
+    assert view.blocks == OpAmpBlocks()
+    assert view.blocks.blocks == {} and not view.blocks.is_fully_differential
+    assert view.blocks.input_pair is None
+    assert view.blocks.load is None
+    assert view.blocks.tail is None
+    assert not view.blocks.has_cascode_load()
+    assert view.blocks.first_stage_out_net() is None

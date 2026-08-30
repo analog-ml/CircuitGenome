@@ -99,9 +99,14 @@ class Block:
 
 @dataclass
 class OpAmpBlocks:
-    """The block decomposition of a recognised op-amp."""
-    blocks: dict[str, Block]
-    is_fully_differential: bool
+    """The block decomposition of a recognised op-amp.
+
+    Both fields default, so a bare ``OpAmpBlocks()`` is the empty
+    decomposition -- which is what :class:`GmIdCircuitView` falls back to when
+    it is built without one.
+    """
+    blocks: dict[str, Block] = field(default_factory=dict)
+    is_fully_differential: bool = False
 
     @property
     def input_pair(self) -> Block | None:
