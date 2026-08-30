@@ -32,7 +32,7 @@ from __future__ import annotations
 from ..physics.device_model import GmIdModel
 from ..models import SizingSpec, TechParams, TransistorSizing
 from ..physics.taxonomy import RAILS
-from .blocks import OpAmpBlocks
+from .analyze import OpAmpBlocks
 from .resistors import _bias_rail_target_v
 
 __all__ = ["tune_bias_levels"]

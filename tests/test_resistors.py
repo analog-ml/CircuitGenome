@@ -4,7 +4,7 @@ import math
 import pytest
 
 from circuitgenome.recognizer import assign_slots, parse, recognize
-from circuitgenome.sizer.gmid.blocks import build_blocks
+from circuitgenome.sizer.gmid.analyze import build_blocks
 from circuitgenome.sizer.gmid.intent import GmIdIntent
 from circuitgenome.sizer.gmid.resistors import size_resistors
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TransistorSizing
