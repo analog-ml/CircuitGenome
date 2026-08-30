@@ -109,8 +109,9 @@
 <section class="part" id="part-1">
 
   <h2>Part 1 &middot; Why this file exists</h2>
+  <p><strong>TLDR:</strong> <code>rig.py</code> is the boilerplate every testbench would otherwise repeat &mdash; supplies, bias source, pin-to-net wiring and deck assembly &mdash; plus the one piece of real circuit reasoning that boilerplate needs: reading the reference diode's rail to decide whether the bias current must be pushed in or pulled out.</p>
 
-  <blockquote><p><strong>The one job:</strong> six testbenches all need the same scaffolding around the DUT &mdash; a supply, a bias current, and a wiring map. Write it once. Then handle the two things about that scaffolding which are <em>not</em> the same for every circuit.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> six testbenches all need the same scaffolding around the DUT &mdash; a supply, a bias current, and a wiring map. Write it once. Then handle the two things about that scaffolding which are <em>not</em> the same for every circuit.</p></blockquote>
 
   <p class="beat">The boring part is boring. The interesting part is what refuses to stay constant.</p>
 
@@ -131,7 +132,7 @@
 
   <h2>Part 2 &middot; <code>_Topo</code> &mdash; what the pin list tells you</h2>
 
-  <blockquote><p><strong>The one job:</strong> decide, from the port names alone, whether this is a single-ended or a fully-differential amplifier &mdash; and whether it expects a common-mode reference.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> decide, from the port names alone, whether this is a single-ended or a fully-differential amplifier &mdash; and whether it expects a common-mode reference.</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">_Topo</span>:
     <span class="tok-kw">def</span> <span class="tok-fn">__init__</span>(self, ports):
@@ -140,17 +141,13 @@
         self.out     = [<span class="tok-str">"outp"</span>, <span class="tok-str">"outn"</span>] <span class="tok-kw">if</span> self.fd <span class="tok-kw">else</span> [<span class="tok-str">"out"</span>]
         self.has_vcm = <span class="tok-str">"vcm_ref"</span> <span class="tok-kw">in</span> ports</code></pre>
 
-  <p>Twelve lines, and every bench branches on them. A fully-differential circuit needs its output read as a <em>difference</em> (<code>v(outp)-v(outn)</code>), needs both outputs checked for railing, and &mdash; if it exposes <code>vcm_ref</code> &mdash; needs that pin driven to the common-mode voltage or its CMFB loop has no reference to servo against.</p>
-
-  <p><code>has_vcm</code> is separate from <code>fd</code> for a real reason: when a fully-differential topology has its CMFB pruned, the <code>vcm_ref</code> pin goes with it. So "is differential" and "wants a CM reference" are two questions, not one.</p>
-
 </section>
 
 <section class="part" id="part-3">
 
   <h2>Part 3 &middot; <code>_iref_sink()</code> &mdash; which way does the bias current go?</h2>
 
-  <blockquote><p><strong>The one job:</strong> look at the reference diode on the <code>ibias</code> pin and decide whether the bench must <em>push</em> current in or <em>pull</em> it out.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> look at the reference diode on the <code>ibias</code> pin and decide whether the bench must <em>push</em> current in or <em>pull</em> it out.</p></blockquote>
 
   <p>Every amplifier here is biased from a single external reference current on the <code>ibias</code> pin. Inside, that pin lands on a diode-connected MOSFET &mdash; <code>d == g == ibias</code> &mdash; which mirrors the current to everything else. The question the bench has to answer is which <em>rail</em> that diode sits on, because it flips the direction of the whole thing.</p>
 
@@ -212,7 +209,7 @@
 
   <h2>Part 4 &middot; <code>_fb_netmap()</code> and <code>_deck()</code> &mdash; assembly</h2>
 
-  <blockquote><p><strong>The one job:</strong> map the DUT's pins onto the bench's nets for a chosen input polarity, then concatenate everything into one string ngspice can run.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> map the DUT's pins onto the bench's nets for a chosen input polarity, then concatenate everything into one string ngspice can run.</p></blockquote>
 
   <p>The netmap is the join between two naming worlds. The DUT speaks in port names (<code>in1</code>, <code>vdd!</code>, <code>outp</code>); the bench speaks in net names (<code>inp</code>, <code>vdd</code>, <code>outp</code>). One dict reconciles them, parameterised by which port is playing the non-inverting role:</p>
 
@@ -268,12 +265,10 @@
   <ul>
     <li>It does not <em>find</em> the input polarity. It only makes both choices equally easy to wire, so the AC bench can try them and pick. See <a href="verify-measure_explained.html"><code>measure.py</code></a>.</li>
     <li>The bias-direction heuristic is textual. It looks for <code>d == g == ibias</code> in the device lines; a bias generator that references its current some other way would not be recognised, and the fallback is to inject.</li>
-    <li>Both rails carrying a reference diode is treated as "unknown", not "both". That case is not expected to occur, and if it ever does the fallback quietly hides it.</li>
     <li>Nothing here is a measurement. Every function returns a <em>string</em>; not one of them runs a simulator.</li>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>rig.py</code> is the boilerplate every testbench would otherwise repeat &mdash; supplies, bias source, pin-to-net wiring and deck assembly &mdash; plus the one piece of real circuit reasoning that boilerplate needs: reading the reference diode's rail to decide whether the bias current must be pushed in or pulled out.</p>
 
 </section>
 

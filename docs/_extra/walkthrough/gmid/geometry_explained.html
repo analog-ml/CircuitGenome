@@ -118,11 +118,8 @@
 
   <p class="beat">Here is the whole story before a single line of code.</p>
 
-  <p>Most of this sizer sizes transistors by <strong>search</strong>. A CP-SAT solver (a constraint-satisfaction engine, like a Sudoku solver) is told the rules — "these two must match," "this mirror must be 3× that one," "everyone must saturate" — and it hunts through combinations of widths until it finds a set that satisfies every rule at once. Search is powerful, but it is slow, and it can fail to find anything even when an answer exists.</p>
+  <p>Most of this sizer sizes transistors by <strong>search</strong>. For the gm/Id path, <strong>we don't have to search at all.</strong> The current through every device is already pinned by Kirchhoff's current law. The transconductance target <code>gm/Id</code> is already chosen. Once those two are fixed, physics leaves <em>no freedom</em> in the width — the lookup table hands it to you directly. So instead of a solver exploring a tree, we walk a short, deterministic <strong>forward pass</strong>: plug in, read out, done.</p>
 
-  <p>This file makes a bet: for the gm/Id path, <strong>we don't have to search at all.</strong> The current through every device is already pinned by Kirchhoff's current law. The transconductance target <code>gm/Id</code> is already chosen. Once those two are fixed, physics leaves <em>no freedom</em> in the width — the lookup table hands it to you directly. So instead of a solver exploring a tree, we walk a short, deterministic <strong>forward pass</strong>: plug in, read out, done.</p>
-
-  <p>Analogy: it's the difference between a Sudoku puzzle and a recipe. Sudoku (CP-SAT) means trying values and backtracking until nothing contradicts. A recipe (this file) means every quantity is already determined — "2 cups per person, 4 people, therefore 8 cups" — you just evaluate it. Same kitchen, no guessing.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 560 250" role="img" aria-label="CP-SAT search tree on the left versus a straight forward pass on the right">

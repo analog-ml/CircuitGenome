@@ -112,7 +112,7 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-
+  <p><strong>TLDR:</strong> <code>blocks.py</code> reads only the terminal-connectivity of a recognised op-amp — <code>g==d</code> for mirrors, one device's source on another's drain for cascodes — to group devices into typed <code>Block</code>s and derive the first-stage gain factor, cascode headroom flags, and a cascode-aware output resistance, forming the structural layer the Analyze, bias, and evaluate phases all build on.</p>  <p><strong>In one sentence:</strong> <code>blocks.py</code> reads only the terminal-connectivity of a recognised op-amp — <code>g==d</code> for mirrors, one device's source on another's drain for cascodes — to group devices into typed <code>Block</code>s and derive the first-stage gain factor, cascode headroom flags, and a cascode-aware output resistance, forming the structural layer the Analyze, bias, and evaluate phases all build on.</p>
   <blockquote><p><strong>The one job:</strong> given the raw pile of transistors the recogniser dropped into named slots, decide <em>which</em> devices form the input pair, the load, the tail — and, crucially, what <em>kind</em> of load and tail they are (mirror? cascode? resistor? plain current source?).</p></blockquote>
 
   <p class="beat">Here is the whole story before a single line of code.</p>
@@ -1018,7 +1018,7 @@
   <p>The whole file rides one insight: <strong>you can read an amplifier's electrical behaviour off its wiring graph alone</strong>. Two one-line terminal tests (<code>g==d</code>, <code>s∈drains</code>) plus a shallow recursion recover the gain factor, the headroom demand, and the output resistance — no matrices, no simulation — giving the Analyze phase a fast, cheap, honest structural read of what it's holding.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>blocks.py</code> reads only the terminal-connectivity of a recognised op-amp — <code>g==d</code> for mirrors, one device's source on another's drain for cascodes — to group devices into typed <code>Block</code>s and derive the first-stage gain factor, cascode headroom flags, and a cascode-aware output resistance, forming the structural layer the Analyze, bias, and evaluate phases all build on.</p>
+
 </section>
 
 </main>
