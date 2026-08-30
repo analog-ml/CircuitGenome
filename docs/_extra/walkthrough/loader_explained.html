@@ -109,16 +109,8 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-
-  <blockquote><p><strong>The one job:</strong> take a human-friendly YAML config file and hand back a typed, validated Python object — so the rest of the sizer never has to touch a raw dictionary or guess whether a value is a string or a number.</p></blockquote>
-
-  <p class="beat">Here is the whole story without a line of code.</p>
-
-  <p>The sizer needs process facts — threshold voltages, width grids, capacitor ranges, file paths to SPICE models. Those live in <code>.yaml</code> files that a <em>human</em> writes and edits: with comments, extra annotation keys, numbers typed as <code>270.0e-6</code>, and paths written <em>relative</em> to the config folder. That is the messy outside world.</p>
-
-  <p>The sizer's inside world is the opposite: strict, typed <code>@dataclass</code> objects (<code>TechParams</code>, <code>SizingSpec</code>, <code>GridSpec</code> …) where <code>vth</code> is guaranteed to be a <code>float</code> and a path is guaranteed to be absolute. Everything downstream leans on that guarantee.</p>
-
-  <p>Think of <code>loader.py</code> as a <strong>customs officer at a border</strong>. Travellers (YAML documents) arrive with paperwork in every format. The officer reads each document, converts every value into the country's official currency (<code>float()</code>, <code>str()</code>), stamps the required fields, waves through the harmless extras, and hands the sizer a clean, typed passport. Nothing gets past this desk untyped.</p>
+<p><strong>TLDR:</strong> <code>loader.py</code> is the single validated border between human-written YAML and the sizer's typed core — <code>load_spec()</code> leniently builds a <code>SizingSpec</code>, <code>load_tech()</code> strictly builds a <code>TechParams</code> (resolving built-in names and relative paths, coercing every value through <code>float()</code>/<code>str()</code>, and filling optional blocks only when present) — so that everything downstream can trust its inputs completely.</p>
+  <blockquote><p><strong>Main task:</strong> take a human-friendly YAML config file and hand back a typed, validated Python object — so the rest of the sizer never has to touch a raw dictionary or guess whether a value is a string or a number.</p></blockquote>
 
   <figure class="fig">
     <svg viewBox="0 0 560 130" role="img" aria-label="Data flow: YAML file parsed, coerced and validated, into a typed dataclass">
@@ -151,7 +143,6 @@
     <figcaption>One direction, one desk: a human YAML file goes in, a typed dataclass comes out — validated on the way through.</figcaption>
   </figure>
 
-  <p>What breaks without this file? The sizer would reach into a raw dict, guess key names, and eventually feed a <em>string</em> <code>"0.5"</code> into a numeric routine ten stack-frames deep — a crash with no hint of the real cause (a typo in a config file). The loader pulls all of that risk to <strong>one place</strong>, at the moment the config is read.</p>
 
   <h3>The cast of characters</h3>
   <p>Two public front doors, three tiny private helpers. Hover any box to trace who it calls.</p>
@@ -199,26 +190,15 @@
     <figcaption>Two independent entry points. <code>load_spec()</code> stands alone; <code>load_tech()</code> leans on three one-line coercion helpers. We'll learn the leaves as they appear.</figcaption>
   </figure>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 takes the smaller door first — <code>load_spec()</code> — whose whole trick is a single lenient one-liner.</p></blockquote>
 </section>
 
 <!-- ================= PART 2 ================= -->
 <section class="part" id="part-2">
   <h2>Part 2 · <code>load_spec()</code> — the lenient parser</h2>
+ <p>Part&nbsp;2 takes the smaller door first — <code>load_spec()</code> — whose whole trick is a single lenient one-liner.</p>
+  <blockquote><p><strong>Main task:</strong> read a spec YAML file and build a <code>SizingSpec</code> from it, quietly ignoring any keys that aren't real <code>SizingSpec</code> fields.</p></blockquote>
 
-  <blockquote><p><strong>The one job:</strong> read a spec YAML file and build a <code>SizingSpec</code> from it, quietly ignoring any keys that aren't real <code>SizingSpec</code> fields.</p></blockquote>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">load_spec</span>(path):
-    <span class="tok-kw">with</span> <span class="tok-fn">open</span>(path) <span class="tok-kw">as</span> f:
-        data = yaml.<span class="tok-fn">safe_load</span>(f)
-    <span class="tok-kw">return</span> <span class="tok-fn">SizingSpec</span>(
-        **{k: v <span class="tok-kw">for</span> k, v <span class="tok-kw">in</span> data.<span class="tok-fn">items</span>()
-           <span class="tok-kw">if</span> k <span class="tok-kw">in</span> SizingSpec.__dataclass_fields__})</code></pre>
-
-  <p>Analogy: a <strong>form-parser that skips blank lines it doesn't recognise.</strong> You hand it a form with the four required boxes filled in — plus some scribbled notes in the margin. It copies the boxes it knows about and simply doesn't read your margin notes. No error, no fuss.</p>
-
-  <h3>The single most important line</h3>
-  <p>Everything happens in that dict comprehension. <code>SizingSpec.__dataclass_fields__</code> is a dict Python auto-generates for every <code>@dataclass</code> — its keys are the legal field names. So <span class="keyline">if k in SizingSpec.__dataclass_fields__</span> is a <em>sieve</em>: a YAML key survives only if it names a real field. Unknown keys fall through the holes and vanish before they ever reach the constructor.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 540 210" role="img" aria-label="A sieve keeping known SizingSpec fields and dropping unknown keys">
@@ -266,26 +246,15 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
   <p>After <code>yaml.safe_load</code> that's a dict of five keys. The comprehension keeps the four that name fields and drops <code>provenance</code>, so the call is effectively:</p>
   <pre class="code"><code><span class="tok-fn">SizingSpec</span>(vdd=<span class="tok-num">5.0</span>, vss=<span class="tok-num">0.0</span>, ibias=<span class="tok-num">1e-05</span>, cl=<span class="tok-num">1e-11</span>)
 <span class="tok-com"># every other SizingSpec field takes its dataclass default (None / 2.0 …)</span></code></pre>
-  <p>Why be lenient here? A spec file is something an <em>engineer</em> annotates by hand — dropping in comments, provenance, a scratch note. Leniency means those annotations never break loading. The cost: a <strong>typo</strong> in a real field name (say <code>vddd</code>) is silently ignored too — we'll flag that honestly in Part&nbsp;5.</p>
 </section>
 
 <!-- ================= PART 3 ================= -->
 <section class="part" id="part-3">
   <h2>Part 3 · <code>load_tech()</code> — first, find the file</h2>
 
-  <blockquote><p><strong>The one job:</strong> before parsing anything, decide <em>which</em> file to actually open — a built-in default, a real path the user gave, or the short name of a bundled config.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> before parsing anything, decide <em>which</em> file to actually open — a built-in default, a real path the user gave, or the short name of a bundled config.</p></blockquote>
 
   <p><code>load_tech()</code> accepts <code>path=None</code>, a real filesystem path, <em>or</em> a friendly short name like <code>"ptm45"</code>. That convenience means it has to resolve three cases up front:</p>
-
-  <pre class="code"><code><span class="tok-kw">if</span> path <span class="tok-kw">is None</span>:
-    path = _BUILTIN_DIR / <span class="tok-str">"tech_generic.yaml"</span>
-<span class="tok-kw">elif not</span> <span class="tok-fn">Path</span>(path).<span class="tok-fn">exists</span>():
-    <span class="tok-com"># not a real path → treat as a built-in name ("ptm45" → tech_ptm45.yaml)</span>
-    builtin = _BUILTIN_DIR / <span class="tok-fn">f"tech_{Path(path).name}.yaml"</span>
-    <span class="tok-kw">if</span> builtin.<span class="tok-fn">exists</span>():
-        path = builtin</code></pre>
-
-  <p>Analogy: you walk up to the officer and either say nothing (they hand you the <strong>standard form</strong>), show a real document (they take it as-is), or say a nickname like "the 45-nanometre one" — and they walk to the shelf and pull <code>tech_ptm45.yaml</code> for you.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 560 220" role="img" aria-label="Three-way path resolution in load_tech">
@@ -313,7 +282,7 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
   </figure>
 
   <h3>The three tiny helpers it defines</h3>
-  <p>Once the file is open and parsed, <code>load_tech</code> defines three closures. Each is a one-liner whose only job is <strong>type coercion</strong> — turning a YAML sub-dict into a typed dataclass, forcing every number through <code>float()</code>.</p>
+  <p>Once the file is open and parsed, <code>load_tech</code> defines three closures, turning a YAML sub-dict into a typed dataclass, forcing every number through <code>float()</code>.</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_mosfet</span>(d):
     <span class="tok-kw">return</span> <span class="tok-fn">MosfetParams</span>(
@@ -329,8 +298,7 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
         max=<span class="tok-fn">float</span>(d[max_key]),
         step=<span class="tok-fn">float</span>(d[<span class="tok-str">"step"</span>]))</code></pre>
 
-  <p>Why wrap <code>float()</code> around values YAML already parsed? Because you can't <em>trust</em> that YAML gave you a number. Write <code>vth: 0.5</code> and you get a float; write <code>vth: "0.5"</code> or <code>vth: 5e-1</code> in a way the parser reads as a string, and you'd get a <code>str</code>. The explicit <code>float()</code> is the officer converting <em>every</em> value to the official currency, no exceptions. Each square-law number (<code>vth</code>, <code>mu_cox</code>, <code>lam</code>) is coerced only when its key is actually present — a gm/Id (LUT) tech may omit them entirely and fall back to <code>None</code>, since the lookup table already supplies those operating-point values. The body-effect terms <code>gamma</code>/<code>phi</code> always fill in, defaulting to <code>0.0</code> / <code>0.7</code>. That's why each field is guarded with <code>if key in d</code> rather than a bare <code>d["…"]</code>: requiredness is enforced only for Level-1 techs, by a separate <code>_validate_mosfets</code> pass, not by <code>[]</code>-access.</p>
-
+  
   <p>The third helper resolves relative paths against the config file's own directory:</p>
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_resolve</span>(rel):
     <span class="tok-kw">if not</span> rel:
@@ -339,16 +307,14 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
     <span class="tok-kw">if not</span> p.<span class="tok-fn">is_absolute</span>():
         p = <span class="tok-fn">Path</span>(path).parent / p
     <span class="tok-kw">return</span> <span class="tok-fn">str</span>(p)</code></pre>
-  <p>A config writes <code>gmid_lut: models/gf180mcu_gmid.npz</code> — relative to <em>where the config lives</em>, not to wherever you happened to run the program. <code>_resolve</code> glues that onto <code>Path(path).parent</code> so the sizer always gets an absolute path that works no matter the current directory. Absolute paths are passed through untouched; empty/None comes back as <code>None</code>.</p>
 </section>
 
 <!-- ================= PART 4 ================= -->
 <section class="part" id="part-4">
   <h2>Part 4 · <code>load_tech()</code> — building the object</h2>
 
-  <blockquote><p><strong>The one job:</strong> assemble one big typed <code>TechParams</code> — every required field coerced through a helper, every optional block filled in only if the YAML provides it.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> assemble one big typed <code>TechParams</code> — every required field coerced through a helper, every optional block filled in only if the YAML provides it.</p></blockquote>
 
-  <p>With the file open and the helpers defined, the payoff is one large constructor call. Here is the shape of it, trimmed to the essentials:</p>
 
   <pre class="code"><code><span class="tok-kw">return</span> <span class="tok-fn">TechParams</span>(
     name=<span class="tok-fn">str</span>(data[<span class="tok-str">"name"</span>]),
@@ -365,7 +331,7 @@ provenance: <span class="tok-str">"hand-tuned 2026"</span>   <span class="tok-co
     spice_lib=spice_lib,
     wl_units=<span class="tok-fn">str</span>(data.<span class="tok-fn">get</span>(<span class="tok-str">"wl_units"</span>, <span class="tok-str">"m"</span>)))</code></pre>
 
-  <p>Notice the <strong>one place a name is remapped</strong>. The YAML writes the cap grid as <code>min_pf / max_pf / step_pf</code> (units baked into the key, friendly for humans), but <code>GridSpec</code> just wants <code>min / max / step</code>. That's why <code>cap</code> is built by hand instead of via <code>_grid</code> — its keys don't match the helper's defaults. Everything else lines up one-to-one.</p>
+  <p>Notice the <strong>one place a name is remapped</strong>. The YAML writes the cap grid as <code>min_pf / max_pf / step_pf</code> (units baked into the key, friendly for humans), but <code>GridSpec</code> just wants <code>min / max / step</code>. That's why <code>cap</code> is built by hand instead of via <code>_grid</code> . Everything else lines up one-to-one.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 560 250" role="img" aria-label="Field-by-field mapping from YAML into TechParams">
@@ -456,15 +422,12 @@ lib_d = data.<span class="tok-fn">get</span>(<span class="tok-str">"spice_lib"</
 <section class="part" id="part-5">
   <h2>Part 5 · The hidden boundary, limits, and the one line</h2>
 
-  <p>Although the file never names it, <code>loader.py</code> implements one classic idea: a <strong>single validated boundary</strong> — the anti-corruption layer — between the messy config world and the clean typed core.</p>
 
   <div class="eq-center">
     <span class="boxed-eq">messy YAML&nbsp;&nbsp;──( one door )──▶&nbsp;&nbsp;typed, trusted dataclasses</span>
   </div>
 
-  <p>Every guarantee the sizer relies on is established <em>here</em> and nowhere else. Downstream code never re-checks types, never resolves a path, never guesses a key — because it can't receive anything that wasn't already coerced and validated at this desk.</p>
 
-  <h3>The lenient/strict split</h3>
   <p>The two doors deliberately behave differently, and it's worth naming why:</p>
   <table>
     <thead><tr><th>Door</th><th>Unknown key</th><th>Missing required</th><th>Why</th></tr></thead>
@@ -477,17 +440,12 @@ lib_d = data.<span class="tok-fn">get</span>(<span class="tok-str">"spice_lib"</
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li><strong>Missing required field</strong> → a raw <code>KeyError</code> (e.g. <code>data["name"]</code>) or <code>TypeError</code>. Loud and immediate — which is the point.</li>
-    <li><strong>Invalid value</strong> → <code>float("abc")</code> raises <code>ValueError</code>. No custom message; you get Python's.</li>
-    <li><strong>An unknown nickname</strong> → if <code>tech_foo.yaml</code> doesn't exist, resolution falls through and <code>open(path)</code> raises <code>FileNotFoundError</code> on the original string.</li>
     <li><strong>A typo in an optional key</strong> (e.g. <code>vddd</code>, <code>spicemodel</code>) is <em>silently dropped</em> — no schema validation catches it. This is the price of leniency.</li>
-    <li>Process-param sanity <em>is</em> now checked for Level-1 techs (no <code>gmid_lut</code>): <code>_validate_mosfets</code> rejects a wrong-signed <code>vth</code> (NMOS must be &gt; 0, PMOS &lt; 0) and a non-positive <code>mu_cox</code>/<code>lam</code>, raising <code>ValueError</code>. But broader range checking still isn't here — a negative width loads happily. That much sanity is still someone else's job.</li>
   </ul>
 
-  <h3>Why it's elegant</h3>
-  <p>The whole file rides one discipline: <strong>convert and validate exactly once, at the edge.</strong> Required fields crash loudly, optional fields default quietly, paths resolve relative to their own config, and every number is forced through <code>float()</code> — so the hundreds of lines of sizing code behind this desk can assume perfect, typed inputs and never look back.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>loader.py</code> is the single validated border between human-written YAML and the sizer's typed core — <code>load_spec()</code> leniently builds a <code>SizingSpec</code>, <code>load_tech()</code> strictly builds a <code>TechParams</code> (resolving built-in names and relative paths, coercing every value through <code>float()</code>/<code>str()</code>, and filling optional blocks only when present) — so that everything downstream can trust its inputs completely.</p>
+  
 </section>
 
 </main>

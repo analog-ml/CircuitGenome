@@ -108,7 +108,7 @@
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
 
-  <blockquote><p><strong>The one job:</strong> the sizer has chosen every transistor's width, length and current. Read that solved circuit <em>once</em> and write down the handful of small-signal numbers a performance formula actually needs — per-stage <code>gm</code> and <code>Rout</code>, the tail and load conductances, the compensation caps, the branch currents.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> the sizer has chosen every transistor's width, length and current. Read that solved circuit <em>once</em> and write down the handful of small-signal numbers a performance formula actually needs — per-stage <code>gm</code> and <code>Rout</code>, the tail and load conductances, the compensation caps, the branch currents.</p></blockquote>
 
   <p class="beat">The whole idea in one sentence.</p>
 
@@ -127,7 +127,7 @@
 
   <blockquote><p><strong>The one job of this Part:</strong> understand why the metrics code never mentions <code>λ</code> or a lookup table directly — it only ever asks a <code>DeviceModel</code> for <code>gm</code> and <code>gds</code> at the geometry already chosen.</p></blockquote>
 
-  <p>Think of a <strong>universal power adapter</strong>. Your laptop does not care whether the wall socket behind the adapter is European or American — it just asks the adapter for "clean DC," and the adapter hides the difference. The <code>DeviceModel</code> is that adapter. The metrics code plugs into it and asks for two things:</p>
+  <p>he <code>DeviceModel</code> is an adapter. The metrics code plugs into it and asks for two things:</p>
 
   <ul>
     <li><code>model.gm(type, W, L, Ids)</code> — the small-signal <em>transconductance</em>: how strongly this device turns a gate voltage into a drain current.</li>
@@ -189,40 +189,7 @@ Small-signal parameters come through a DeviceModel evaluated at the
 
   <p><code>_sz</code> is a dictionary lookup: given a device reference like <code>"M1"</code>, hand back its solved sizing (or <code>None</code> if it was never sized). <code>_gds</code> is a pure pass-through to the model. The interesting one is <code>_gm</code>, and it is interesting because of that <code>min(…)</code>.</p>
 
-  <h3>Why the <code>min</code>? The weak-inversion ceiling</h3>
-
-  <p>The Level-1 square-law formula <code>gm = √(2·µCox·(W/L)·Id)</code> has no upper limit — make the device wide enough and it promises unbounded transconductance. But real physics says <code>gm</code> can never exceed <code>Id / (n·φt)</code>, roughly <code>gm/Id ≤ 25 /V</code> at room temperature (the weak-inversion limit). Left unchecked, the square-law formula would let the sizer <em>promise a gm the device can only reach by sliding into weak inversion</em> — a gm the amplifier will never actually deliver.</p>
-
-  <p>So <code>_gm</code> takes the smaller of the two: the formula's value, or the physical ceiling <code>gm_ceiling = 25 · |Id|</code>.</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 520 190" role="img" aria-label="gm is the minimum of the square-law value and the physical ceiling">
-      <text x="260" y="22" text-anchor="middle" font-size="12.5" font-weight="600">min( square-law gm , ceiling 25·Id )</text>
-      <!-- case A: formula below ceiling -->
-      <text x="130" y="52" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">narrow device</text>
-      <rect x="70" y="60" width="120" height="30" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
-      <text x="130" y="80" text-anchor="middle" font-size="11">formula = 0.6 mA/V</text>
-      <line x1="70" y1="108" x2="190" y2="108" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
-      <text x="130" y="126" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ceiling = 0.5 mA/V</text>
-      <text x="130" y="150" text-anchor="middle" font-size="11" fill="var(--fig-bad)">picks ceiling: 0.5 ✗ formula</text>
-      <line x1="255" y1="55" x2="255" y2="155" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="2 4"/>
-      <!-- case B -->
-      <text x="390" y="52" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">honest device</text>
-      <rect x="330" y="90" width="120" height="30" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-      <text x="390" y="110" text-anchor="middle" font-size="11">formula = 0.4 mA/V</text>
-      <line x1="330" y1="70" x2="450" y2="70" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
-      <text x="390" y="64" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ceiling = 0.5 mA/V</text>
-      <text x="390" y="150" text-anchor="middle" font-size="11" fill="var(--fig-good)">picks formula: 0.4 ✓</text>
-    </svg>
-    <figcaption>When the square-law formula over-promises (left), the clamp pulls it down to the physical ceiling; when it is honest (right), the formula wins. Either way, <code>gm</code> stays believable.</figcaption>
-  </figure>
-
-  <h3>A number, traced</h3>
-  <p>Say a device carries <code>Id = 20 µA</code>, and the square-law formula returns <code>0.6 mA/V</code>:</p>
-  <pre class="code"><code>ceiling = 25 × 20e-6 = 500e-6 = 0.5 mA/V
-gm      = min(0.6 mA/V, 0.5 mA/V) = 0.5 mA/V   <span class="tok-com"># clamped</span></code></pre>
-
-  <p>Note the ceiling depends on <code>Id</code> (and length), <em>not</em> width — you cannot buy more <code>gm</code> per amp of current than physics allows, no matter how wide you go. With these three helpers in hand, every metric below is just arithmetic on <code>gm</code> and <code>gds</code>.</p>
+  
 </section>
 
 <section class="part" id="part-4">

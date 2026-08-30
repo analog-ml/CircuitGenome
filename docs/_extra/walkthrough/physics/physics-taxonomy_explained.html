@@ -97,23 +97,25 @@
 
 <nav id="toc">
   <div class="label">Contents</div>
-  <a href="#part-1">1 · Why this file exists</a>
-  <a href="#part-2">2 · Slots → bias &amp; stage groups</a>
-  <a href="#part-3">3 · Nets → bias rails</a>
-  <a href="#part-4">4 · is_signal_device() &amp; the one lever</a>
+  <a href="#part-1">1 · Slots → bias &amp; stage groups</a>
+  <a href="#part-2">2 · Nets → bias rails</a>
+  <a href="#part-3">3 · is_signal_device() &amp; the one lever</a>
 </nav>
 
 <main>
 
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
-  <h2>Part 1 · Why this file even exists</h2>
 
-  <blockquote><p><strong>The one job:</strong> be the <em>single dictionary</em> of naming conventions — which slot names exist, which bias-current group each belongs to, and which net names are rails — so the sizer can recognize any topology that speaks this vocabulary without a single line of new code.</p></blockquote>
+<p><strong>TLDR:</strong> <code>taxonomy.py</code> is the sizer's single source of truth for naming — four slot groups that say how much current a device carries and whether it's a gain stage (with source-follower buffers deliberately excluded), two net sets that mark bias rails versus AC grounds, and one small polarity-agnostic function that reads those net sets to separate signal transistors from current-source loads — so a new topology is supported by extending a set here, and only here.</p>
+
+  
+
+  <blockquote><p><strong>Main task:</strong> be the <em>single dictionary</em> of naming conventions — which slot names exist, which bias-current group each belongs to, and which net names are rails — so the sizer can recognize any topology that speaks this vocabulary without a single line of new code.</p></blockquote>
 
   <p class="beat">Here is the whole story without reading the function at the bottom.</p>
 
-  <p>Two sizers — the Level-1 analytical sizer and the gm/Id pipeline — both need to look at a circuit template and answer questions like <em>"does this device carry the full tail current or half of it?"</em> and <em>"is this gate tied to a supply rail?"</em> Every one of those answers depends on a <strong>naming convention</strong>: a differential input transistor is always in a slot called <code>input_pair</code>, a supply is always a net called <code>vdd!</code>, and so on.</p>
+  <p>Different sizers need to look at a circuit template and answer questions like <em>"does this device carry the full tail current or half of it?"</em> and <em>"is this gate tied to a supply rail?"</em> Every one of those answers depends on a <strong>naming convention</strong>: a differential input transistor is always in a slot called <code>input_pair</code>, a supply is always a net called <code>vdd!</code>, and so on.</p>
 
   <p>Think of it like a <strong>library catalog</strong> — or the standardized part numbers in an electronics warehouse. The books (transistors) live all over the building, but the catalog says exactly which shelf (bias group) each call-number prefix belongs to. Nobody re-invents the shelving scheme per book; they look it up in one place.</p>
 
@@ -169,14 +171,18 @@
     <figcaption>The entire file at a glance: four named buckets of slot strings, two named buckets of net strings. That is the whole vocabulary the sizer trusts.</figcaption>
   </figure>
 
-  <p>The file has three moving parts, and we'll take them in learning order: the <strong>slot groups</strong> (Part 2) that classify transistors by how much current they carry and what stage they belong to, the <strong>net names</strong> (Part 3) that mark supply and bias rails, and the single tiny <strong>function</strong> (Part 4), <code>is_signal_device()</code>, that leans on those net names to tell a signal transistor from a current-source load.</p>
+  <p>The file has three parts, and we'll take them in learning order: </p>
+  <ul> 
+    <li><strong>slot groups</strong> (Part 2) that classify transistors by how much current they carry and what stage they belong to, the <strong>net names</strong></li>
+    <li>(Part 3) that mark supply and bias rails, and the single tiny <strong>function</strong> </li>
+    <li>(Part 4), <code>is_signal_device()</code>, that leans on those net names to tell a signal transistor from a current-source load.</li>
+  </ul>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part 2 opens the two current-group buckets and shows <em>why</em> a differential pair carries half the tail current while the tail carries all of it.</p></blockquote>
 </section>
 
-<!-- ================= PART 2 ================= -->
-<section class="part" id="part-2">
-  <h2>Part 2 · Slots → bias &amp; stage groups</h2>
+<!-- ================= PART 1 ================= -->
+<section class="part" id="part-1">
+  <h2>Part 1 · Slots → bias &amp; stage groups</h2>
 
   <blockquote><p><strong>The one job:</strong> sort every FBR slot name into the group that tells the sizer how much current the device carries and whether it counts as a gain stage.</p></blockquote>
 
@@ -235,7 +241,6 @@ FULL_BIAS_SLOTS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"
   <p><strong>A concrete lookup.</strong> The sizer holds a device in slot <code>"input_pair"</code> and asks "what current?" It checks:</p>
   <pre class="code"><code><span class="tok-str">"input_pair"</span> <span class="tok-kw">in</span> HALF_BIAS_SLOTS   <span class="tok-com"># True  → iBias / 2</span>
 <span class="tok-str">"tail_current"</span> <span class="tok-kw">in</span> FULL_BIAS_SLOTS <span class="tok-com"># True  → iBias</span></code></pre>
-  <p>No arithmetic lives here — just membership. The <em>meaning</em> ("halve it" / "don't") lives in the sizer; this file only supplies the sorted set.</p>
 
   <h3>The stage groups — and one deliberately-excluded set</h3>
   <pre class="code"><code>SECOND_STAGE_SLOTS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"second_stage"</span>, <span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>})
@@ -288,9 +293,9 @@ STAGE_SLOTS = SECOND_STAGE_SLOTS | THIRD_STAGE_SLOTS</code></pre>
   <blockquote><p><strong>Why is OUTPUT_STAGE_SLOTS kept out of STAGE_SLOTS?</strong> A source-follower output buffer has gain ≈ 1. If it were counted as a gain stage, the gain / phase-margin / topology-mismatch machinery would multiply an extra ≈1 factor into the gain product and mis-classify the topology. Leaving it out keeps the follower <em>invisible</em> to that machinery — its devices are still sized (via their per-transistor intent) but never counted as a stage. I like this: the exclusion is a one-line design decision made loud by its own comment.</p></blockquote>
 </section>
 
-<!-- ================= PART 3 ================= -->
-<section class="part" id="part-3">
-  <h2>Part 3 · Nets → bias rails</h2>
+<!-- ================= PART 2 ================= -->
+<section class="part" id="part-2">
+  <h2>Part 2 · Nets → bias rails</h2>
 
   <blockquote><p><strong>The one job:</strong> name the special nets — the ones that mean "this gate is tied to a fixed supply/bias" or "this node is an AC ground" — so downstream code recognizes them without hard-coding strings.</p></blockquote>
 
@@ -298,29 +303,6 @@ STAGE_SLOTS = SECOND_STAGE_SLOTS | THIRD_STAGE_SLOTS</code></pre>
 BIAS_NETS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</span>, <span class="tok-str">"vss!"</span>, <span class="tok-str">"gnd!"</span>, <span class="tok-str">"ibias"</span>})
 <span class="tok-com"># Supply-rail net names (AC grounds for output-resistance walks).</span>
 RAILS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</span>, <span class="tok-str">"vss!"</span>, <span class="tok-str">"gnd!"</span>, <span class="tok-str">"0"</span>})</code></pre>
-
-  <p>These two sets look almost the same but answer different questions, and the difference is the whole point. They <strong>share</strong> the three physical supplies <code>vdd!</code>, <code>vss!</code>, <code>gnd!</code> — but each keeps one member the other doesn't:</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 480 220" role="img" aria-label="Venn diagram: BIAS_NETS and RAILS share vdd, vss, gnd but differ on ibias and 0">
-      <ellipse cx="175" cy="115" rx="140" ry="75" fill="var(--fig-fill)" fill-opacity="0.55" stroke="var(--fig-accent)" stroke-width="2"/>
-      <ellipse cx="305" cy="115" rx="140" ry="75" fill="var(--fig-fill2)" fill-opacity="0.55" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="95" y="40" font-size="12" font-weight="600" fill="var(--fig-accent)">BIAS_NETS</text>
-      <text x="385" y="40" font-size="12" font-weight="600" fill="var(--fig-accent2)">RAILS</text>
-      <!-- left only -->
-      <text x="100" y="115" text-anchor="middle" font-size="13" font-weight="600">ibias</text>
-      <text x="100" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">bias input, not a rail</text>
-      <!-- overlap -->
-      <text x="240" y="98" text-anchor="middle" font-size="11">vdd!</text>
-      <text x="240" y="116" text-anchor="middle" font-size="11">vss!</text>
-      <text x="240" y="134" text-anchor="middle" font-size="11">gnd!</text>
-      <!-- right only -->
-      <text x="382" y="115" text-anchor="middle" font-size="13" font-weight="600">0</text>
-      <text x="382" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">SPICE global gnd</text>
-      <text x="240" y="205" text-anchor="middle" font-size="10" fill="var(--fig-muted)">shared: { vdd!, vss!, gnd! }</text>
-    </svg>
-    <figcaption>Same three supplies in the middle. BIAS_NETS adds ibias (a bias input you'd gate onto); RAILS adds "0" (SPICE's global ground node) as an AC ground.</figcaption>
-  </figure>
 
   <p><strong>Why the split?</strong> The two sets are consulted in different walks:</p>
   <ul>
@@ -337,11 +319,11 @@ RAILS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</spa
   </table>
 </section>
 
-<!-- ================= PART 4 ================= -->
-<section class="part" id="part-4">
-  <h2>Part 4 · <code>is_signal_device()</code> &amp; the one lever</h2>
+<!-- ================= PART 3 ================= -->
+<section class="part" id="part-3">
+  <h2>Part 3 · <code>is_signal_device()</code> &amp; the one lever</h2>
 
-  <blockquote><p><strong>The one job:</strong> of the two transistors in a gain stage, decide which one carries the <em>signal</em> (its gate is driven by the previous stage's output) versus the one that's just a current-source load (its gate sits on a bias net).</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> of the two transistors in a gain stage, decide which one carries the <em>signal</em> (its gate is driven by the previous stage's output) versus the one that's just a current-source load (its gate sits on a bias net).</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">is_signal_device</span>(device: Device) -> <span class="tok-kw">bool</span>:
     gate = device.terminals.<span class="tok-fn">get</span>(<span class="tok-str">"g"</span>, <span class="tok-str">""</span>)
@@ -349,7 +331,6 @@ RAILS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</spa
             <span class="tok-kw">and not</span> gate.<span class="tok-fn">startswith</span>(<span class="tok-str">"net_bias"</span>) <span class="tok-kw">and not</span> gate.<span class="tok-fn">endswith</span>(<span class="tok-str">"_pref"</span>)
             <span class="tok-kw">and not</span> gate.<span class="tok-fn">endswith</span>(<span class="tok-str">"_ncasc"</span>))</code></pre>
 
-  <p>Analogy: you're sorting mail. A letter is "real correspondence" (signal) unless it matches one of a few junk-mail patterns (bias). The function is a chain of <code>and</code>s — the device is a signal device only if the gate net passes <em>every</em> filter. Fail any one and it's a bias device. The neat part is it works <strong>regardless of NMOS/PMOS polarity</strong>: it never looks at the transistor type, only at where the gate is wired.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 560 230" role="img" aria-label="Five gate-net tests, all must pass for a signal device, else bias device">
@@ -406,7 +387,7 @@ RAILS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</spa
   <p>The last two patterns catch the constructed bias generator's <em>internal</em> reference gates — <code>*_pref</code> (the PMOS-side mirror reference) and <code>*_ncasc</code> (the wide-swing cascode level). Those come from <code>synthesizer/config/bias_legs.yaml</code>, slot-prefixed on assembly to names like <code>bias_gen_pref</code>. Devices gated by them are bias plumbing, not signal — hence the two <code>endswith</code> guards.</p>
 
   <h3>The hidden idea: extend in exactly one place</h3>
-  <p>Step back and the whole file has a single organizing principle:</p>
+  <p>The whole file has a single organizing principle:</p>
 
   <div class="eq-center"><span class="boxed-eq">new topology &nbsp;⟹&nbsp; extend a set <em>here</em>, and <strong>only</strong> here</span></div>
 
@@ -414,13 +395,11 @@ RAILS = <span class="tok-fn">frozenset</span>({<span class="tok-str">"vdd!"</spa
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
-    <li>It stores <strong>no behavior</strong> — no currents are computed, no rails resolved to volts. It only classifies names; the meaning lives in the callers.</li>
     <li>The bias-reference detection is <strong>string-pattern based</strong> (<code>net_bias*</code>, <code>*_pref</code>, <code>*_ncasc</code>). A topology that names an internal reference differently would slip past <code>is_signal_device()</code> until its convention is added here.</li>
-    <li>The groups are curated by hand. Nothing enforces that a template actually uses these slot names — a typo'd slot simply falls into none of the sets and is silently un-classified.</li>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>taxonomy.py</code> is the sizer's single source of truth for naming — four slot groups that say how much current a device carries and whether it's a gain stage (with source-follower buffers deliberately excluded), two net sets that mark bias rails versus AC grounds, and one small polarity-agnostic function that reads those net sets to separate signal transistors from current-source loads — so a new topology is supported by extending a set here, and only here.</p>
+  
 </section>
 
 </main>

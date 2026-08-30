@@ -109,8 +109,8 @@
 <section class="part" id="part-1">
 
   <h2>Part 1 &middot; Why this file exists</h2>
-
-  <blockquote><p><strong>The one job:</strong> run all six benches on one circuit and return one dictionary &mdash; without ever letting a failed bench take down the ones that would have worked.</p></blockquote>
+  <p><strong>TLDR:</strong> <code>simulate_metrics()</code> builds the DUT once, runs six independent benches over it in an order set by the two facts the AC sweep discovers, and returns the same nine keys the analytical estimate uses &mdash; with <code>None</code> wherever a measurement could not be made, and a note saying why.</p>
+  <blockquote><p><strong>Main task:</strong> run all six benches on one circuit and return one dictionary &mdash; without ever letting a failed bench take down the ones that would have worked.</p></blockquote>
 
   <p class="beat">Ninety-five lines, almost all of them about failure.</p>
 
@@ -261,7 +261,7 @@ args = (name, ports, body_dut, _Topo(ports), vdd, ibias, vcm)</code></pre>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>simulate_metrics()</code> builds the DUT once, runs six independent benches over it in an order set by the two facts the AC sweep discovers, and returns the same nine keys the analytical estimate uses &mdash; with <code>None</code> wherever a measurement could not be made, and a note saying why.</p>
+
 
 </section>
 

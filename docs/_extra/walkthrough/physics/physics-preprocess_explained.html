@@ -110,8 +110,9 @@
 
 <section class="part" id="part-1">
   <h2>Part 1 &middot; Why this file even exists</h2>
+  <p><strong>TLDR:</strong> <code>preprocess.py</code> is the model-independent pre-sizing both sizers share &mdash; taking the structure <a href="physics-circuit-view_explained.html"><code>circuit_view.py</code></a> derived, it assigns every transistor its KCL current from <code>spec.ibias</code>, sizes rail-referenced load resistors by Ohm's law, and derives per-stage gm and VDS_sat targets (plus the compensation caps) straight from the performance spec, pushing the only model-dependent quantity, <code>gds</code>, behind a <code>DeviceModel</code> so the gm/Id path gets LUT-accurate conductance while Level-1 reproduces <code>&lambda;&middot;Id</code> exactly.</p>
 
-  <blockquote><p><strong>The one job:</strong> between "here is the circuit's structure" and "here is a width for every transistor" sits a layer of pure physics &mdash; how much current each device carries, what each stage's <code>gm</code> must be to meet the spec, and how big the compensation cap has to be. That layer is this file.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> between "here is the circuit's structure" and "here is a width for every transistor" sits a layer of pure physics &mdash; how much current each device carries, what each stage's <code>gm</code> must be to meet the spec, and how big the compensation cap has to be. That layer is this file.</p></blockquote>
 
   <p class="beat">Here is the whole story without a line of code.</p>
 
@@ -128,7 +129,7 @@
 <section class="part" id="part-2">
   <h2>Part 2 · <code>size_load_resistors()</code> — Ohm's law biases a node</h2>
 
-  <blockquote><p><strong>The one job:</strong> pick the resistance of a <em>resistor load</em> so that the DC current flowing through it drops just enough voltage to switch the next transistor on — nothing more than <code>R = V / I</code>.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> pick the resistance of a <em>resistor load</em> so that the DC current flowing through it drops just enough voltage to switch the next transistor on — nothing more than <code>R = V / I</code>.</p></blockquote>
 
   <p>Analogy: a resistor with current flowing through it is a <strong>voltage divider you tune by choosing the resistance</strong>. You know the current (physics fixed it). You know the voltage you <em>want</em> at the node (enough to turn the driven device on). So the resistance is forced: <code>R = wanted-drop / current</code>.</p>
 
@@ -186,15 +187,15 @@ R      = V_node / branch_i = 0.60 V / 10 µA = 60 kΩ</code></pre>
     <figcaption>The current is fixed; the wanted node voltage is fixed; so the resistance is forced. Ohm's law, nothing more.</figcaption>
   </figure>
 
-  <p><strong>Honest limits.</strong> Only the <code>load</code> slot is sized, and only if the resistor actually touches a rail (<code>gnd</code>/<code>vss!</code>/<code>0</code>, or <code>vdd</code>). A resistor floating between two internal nodes hits the <code>else: continue</code> and keeps whatever value the netlist gave it — this function refuses to guess when it can't reason about the drop. The polarity mirror is neat: a resistor <em>to ground</em> lifts its node to switch an <strong>NMOS</strong> on; a resistor <em>from vdd</em> drops from the top to switch a <strong>PMOS</strong> on.</p>
+  <p><strong>Honest limits.</strong> Only the <code>load</code> slot is sized, and only if the resistor actually touches a rail (<code>gnd</code>/<code>vss!</code>/<code>0</code>, or <code>vdd</code>). A resistor floating between two internal nodes hits the <code>else: continue</code> and keeps whatever value the netlist gave it — this function refuses to guess when it can't reason about the drop. </p>
 </section>
 
 <section class="part" id="part-3">
   <h2>Part 3 · <code>assign_ids()</code> — Kirchhoff hands out the currents</h2>
 
-  <blockquote><p><strong>The one job:</strong> give every transistor its quiescent drain current, worked out purely from where it sits in the circuit (its slot) and the one bias number the user supplied, <code>spec.ibias</code>.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> give every transistor its quiescent drain current, worked out purely from where it sits in the circuit (its slot) and the one bias number the user supplied, <code>spec.ibias</code>.</p></blockquote>
 
-  <p>Analogy: <code>ibias</code> is a river of current entering at the tail. Kirchhoff's law says whatever flows in must split and flow out — so each branch's share is fixed by the wiring, not by any transistor model. A differential pair splits the tail evenly: two branches, half each.</p>
+  <p>Analogy: <code>ibias</code> is a river of current entering at the tail.  A differential pair splits the tail evenly: two branches, half each.</p>
 
   <p>The slot <em>names</em> encode the split. The taxonomy groups them:</p>
 
@@ -284,7 +285,7 @@ i_casc = spec.ibias / <span class="tok-num">2.0</span>
 <section class="part" id="part-4">
   <h2>Part 4 · <code>_first_stage_gain_factor()</code> — the ½ that bites</h2>
 
-  <blockquote><p><strong>The one job:</strong> return <code>k_fs = 1.0</code> or <code>0.5</code> — a single number that says whether the first stage delivers its <em>full</em> transconductance to the loop, or only half of it because a non-mirror load throws one branch away.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> return <code>k_fs = 1.0</code> or <code>0.5</code> — a single number that says whether the first stage delivers its <em>full</em> transconductance to the loop, or only half of it because a non-mirror load throws one branch away.</p></blockquote>
 
   <p>Analogy: a differential pair generates signal in <em>two</em> branches. To use both, you need a load that <strong>folds them together</strong> — an active current mirror. A plain resistor or a non-mirror current-source load only lets one branch through, and you lose half the gm. It's like a two-lane road merging: a smart merge keeps all the traffic; a bad one drops a lane.</p>
 
@@ -296,38 +297,7 @@ i_casc = spec.ibias / <span class="tok-num">2.0</span>
     is_mirror = <span class="tok-fn">any</span>(d.terminals.get(<span class="tok-str">"g"</span>) == d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets)
     <span class="tok-kw">return</span> <span class="tok-num">1.0</span> <span class="tok-kw">if</span> is_mirror <span class="tok-kw">else</span> <span class="tok-num">0.5</span></code></pre>
 
-  <p>The mirror test is beautifully cheap: a current-mirror load has a <strong>diode-connected</strong> device, and diode-connected means <code>gate == drain</code> (<code>g</code> and <code>d</code> on the same net). One terminal comparison detects the whole topology.</p>
 
-  <figure class="fig">
-    <svg viewBox="0 0 540 200" role="img" aria-label="Mirror load recovers full gm; non-mirror load halves it">
-      <!-- left: mirror -->
-      <text x="135" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-good)">mirror load — k_fs = 1.0</text>
-      <rect x="40" y="40" width="80" height="40" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="80" y="64" text-anchor="middle" font-size="10">branch A</text>
-      <rect x="150" y="40" width="80" height="40" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="190" y="64" text-anchor="middle" font-size="10">branch B</text>
-      <line x1="120" y1="60" x2="150" y2="60" stroke="var(--fig-good)" stroke-width="2.5"/>
-      <text x="135" y="98" text-anchor="middle" font-size="10" fill="var(--fig-good)">g = d → diode-connected</text>
-      <path d="M80,80 C80,120 190,120 190,132" stroke="var(--fig-good)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
-      <text x="135" y="150" text-anchor="middle" font-size="10.5">both branches combine</text>
-      <text x="135" y="168" text-anchor="middle" font-size="11" fill="var(--fig-good)">full gm1·Rout1</text>
-      <!-- divider -->
-      <line x1="275" y1="30" x2="275" y2="180" stroke="var(--fig-border)" stroke="var(--fig-muted)" stroke-width="1" stroke-dasharray="3 4"/>
-      <!-- right: non-mirror -->
-      <text x="405" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-bad)">resistor load — k_fs = 0.5</text>
-      <rect x="310" y="40" width="80" height="40" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="350" y="64" text-anchor="middle" font-size="10">branch A</text>
-      <rect x="420" y="40" width="80" height="40" rx="6" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="4 3"/>
-      <text x="460" y="60" text-anchor="middle" font-size="10" fill="var(--fig-muted)">branch B</text>
-      <text x="460" y="74" text-anchor="middle" font-size="9" fill="var(--fig-muted)">wasted</text>
-      <path d="M350,80 L350,132" stroke="var(--fig-bad)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
-      <text x="405" y="150" text-anchor="middle" font-size="10.5">only one branch tapped</text>
-      <text x="405" y="168" text-anchor="middle" font-size="11" fill="var(--fig-bad)">half: gm1·Rout1 / 2</text>
-    </svg>
-    <figcaption>A mirror folds both branches back together (full gm); a resistor or non-mirror source drops a branch, so the device must be twice as strong to hit the same spec.</figcaption>
-  </figure>
-
-  <p>Why does <code>0.5</code> "bite"? Because everywhere the requirements pass later divides by <code>k_fs</code>: a non-mirror load needs a proportionally <em>larger</em> device gm1 to hit the same GBW and gain. One branch wasted → double the transconductance demanded. (Subtle detail the docstring flags: <code>k_fs</code> is applied to gain and to gm1's role in GBW/PM, but <em>not</em> to the raw-device gm1 used for CMRR.)</p>
 </section>
 
 <section class="part" id="part-5">
@@ -353,7 +323,7 @@ gd_ld = <span class="tok-fn">_gds_est</span>(ld_devices[<span class="tok-num">0<
 rout1 = eq.<span class="tok-fn">rout</span>(gd_ip, gd_ld + gd_load_r)                <span class="tok-com"># resistor load folded in</span>
 k_fs  = <span class="tok-fn">_first_stage_gain_factor</span>(slot_transistors)</code></pre>
 
-  <p><strong>This <code>_gds_est</code> is the hidden hinge of the whole file.</strong> It's the single place a device model is consulted. Everything else — currents, Rs, gm targets — is pure algebra. Route <code>gds</code> through the <code>DeviceModel</code> and the exact same code gives Level-1 its analytical <code>λ·Id</code> and the gm/Id path its LUT-accurate silicon <code>gds</code>. We'll draw that fork in Part&nbsp;10.</p>
+  <p><strong>This <code>_gds_est</code> is the hidden hinge of the whole file.</strong> It's the single place a device model is consulted. Everything else — currents, Rs, gm targets — is pure algebra. Route <code>gds</code> through the <code>DeviceModel</code> and the exact same code gives Level-1 its analytical <code>λ·Id</code> and the gm/Id path its LUT-accurate silicon <code>gds</code>. </p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 170" role="img" aria-label="Output conductances add in parallel; resistance is the reciprocal">
@@ -498,7 +468,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
 <section class="part" id="part-7">
   <h2>Part 7 · The hidden idea, the limits, and the one line</h2>
 
-  <p>Step back and the whole file is implementing a single principle it never writes down:</p>
+  <p>The whole file is implementing a single principle:</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -547,7 +517,6 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>preprocess.py</code> is the model-independent pre-sizing both sizers share &mdash; taking the structure <a href="physics-circuit-view_explained.html"><code>circuit_view.py</code></a> derived, it assigns every transistor its KCL current from <code>spec.ibias</code>, sizes rail-referenced load resistors by Ohm's law, and derives per-stage gm and VDS_sat targets (plus the compensation caps) straight from the performance spec, pushing the only model-dependent quantity, <code>gds</code>, behind a <code>DeviceModel</code> so the gm/Id path gets LUT-accurate conductance while Level-1 reproduces <code>&lambda;&middot;Id</code> exactly.</p>
 </section>
 
 </main>
