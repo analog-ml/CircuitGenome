@@ -10,7 +10,7 @@ pass rather than searched.  :doc:`gmid/gmid_sizer` is the orchestrator
 (:doc:`gmid/plan`) assigns bias currents and per-device ``gm`` requirements;
 **Size** places geometry, then repairs the DC bias (:doc:`gmid/bias`); and
 **Evaluate** (:doc:`gmid/evaluate`) computes the analytical metrics.  Supporting
-these are :doc:`gmid/blocks` and :doc:`gmid/intent` (the role/``gm-Id`` tagging),
+these are :doc:`gmid/intent` (the role/``gm-Id`` tagging),
 :doc:`gmid/geometry` (the LUT → W/L core), and :doc:`gmid/resistors` /
 :doc:`gmid/bias_levels` (the resistor network and bias-level tuning).  The full
 walk-through is in :doc:`../../theory/gmid_sizing_flow`.
@@ -23,7 +23,6 @@ walk-through is in :doc:`../../theory/gmid_sizing_flow`.
    gmid/plan
    gmid/bias
    gmid/evaluate
-   gmid/blocks
    gmid/intent
    gmid/geometry
    gmid/resistors

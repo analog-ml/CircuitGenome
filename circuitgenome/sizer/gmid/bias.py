@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from ..physics.device_model import GmIdModel
 from ..models import SizingSpec, TechParams, TransistorSizing
-from .blocks import OpAmpBlocks
+from .analyze import OpAmpBlocks
 
 __all__ = ["check_dc_operating_point"]
 
