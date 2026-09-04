@@ -63,6 +63,44 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+# Git Commit Guidelines
+
+When generating or executing git commits via `/commit` or Bash tools, you must explicitly use `Assisted-by` instead of `Co-Authored-By`. 
+
+## Commit Message Rules
+- Use the Conventional Commits format.
+- Never append a `Co-Authored-By:` trailer.
+- Always include the tool provenance at the bottom of the commit message using the exact format below:
+
+Contributions should include an Assisted-by tag in the following format:
+
+Assisted-by: AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]
+Where:
+
+AGENT_NAME is the name of the AI tool or framework
+MODEL_VERSION is the specific model version used
+[TOOL1] [TOOL2] are optional specialized analysis tools used (e.g., coccinelle, sparse, smatch, clang-tidy)
+Basic development tools (git, gcc, make, editors) should not be listed.
+
+Example:
+
+Assisted-by: Claude:claude-3-opus coccinelle sparse
+
+# Code Drift Prevention Guidelines
+
+You must ensure that tests, documentation, and walkthrough tutorials never drift from implementation or bug fix changes.
+
+## Enforcement Protocol
+- **Analyze Impact Before Coding:** Before modifying any implementation or fixing a bug, locate and analyze all relevant tests, Markdown documentation, and walkthrough tutorials.
+- **Synchronized Updates:** You are required to update tests, internal documentation, and tutorials in the same atomic change or pull request as the code modification.
+- **Verify Testing:** Always write or update corresponding tests for new features or bug fixes. Run the test suite using available Bash tools to verify that they pass before considering a task complete.
+- **Tutorial Audit:** If a walkthrough tutorial exists for the modified feature, step through the tutorial logic mentally or via tests to ensure the instructions, code snippets, and expected outputs remain 100% accurate.
+
+## Docstring & Inline Documentation Rules
+- **Sync Docstrings Instantly:** When changing a function, class, or method signature, you must immediately update its docstring to reflect accurate parameter types, return values, raised exceptions, and behavioral descriptions.
+- **Remove Stale Comments:** Delete or rewrite inline comments that no longer accurately describe the surrounding code logic. Do not leave obsolete "TODO" or "FIXME" blocks behind after resolving an issue.
+- **Self-Documenting Code First:** Prioritize writing clean, self-documenting code over excessive inline comments. Reserve docstrings for public APIs, complex algorithmic logic, and unexpected edge cases.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
