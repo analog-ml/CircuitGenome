@@ -4,7 +4,7 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-## 1. Think Before Coding
+## Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 
@@ -14,7 +14,7 @@ Before implementing:
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
 
-## 2. Simplicity First
+## Simplicity First
 
 **Minimum code that solves the problem. Nothing speculative.**
 
@@ -29,7 +29,7 @@ Before implementing:
 
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
-## 3. Surgical Changes
+## Surgical Changes
 
 **Touch only what you must. Clean up only your own mess.**
 
@@ -45,7 +45,7 @@ When your changes create orphans:
 
 The test: Every changed line should trace directly to the user's request.
 
-## 4. Goal-Driven Execution
+## Goal-Driven Execution
 
 **Define success criteria. Loop until verified.**
 
@@ -74,17 +74,23 @@ When generating or executing git commits via `/commit` or Bash tools, you must e
 
 Contributions should include an Assisted-by tag in the following format:
 
+```
 Assisted-by: AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]
+```
+
 Where:
 
-AGENT_NAME is the name of the AI tool or framework
-MODEL_VERSION is the specific model version used
-[TOOL1] [TOOL2] are optional specialized analysis tools used (e.g., coccinelle, sparse, smatch, clang-tidy)
+- AGENT_NAME is the name of the AI tool or framework
+- MODEL_VERSION is the specific model version used
+- [TOOL1] [TOOL2] are optional specialized analysis tools used (e.g., coccinelle, sparse, smatch, clang-tidy)
+
 Basic development tools (git, gcc, make, editors) should not be listed.
 
 Example:
 
+```
 Assisted-by: Claude:claude-3-opus coccinelle sparse
+```
 
 # Code Drift Prevention Guidelines
 
