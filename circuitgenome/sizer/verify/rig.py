@@ -88,7 +88,8 @@ def _fb_netmap(topo: _Topo, inp: str, inn: str) -> dict:
 
 
 def _deck(name: str, ports: list[str], body_dut: str, vdd: float, ibias: float,
-          fb: str, netmap: dict, control: str, sup_ac: bool = False) -> str:
+          fb: str, netmap: dict, control: str, sup_ac: bool = False,
+          temperature_c: float | None = None) -> str:
     """Assemble a full ngspice deck: DUT + supplies + testbench ``fb`` + control.
 
     The bias-current direction adapts to the DUT block's reference diode
@@ -97,4 +98,5 @@ def _deck(name: str, ports: list[str], body_dut: str, vdd: float, ibias: float,
     return (body_dut.replace("__PORTS__", " ".join(ports))
             + _rig(vdd, ibias, sup_ac, sink=_iref_sink(body_dut.splitlines()))
             + fb + _xline(name, ports, netmap) + "\n"
+            + (f".temp {temperature_c}\n" if temperature_c is not None else "")
             + f".control\n{control}\n.endc\n.end\n")

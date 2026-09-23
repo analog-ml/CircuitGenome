@@ -57,7 +57,8 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     except Exception as e:
         _oops("power", e)
     try:
-        g, gbw, pm, reason, polarity = _measure_ac(*args)
+        g, gbw, pm, reason, polarity = _measure_ac(
+            *args, load_cap_f=spec.cl)
         out["gain_db"], out["gbw_hz"], out["phase_margin_deg"] = g, gbw, pm
         ac_clean = reason is None   # positive gain from an uncorrupted sweep
         if reason:
@@ -69,7 +70,8 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
         _oops("AC gain", e)
     try:
         out["slew_rate_vps"] = _measure_sr(
-            *args, polarity=polarity, sr_hint=spec.slew_rate_min_vps)
+            *args, polarity=polarity, sr_hint=spec.slew_rate_min_vps,
+            load_cap_f=spec.cl)
     except Exception as e:
         _oops("slew-rate", e)
     try:

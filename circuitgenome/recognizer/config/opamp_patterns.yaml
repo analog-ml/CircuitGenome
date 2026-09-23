@@ -17,6 +17,47 @@ patterns:
   # templates (shared source/bulk), producing a same-scoring spurious
   # candidate that file order then has to break.
 
+  - name: rail_to_rail_complementary_input
+    category: input_pair
+    circuit_block: gain_stage_1
+    devices:
+      - {ref: mp1,    type: pmos}
+      - {ref: mn1,    type: nmos}
+      - {ref: mp2,    type: pmos}
+      - {ref: mn2,    type: nmos}
+      - {ref: mnref,  type: nmos}
+      - {ref: mnpref, type: nmos}
+      - {ref: mppref, type: pmos}
+      - {ref: mntail, type: nmos}
+      - {ref: mptail, type: pmos}
+      - {ref: mpload_ref, type: pmos}
+      - {ref: mpload_out, type: pmos}
+      - {ref: mnload_ref, type: nmos}
+      - {ref: mnload_out, type: nmos}
+    same_net:
+      - [mp1.g, mn1.g]
+      - [mp2.g, mn2.g]
+      - [mn1.d, mpload_ref.d, mpload_ref.g, mpload_out.g]
+      - [mp1.d, mnload_ref.d, mnload_ref.g, mnload_out.g]
+      - [mp2.d, mn2.d, mpload_out.d, mnload_out.d]
+      - [mp1.s, mp2.s, mptail.d]
+      - [mn1.s, mn2.s, mntail.d]
+      - [mnref.d, mnref.g, mnpref.g, mntail.g]
+      - [mnpref.d, mppref.d, mppref.g, mptail.g]
+      - [mp1.b, mp2.b, mppref.s, mppref.b, mptail.s, mptail.b,
+         mpload_ref.s, mpload_ref.b, mpload_out.s, mpload_out.b]
+      - [mn1.b, mn2.b, mnref.s, mnref.b, mnpref.s, mnpref.b,
+         mntail.s, mntail.b, mnload_ref.s, mnload_ref.b,
+         mnload_out.s, mnload_out.b]
+    pins:
+      in1: mp1.g
+      in2: mp2.g
+      out1: mn1.d
+      out2: mp2.d
+      tail: mnref.g
+      vdd: mppref.s
+      gnd: mnref.s
+
   - name: inverter_based_input
     category: input_pair
     circuit_block: gain_stage_1
@@ -768,6 +809,23 @@ patterns:
       out: mp1.d
 
   # ─── OUTPUT STAGE variants (source-follower buffers) ─────────────────────────
+
+  - name: complementary_class_ab_output
+    category: output_stage
+    circuit_block: output_stage_block
+    devices:
+      - {ref: mn_out, type: nmos}
+      - {ref: mp_out, type: pmos}
+    same_net:
+      - [mn_out.d, mp_out.d]
+      - [mn_out.g, mp_out.g]
+      - [mn_out.s, mn_out.b]
+      - [mp_out.s, mp_out.b]
+    pins:
+      in: mn_out.g
+      out: mn_out.d
+      vdd: mp_out.s
+      gnd: mn_out.s
 
   - name: common_drain_pmos
     category: output_stage

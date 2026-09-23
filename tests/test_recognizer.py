@@ -44,7 +44,7 @@ def _get_modules():
         _MODULES = load_modules()
     return _MODULES
 
-# 9 combos covering every reachable one_stage_opamp variant: all 5
+# Representative combos covering every reachable one_stage_opamp variant: all 6
 # input_pair, all 8 single-ended-reachable load variants
 # (current_source_load_* are pruned from single-ended topologies by
 # load_branch_compatibility.py, issue #112), and all 6 real tail_current
@@ -68,6 +68,8 @@ _ONE_STAGE_COMBOS = [
     ("differential_pair_pmos_degenerated","folded_cascode_load_pmos_input_single_output", "resistor_tail_vdd"),
     # ── input_pair: inverter_based_input (tail pruned to absent) ────────────
     ("inverter_based_input",              "folded_cascode_load_nmos_input_single_output", _CANONICAL_TAIL),
+    # ── complementary rail-to-rail pair (VDD-side current reference) ───────
+    ("rail_to_rail_complementary_input",  "rail_to_rail_load_absent",                     "cascode_current_mirror_tail_pmos"),
 ]
 
 
@@ -262,6 +264,38 @@ def test_round_trip_two_stage_opamp(
         assert assigned.pattern_name == expected, (
             f"slot {slot_name!r}: expected {expected!r}, got {assigned.pattern_name!r}"
         )
+
+
+def test_round_trip_fixed_bias_class_ab_output():
+    """The parked Class-AB macro remains recognizable for opt-in synthesis
+    and external flat netlists."""
+    modules = load_modules()
+    topology = next(
+        t for t in load_topologies()
+        if t.name == "two_stage_opamp_class_ab_single_ended"
+    )
+    chosen = {
+        "input_pair": "differential_pair_pmos",
+        "load": "active_load_nmos",
+        "tail_current": "current_mirror_tail_pmos",
+        "compensation": "miller_cap",
+        "output_stage": "complementary_class_ab_output",
+    }
+    simple_modules = {
+        category: [v for v in modules[category] if v.name == name]
+        for category, name in chosen.items()
+    }
+    circuit = next(enumerate_circuits(
+        topology, simple_modules, {"include_unsupported": True}
+    ))
+
+    sr_result = recognize(parse(to_flat_spice(circuit)))
+    assert sr_result.unrecognized_devices == []
+
+    fbr_result = assign_slots(sr_result, topology)
+    assert fbr_result.slot_assignments["class_ab_stage"].pattern_name == (
+        "complementary_class_ab_output"
+    )
 
 
 # ─── two_stage_opamp_fully_differential round-trip ──────────────────────────

@@ -1046,6 +1046,92 @@ def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
     assert a.w_um == b.w_um and a.l_um == b.l_um  # matched differential pair
 
 
+def test_ptm45_sizes_rail_to_rail_complementary_input():
+    """The experimental complementary input macro gets dual-tail KCL sizing."""
+    parsed, sr, fbr, topology = _fbr(
+        "one_stage_opamp",
+        {
+            "input_pair": "rail_to_rail_complementary_input",
+            "load": "rail_to_rail_load_absent",
+            "tail_current": "current_mirror_tail_pmos",
+        },
+        include_unsupported=True,
+    )
+    ibias = 20e-6
+    result = size_circuit(
+        parsed, sr, fbr, topology, load_tech("ptm45"),
+        SizingSpec(vdd=1.0, vss=0.0, ibias=ibias, cl=2e-12,
+                   gain_min_db=20, gbw_min_hz=2e6),
+    )
+    assert result.solver_status == "GMID"
+    macro = {r: s for r, s in result.transistors.items()
+             if r.endswith("_input_pair")}
+    assert len(macro) == 13
+    for ref in ("mp1_input_pair", "mp2_input_pair",
+                "mn1_input_pair", "mn2_input_pair"):
+        assert macro[ref].ids_a == pytest.approx(ibias / 2)
+    for ref in ("mnref_input_pair", "mnpref_input_pair", "mppref_input_pair",
+                "mntail_input_pair", "mptail_input_pair"):
+        assert macro[ref].ids_a == pytest.approx(ibias)
+        assert result.transistor_intents[ref].role == "current_source"
+    for ref in ("mpload_ref_input_pair", "mpload_out_input_pair",
+                "mnload_ref_input_pair", "mnload_out_input_pair"):
+        assert macro[ref].ids_a == pytest.approx(ibias / 2)
+        assert result.transistor_intents[ref].role == "current_source"
+    for ref in ("mp1_input_pair", "mp2_input_pair",
+                "mn1_input_pair", "mn2_input_pair"):
+        assert result.transistor_intents[ref].role == "signal"
+    level1 = size_circuit(
+        parsed, sr, fbr, topology, _tech(),
+        SizingSpec(vdd=5.0, vss=0.0, ibias=ibias, cl=5e-12),
+    )
+    assert level1.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert len([r for r in level1.transistors if r.endswith("_input_pair")]) == 13
+
+
+def test_ptm45_sizes_static_class_ab_output():
+    """The static Class-AB macro gets an explicit IQ and both output devices."""
+    parsed, sr, fbr, topology = _fbr(
+        "two_stage_opamp_class_ab_single_ended",
+        {
+            "input_pair": "differential_pair_pmos",
+            "load": "active_load_nmos",
+            "tail_current": "current_mirror_tail_pmos",
+            "compensation": "miller_cap",
+            "class_ab_stage": "complementary_class_ab_output",
+        },
+        include_unsupported=True,
+    )
+    ibias = 20e-6
+    iq_ratio = 1.5
+    result = size_circuit(
+        parsed, sr, fbr, topology, load_tech("ptm45"),
+        SizingSpec(vdd=1.0, vss=0.0, ibias=ibias, cl=2e-12,
+                   second_stage_current_ratio=2.5,
+                   output_stage_current_ratio=iq_ratio,
+                   gain_min_db=35, gbw_min_hz=3e6,
+                   phase_margin_min_deg=60),
+    )
+    assert result.solver_status == "GMID"
+    macro = {r: s for r, s in result.transistors.items()
+             if r.endswith("_class_ab_stage")}
+    assert len(macro) == 2
+    for ref, sizing in macro.items():
+        assert sizing.ids_a == pytest.approx(ibias * iq_ratio)
+    assert "mn_out_class_ab_stage" in macro
+    assert "mp_out_class_ab_stage" in macro
+    assert result.transistor_intents["mn_out_class_ab_stage"].role == "signal"
+    assert result.transistor_intents["mp_out_class_ab_stage"].role == "signal"
+    level1 = size_circuit(
+        parsed, sr, fbr, topology, _tech(),
+        SizingSpec(vdd=5.0, vss=0.0, ibias=ibias, cl=5e-12,
+                   output_stage_current_ratio=iq_ratio),
+    )
+    assert level1.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert len([r for r in level1.transistors
+                if r.endswith("_class_ab_stage")]) == 2
+
+
 # ---------------------------------------------------------------------------
 # Cascode-load current plan (KCL at the folding node)
 # ---------------------------------------------------------------------------
@@ -1391,4 +1477,3 @@ def test_ptm45_example_three_stage_se_met(three_stage_rnmc_se_fbr):
 
 def test_ptm45_example_three_stage_fd_met(three_stage_rnmc_fd_fbr):
     _assert_example_ptm45_met(three_stage_rnmc_fd_fbr, "three_stage_fd_specs")
-

@@ -40,7 +40,8 @@ Main components
 An op-amp is assembled from these functional categories:
 
 - **Input pair** — the differential input stage (PMOS/NMOS, optional source
-  degeneration).
+  degeneration); an opt-in complementary PMOS+NMOS macro provides structural
+  rail-to-rail common-mode coverage.
 - **Load** — the first-stage load (resistor, active current-mirror,
   current-source, folded / telescopic cascode).
 - **Tail current** — the input pair's bias current source (current mirror,
@@ -52,8 +53,9 @@ An op-amp is assembled from these functional categories:
   indirect compensation.
 - **Amplification stage** — the second / third gain stages (common-source or
   non-inverting current-mirror).
-- **Output stage** — a source-follower buffer, used in the ``*_buffered_*``
-  templates.
+- **Output stage** — PMOS/NMOS source-follower buffers for ``*_buffered_*``
+  templates, plus an opt-in static CMOS Class-AB gain stage used only by the
+  dedicated ``two_stage_opamp_class_ab_single_ended`` topology.
 
 .. rubric:: Input pair
 

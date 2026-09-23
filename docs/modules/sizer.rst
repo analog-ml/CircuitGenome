@@ -53,7 +53,8 @@ targets** the sizer solves against:
      - Supply rails
    * - ``ibias``
      - A
-     - Tail bias current (each input device carries ``ibias/2``)
+     - Tail bias current (each differential-pair device carries ``ibias/2``;
+       the complementary input has one such tail per polarity)
    * - ``cl``
      - F
      - Output load capacitance
@@ -63,6 +64,10 @@ targets** the sizer solves against:
    * - ``third_stage_current_ratio``
      - —
      - ``iDS_3 = ratio × ibias`` (three-stage only; default 5.0)
+   * - ``output_stage_current_ratio``
+     - —
+     - Output-buffer quiescent current ``IQ = ratio × ibias`` (default 1.0;
+       sets the static Class-AB current when that experimental macro is used)
    * - ``gain_min_db``
      - dB
      - Minimum open-loop DC voltage gain
@@ -201,6 +206,107 @@ on-chip CMFB operating point), the single-ended-only swing/slew benches on FD
 circuits, and any non-converging measurement are reported as ``n/a`` rather than
 as wrong numbers.
 
+CMA-ES SPICE refinement
+-----------------------
+
+The analytical/gm-Id result can be refined directly against the existing
+ngspice benches.  CMA-ES searches logarithmic width multipliers, keeps
+differential/mirror groups together, and optionally adjusts the compensation
+capacitor.  Its default objective first eliminates missing/failed measurements
+and spec violations, then maximizes the small-signal op-amp figure of merit
+``FoM_S = GBW·CL/Iq`` with a small area penalty.  It also reports the
+large-signal ``FoM_L = SR·CL/Iq``::
+
+    from circuitgenome.sizer import CmaEsConfig, refine_cmaes
+
+    initial = size_circuit(parsed, sr, fbr, topology, tech, spec)
+    refined = refine_cmaes(
+        netlist_text, initial, tech, spec,
+        CmaEsConfig(workers=4, seed=1),
+    )
+    final = refined.sizing
+    print(refined.figures_of_merit)
+
+``workers`` evaluates one population in parallel.  Width and capacitor values
+are snapped to the technology grids.  Lengths remain at the initial sizer's
+gain/headroom policy in this first refinement pass; pass explicit ``groups`` to
+override the automatic matching partition.
+
+The defaults use 16 candidates for 80 generations: at most 1,281 ngspice
+evaluations including the initial point.  Search starts locally
+(``sigma=0.15``) and stays within ``0.6×`` to ``1.7×`` of the deterministic
+sizing.  Optimization stops after 30 non-improving generations; set
+``patience=0`` to consume the full budget.
+
+Set ``objective="worst_margin"`` to recover the conservative alternative that
+maximizes the minimum normalized specification margin instead of FoM.
+
+Every real-SPICE candidate passes a separate DC operating-point gate before its
+FoM is considered.  Railed, non-convergent, starved or triode-biased circuits
+are rejected, as are non-finite/physically impossible measurements.  A loose
+``SR·CL`` current check prevents transient-feedthrough spikes from masquerading
+as exceptional slew rate; ``max_slew_current_ratio`` adjusts that guard for an
+unusually strong Class-AB stage.
+
+Class-AB quiescent-current calibration
+--------------------------------------
+
+The static Class-AB mirror ratio is an analytical seed.  Short-channel output
+conductance and body effect can move the actual quiescent output current away
+from ``output_stage_current_ratio * ibias``.  A deterministic ngspice-backed
+post-step corrects the two output widths together while preserving N/P balance::
+
+    from circuitgenome.sizer import calibrate_class_ab_iq
+
+    calibrated = calibrate_class_ab_iq(netlist_text, initial, tech, spec)
+    if calibrated.converged:
+        final = calibrated.sizing
+
+This calibration normally converges in one or two ``.op`` runs and should run
+before CMA-ES.  It changes only the complementary output pair; global
+performance optimization remains CMA-ES's job.
+
+Rail-to-rail common-mode sweep
+------------------------------
+
+The complementary input macro has a specialized DC sweep that holds the output
+near mid-supply through a level-shifted feedback loop.  This separates input
+common-mode coverage from output-swing limits and reports the NMOS-pair current,
+PMOS-pair current and combined input gm at every point::
+
+    from circuitgenome.sizer import sweep_rail_to_rail_vcm
+
+    points = sweep_rail_to_rail_vcm(
+        netlist_text, sizing, tech, spec,
+        vcm_values=(0.05, 0.25, 0.50, 0.75, 0.95),
+    )
+
+The basic macro intentionally has no constant-gm steering loop.  The sweep is
+therefore used both as a no-dead-zone gate and to quantify its mid-rail gm bump.
+
+Class-AB load characterization
+------------------------------
+
+``characterize_class_ab_loads`` applies 0.5/1/2/5/10 pF loads by default and
+reports loaded gain, GBW, phase margin, separate rising/falling slew, actual
+output-pair source/sink peak currents, full-step tracking and settling.  The
+tracking and settling fields prevent a small transient excursion from being
+mistaken for a valid large-signal result::
+
+    from circuitgenome.sizer import characterize_class_ab_loads
+
+    points = characterize_class_ab_loads(netlist_text, sizing, tech, spec)
+
+``characterize_class_ab_linearity`` complements the load/step sweep with a
+closed-loop sine test. It reports FFT THD and the nonlinear residual around
+each zero crossing after removing the fitted fundamental, so ordinary gain and
+phase error are not mistaken for crossover distortion.
+
+``sweep_class_ab_pvt`` keeps geometry fixed and sweeps supply, temperature and,
+when the technology supplies a corner library, process corner. PTM45 provides
+only one model card, so its result is labelled ``nominal`` rather than
+inventing FF/SS data.
+
 Example output
 --------------
 
@@ -264,4 +370,6 @@ Further reading
    ../api/sizer/physics
    ../api/sizer/analytical
    ../api/sizer/gmid
+   ../api/sizer/calibration
+   ../api/sizer/cmaes
    ../api/sizer/verify

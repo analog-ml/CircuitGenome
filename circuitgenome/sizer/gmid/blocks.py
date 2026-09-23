@@ -138,6 +138,7 @@ class OpAmpBlocks:
         ``None`` for a one-stage opamp (no downstream stage to read it from).
         """
         for slot in ("second_stage", "second_stage_p", "second_stage_n",
+                     "class_ab_stage",
                      "third_stage", "third_stage_p", "third_stage_n"):
             b = self.blocks.get(slot)
             sig = b.signal_device if b else None

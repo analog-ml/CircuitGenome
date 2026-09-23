@@ -31,10 +31,206 @@ when the tail can't actually bias.
 from __future__ import annotations
 
 from ..physics.device_model import GmIdModel
+from ..physics.taxonomy import (
+    OUTPUT_STAGE_SLOTS,
+    complementary_output_pair,
+    is_complementary_input_stage,
+    signal_devices,
+)
 from ..models import SizingSpec, TechParams, TransistorSizing
 from .blocks import OpAmpBlocks
 
 __all__ = ["check_dc_operating_point"]
+
+
+def _resize_gmid_group(model, tech, sizing, devices, gm_id, *, l_um=None):
+    """Return ``sizing`` with ``devices`` placed at one matched gm/Id."""
+    out = dict(sizing)
+    for dev in devices:
+        old = out.get(dev.ref)
+        if old is None:
+            continue
+        length = tech.length.snap(l_um) if l_um is not None else old.l_um
+        idw = model.lut.id_per_w(dev.type, gm_id, length)
+        if idw <= 0:
+            continue
+        width = tech.width.snap(abs(old.ids_a) / idw)
+        out[dev.ref] = TransistorSizing(
+            ref=old.ref,
+            w_um=width,
+            l_um=length,
+            ids_a=old.ids_a,
+            vgs_v=model.vgs(dev.type, width, length, old.ids_a),
+            vds_sat_v=model.vds_sat(
+                dev.type, width, length, old.ids_a),
+        )
+    return out
+
+
+def _check_complementary_input_headroom(
+    model: GmIdModel,
+    devices: list,
+    sizing: dict[str, TransistorSizing],
+    spec: SizingSpec,
+    tech: TechParams,
+) -> tuple[dict[str, TransistorSizing], list[str]]:
+    """Repair/check both local tails of a complementary input macro.
+
+    This is a midpoint common-mode analytical check.  It does not claim the
+    constant-gm/current-steering behaviour of a production rail-to-rail stage.
+    """
+    out = dict(sizing)
+    warnings: list[str] = []
+    sig = signal_devices(devices)
+    for dtype in ("nmos", "pmos"):
+        pair = next((d for d in sig if d.type == dtype), None)
+        s_pair = out.get(pair.ref) if pair else None
+        if not pair or not s_pair:
+            continue
+        source_net = pair.terminals.get("s")
+        tail = next((d for d in devices
+                     if d.type == dtype and d.ref != pair.ref
+                     and d.terminals.get("d") == source_net), None)
+        s_tail = out.get(tail.ref) if tail else None
+        if not tail or not s_tail:
+            continue
+        distance = ((spec.vcm - spec.vss) if dtype == "nmos"
+                    else (spec.vdd - spec.vcm))
+        need = model.vds_sat(dtype, s_tail.w_um, s_tail.l_um, s_tail.ids_a)
+        vgs = abs(model.vgs(dtype, s_pair.w_um, s_pair.l_um, s_pair.ids_a))
+        headroom = distance - vgs
+
+        # The normal gm requirement may select a strong-inversion/minimum-width
+        # pair whose VGS leaves no room for its local tail.  Move the whole pair
+        # toward weaker inversion until VGS + 1.1*VDSsat_tail fits.  Raising
+        # gm/Id only increases input gm, so this is specification-safe.
+        if headroom < 1.25 * need:
+            pair_devs = [d for d in sig if d.type == dtype]
+            tail_gate = tail.terminals.get("g")
+            tail_group = [
+                d for d in devices
+                if d.type == dtype and d.terminals.get("g") == tail_gate
+            ]
+            repaired = None
+            for tail_gmid in (float(g) for g in model.lut.gm_id_axis):
+                tail_trial = _resize_gmid_group(
+                    model, tech, out, tail_group, tail_gmid)
+                st = tail_trial[tail.ref]
+                trial_need = model.vds_sat(
+                    dtype, st.w_um, st.l_um, st.ids_a)
+                max_vgs = distance - 1.25 * trial_need
+                for pair_gmid in (float(g) for g in model.lut.gm_id_axis):
+                    pair_trial = _resize_gmid_group(
+                        model, tech, tail_trial, pair_devs, pair_gmid)
+                    sp = pair_trial[pair.ref]
+                    trial_vgs = abs(model.vgs(
+                        dtype, sp.w_um, sp.l_um, sp.ids_a))
+                    if trial_vgs <= max_vgs:
+                        repaired = pair_trial
+                        need, vgs = trial_need, trial_vgs
+                        break
+                if repaired is not None:
+                    break
+            if repaired is not None:
+                out = repaired
+                s_pair, s_tail = out[pair.ref], out[tail.ref]
+                headroom = distance - vgs
+        if headroom < need:
+            warnings.append(
+                f"rail-to-rail {dtype.upper()} input tail has insufficient "
+                f"headroom at Vcm={spec.vcm:.2f} V ({headroom * 1e3:.0f} mV "
+                f"available vs {need * 1e3:.0f} mV Vdsat)."
+            )
+
+    # The four internal current-combiner devices sit directly on the
+    # high-impedance output.  They need more intrinsic gain than the short-L
+    # input devices; otherwise the one-active-pair regions near either input
+    # rail lose most of their open-loop gain.  Keep tail/reference mirrors out
+    # of this group -- their priority is headroom, not output resistance.
+    source_nets = {d.terminals.get("s") for d in sig} - {None}
+    tail_devs = [d for d in devices if d.terminals.get("d") in source_nets]
+    tail_bias_nets = {d.terminals.get("g") for d in tail_devs} - {None}
+    signal_refs = {d.ref for d in sig}
+    combiners = [
+        d for d in devices
+        if d.ref not in signal_refs
+        and d.terminals.get("g") not in tail_bias_nets
+    ]
+    if combiners:
+        out = _resize_gmid_group(
+            model, tech, out, combiners, 10.0,
+            l_um=min(8.0 * tech.length.min, tech.length.max),
+        )
+    return out, warnings
+
+
+def _repair_class_ab_headroom(model, devices, sizing, spec, tech):
+    """Fit legacy Class-AB follower diode-shifter stacks around ``spec.vcm``."""
+    pair = complementary_output_pair(devices)
+    if not pair:
+        return sizing, []
+    if pair[0].terminals.get("d") == pair[1].terminals.get("d"):
+        return sizing, []  # static CMOS common-source pair has no shifter stack
+    out = dict(sizing)
+    warnings: list[str] = []
+    axis = [float(g) for g in model.lut.gm_id_axis]
+    for output in pair:
+        gate = output.terminals.get("g")
+        shift = next((d for d in devices
+                      if d.ref != output.ref and d.type == output.type
+                      and d.terminals.get("g") == gate
+                      and d.terminals.get("d") == gate), None)
+        if shift is None:
+            continue
+        feeder = next((d for d in devices
+                       if d.type != output.type
+                       and d.terminals.get("d") == gate), None)
+        if feeder is None:
+            continue
+        shift_group = [d for d in devices
+                       if d.type == output.type
+                       and d.terminals.get("g") == gate]
+        feeder_gate = feeder.terminals.get("g")
+        feeder_group = [d for d in devices
+                        if d.type == feeder.type
+                        and d.terminals.get("g") == feeder_gate]
+        distance = ((spec.vdd - spec.vcm) if output.type == "nmos"
+                    else (spec.vcm - spec.vss))
+        repaired = None
+        # The rail-side current source owns the tightest headroom.  Put it at
+        # the weakest-inversion LUT point first; a merely analytical
+        # knife-edge fit is not robust once the closed-loop node shifts in
+        # SPICE because of body effect and finite output resistance.
+        for feeder_gmid in (axis[-1],):
+            feed_trial = _resize_gmid_group(
+                model, tech, out, feeder_group, feeder_gmid,
+                # These devices only bias low-impedance diode nodes; using a
+                # long current-source L wastes area and raises the minimum
+                # practical width at the weak-inversion point required by the
+                # 1 V stack.  Short L preserves headroom and mirror matching.
+                l_um=tech.length.min)
+            sf = feed_trial[feeder.ref]
+            feed_need = model.vds_sat(
+                feeder.type, sf.w_um, sf.l_um, sf.ids_a)
+            for shift_gmid in (axis[-1],):
+                trial = _resize_gmid_group(
+                    model, tech, feed_trial, shift_group, shift_gmid)
+                ss = trial[shift.ref]
+                drop = abs(model.vgs(
+                    shift.type, ss.w_um, ss.l_um, ss.ids_a))
+                if drop + 1.25 * feed_need <= distance:
+                    repaired = trial
+                    break
+            if repaired is not None:
+                break
+        if repaired is None:
+            warnings.append(
+                f"Class-AB {output.type.upper()} level shifter has insufficient "
+                f"headroom around Vcm={spec.vcm:.2f} V."
+            )
+        else:
+            out = repaired
+    return out, warnings
 
 
 def _tail_gm_id_for_headroom(
@@ -186,8 +382,19 @@ def check_dc_operating_point(
     The returned ``sizing`` reflects any tail headroom repair; the input mapping
     is never mutated.
     """
-    sizing, warnings = _apply_headroom(
-        model, slot_transistors, all_transistors, ids_map, sizing, spec, tech)
+    ip_devices = slot_transistors.get("input_pair", [])
+    if is_complementary_input_stage(ip_devices):
+        sizing, warnings = _check_complementary_input_headroom(
+            model, ip_devices, sizing, spec, tech)
+    else:
+        sizing, warnings = _apply_headroom(
+            model, slot_transistors, all_transistors, ids_map, sizing, spec, tech)
+    output_devices = [
+        d for slot in OUTPUT_STAGE_SLOTS for d in slot_transistors.get(slot, [])
+    ]
+    sizing, output_warnings = _repair_class_ab_headroom(
+        model, output_devices, sizing, spec, tech)
+    warnings.extend(output_warnings)
     bias_feasible = not any("headroom" in w for w in warnings)
 
     # Cascode-aware budget: a stacked tail needs the *sum* of its devices' Vdsat.

@@ -22,6 +22,7 @@ from .compatibility import (
     is_cmfb_compatible,
     is_combination_valid,
     is_compensation_compatible,
+    is_input_load_compatible,
     is_load_branch_compatible,
     is_output_type_compatible,
     is_stage_interface_compatible,
@@ -142,6 +143,7 @@ def build_circuit(
     :func:`~circuitgenome.synthesizer.compatibility.polarity.is_combination_valid`,
     :func:`~circuitgenome.synthesizer.compatibility.stage_interface.is_stage_interface_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.compensation.is_compensation_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.input_load.is_input_load_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.output.is_output_type_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.load_branch.is_load_branch_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.cmfb.is_cmfb_compatible`, or
@@ -159,11 +161,19 @@ def build_circuit(
     """
     variant_map = dict(variant_map)  # don't mutate caller's dict
 
+    class_ab = [v for v in variant_map.values()
+                if v.name == "complementary_class_ab_output"]
+    dedicated = topology.name == "two_stage_opamp_class_ab_single_ended"
+    if bool(class_ab) != dedicated:
+        return None
+
     if not is_combination_valid(variant_map):
         return None
     if not is_stage_interface_compatible(topology, variant_map):
         return None
     if not is_compensation_compatible(topology, variant_map):
+        return None
+    if not is_input_load_compatible(variant_map):
         return None
     if not is_output_type_compatible(topology, variant_map):
         return None
@@ -228,8 +238,10 @@ def enumerate_circuits(
 
     Variants parked with an ``unsupported:`` reason tag in the modules YAML
     are dropped from every slot's candidate pool before the product is
-    formed (currently ``inverter_based_input``, issue #113, and
-    ``differential_ota_second_stage``, issue #114), unless
+    formed (currently ``inverter_based_input``, issue #113, the complementary
+    ``rail_to_rail_complementary_input`` prototype,
+    ``differential_ota_second_stage``, issue #114, and the fixed-bias
+    ``complementary_class_ab_output`` prototype), unless
     ``config={"include_unsupported": True}`` -- see the ``config`` parameter.
 
     Variants tagged ``bias_infeasible:`` -- functionally-correct wiring whose
@@ -331,7 +343,9 @@ def enumerate_circuits(
                    ``include_unsupported`` (bool, default ``False``) —
                    when ``True``, variants parked with an ``unsupported:``
                    reason tag (currently ``inverter_based_input``, issue
-                   #113, and ``differential_ota_second_stage``, issue #114)
+                   #113, ``rail_to_rail_complementary_input``,
+                   ``differential_ota_second_stage``, issue #114, and
+                   ``complementary_class_ab_output``)
                    are enumerated anyway. Intended for round-trip tests and
                    future un-parking work, not for design runs.
                    ``include_infeasible`` (bool, default ``False``) — when

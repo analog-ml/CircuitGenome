@@ -86,7 +86,7 @@ and reuse its name, so a successful match's
 comparable to a
 :attr:`~circuitgenome.synthesizer.models.SynthesizedCircuit.variant_map`
 entry's variant name. The library covers every module variant across the
-templates the synthesizer produces -- 43 patterns across eight categories:
+templates the synthesizer produces -- 45 patterns across eight categories:
 
 .. list-table::
    :header-rows: 1
@@ -96,11 +96,13 @@ templates the synthesizer produces -- 43 patterns across eight categories:
      - Patterns (count)
      - Notes
    * - ``input_pair``
-     - 5
+     - 6
      - - ``differential_pair_{nmos,pmos}``.
        - degenerated variants (NMOS+NMOS / PMOS+PMOS transistors + 2
          source-degeneration resistors).
        - ``inverter_based_input`` (2 CMOS inverters: 2 PMOS + 2 NMOS).
+       - ``rail_to_rail_complementary_input`` — parallel PMOS/NMOS pairs,
+         complementary current-mirror combining and local complementary tails.
    * - ``load``
      - 14
      - - resistor (VDD-side / GND-side).
@@ -167,18 +169,23 @@ templates the synthesizer produces -- 43 patterns across eight categories:
        - ``noninverting_stage_{nmos,pmos}`` — 2 PMOS + 2 NMOS non-inverting
          current-mirror gain stages.
    * - ``output_stage``
-     - 2
+     - 3
      - - ``common_drain`` — PMOS source follower + PMOS current source (the
          follower's source/bulk tie and the source's bulk-on-vdd keep it
          disjoint from the CS and OTA shapes).
        - ``common_drain_nmos`` — NMOS source follower + NMOS sink (the
          follower's source is the sink's drain, all bulks on gnd).
+       - ``complementary_class_ab_output`` — PMOS/NMOS common-source devices
+         with shared gate and drain, forming a static CMOS push-pull stage.
+         The synthesis variant is parked, but the pattern recognizes opt-in
+         and external netlists.
 
-       Fills the ``output_stage`` slot of the ``*_buffered_*`` topologies.
+       Followers fill ``*_buffered_*`` output slots; Class-AB fills the
+       dedicated ``class_ab_stage`` slot.
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search
-(patterns are 1-4 devices, so no graph library is needed), filtering
+(patterns are bounded declarative device sets, so no graph library is needed), filtering
 candidates by device type and checking ``same_net``. A pattern's optional
 ``hook`` can further constrain or extend each match — see `Hooks`_ below.
 
@@ -265,7 +272,7 @@ devices. The table breaks the library down by template — the patterns each fir
 introduces, and the round-trip combos that exercise it:
 
 - **Patterns introduced** — the SR patterns this template is the first to need.
-  The counts total all 43, so the column doubles as a coverage checklist (every
+  The counts total all 45, so the column doubles as a coverage checklist (every
   pattern is introduced by some template).
 - **Round-trip combos** — the number of round-trip test cases targeting that
   template.
@@ -278,16 +285,16 @@ introduces, and the round-trip combos that exercise it:
      - Patterns introduced
      - Round-trip combos
    * - ``one_stage_opamp``
-     - 27 — 5 ``input_pair``, 10 single-ended ``load``, 8 ``tail_current``
+     - 28 — 6 ``input_pair``, 10 single-ended ``load``, 8 ``tail_current``
        (6 default + 2 parked stacked-cascode), 4 ``bias_generation``
-     - 11
+     - 12
    * - ``two_stage_opamp_single_ended``
      - +6 — 3 ``compensation``, 3 ``amplification_stage``
      - 11
    * - ``two_stage_opamp_fully_differential``
      - +6 — 4 differential ``load`` (2 diff-output folded cascode + 2
        ``current_source_load_*``), 2 ``cmfb``
-     - 13
+     - 15
    * - ``three_stage_opamp_{nmc,rnmc}_single_ended``
      - +2 — ``noninverting_stage_{nmos,pmos}`` (the NMC gm2 stage, issue #139)
      - 10
@@ -295,12 +302,13 @@ introduces, and the round-trip combos that exercise it:
      - none — reuses existing patterns per output path
      - 8
    * - ``*_buffered_*``
-     - +2 — ``output_stage`` followers ``common_drain``/``common_drain_nmos``
-       (issue #125)
+     - +3 — ``output_stage`` followers ``common_drain``/``common_drain_nmos``
+       (issue #125) plus the fixed-bias complementary Class-AB macro
      - within the 2-/3-stage rows
 
-The table's 53 combos plus 2 opt-in stacked-diode cascode-tail round-trips
-(``include_infeasible``) total **55**, all asserting
+The table's 56 combos, 2 opt-in stacked-diode cascode-tail round-trips
+(``include_infeasible``), and the dedicated Class-AB round trip total **59**,
+all asserting
 ``unrecognized_devices == []`` and full ``variant_map`` recovery. Combos are
 hand-picked to cover every variant and to avoid a few known bias-pattern
 ambiguities that would otherwise need extra disambiguation code.

@@ -61,16 +61,20 @@ Design-intent table (defaults):
 
 "solved" = gm/Id is not a free knob for signal devices; it is set to
 ``gm_required / Id`` to meet the spec (see :meth:`GmIdModel.geometry_for`).  The
-source-follower output stage is the exception: it is a signal device (its gate is
-the signal) but carries a *fixed* gm/Id, because it never gets a gm requirement —
-its job is buffering, not gain.
+An ordinary source-follower output stage normally carries a fixed gm/Id because
+its job is buffering, not gain.  A complementary Class-AB pair additionally gets
+an output-pole gm floor from GBW, phase margin and load capacitance.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
 from ..physics.device_model import CASCODE, CURRENT_SOURCE, SIGNAL
-from ..physics.taxonomy import is_signal_device
+from ..physics.taxonomy import (
+    complementary_output_pair,
+    diode_bias_nets,
+    is_signal_device,
+)
 
 # --- gm/Id inversion regions used as the block defaults (1/V) ----------------
 _MODERATE = 14.0        # signal nominal (pre-geometry estimate); real gm/Id is solved
@@ -176,6 +180,7 @@ _SIGNAL_BLOCK = {
     "second_stage_n": "gain_stage",
     "third_stage": "gain_stage", "third_stage_p": "gain_stage",
     "third_stage_n": "gain_stage",
+    "class_ab_stage": "gain_stage",
     # Source-follower output-buffer slots (the *_buffered_* topologies) — the
     # only slots mapping to the output_stage (follower) block.
     "output_stage": "output_stage", "output_stage_p": "output_stage",
@@ -215,8 +220,28 @@ def resolve_transistor_intents(
 ) -> dict[str, TransistorIntent]:
     """Resolve the block registry onto every device (Level 2 → Level 3)."""
     out: dict[str, TransistorIntent] = {}
+    devices = [device for device, _slot in all_transistors.values()]
+    local_bias_nets = diode_bias_nets(devices)
+    output_devices = [
+        device for device, slot in all_transistors.values()
+        if slot in ("output_stage", "output_stage_p", "output_stage_n",
+                    "class_ab_stage")
+    ]
+    output_pair = complementary_output_pair(output_devices)
+    output_signal_gates = {d.terminals.get("g") for d in output_pair} - {None}
+    # Preserve signal classification for complementary output pairs, including
+    # legacy self-biased followers and the static CMOS push-pull gain stage.
+    output_signal_refs = {
+        d.ref for d in output_devices
+        if d.terminals.get("g") in output_signal_gates
+    }
     for ref, (device, slot) in all_transistors.items():
-        block = functional_block(slot, is_signal_device(device), ref in cascode_refs)
+        is_signal = (
+            ref in output_signal_refs
+            or (is_signal_device(device)
+                and device.terminals.get("g") not in local_bias_nets)
+        )
+        block = functional_block(slot, is_signal, ref in cascode_refs)
         bi = block_intents[block]
         out[ref] = TransistorIntent(ref=ref, block=block, role=bi.role,
                                     gm_id=bi.gm_id, l_mult=bi.l_mult,

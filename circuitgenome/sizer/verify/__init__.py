@@ -23,10 +23,21 @@ Package layout:
     :mod:`.rig` — port classification and the shared testbench rig
     :mod:`.measure` — per-metric testbenches
     :mod:`.op` — operating-point reading + DC bias-soundness verdict
+    :mod:`.advanced` — specialized rail-to-rail/common-mode characterization
     :mod:`.simulate` — the :func:`simulate_metrics` entry point
 """
 from .deck import ngspice_available, pdk_netlist, sized_netlist
 from .op import check_bias_soundness, read_op_operating_point
+from .advanced import (
+    ClassAbLoadPoint,
+    ClassAbLinearityPoint,
+    ClassAbPvtPoint,
+    RailToRailVcmPoint,
+    characterize_class_ab_linearity,
+    sweep_class_ab_pvt,
+    characterize_class_ab_loads,
+    sweep_rail_to_rail_vcm,
+)
 from .simulate import simulate_metrics
 
 __all__ = [
@@ -34,6 +45,14 @@ __all__ = [
     "ngspice_available",
     "pdk_netlist",
     "read_op_operating_point",
+    "RailToRailVcmPoint",
+    "ClassAbLoadPoint",
+    "ClassAbLinearityPoint",
+    "ClassAbPvtPoint",
+    "characterize_class_ab_linearity",
+    "sweep_class_ab_pvt",
+    "characterize_class_ab_loads",
+    "sweep_rail_to_rail_vcm",
     "simulate_metrics",
     "sized_netlist",
 ]

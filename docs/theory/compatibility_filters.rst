@@ -300,15 +300,13 @@ Tail-current compatibility filter
 ---------------------------------
 
 Every topology has a ``tail_current`` slot, wired ``input_pair.tail ->
-net_tail <- tail_current.out``. Of the 5 ``input_pair`` variants, only the 4
-``differential_pair_*`` variants reference their ``tail`` port from a device
-terminal (``s``/``b: tail`` on the tail transistor, or ``t2: tail`` on the
-degenerated variants' tail resistor). ``inverter_based_input`` -- two
-back-to-back CMOS inverters -- is self-biased by design and never references
-``tail``, so without this filter ``net_tail`` would be a floating,
-single-terminal node and ``tail_current`` would drive nothing.
+net_tail <- tail_current.out``. The four ``differential_pair_*`` variants use
+that port as their common-source node. ``inverter_based_input`` -- two
+back-to-back CMOS inverters -- is self-biased and never references ``tail``;
+the complementary rail-to-rail macro instead uses it as a VDD-side reference
+current for its internal dual-tail mirrors.
 
-For an ``input_pair`` that doesn't reference ``tail``, only the canonical
+For the inverter input, only the canonical
 ``current_mirror_tail_pmos`` variant is allowed through -- the other 5
 ``tail_current`` choices would otherwise be enumerated as duplicate no-op
 circuits. That canonical variant is then pruned to an empty placeholder (no
@@ -322,6 +320,23 @@ counted as a needed bias rail
    ``inverter_based_input`` yields a single circuit per ``load`` instead of
    six identical ones: whichever ``tail_current`` was chosen, the prune leaves
    the same tail-less netlist.
+
+For ``rail_to_rail_complementary_input``, only a PMOS/VDD-side tail-current
+variant is compatible with the reference-current direction.
+
+----
+
+Rail-to-rail input/load coupling
+--------------------------------
+
+``rail_to_rail_complementary_input`` already combines its NMOS and PMOS pair
+currents through internal mirror loads at its single-ended output.  It must
+therefore use the zero-device
+``rail_to_rail_load_absent`` adapter; adding an ordinary active or resistive
+load breaks the intended branch-current balance.  Conversely, an ordinary
+differential pair cannot use the empty adapter.  The two variants are kept
+together by
+:func:`~circuitgenome.synthesizer.compatibility.input_load.is_input_load_compatible`.
 
 ----
 
@@ -339,6 +354,7 @@ the sections above; these pages are the API surface (import from the
    ../api/compatibility/stage_interface
    ../api/compatibility/compensation
    ../api/compatibility/output
+   ../api/compatibility/input_load
    ../api/compatibility/load_branch
    ../api/compatibility/cmfb
    ../api/compatibility/tail_current

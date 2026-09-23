@@ -45,13 +45,14 @@ explained below the table.
 
    * - Category
      - Variants
-   * - Input pair (4 + 1)
+   * - Input pair (4 + 2)
      - | PMOS differential pair
        | NMOS differential pair
        | PMOS with source degeneration
        | NMOS with source degeneration
        | :strike:`Inverter-based` †
-   * - Load (14)
+       | :strike:`Complementary rail-to-rail` ※
+   * - Load (14 + 1 adapter)
      - | Resistor (VDD-side)
        | Resistor (GND-side)
        | PMOS active (current mirror)
@@ -66,6 +67,7 @@ explained below the table.
        | Telescopic cascode (NMOS), self-biased
        | Telescopic cascode (PMOS), wide-swing / Sooch
        | Telescopic cascode (NMOS), wide-swing / Sooch
+       | No external load (rail-to-rail current-summing adapter)
    * - Tail current (6 + 2)
      - | Current mirror (PMOS)
        | Current mirror (NMOS)
@@ -88,9 +90,10 @@ explained below the table.
        | Non-inverting current-mirror (NMOS-input)
        | Non-inverting current-mirror (PMOS-input)
        | :strike:`Differential OTA` §
-   * - Output stage (2)
+   * - Output stage (2 + 1)
      - | Common-drain follower (PMOS)
        | Common-drain follower (NMOS)
+       | :strike:`Complementary fixed-bias Class-AB` ¶
 
 Parked variants are excluded from the default enumeration but can be opted back
 in with ``config={"include_unsupported": True}`` or
@@ -99,6 +102,12 @@ in with ``config={"include_unsupported": True}`` or
 | **†** ``inverter_based_input`` — ``unsupported`` (issue #113): self-biased, so
   its quiescent current is set by W/L at the wiring-pinned gate voltage, not by
   ``spec.ibias``, and the gm/Id sizer has no fixed-Vgs path for it.
+| **※** ``rail_to_rail_complementary_input`` — ``unsupported`` structural
+  prototype: parallel PMOS/NMOS differential pairs use complementary mirror
+  combiners and locally mirrored complementary tails.  It covers the
+  input common-mode rails, but the basic form has a mid-rail gm bump.  The
+  sizer handles the nominal midpoint (two ``ibias`` tails and summed gm), but
+  common-mode handoff and noise validation remain open.
 | **‡** ``stacked_cascode_current_mirror_tail_{pmos,nmos}`` — ``bias_infeasible``
   (issue #111): the output cascode's source sits a full ``|Vgs|`` from the rail,
   needing ``|Vgs|+Vdsat`` (~1.3 V at gf180) of tail compliance the default
@@ -109,6 +118,11 @@ in with ``config={"include_unsupported": True}`` or
   composite is non-inverting (Miller compensation around it is positive
   feedback), and its internal node is a second in-band pole the single-gm2
   sizer cannot model.
+| **¶** ``complementary_class_ab_output`` — ``unsupported`` structural
+  prototype: a static CMOS complementary common-source push-pull stage. It is
+  used only by ``two_stage_opamp_class_ab_single_ended``; the sizer handles IQ,
+  output gm, swing, power and nominal-load Miller compensation. Crossover
+  distortion and PVT validation remain open.
 
 .. admonition:: Bias generation — constructed, not enumerated
    :class: important
@@ -188,12 +202,13 @@ Fully-differential templates duplicate the per-path slots (``comp_p``/
 Buffered templates
 ~~~~~~~~~~~~~~~~~~~
 
-A **buffered** template is a plain template with a source-follower
+A **buffered** template is a plain template with a unity-gain buffer
 **output_stage** slot inserted after the last gain stage (issue #125, PR #134).
 The gain stage now drives an internal node ``net_ampout`` instead of the
-output, the follower drives the final output, and the Miller compensation is
+output, the buffer drives the final output, and the Miller compensation is
 re-pointed to ``net_ampout`` so it still wraps the *gain* stage, not the
-follower.
+buffer.  Its two ordinary variants are single-ended source followers.  The
+Class-AB common-source stage is deliberately excluded and has its own topology.
 
 The design choice worth calling out: a source follower is a **unity-gain
 buffer** (A ≈ 1), added for output drive strength and low output impedance, not
@@ -379,6 +394,16 @@ be opted back in:
 voltage, not by ``spec.ibias``, and the gm/Id sizer has no fixed-Vgs path for
 it.
 
+**Complementary rail-to-rail input**
+(``rail_to_rail_complementary_input``, ``unsupported``) — a thirteen-MOS
+structural macro with parallel PMOS/NMOS differential pairs, complementary
+current-mirror combiners, and internal complementary tail mirrors derived from one
+VDD-side current reference.  It is the basic rail-to-rail form, not a
+constant-gm implementation; around mid-rail both pairs conduct.  With
+``config={"include_unsupported": True}`` it can be generated and sized at the
+nominal midpoint, whose DC bias is covered by ngspice; rail handoff still needs
+sweep validation.
+
 **Differential-OTA second stage** (``differential_ota_second_stage``,
 ``unsupported``, issue #114) — despite its name it is two cascaded common-source
 stages, so its ``in`` → ``out`` composite is *non-inverting*: Miller-family
@@ -387,6 +412,15 @@ gain/GBW/PM cannot be measured), and its internal ``d1`` node is a second
 in-band pole the sizer's single-gm2 model cannot see.  The non-inverting gm2
 role that NMC needs is filled instead by the enumerable
 ``noninverting_stage_{nmos,pmos}`` (issue #139; see the ‖ filter below).
+
+**Static CMOS Class-AB output**
+(``complementary_class_ab_output``, ``unsupported``) — a two-MOS complementary
+common-source push-pull stage. It is generated only through
+``two_stage_opamp_class_ab_single_ended`` so it is counted and compensated as
+the second gain stage, not mistaken for a unity-gain buffer. With
+``config={"include_unsupported": True}`` it supports configurable IQ,
+ngspice IQ calibration and loaded bidirectional characterization. Crossover
+distortion and PVT validation remain open.
 
 **Stacked-diode cascode tails** (``stacked_cascode_current_mirror_tail_*``,
 ``bias_infeasible``, issue #111) — the output cascode's source sits a full

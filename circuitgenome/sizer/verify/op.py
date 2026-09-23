@@ -66,6 +66,7 @@ def _read_op(
         for pre in prefixes.values()
     )
     ran = False
+    candidates: list[tuple[float, dict[str, dict[str, float]]]] = []
     for inp, inn in (("in1", "in2"), ("in2", "in1")):
         netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
                   inp: "inp", inn: "inn", "out": "out"}
@@ -86,7 +87,13 @@ def _read_op(
             continue  # wrong polarity → output railed
         op = _parse_probes(prefixes, txt)
         if op:
-            return op, None
+            # A buffered stage can keep a positive-feedback solution away from
+            # the rails, so "inside 10--90%" alone is not enough to identify
+            # the negative-feedback polarity.  The honest unity-feedback
+            # solution is the one that tracks the Vcm stimulus most closely.
+            candidates.append((abs(float(mo.group(1)) - vcm), op))
+    if candidates:
+        return min(candidates, key=lambda item: item[0])[1], None
     return None, ("railed" if ran else "sim-failed")
 
 
