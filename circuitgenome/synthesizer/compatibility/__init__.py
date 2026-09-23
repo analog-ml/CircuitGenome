@@ -5,7 +5,7 @@ Cross-slot compatibility filters for
 Each submodule owns one slot's rule for rejecting variant combinations that
 assemble into a non-functional or duplicate circuit. Two shapes recur:
 
-- **pure filters** (``polarity``, ``output``, ``load_branch``,
+- **pure filters** (``polarity``, ``output``, ``input_load``, ``load_branch``,
   ``second_stage``, ``compensation``) -- an ``is_*_compatible`` predicate that
   drops a combination before it is ever assembled.
 - **filter + prune pairs** (``cmfb``, ``tail_current``) -- the filter collapses
@@ -30,6 +30,7 @@ from .cmfb import (
 )
 from .compensation import is_compensation_compatible, stage_inversions
 from .load_branch import is_load_branch_compatible, untapped_branch_is_dc_defined
+from .input_load import is_input_load_compatible
 from .output import is_output_type_compatible
 from .polarity import is_combination_valid
 from .stage_interface import (
@@ -51,6 +52,7 @@ __all__ = [
     "is_compensation_compatible",
     "stage_inversions",
     "is_load_branch_compatible",
+    "is_input_load_compatible",
     "untapped_branch_is_dc_defined",
     "is_output_type_compatible",
     "is_combination_valid",

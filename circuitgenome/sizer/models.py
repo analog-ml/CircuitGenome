@@ -150,6 +150,8 @@ class SizingSpec:
     :param cl: Output load capacitance in F.
     :param second_stage_current_ratio: Second-stage quiescent current as a
         multiple of ``ibias``  (``iDS_2 = ratio × ibias``). Default 2.0.
+    :param output_stage_current_ratio: Output-buffer quiescent current as a
+        multiple of ``ibias``.  Used by source followers and static Class-AB.
     :param gain_min_db: Minimum open-loop DC gain in dB.
     :param gbw_min_hz: Minimum unity-gain bandwidth in Hz.
     :param phase_margin_min_deg: Minimum phase margin in degrees.
@@ -166,6 +168,7 @@ class SizingSpec:
     cl: float
     second_stage_current_ratio: float = 2.0
     third_stage_current_ratio: float = 5.0
+    output_stage_current_ratio: float = 1.0
     gain_min_db: float | None = None
     gbw_min_hz: float | None = None
     phase_margin_min_deg: float | None = None

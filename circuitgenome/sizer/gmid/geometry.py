@@ -120,7 +120,7 @@ def _mirror_tied_refs(all_transistors: dict[str, tuple]) -> set[str]:
 
 def _apply_symmetry(
     W: dict[str, float], L: dict[str, float], slot_transistors: dict[str, list],
-    ids_map: dict[str, float],
+    ids_map: dict[str, float], intents: dict,
 ) -> None:
     """Matched pairs share the anchor device's geometry (plain assignment).
 
@@ -139,7 +139,15 @@ def _apply_symmetry(
         groups: dict[tuple, list[str]] = {}
         for d in devices:
             if d.type in ("nmos", "pmos") and d.ref in W:
-                groups.setdefault((d.type, ids_map.get(d.ref)), []).append(d.ref)
+                # Composite macros can contain a signal pair and internal
+                # mirror loads at the same current.  They are not a matched
+                # device array: forcing them together destroys the load's
+                # longer-L/rout intent.  Match only within the same resolved
+                # functional block.
+                block = intents[d.ref].block if d.ref in intents else None
+                groups.setdefault(
+                    (d.type, ids_map.get(d.ref), block), []
+                ).append(d.ref)
         for grp in groups.values():
             equalize(grp)
 
@@ -289,7 +297,7 @@ def assign_geometry_gmid(
                 f"(the design will fall short).")
 
     # --- 3: symmetry (matched pairs share the anchor's geometry) ---
-    _apply_symmetry(W, L, slot_transistors, ids_map)
+    _apply_symmetry(W, L, slot_transistors, ids_map, intents)
 
     # --- 4: current-mirror ratios (exact, no Fraction approximation) ---
     _apply_mirror_ratios(W, L, all_transistors, ids_map, tech.width.snap)

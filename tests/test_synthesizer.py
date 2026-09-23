@@ -10,6 +10,7 @@ from circuitgenome.synthesizer.compatibility import (
     is_cmfb_compatible,
     is_combination_valid,
     is_compensation_compatible,
+    is_input_load_compatible,
     is_load_branch_compatible,
     is_output_type_compatible,
     is_stage_interface_compatible,
@@ -66,6 +67,7 @@ def test_load_variant_names():
         "telescopic_cascode_load_nmos",
         "telescopic_cascode_load_wideswing_pmos",
         "telescopic_cascode_load_wideswing_nmos",
+        "rail_to_rail_load_absent",
     }
 
 
@@ -385,7 +387,8 @@ def test_second_stage_signal_device_types():
     is the `in` port) is detected structurally: NMOS for common_source_nmos,
     common_drain_nmos, differential_ota_second_stage, and
     noninverting_stage_nmos; PMOS for common_source_pmos, common_drain_pmos,
-    and noninverting_stage_pmos."""
+    and noninverting_stage_pmos.  The static Class-AB inverter drives both
+    gates; the first signal path is the NMOS common-source device."""
     modules = load_modules()
     stages = modules["amplification_stage"] + modules["output_stage"]
     types = {v.name: signal_device_type(v) for v in stages}
@@ -397,6 +400,7 @@ def test_second_stage_signal_device_types():
         "differential_ota_second_stage": "nmos",
         "noninverting_stage_nmos": "nmos",
         "noninverting_stage_pmos": "pmos",
+        "complementary_class_ab_output": "nmos",
     }
 
 
@@ -416,6 +420,7 @@ def test_second_stage_required_pair_types():
         "differential_ota_second_stage": "pmos",
         "noninverting_stage_nmos": "pmos",
         "noninverting_stage_pmos": "nmos",
+        "complementary_class_ab_output": "pmos",
     }
 
 
@@ -537,7 +542,9 @@ def test_stage_inversions_per_variant():
     differential_ota_second_stage (two cascaded common-source hops through
     its internal d1 node -- the non-inverting composite of issue #114) and
     for the noninverting_stage_* variants (CS input hop + current-mirror
-    output hop; the diode-connected mirror master is skipped, issue #139)."""
+    output hop; the diode-connected mirror master is skipped, issue #139).
+    The Class-AB macro has two parallel common-source paths; either path has
+    one inversion."""
     modules = load_modules()
     stages = modules["amplification_stage"] + modules["output_stage"]
     inversions = {v.name: stage_inversions(v) for v in stages}
@@ -549,6 +556,7 @@ def test_stage_inversions_per_variant():
         "differential_ota_second_stage": 2,
         "noninverting_stage_nmos": 2,
         "noninverting_stage_pmos": 2,
+        "complementary_class_ab_output": 1,
     }
 
 
@@ -775,14 +783,18 @@ def test_enumerate_circuits_excludes_output_cardinality_mismatches():
 
 
 def test_untapped_branch_dc_definition_covers_all_loads():
-    """The untapped branch node (in1) is DC-defined for 12 of the 14 loads:
+    """The untapped branch node is DC-defined for 12 of 14 electrical loads.
+
+    The fifteenth load entry is the zero-device rail-to-rail adapter and is
+    checked by the dedicated input/load compatibility tests.
     by a resistor (resistor_load_*), a diode-connected MOSFET
     (active_load_*'s reference side), or a MOSFET source terminal (the
     cascode loads' folding/cascode devices ride the node one V_GS below
     their gate rail). Only current_source_load_* put a bare, rail-gated
     drain on in1 with nothing to define its voltage (issue #112)."""
     modules = load_modules()
-    defined = {v.name: untapped_branch_is_dc_defined(v) for v in modules["load"]}
+    defined = {v.name: untapped_branch_is_dc_defined(v)
+               for v in modules["load"] if v.devices}
     assert defined == {
         "resistor_load_vdd": True,
         "resistor_load_gnd": True,
@@ -799,6 +811,25 @@ def test_untapped_branch_dc_definition_covers_all_loads():
         "telescopic_cascode_load_wideswing_pmos": True,
         "telescopic_cascode_load_wideswing_nmos": True,
     }
+
+
+def test_rail_to_rail_input_requires_absent_load_adapter():
+    """Only the self-loading complementary input may use the empty adapter."""
+    modules = load_modules()
+    inputs = {v.name: v for v in modules["input_pair"]}
+    loads = {v.name: v for v in modules["load"]}
+    assert is_input_load_compatible({
+        "input_pair": inputs["rail_to_rail_complementary_input"],
+        "load": loads["rail_to_rail_load_absent"],
+    })
+    assert not is_input_load_compatible({
+        "input_pair": inputs["rail_to_rail_complementary_input"],
+        "load": loads["active_load_nmos"],
+    })
+    assert not is_input_load_compatible({
+        "input_pair": inputs["differential_pair_pmos"],
+        "load": loads["rail_to_rail_load_absent"],
+    })
 
 
 def test_is_load_branch_compatible_denies_current_source_loads_in_single_ended():
@@ -1070,6 +1101,21 @@ def test_is_tail_current_compatible_inverter_based_input_only_allows_canonical_v
         assert not is_tail_current_compatible({"input_pair": input_pair, "tail_current": variant})
 
 
+def test_rail_to_rail_input_requires_vdd_side_tail_reference():
+    """The rail-to-rail macro's tail port feeds an internal NMOS reference
+    diode, so only PMOS/VDD-side tail variants can source that current."""
+    modules = load_modules()
+    by_name = {v.name: v for cat in modules.values() for v in cat}
+    input_pair = by_name["rail_to_rail_complementary_input"]
+
+    for tail_variant in modules["tail_current"]:
+        compatible = is_tail_current_compatible({
+            "input_pair": input_pair,
+            "tail_current": tail_variant,
+        })
+        assert compatible == (tail_variant.polarity == "pmos_input")
+
+
 def test_prune_tail_current_keeps_variant_for_tail_consuming_input_pair():
     """differential_pair_pmos references its tail port -- the tail_current
     variant is returned unchanged."""
@@ -1126,7 +1172,7 @@ def test_enumerate_circuits_tail_current_present_iff_not_inverter_based_input():
             assert "out7" not in {p.name for p in bias_variant.ports}
 
 
-def test_inverter_based_input_is_parked_unsupported():
+def test_unsupported_variants_are_parked():
     """inverter_based_input carries an ``unsupported:`` reason tag (issue
     #113: self-biased with Vgs pinned at Vcm, and the gm/Id sizer has no
     fixed-Vgs sizing path); differential_ota_second_stage likewise (issue
@@ -1135,10 +1181,14 @@ def test_inverter_based_input_is_parked_unsupported():
     second gain stage/pole the single-gm2 sizing model cannot see); the two
     source followers (common_drain_pmos/common_drain_nmos) are no longer parked --
     they moved to the new output_stage category and enumerate in the
-    *_buffered_* topologies; every other variant is enumerable."""
+    *_buffered_* topologies.  Rail-to-rail and fixed-bias Class-AB now have
+    experimental analytical sizing, but remain parked pending SPICE validation;
+    every other variant is enumerable."""
     parked = {
         "inverter_based_input": "#113",
+        "rail_to_rail_complementary_input": "rail-to-rail",
         "differential_ota_second_stage": "#114",
+        "complementary_class_ab_output": "Class-AB",
     }
     modules = load_modules()
     for variants in modules.values():
@@ -1161,12 +1211,108 @@ def test_enumerate_circuits_excludes_unsupported_variants():
         c.variant_map["input_pair"].name for c in enumerate_circuits(topo, modules)
     }
     assert "inverter_based_input" not in default_pairs
+    assert "rail_to_rail_complementary_input" not in default_pairs
 
     opt_in_pairs = {
         c.variant_map["input_pair"].name
         for c in enumerate_circuits(topo, modules, {"include_unsupported": True})
     }
-    assert opt_in_pairs - default_pairs == {"inverter_based_input"}
+    assert opt_in_pairs - default_pairs == {
+        "inverter_based_input",
+        "rail_to_rail_complementary_input",
+    }
+
+
+def test_fixed_bias_class_ab_output_is_opt_in_and_structurally_complete():
+    """The static push-pull macro builds only through unsupported opt-in."""
+    modules = load_modules()
+    topo = next(
+        t for t in load_topologies()
+        if t.name == "two_stage_opamp_class_ab_single_ended"
+    )
+    chosen = {
+        "input_pair": "differential_pair_pmos",
+        "load": "active_load_nmos",
+        "tail_current": "current_mirror_tail_pmos",
+        "compensation": "miller_cap",
+        "output_stage": "complementary_class_ab_output",
+    }
+    simple_modules = {
+        category: [v for v in modules[category] if v.name == name]
+        for category, name in chosen.items()
+    }
+
+    with pytest.raises(ValueError, match="output_stage"):
+        list(enumerate_circuits(topo, simple_modules))
+    circuit = next(enumerate_circuits(
+        topo, simple_modules, {"include_unsupported": True}
+    ))
+
+    assert circuit.variant_map["class_ab_stage"].name == "complementary_class_ab_output"
+    output_devices = {
+        ref: device
+        for ref, device in circuit.devices
+        if ref.endswith("_class_ab_stage")
+    }
+    assert len(output_devices) == 2
+    assert output_devices["mn_out_class_ab_stage"].terminals["d"] == "out"
+    assert output_devices["mp_out_class_ab_stage"].terminals["d"] == "out"
+    assert output_devices["mn_out_class_ab_stage"].terminals["g"] == "net_mid"
+    assert output_devices["mp_out_class_ab_stage"].terminals["g"] == "net_mid"
+    assert output_devices["mn_out_class_ab_stage"].terminals["s"] == "gnd!"
+    assert output_devices["mp_out_class_ab_stage"].terminals["s"] == "vdd!"
+
+    # Its unused legacy ``bias`` topology connection is pruned, so no sixth
+    # bias leg is constructed.
+    bias_refs = {ref for ref, _ in circuit.devices if ref.endswith("_bias_gen")}
+    assert "mp6_bias_gen" not in bias_refs
+
+
+def test_rail_to_rail_input_is_opt_in_and_structurally_complete():
+    """The rail-to-rail macro contains complementary differential pairs,
+    mirror current combiners and locally mirrored complementary tails."""
+    modules = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    chosen = {
+        "input_pair": "rail_to_rail_complementary_input",
+        "load": "rail_to_rail_load_absent",
+        "tail_current": "current_mirror_tail_pmos",
+    }
+    simple_modules = {
+        category: [v for v in modules[category] if v.name == name]
+        for category, name in chosen.items()
+    }
+
+    with pytest.raises(ValueError, match="input_pair"):
+        list(enumerate_circuits(topo, simple_modules))
+    circuit = next(enumerate_circuits(
+        topo, simple_modules, {"include_unsupported": True}
+    ))
+
+    input_devices = {
+        ref: device
+        for ref, device in circuit.devices
+        if ref.endswith("_input_pair")
+    }
+    assert len(input_devices) == 13
+    assert input_devices["mp1_input_pair"].terminals["g"] == "in1"
+    assert input_devices["mn1_input_pair"].terminals["g"] == "in1"
+    assert input_devices["mn1_input_pair"].terminals["d"] == "net_diff1"
+    assert input_devices["mpload_ref_input_pair"].terminals["g"] == "net_diff1"
+    assert input_devices["mnload_ref_input_pair"].terminals["g"] == (
+        input_devices["mp1_input_pair"].terminals["d"]
+    )
+    # Both mirror-combined signal paths meet at the exposed output.
+    assert input_devices["mp2_input_pair"].terminals["d"] == "out"
+    assert input_devices["mn2_input_pair"].terminals["d"] == "out"
+    assert input_devices["mpload_out_input_pair"].terminals["d"] == "out"
+    assert input_devices["mnload_out_input_pair"].terminals["d"] == "out"
+    assert input_devices["mnref_input_pair"].terminals["g"] == "net_tail"
+    assert input_devices["mntail_input_pair"].terminals["g"] == "net_tail"
+    assert input_devices["mptail_input_pair"].terminals["g"] == "input_pair_pref"
+
+    assert circuit.variant_map["tail_current"].name == "current_mirror_tail_pmos"
+    assert "out7" in {p.name for p in circuit.variant_map["bias_gen"].ports}
 
 
 def test_load_topologies():

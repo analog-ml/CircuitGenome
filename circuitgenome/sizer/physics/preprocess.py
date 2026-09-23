@@ -22,7 +22,11 @@ from .taxonomy import (
     RAILS,
     SECOND_STAGE_SLOTS,
     THIRD_STAGE_SLOTS,
+    OUTPUT_STAGE_SLOTS,
+    complementary_output_pair,
+    is_complementary_input_stage,
     is_signal_device,
+    signal_devices,
 )
 
 
@@ -126,10 +130,33 @@ def assign_ids(
     """Assign quiescent IDS to each transistor from KCL + spec.ibias."""
     ids_2 = spec.ibias * spec.second_stage_current_ratio
     cascode_load = _cascode_load_current_plan(slot_transistors, spec)
+    ip_devs = slot_transistors.get("input_pair", [])
+    ip_signal_refs = {d.ref for d in signal_devices(ip_devs)}
+    complementary_input = is_complementary_input_stage(ip_devs)
+    ip_signal_source_nets = {
+        d.terminals.get("s") for d in ip_devs if d.ref in ip_signal_refs
+    } - {None}
+    ip_tail_devs = [
+        d for d in ip_devs if d.terminals.get("d") in ip_signal_source_nets
+    ]
+    ip_tail_bias_nets = {d.terminals.get("g") for d in ip_tail_devs} - {None}
+    output_devs = [
+        d for slot in OUTPUT_STAGE_SLOTS for d in slot_transistors.get(slot, [])
+    ]
+    output_pair_refs = {d.ref for d in complementary_output_pair(output_devs)}
     ids_map: dict[str, float] = {}
     for ref, (device, slot) in all_transistors.items():
         if slot == "load" and ref in cascode_load:
             ids_map[ref] = cascode_load[ref]
+        elif slot == "input_pair" and complementary_input:
+            # Each complementary pair has a full tail current.  Its signal
+            # devices and the two current-combining mirror loads carry half;
+            # the tail/reference-conversion mirrors carry the full current.
+            ids_map[ref] = (
+                spec.ibias
+                if device.terminals.get("g") in ip_tail_bias_nets
+                else spec.ibias / 2.0
+            )
         elif slot in HALF_BIAS_SLOTS:
             # Each transistor in a 2-transistor group carries ibias/2.
             # For n devices in the slot (e.g. degenerated pairs), divide equally.
@@ -137,10 +164,21 @@ def assign_ids(
             ids_map[ref] = spec.ibias / max(n, 1)
         elif slot in FULL_BIAS_SLOTS:
             ids_map[ref] = spec.ibias
+        elif slot == "class_ab_stage":
+            ids_map[ref] = spec.ibias * spec.output_stage_current_ratio
         elif slot in SECOND_STAGE_SLOTS:
             ids_map[ref] = ids_2
         elif slot in THIRD_STAGE_SLOTS:
             ids_map[ref] = spec.ibias * spec.third_stage_current_ratio
+        elif slot in OUTPUT_STAGE_SLOTS:
+            # A complementary Class-AB pair is scaled to the requested
+            # quiescent output current. Ordinary follower blocks retain the
+            # historical all-device ratio.
+            ids_map[ref] = (
+                spec.ibias * spec.output_stage_current_ratio
+                if not output_pair_refs or ref in output_pair_refs
+                else spec.ibias
+            )
         else:
             ids_map[ref] = spec.ibias  # conservative default
     return ids_map
@@ -197,13 +235,21 @@ def compute_requirements(
     # --- Output conductances at the operating point ---
     ip_devices = slot_transistors.get("input_pair", [])
     ld_devices = slot_transistors.get("load", [])
+    ip_signal = signal_devices(ip_devices)
+    complementary_input = is_complementary_input_stage(ip_devices)
 
     def _gds_est(device: Device, ids: float) -> float:
         """Pre-geometry gds estimate, role-aware (signal vs current source)."""
         role = SIGNAL if is_signal_device(device) else CURRENT_SOURCE
         return model.gds_estimate(device.type, ids, role)
 
-    gd_ip = _gds_est(ip_devices[0], spec.ibias / 2) if ip_devices else 0.0
+    if complementary_input:
+        # One device of each polarity terminates on each summed output node.
+        ip_reps = [next(d for d in ip_signal if d.type == dtype)
+                   for dtype in ("nmos", "pmos")]
+        gd_ip = sum(_gds_est(d, ids_map[d.ref]) for d in ip_reps)
+    else:
+        gd_ip = _gds_est(ip_devices[0], spec.ibias / 2) if ip_devices else 0.0
     gd_ld = _gds_est(ld_devices[0], spec.ibias / 2) if ld_devices else 0.0
     # Resistor-load conductance (1/R) loads the first-stage output node.
     rout1 = eq.rout(gd_ip, gd_ld + gd_load_r)
@@ -255,15 +301,22 @@ def compute_requirements(
         cc_min_f = tech.cap.min * 1e-12
         cc_max_f = tech.cap.max * 1e-12
 
-        # Pick the *smallest* stable Cc: the pole-split floor ~0.25·CL keeps
+        # Pick the *smallest* stable Cc: the ordinary pole-split floor
+        # ~0.25·CL keeps
         # the output pole clear of GBW for a ~60° PM budget.  The slew rate
         # only *upper*-bounds Cc (SR = iBias/Cc — a smaller Cc slews faster),
         # and every pF above the floor inflates the GBW-side gm1 requirement
         # 2π·GBW·Cc/k_fs toward the weak-inversion ceiling (issue #108).
+        # The complementary common-source output has both NMOS and PMOS gm at
+        # the second-stage node and needs a wider nominal margin than a
+        # one-device CS stage.  SPICE regression establishes 0.5·CL as its
+        # minimum useful seed; optimization may still increase it.
+        stability_ratio = (0.5 if "class_ab_stage" in slot_transistors
+                           else _CC_STABILITY_RATIO)
         cc_ub_f = cc_max_f
         if spec.slew_rate_min_vps:
             cc_ub_f = min(cc_ub_f, spec.ibias / spec.slew_rate_min_vps)
-        cc_f = max(cc_min_f, min(_CC_STABILITY_RATIO * spec.cl, cc_ub_f))
+        cc_f = max(cc_min_f, min(stability_ratio * spec.cl, cc_ub_f))
 
     # Cc2 for three-stage (inner cap = Cc1/4); None for two-stage and one-stage.
     cc2_pf: float | None = None
@@ -358,7 +411,13 @@ def compute_requirements(
         return model.gm_ceiling(dtype, ids, tech.length.min)
 
     gm_ceiling_warnings: list[str] = []
-    gm1_ceil = _ceil(spec.ibias / 2.0, ip_devices)
+    if complementary_input:
+        gm1_ceil = sum(
+            model.gm_ceiling(dtype, spec.ibias / 2.0, tech.length.min)
+            for dtype in ("nmos", "pmos")
+        )
+    else:
+        gm1_ceil = _ceil(spec.ibias / 2.0, ip_devices)
     if gm1_req > gm1_ceil:
         gm1_req = gm1_ceil
         gm_ceiling_warnings.append(
@@ -383,7 +442,11 @@ def compute_requirements(
 
     for ref, (device, slot) in all_transistors.items():
         if slot == "input_pair":
-            gm_req_map[ref] = gm1_req
+            if ref in {d.ref for d in ip_signal}:
+                # In a complementary stage the NMOS and PMOS pair gms add.
+                gm_req_map[ref] = gm1_req / 2.0 if complementary_input else gm1_req
+            else:
+                gm_req_map[ref] = 0.0
         elif slot in SECOND_STAGE_SLOTS:
             # Only the signal transistor (gate driven by first-stage output)
             # needs a gm requirement; the load transistor is a current source.
@@ -391,6 +454,25 @@ def compute_requirements(
         elif slot in THIRD_STAGE_SLOTS:
             gm_req_map[ref] = gm3_req if is_signal_device(device) else 0.0
         # All other slots: no explicit gm requirement (sized by min W/L)
+
+    # A follower buffer needs enough aggregate gm to put its output pole above
+    # unity gain.  For static Class-AB the complementary pair shares this gm.
+    output_devs = [d for s in OUTPUT_STAGE_SLOTS
+                   for d in slot_transistors.get(s, [])]
+    output_pair = complementary_output_pair(output_devs)
+    if output_pair and spec.gbw_min_hz:
+        lag = 1.0
+        if spec.phase_margin_min_deg is not None:
+            lag = max(math.tan(math.radians(90.0 - spec.phase_margin_min_deg)), 1e-3)
+        gm_out = 2.0 * math.pi * spec.gbw_min_hz * spec.cl / lag
+        for d in output_pair:
+            gm_req_map[d.ref] = max(
+                gm_req_map.get(d.ref, 0.0),
+                min(
+                    gm_out / len(output_pair),
+                    model.gm_ceiling(d.type, ids_map[d.ref], tech.length.min),
+                ),
+            )
 
     # --- VDS_sat upper bounds from output swing specs ---
     vdd = spec.vdd
@@ -416,6 +498,14 @@ def compute_requirements(
                         vod_max_map[d.ref] = min(
                             vod_max_map.get(d.ref, float("inf")), vds_sat_max
                         )
+            common_source_pair = bool(
+                output_pair
+                and output_pair[0].terminals.get("d")
+                == output_pair[1].terminals.get("d")
+            )
+            for d in output_pair:
+                if d.type == ("pmos" if common_source_pair else "nmos"):
+                    vod_max_map[d.ref] = vds_sat_max
 
     if spec.output_swing_min_v is not None:
         vds_sat_max_low = spec.output_swing_min_v - vss
@@ -427,5 +517,13 @@ def compute_requirements(
                         vod_max_map[d.ref] = min(
                             vod_max_map.get(d.ref, float("inf")), vds_sat_max_low
                         )
+            common_source_pair = bool(
+                output_pair
+                and output_pair[0].terminals.get("d")
+                == output_pair[1].terminals.get("d")
+            )
+            for d in output_pair:
+                if d.type == ("nmos" if common_source_pair else "pmos"):
+                    vod_max_map[d.ref] = vds_sat_max_low
 
     return gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings

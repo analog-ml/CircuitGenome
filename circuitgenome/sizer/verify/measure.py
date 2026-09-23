@@ -118,7 +118,9 @@ def _loop_fb(topo, vcm, drive: str) -> tuple[str, str]:
     return fb, "v(out)"
 
 
-def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
+def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm,
+                load_cap_f: float | None = None,
+                temperature_c: float | None = None):
     """Open-loop AC: returns ``(gain_db, gbw_hz, pm_deg, reason, polarity)``.
 
     AC-coupled feedback: huge L closes the loop at DC (sets bias ≈ CM), huge C
@@ -147,9 +149,12 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         # No AC-grounding caps in the FD drive — they would short out Vid.
         drive = ("Vid inp inn ac 1\n" if topo.fd else "Vid inp cm ac 1\n")
         fb, outexpr = _loop_fb(topo, vcm, drive)
+        if load_cap_f and not topo.fd:
+            fb += f"Cload out 0 {load_cap_f}\n"
         # DC check: output must settle near CM (negative feedback), else swap.
         dc = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
-                   f"op\nlet vchk={outexpr}\nwrdata __OUT__ vchk")
+                   f"op\nlet vchk={outexpr}\nwrdata __OUT__ vchk",
+                   temperature_c=temperature_c)
         d = _run(dc, ["vchk"])
         if d is None:
             continue
@@ -166,7 +171,8 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         # at 1 Hz skews the phase reference (and thus PM) by tens of degrees.
         ac = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
                    f"ac dec 30 1e-3 1e10\nlet vod={outexpr}\n"
-                   "wrdata __OUT__ real(vod) imag(vod)")
+                   "wrdata __OUT__ real(vod) imag(vod)",
+                   temperature_c=temperature_c)
         a = _run(ac, ["re", "im"])
         if a is None or a.shape[0] < 5 or a.shape[1] < 4:
             continue
@@ -268,7 +274,8 @@ def _edge_slew(t, vo, vdd) -> float | None:
 
 
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
-                sr_hint: float | None = None):
+                sr_hint: float | None = None,
+                load_cap_f: float | None = None):
     """Unity-gain large-signal pulse → slew rate (V/s), the **min of the
     rising and falling edges**.  SE only (best-effort).
 
@@ -289,6 +296,8 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
         # unity buffer: out -> inverting input (direct), pulse the non-inverting input
         fb = (f"Rfb out inn 1\n"
               f"Vstep inp 0 pulse({vcm} {vcm + step} {t0} 10p 10p {t_edge} 1)\n")
+        if load_cap_f:
+            fb += f"Cload out 0 {load_cap_f}\n"
         deck = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
                      f"tran {(t0 + 2 * t_edge) / 2000} {t0 + 2 * t_edge}\n"
                      "wrdata __OUT__ v(out)")

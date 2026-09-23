@@ -52,10 +52,11 @@
 #                       filled into the second_stage/third_stage slots)
 #   output_stage:     in, out, bias, vdd, gnd
 #                       Same canonical signature as the amplification stage, but
-#                       a follower buffer (gain ~ 1): in -> gate, out -> source,
-#                       bias -> current-source gate. Held separately so gain_db
-#                       counts only real gain stages and the follower stays
-#                       outside the Miller loop.
+#                       a buffer (gain ~ 1): the active common-drain variants use
+#                       bias as a current-source gate; parked macro variants may
+#                       use it as a reference-current interface. Held separately
+#                       so gain_db counts only real gain stages and the buffer
+#                       stays outside the Miller loop.
 #   cmfb:             in1, in2, vref, bias, out, vdd, gnd
 #                       - in1, in2  : differential sense inputs. In
 #                                     fully_differential topologies, wired to
@@ -186,7 +187,78 @@ modules:
       - {ref: mp2, type: pmos, d: out2, g: in2, s: vdd, b: vdd}
       - {ref: mn2, type: nmos, d: out2, g: in2, s: gnd, b: gnd}
 
+  - name: rail_to_rail_complementary_input
+    category: input_pair
+    display_name: "Rail-to-Rail Complementary Input Stage"
+    # Structural prototype: parallel PMOS and NMOS differential pairs share
+    # in1/in2.  Each pair has a complementary 1:1 mirror load; both
+    # single-ended mirror outputs are summed at out2.  This avoids leaving a
+    # second directly-summed drain node without a DC/common-mode mechanism.
+    # A single
+    # VDD-side tail-current input is converted into local NMOS and PMOS mirror
+    # references, which bias the two pair tails.  At low input common mode the
+    # PMOS pair remains active; at high common mode the NMOS pair remains
+    # active.  Around mid-rail both pairs conduct, so this basic form does not
+    # claim constant gm.
+    #
+    # The analytical/gm-Id sizer supports the nominal midpoint operating point:
+    # each pair gets its own ibias tail and their gms are summed.  It remains
+    # parked because common-mode-dependent handoff, noise, the mid-rail gm bump,
+    # and SPICE validation are not yet modeled.  See tail_current compatibility:
+    # only a VDD-side source may drive this macro's `tail` reference interface.
+    unsupported: >-
+      rail-to-rail analytical sizing is experimental; common-mode handoff,
+      gm variation and noise are not yet covered
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: out1, role: output}
+      - {name: out2, role: output}
+      - {name: tail, role: supply_in}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      # Complementary pairs.
+      - {ref: mp1, type: pmos, d: psum, g: in1, s: ptail, b: vdd}
+      - {ref: mp2, type: pmos, d: out2, g: in2, s: ptail, b: vdd}
+      - {ref: mn1, type: nmos, d: out1, g: in1, s: ntail, b: gnd}
+      - {ref: mn2, type: nmos, d: out2, g: in2, s: ntail, b: gnd}
+      # Current-mirror combiners.  The NMOS pair uses a PMOS load referenced
+      # at out1; the PMOS pair uses an NMOS load referenced at psum.  Their
+      # signal currents add at the sole high-impedance output, out2.
+      - {ref: mpload_ref, type: pmos, d: out1, g: out1, s: vdd, b: vdd}
+      - {ref: mpload_out, type: pmos, d: out2, g: out1, s: vdd, b: vdd}
+      - {ref: mnload_ref, type: nmos, d: psum, g: psum, s: gnd, b: gnd}
+      - {ref: mnload_out, type: nmos, d: out2, g: psum, s: gnd, b: gnd}
+      # VDD-side external tail current lands on the NMOS reference diode.
+      - {ref: mnref,  type: nmos, d: tail, g: tail, s: gnd, b: gnd}
+      - {ref: mnpref, type: nmos, d: pref, g: tail, s: gnd, b: gnd}
+      - {ref: mppref, type: pmos, d: pref, g: pref, s: vdd, b: vdd}
+      # Locally mirrored complementary tail currents.
+      - {ref: mntail, type: nmos, d: ntail, g: tail, s: gnd, b: gnd}
+      - {ref: mptail, type: pmos, d: ptail, g: pref, s: vdd, b: vdd}
+
   # ─── LOADS ────────────────────────────────────────────────────────────────
+
+  - name: rail_to_rail_load_absent
+    category: load
+    display_name: "No External Load (Rail-to-Rail Current Summing)"
+    # The complementary rail-to-rail input macro contains its own current-mirror
+    # combiners.  Adding another active/resistive load would impose an unrelated
+    # branch current.  This zero-device adapter only exposes the macro output.
+    ports:
+      - {name: in1,       role: input}
+      - {name: in2,       role: input}
+      - {name: out,       role: optional}
+      - {name: out1,      role: output, alias_of: in1}
+      - {name: out2,      role: output, alias_of: in2}
+      - {name: bias1,     role: optional}
+      - {name: bias2,     role: optional}
+      - {name: bias3,     role: optional}
+      - {name: bias_cmfb, role: optional}
+      - {name: vdd,       role: supply}
+      - {name: gnd,       role: supply}
+    devices: []
 
   - name: resistor_load_vdd
     category: load
@@ -950,6 +1022,26 @@ modules:
       # device), so the realized Vgs carries body effect.
       - {ref: mn1, type: nmos, d: vdd, g: in,   s: out,  b: gnd}
       - {ref: mn2, type: nmos, d: out, g: bias,  s: gnd,  b: gnd}
+
+  - name: complementary_class_ab_output
+    category: output_stage
+    display_name: "Complementary Class-AB Output Stage (Static CMOS Push-Pull)"
+    # A complementary common-source pair provides rail-capable push-pull drive.
+    # Both gates use the preceding-stage output; closed-loop DC feedback selects
+    # the quiescent gate voltage, while the common width calibration sets IQ.
+    # This avoids the former source-follower prototype's unavoidable gate-drive
+    # loss (Vout,max < VDD-VGS and Vout,min > |VGSP| at 1 V).
+    unsupported: >-
+      static CMOS push-pull Class-AB analytical sizing is experimental;
+      large-signal stability, crossover distortion and PVT are not fully covered
+    ports:
+      - {name: in,   role: input}
+      - {name: out,  role: output}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: mn_out, type: nmos, d: out, g: in, s: gnd, b: gnd}
+      - {ref: mp_out, type: pmos, d: out, g: in, s: vdd, b: vdd}
 
   # ─── CMFB (COMMON-MODE FEEDBACK) ──────────────────────────────────────────
 

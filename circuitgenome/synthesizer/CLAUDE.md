@@ -18,11 +18,13 @@ SPICE netlists.
   YAML device-entry keys except `ref`/`type` (so `d/g/s/b` for MOSFETs,
   `t1/t2` for resistors, `p/m` for capacitors — whatever the YAML uses).
 - `config/opamp_modules.yaml` — module variant definitions, grouped by
-  category (input_pair, load, tail_current, cmfb, compensation,
+  category (input_pair — including the parked complementary rail-to-rail
+  macro — load, tail_current, cmfb, compensation,
   amplification_stage — the voltage-gain stages common_source_nmos/
   common_source_pmos/noninverting_stage_nmos/noninverting_stage_pmos/
-  differential_ota_second_stage — and output_stage — the
-  source followers common_drain_pmos/common_drain_nmos). The bias_generation
+  differential_ota_second_stage — and output_stage — the active source
+  followers common_drain_pmos/common_drain_nmos plus the parked static CMOS
+  complementary_class_ab_output macro). The bias_generation
   category has **no** variants here — the bias generator is constructed per
   combination (see below). Note: the `second_stage`/`third_stage`/
   `second_stage_p`/`_n`/`third_stage_p`/`_n` topology *slot* names carry
@@ -136,7 +138,8 @@ Each `input_pair`/`load`/`tail_current` variant declares
 `polarity: pmos_input | nmos_input | None`. `input_pair` is the reference:
 `is_combination_valid` rejects a combination if any other tagged variant's
 polarity doesn't match `input_pair`'s (untagged variants, e.g.
-`inverter_based_input` and all `bias_generation` variants, impose no
+`inverter_based_input`, `rail_to_rail_complementary_input`, and all
+`bias_generation` variants, impose no
 constraint). To support a new/edited variant, just add the right `polarity:`
 tag in YAML — no code changes needed.
 
@@ -159,7 +162,8 @@ structurally (no YAML tags) and only constrains `second_stage`-category
 slots whose `in` net is one of the load's output nets
 (`load.out`/`out1`/`out2`) — the 3-stage topologies' `third_stage` slot
 senses the second stage's wide-swing output instead and is deliberately
-unconstrained. Untagged input pairs (`inverter_based_input`) impose no
+unconstrained. Untagged input pairs (`inverter_based_input` and the parked
+complementary rail-to-rail macro) impose no
 constraint. New `second_stage` variants are classified automatically by
 whichever device gates `in` and where its source sits.
 
@@ -254,12 +258,13 @@ real `bias_cmfb: role: input` -- no code changes needed here.
 
 ## Tail-current compatibility filter & pruning (`compatibility/tail_current.py`)
 
-Of the 5 `input_pair` variants, only the 4 `differential_pair_*` variants
-reference their `tail` port from a device terminal (`s`/`b: tail` on the
-tail transistor, or `t2: tail` on the degenerated variants' tail resistor);
-`inverter_based_input` -- two back-to-back CMOS inverters -- is self-biased
-and never references `tail`, so `input_pair.tail -> net_tail <-
-tail_current.out` drives nothing. `is_tail_current_compatible` rejects
+Of the 6 `input_pair` variants, the 4 `differential_pair_*` variants use
+their `tail` port as the common-source node. The rail-to-rail macro uses
+`tail` differently: it feeds an internal NMOS reference diode, so
+`is_tail_current_compatible` admits only VDD-side (`pmos_input`) sources for
+that macro. `inverter_based_input` -- two back-to-back CMOS inverters -- is
+self-biased and never references `tail`, so `input_pair.tail -> net_tail <-
+tail_current.out` drives nothing. For that case the compatibility filter rejects
 combinations where `input_pair` doesn't reference `tail` and `tail_current`
 isn't `CANONICAL_TAIL_CURRENT_VARIANT` (`current_mirror_tail_pmos`) -- this
 collapses the otherwise-duplicate choice between the 6 `tail_current`
@@ -353,6 +358,13 @@ round-trip tests). Currently parked:
   sizer has no fixed-Vgs sizing path, so every candidate shipped mA-scale
   crowbar currents (gf180: 90/90 bias✗). Un-park by adding that sizing
   path and removing the tag.
+- `rail_to_rail_complementary_input`: thirteen-device structural macro. Parallel
+  PMOS/NMOS pairs share the differential inputs; complementary mirror loads
+  combine both pair currents at one high-impedance output, and local mirrors
+  derive both tail currents from one VDD-side current reference.
+  It is not constant-gm. Nominal midpoint analytical sizing assigns both tails
+  and sums the complementary gm; nominal PTM45 SPICE bias is covered. Un-park
+  only after common-mode handoff/noise validation, including the mid-rail gm bump.
 - `differential_ota_second_stage` (issue #114): not the folded-cascode OTA
   its name claims — two cascaded common-source stages, so the composite is
   non-inverting and every Miller-family compensation wrap is positive
@@ -369,6 +381,12 @@ round-trip tests). Currently parked:
   which are the feasible replacement for the ota's non-inverting role — same
   parity, but their second inversion sits at a low-Z current-mirror node
   (out-of-band pole) instead of the ota's in-band `d1`.
+- `complementary_class_ab_output`: two-device static CMOS push-pull gain stage.
+  It is restricted to `two_stage_opamp_class_ab_single_ended`, where it is the
+  compensated second gain stage rather than a follower buffer. Analytical
+  sizing covers both devices, configurable IQ, output gm, swing and power;
+  ngspice covers IQ calibration and loaded bidirectional drive. Un-park only
+  after crossover-distortion and PVT validation.
 
 The two source followers `common_drain_pmos` / `common_drain_nmos` (issue #125)
 are **no longer parked**: they moved out of the amplification pool into the

@@ -3,14 +3,14 @@
 :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`.
 
 Every topology has a ``tail_current`` slot, wired
-``input_pair.tail -> net_tail <- tail_current.out``. But only the 4
-``differential_pair_*`` ``input_pair`` variants actually reference their
-``tail`` port from a device terminal (``s``/``b: tail`` on the tail
-transistor, or ``t2: tail`` on the degenerated variants' tail resistor).
-The fifth ``input_pair`` variant, ``inverter_based_input`` -- two
-back-to-back CMOS inverters -- is self-biased by design and never
-references ``tail``, so for that variant ``net_tail`` is a floating,
-single-terminal node and ``tail_current`` is synthesized dead.
+``input_pair.tail -> net_tail <- tail_current.out``. The 4
+``differential_pair_*`` variants use ``tail`` as the pair's common-source
+node. ``rail_to_rail_complementary_input`` instead uses it as a current
+reference feeding an internal NMOS diode, so it specifically requires a
+VDD-side (``pmos_input``) tail source. ``inverter_based_input`` -- two
+back-to-back CMOS inverters -- is self-biased and never references ``tail``,
+so for that variant ``net_tail`` is a floating, single-terminal node and
+``tail_current`` is synthesized dead.
 
 Without a filter, all 6 ``tail_current`` variants would be enumerated for
 every combination, but for ``inverter_based_input`` the choice between them
@@ -43,10 +43,11 @@ identical devices *and* identical names for what should be one circuit.
 circuit per ``(inverter_based_input, load, bias_gen, ...)`` combination, not
 6.
 
-To extend: tag a new or edited ``input_pair`` variant's tail-side device
-terminal(s) with ``tail`` to make it a genuine ``tail_current`` consumer --
-no code changes needed here. A new self-biased, no-tail ``input_pair``
-variant is automatically treated like ``inverter_based_input``.
+To extend: wire a new input pair's tail-side device terminal(s) to ``tail``
+to make it a generic ``tail_current`` consumer. A specialized reference
+interface such as the rail-to-rail macro needs an explicit rule here. A new
+self-biased, no-tail variant is automatically treated like
+``inverter_based_input``.
 """
 from __future__ import annotations
 import dataclasses
@@ -54,6 +55,7 @@ import dataclasses
 from ..models import ModuleVariant
 
 CANONICAL_TAIL_CURRENT_VARIANT = "current_mirror_tail_pmos"
+RAIL_TO_RAIL_INPUT_VARIANTS = {"rail_to_rail_complementary_input"}
 
 
 def _input_pair_uses_tail(input_pair: ModuleVariant) -> bool:
@@ -64,17 +66,24 @@ def _input_pair_uses_tail(input_pair: ModuleVariant) -> bool:
 def is_tail_current_compatible(variant_map: dict[str, ModuleVariant]) -> bool:
     """Return ``False`` if ``tail_current``'s variant choice is irrelevant for this combination.
 
-    If ``input_pair`` references its ``tail`` port (all 4
-    ``differential_pair_*`` variants), every ``tail_current`` variant
-    supplies a real bias current and remains distinct. For
+    If a conventional ``input_pair`` references its ``tail`` port (the 4
+    ``differential_pair_*`` variants), every ``tail_current`` variant remains
+    distinct. The rail-to-rail macro accepts only VDD-side sources because its
+    ``tail`` port feeds an NMOS reference diode. For
     ``inverter_based_input`` -- which is self-biased and never references
     ``tail`` -- ``tail_current.out`` drives nothing, so only
     :data:`CANONICAL_TAIL_CURRENT_VARIANT` is allowed through -- the other 5
     variants would otherwise be enumerated as duplicate no-op circuits.
     """
-    if _input_pair_uses_tail(variant_map["input_pair"]):
+    input_pair = variant_map["input_pair"]
+    tail_current = variant_map["tail_current"]
+    if input_pair.name in RAIL_TO_RAIL_INPUT_VARIANTS:
+        # The macro treats `tail` as a current-reference input that feeds an
+        # internal NMOS diode; it therefore needs current sourced from VDD.
+        return tail_current.polarity == "pmos_input"
+    if _input_pair_uses_tail(input_pair):
         return True
-    return variant_map["tail_current"].name == CANONICAL_TAIL_CURRENT_VARIANT
+    return tail_current.name == CANONICAL_TAIL_CURRENT_VARIANT
 
 
 def prune_tail_current(variant: ModuleVariant, input_pair: ModuleVariant) -> ModuleVariant:

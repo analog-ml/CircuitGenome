@@ -23,7 +23,15 @@ from .circuit_view import CircuitView
 from .device_model import DeviceModel
 from ..models import SizingSpec, TransistorSizing
 from .preprocess import _first_stage_gain_factor
-from .taxonomy import RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device
+from .taxonomy import (
+    RAILS,
+    SECOND_STAGE_SLOTS,
+    THIRD_STAGE_SLOTS,
+    complementary_output_pair,
+    is_complementary_input_stage,
+    is_signal_device,
+    signal_devices,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -171,7 +179,7 @@ class StageChain:
 # Membership lives in taxonomy; this only fixes the order in which a
 # representative device is picked (the SE name before the FD legs).
 _STAGE_SLOT_GROUPS = (
-    ("second_stage", "second_stage_p", "second_stage_n"),
+    ("second_stage", "second_stage_p", "second_stage_n", "class_ab_stage"),
     ("third_stage", "third_stage_p", "third_stage_n"),
 )
 assert set(_STAGE_SLOT_GROUPS[0]) == SECOND_STAGE_SLOTS
@@ -247,8 +255,11 @@ def build_stage_chain(
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
     ip_devs = slot_transistors.get("input_pair", [])
-    tail_net = ip_devs[0].terminals.get("s") if ip_devs else None
-    stop = frozenset({tail_net}) if tail_net else frozenset()
+    ip_signal = signal_devices(ip_devs)
+    complementary_input = is_complementary_input_stage(ip_devs)
+    tail_nets = {d.terminals.get("s") for d in ip_signal} - {None}
+    tail_net = next(iter(tail_nets), None)
+    stop = frozenset(tail_nets)
 
     def _gm(d: Device) -> float:
         s = sizing.get(d.ref)
@@ -278,12 +289,23 @@ def build_stage_chain(
     out1 = next((d.terminals.get("g") for d in signal_devs if d is not None), None)
     if out1 is None and ip_devs:
         out1 = ip_devs[0].terminals.get("d")   # one-stage: the pair's own drain
-    stages = [Stage(gm=_gm(ip_devs[0]) if ip_devs else 0.0,
+    if complementary_input:
+        # One representative device from each pair contributes; the two
+        # complementary transconductances add at the shared output nodes.
+        gm1 = sum(_gm(next(d for d in ip_signal if d.type == dtype))
+                  for dtype in ("nmos", "pmos"))
+    else:
+        gm1 = _gm(ip_signal[0]) if ip_signal else 0.0
+    stages = [Stage(gm=gm1,
                     rout=_rout(out1, gd_load_r))]
 
     # --- Stages 2 and 3: each numbered gain slot's signal device ---
-    for sig in signal_devs:
-        stages.append(Stage(gm=_gm(sig) if sig is not None else 0.0,
+    for devs, sig in zip(slot_devs, signal_devs):
+        pair = complementary_output_pair(devs)
+        gm = sum(_gm(device) for device in pair) if pair else (
+            _gm(sig) if sig is not None else 0.0
+        )
+        stages.append(Stage(gm=gm,
                             rout=_rout(sig.terminals.get("d") if sig else None)))
 
     # --- Output-stage load conductance (PSRR) ---
@@ -311,8 +333,13 @@ def build_stage_chain(
         r_tail = node_rout(tail_net, mosfets, model, sizing, frozenset())
         gd_tail = 1.0 / r_tail if r_tail and r_tail != float("inf") else 0.0
 
-    # --- Output swing: the second stage's Vdsat per polarity ---
+    # --- Output swing: last gain stage, or the complementary follower pair ---
     ss_devs = slot_devs[0] if slot_devs else []
+    output_devs = [d for slot in (
+        "output_stage", "output_stage_p", "output_stage_n", "class_ab_stage"
+    )
+                   for d in slot_transistors.get(slot, [])]
+    output_pair = complementary_output_pair(output_devs)
 
     def _vdsat(dtype: str) -> float | None:
         d = next((d for d in ss_devs if d.type == dtype), None)
@@ -324,12 +351,43 @@ def build_stage_chain(
                   if d.type in ("nmos", "pmos")])
     supply = [spec.ibias]
     if len(stages) > 1:
-        n_ss = sum(1 for s in SECOND_STAGE_SLOTS if s in slot_transistors)
-        supply.append(spec.ibias * spec.second_stage_current_ratio * n_ss)
+        n_ss = sum(1 for s in SECOND_STAGE_SLOTS
+                   if s != "class_ab_stage" and s in slot_transistors)
+        if n_ss:
+            supply.append(spec.ibias * spec.second_stage_current_ratio * n_ss)
     if len(stages) > 2:
         n_ts = sum(1 for s in THIRD_STAGE_SLOTS if s in slot_transistors)
         supply.append(spec.ibias * spec.third_stage_current_ratio * n_ts)
     supply.append(spec.ibias * max(n_bias, 1))
+    if output_devs:
+        # Count each distinct branch entering from VDD.  This covers ordinary
+        # followers and the four quiescent VDD branches in the static Class-AB
+        # macro without double-counting series devices.
+        supply.extend(
+            sizing[d.ref].ids_a for d in output_devs
+            if d.ref in sizing
+            and ((d.type == "pmos" and d.terminals.get("s") == "vdd!")
+                 or (d.type == "nmos" and d.terminals.get("d") == "vdd!"))
+        )
+
+    if complementary_input:
+        # Replace the ordinary single-tail estimate by the two VDD-fed local
+        # branches (PMOS tail plus PMOS reference conversion branch).
+        supply[0] = 2.0 * spec.ibias
+
+    if output_pair:
+        common_source = (output_pair[0].terminals.get("d")
+                         == output_pair[1].terminals.get("d"))
+        high_type, low_type = (("pmos", "nmos") if common_source
+                               else ("nmos", "pmos"))
+        high = next((sizing.get(d.ref) for d in output_pair
+                     if d.type == high_type), None)
+        low = next((sizing.get(d.ref) for d in output_pair
+                    if d.type == low_type), None)
+        swing_vdsat = (high.vds_sat_v if high else None,
+                       low.vds_sat_v if low else None)
+    else:
+        swing_vdsat = (_vdsat("pmos"), _vdsat("nmos"))
 
     return StageChain(
         stages=tuple(stages),
@@ -341,5 +399,5 @@ def build_stage_chain(
         cc_pf=cc_pf,
         cc2_pf=cc2_pf,
         supply_currents=tuple(supply),
-        swing_vdsat=(_vdsat("pmos"), _vdsat("nmos")),
+        swing_vdsat=swing_vdsat,
     )
