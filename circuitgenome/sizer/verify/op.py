@@ -99,7 +99,7 @@ def _parse_probes(prefixes: dict[str, str], txt: str) -> dict[str, dict[str, flo
     return op
 
 
-#: Largest |V(outp) − V(outn)| (fraction of the supply) an FD ``.op`` may
+#: Largest ``|V(outp) − V(outn)|`` (fraction of the supply) an FD ``.op`` may
 #: show at zero differential input before the verdict is "railed": a split
 #: output CM is the signature of an unregulated output stage latching apart.
 _FD_SPLIT_FRAC = 0.2
