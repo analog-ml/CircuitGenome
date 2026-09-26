@@ -11,7 +11,12 @@ import pytest
 from circuitgenome.sizer import SizingSpec
 from circuitgenome.sizer.physics import equations as eq
 from circuitgenome.sizer.physics.metrics import evaluate_metrics
-from circuitgenome.sizer.physics.stage_chain import Stage, StageChain
+from circuitgenome.synthesizer.models import Device
+from circuitgenome.sizer.physics.stage_chain import (
+    Stage,
+    StageChain,
+    _tail_current_net,
+)
 
 INF = float("inf")
 
@@ -91,6 +96,38 @@ def test_three_stage_uses_the_three_stage_phase_margin():
 
 
 # --------------------------------------------------------------------------- #
+# Resolving the tail node through degeneration resistors (issue #224)
+# --------------------------------------------------------------------------- #
+def _res(ref, t1, t2):
+    return Device(ref=ref, type="resistor", terminals={"t1": t1, "t2": t2})
+
+
+def test_plain_pair_tail_node_is_the_pair_source():
+    """No degeneration resistors -- the source net *is* the tail node."""
+    assert _tail_current_net("net_tail", []) == "net_tail"
+
+
+def test_degenerated_pair_tail_node_hops_the_resistor():
+    """r1 bridges the pair source to the shared tail the mirror drains onto."""
+    rs = [_res("r1", "s1", "net_tail"), _res("r2", "s2", "net_tail")]
+    assert _tail_current_net("s1", rs) == "net_tail"
+    assert _tail_current_net("s2", rs) == "net_tail"
+
+
+def test_tail_node_hop_is_terminal_order_independent():
+    """t1/t2 order is a netlist detail, not a direction."""
+    assert _tail_current_net("s1", [_res("r1", "net_tail", "s1")]) == "net_tail"
+
+
+def test_tail_node_ignores_resistors_not_on_the_pair_source():
+    """A degeneration resistor on the *other* leg must not redirect this one."""
+    assert _tail_current_net("s1", [_res("r2", "s2", "net_tail")]) == "s1"
+
+
+def test_tail_node_of_a_pairless_chain_is_none():
+    assert _tail_current_net(None, []) is None
+
+
 # The load-compensated single-stage path (issue #221)
 # --------------------------------------------------------------------------- #
 def _one_stage(**kw):
