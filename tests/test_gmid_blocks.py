@@ -1,6 +1,8 @@
-"""Tests for the gm/Id functional-block view (circuitgenome/sizer/gmid/blocks)."""
-from circuitgenome.sizer.gmid.blocks import (
+"""Tests for the gm/Id functional-block view (circuitgenome/sizer/gmid/analyze)."""
+from circuitgenome.sizer.gmid.analyze import (
+    GmIdCircuitView,
     LoadKind,
+    OpAmpBlocks,
     build_blocks,
     classify_load,
 )
@@ -32,43 +34,55 @@ def test_is_signal_device():
     assert not is_signal_device(D("m", "nmos", g="vdd!", d="o", s="0"))
 
 
-def test_build_blocks_and_first_stage_factor():
+def test_build_blocks_load_kind():
     ip = [D("m1_input_pair", "pmos", g="in1", d="o1", s="t"),
           D("m2_input_pair", "pmos", g="in2", d="o2", s="t")]
     mirror_load = [D("m1_load", "nmos", g="x", d="x", s="0"),
                    D("m2_load", "nmos", g="x", d="o2", s="0")]
-    # mirror first-stage load → full gain (k_fs = 1.0)
     b = build_blocks({"input_pair": ip, "load": mirror_load}, {})
-    assert b.n_stages == 1
     assert not b.is_fully_differential
     assert b.load.load_kind == LoadKind.MIRROR
-    assert b.first_stage_gain_factor() == 1.0
 
-    # resistor load → single-ended halving (k_fs = 0.5)
+    # A resistor-only load slot still gets a block.
     b2 = build_blocks({"input_pair": ip}, {"load": [D("r1_load", "resistor", a="o2", b="0")]})
     assert b2.load.load_kind == LoadKind.RESISTOR
-    assert b2.first_stage_gain_factor() == 0.5
 
 
-def test_fully_differential_factor():
+def test_fully_differential_flag():
     b = build_blocks({"input_pair": [], "second_stage_p": [], "second_stage_n": []}, {})
-    assert b.is_fully_differential and b.n_stages == 2
-    assert b.first_stage_gain_factor() == 1.0
+    assert b.is_fully_differential
 
 
-def test_has_cascode_tail():
+def test_tail_is_cascode():
     ip = [D("mi1", "nmos", g="in1", d="o1", s="t"),
           D("mi2", "nmos", g="in2", d="o2", s="t")]
     # Plain single-device tail: the tail slot is never classified, so this must
     # be detected structurally, not via load_kind (issue #145).
     plain = build_blocks(
         {"input_pair": ip, "tail_current": [D("mt", "nmos", g="net_bias1", d="t", s="0")]}, {})
-    assert not plain.has_cascode_tail()
+    assert not plain.tail.is_cascode
     # Cascode tail: top device stacked on the bottom device's drain.
     casc = build_blocks(
         {"input_pair": ip,
          "tail_current": [D("mt_top", "nmos", g="net_bias2", d="t", s="tc"),
                           D("mt_bot", "nmos", g="net_bias1", d="tc", s="0")]}, {})
-    assert casc.has_cascode_tail()
-    # No tail slot at all → not a cascode tail (resistor-tail / degenerate case).
-    assert not build_blocks({"input_pair": ip}, {}).has_cascode_tail()
+    assert casc.tail.is_cascode
+    # No tail slot at all → nothing to classify (resistor-tail / degenerate case).
+    assert build_blocks({"input_pair": ip}, {}).tail is None
+
+
+def test_default_construction_is_the_empty_decomposition():
+    """``GmIdCircuitView``'s ``blocks`` default must be constructible.
+
+    It is declared ``field(default_factory=OpAmpBlocks)``, so ``OpAmpBlocks``
+    has to work with no arguments or building a view without one raises
+    ``TypeError``.  Every accessor degrades to "absent" rather than blowing up.
+    """
+    view = GmIdCircuitView()
+    assert view.blocks == OpAmpBlocks()
+    assert view.blocks.blocks == {} and not view.blocks.is_fully_differential
+    assert view.blocks.input_pair is None
+    assert view.blocks.load is None
+    assert view.blocks.tail is None
+    assert not view.blocks.has_cascode_load()
+    assert view.blocks.first_stage_out_net() is None
