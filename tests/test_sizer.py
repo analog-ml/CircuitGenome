@@ -5,6 +5,7 @@ import pytest
 
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TechParams
 from circuitgenome.sizer.physics.equations import (
+    cgs,
     cmrr_db,
     gd,
     gm,
@@ -12,6 +13,7 @@ from circuitgenome.sizer.physics.equations import (
     OPEN_LOOP_GAIN_CEILING_DB,
     open_loop_gain_db,
     open_loop_measurable,
+    phase_margin_single_stage_deg,
     phase_margin_two_stage_deg,
     rout,
     slew_rate_vps,
@@ -188,6 +190,28 @@ def test_phase_margin_formula():
     assert 0 < pm < 90
 
 
+def test_single_stage_phase_margin_formula():
+    # PM = 90 - arctan(GBW / f_mirror)  (issue #221)
+    gbw_hz = 2.0e6
+    mirror_hz = 1.0e9
+    pm = phase_margin_single_stage_deg(gbw_hz, mirror_hz)
+    assert pm == pytest.approx(90 - math.degrees(math.atan(gbw_hz / mirror_hz)))
+    # A mirror pole far above the GBW leaves a load-compensated stage near 90.
+    assert 89 < pm < 90
+    # Pushing the GBW onto the mirror pole costs exactly 45 degrees.
+    assert phase_margin_single_stage_deg(1e8, 1e8) == pytest.approx(45.0)
+
+
+def test_cgs_is_two_thirds_of_the_oxide_capacitance():
+    # Cgs = (2/3)·W·L·Cox  (issue #221)
+    cox = 6.0e-15   # F/µm², tech_generic
+    assert cgs(cox, 12.0, 2.0) == pytest.approx((2.0 / 3.0) * 12.0 * 2.0 * cox)
+    # Scales with area.
+    assert cgs(cox, 24.0, 2.0) == pytest.approx(2.0 * cgs(cox, 12.0, 2.0))
+    # A tech with no cox places no pole rather than guessing one.
+    assert cgs(None, 12.0, 2.0) == 0.0
+
+
 def test_slew_rate():
     ibias = 10e-6
     cc_f = 4e-12
@@ -242,6 +266,55 @@ def test_size_one_stage_opamp(one_stage_fbr):
     # Gain should meet spec
     if "gain_db" in result.metrics:
         assert result.metrics["gain_db"] >= spec.gain_min_db
+
+
+def test_size_one_stage_reports_every_performance_metric(one_stage_fbr):
+    """A one-stage OTA is load-compensated, not unmodellable (issue #221).
+
+    Before #221 the GBW/PM/SR/PSRR branches were all gated behind a Miller cap
+    and a second stage, so a single-stage amp came back with gain and CMRR
+    only — and any consumer mapping "missing" to 0.0 saw a design that failed
+    every dynamic spec it was measured against.
+    """
+    parsed, sr_result, fbr_result, topology = one_stage_fbr
+    spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12, gain_min_db=40)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(), spec)
+
+    assert result.cc_pf is None, "one-stage must stay uncompensated"
+    missing = {"gain_db", "gbw_hz", "phase_margin_deg", "slew_rate_vps",
+               "cmrr_db", "psrr_db"} - set(result.metrics)
+    assert not missing, f"single-stage metrics still withheld: {sorted(missing)}"
+
+
+def test_size_one_stage_gbw_and_slew_track_cl(one_stage_fbr):
+    """With no Miller cap it is CL that sets the bandwidth and the slew rate."""
+    parsed, sr_result, fbr_result, topology = one_stage_fbr
+    tech = _tech()
+
+    def _sized(cl):
+        spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=cl, gain_min_db=40)
+        return size_circuit(parsed, sr_result, fbr_result, topology,
+                            tech, spec).metrics
+
+    light, heavy = _sized(5e-12), _sized(20e-12)
+    # Four times the load, a quarter of the bandwidth and of the slew rate.
+    assert heavy["gbw_hz"] == pytest.approx(light["gbw_hz"] / 4.0)
+    assert heavy["slew_rate_vps"] == pytest.approx(light["slew_rate_vps"] / 4.0)
+    # A slower amp sits further from its mirror pole, so PM improves.
+    assert heavy["phase_margin_deg"] > light["phase_margin_deg"]
+
+
+def test_size_one_stage_slew_tracks_ibias(one_stage_fbr):
+    """SR = I_tail/CL — the tail current is what charges the load."""
+    parsed, sr_result, fbr_result, topology = one_stage_fbr
+    tech = _tech()
+
+    def _slew(ibias):
+        spec = SizingSpec(vdd=5.0, vss=0.0, ibias=ibias, cl=20e-12, gain_min_db=40)
+        return size_circuit(parsed, sr_result, fbr_result, topology,
+                            tech, spec).metrics["slew_rate_vps"]
+
+    assert _slew(20e-6) == pytest.approx(2.0 * _slew(10e-6))
 
 
 def test_size_one_stage_input_pair_matched(one_stage_fbr):

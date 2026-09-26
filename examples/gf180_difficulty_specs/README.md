@@ -53,8 +53,10 @@ only.** The same spec accepts at a different rate on a different topology, and
 (92 dB) accepts ~45% on `two_stage_opamp_single_ended` but only ~10% on
 `three_stage_opamp_nmc_single_ended`: the 92 dB gain is trivial for a three-stage,
 but its nested-Miller stability / GBW gates bind harder. A one-stage topology has
-no Miller capacitor, so its GBW / phase-margin / slew-rate targets are not
-modelled at all and are silently ignored.
+no Miller capacitor and is load compensated instead, so its GBW / phase-margin /
+slew-rate follow `CL` rather than `Cc` (issue #221) — the same targets bind, but
+on a different equation, and the acceptance rates above were measured before
+that was modelled.
 
 Treat the difficulty column as "difficulty on the reference topology," and
 re-measure if you retarget these specs at another topology.

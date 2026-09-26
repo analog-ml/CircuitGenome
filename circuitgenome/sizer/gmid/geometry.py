@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from ..physics.device_model import CASCODE, SIGNAL, GmIdModel
 from ..models import TechParams, TransistorSizing
 from ..physics.taxonomy import STAGE_SLOTS
-from .blocks import LoadKind, classify_load
+from .analyze import LoadKind, classify_load
 
 if TYPE_CHECKING:
     from .intent import TransistorIntent
@@ -199,7 +199,7 @@ def _apply_load_current_margin(
     """Give a knife-edge current-source load ``_LOAD_CS_MARGIN`` extra width.
 
     Applies only to the single-ended, no-CMFB case: a ``load`` slot classified
-    :attr:`~.blocks.LoadKind.CURRENT_SOURCE` balancing a MOSFET tail's fixed
+    :attr:`~.analyze.LoadKind.CURRENT_SOURCE` balancing a MOSFET tail's fixed
     current.  This is an explicit design-intent margin — the old uncascoded
     pref branch's ~4% current surplus provided it by accident (issue #103).
     """
