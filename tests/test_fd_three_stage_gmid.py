@@ -43,6 +43,7 @@ _FD_BASE = {"input_pair": "differential_pair_pmos", "load": _FD_LOAD,
 
 # Two-stage FD gets the inverting CMFB orientation (issue #165).
 @pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_inverting", "dda_cmfb_inverting"])
+@pytest.mark.slow
 def test_fd_two_stage_gmid(cmfb):
     r = _size("two_stage_opamp_fully_differential", {**_FD_BASE, "cmfb": cmfb}, _FD_SPEC)
     assert r.solver_status == "GMID"
@@ -68,6 +69,7 @@ def test_fd_two_stage_gmid(cmfb):
     ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output",
      "common_source_nmos", "noninverting_stage_pmos", None),
 ])
+@pytest.mark.slow
 def test_three_stage_se_gmid(topo, load, ss, ts, follower):
     # fc_pmos_single's bias1 is gnd-flavored, the tail and stages vdd-flavored
     # -- mixed, so only resistor_bias survives the flavor filter.

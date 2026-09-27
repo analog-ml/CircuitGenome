@@ -29,11 +29,20 @@ classifiers = [
 [project.optional-dependencies]
 viz = ["streamlit>=1.30", "pyvis>=0.3"]
 
+[dependency-groups]
+dev = ["pytest>=8"]
+
 [project.urls]
 Homepage = "https://github.com/analog-ml/CircuitGenome"
 Repository = "https://github.com/analog-ml/CircuitGenome"
 Issues = "https://github.com/analog-ml/CircuitGenome/issues"
 Changelog = "https://github.com/analog-ml/CircuitGenome/blob/main/CHANGELOG.md"
+
+[tool.pytest.ini_options]
+markers = [
+    "spice: requires ngspice on PATH (skipped without it)",
+    "slow: takes over ~15 s, or shares a slow module fixture with a test that does",
+]
 
 [project.scripts]
 circuitgenome = "circuitgenome.cli:main"
