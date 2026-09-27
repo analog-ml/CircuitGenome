@@ -13,6 +13,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Fixed
 
+- 🔧 The 0.3.0 package accidentally included `sizer/shared/eval_engines/`, a local example folder that was never part of the project. It is now excluded from builds ([#233](https://github.com/analog-ml/CircuitGenome/pull/233)).
 - 🐛 Single-stage op-amps now report GBW, phase margin, slew rate and PSRR — they were treated like multi-stage op-amps that need a Miller capacitor, so they got only 3 of the 7 metrics. A single stage is stabilized by its load capacitor instead. Phase margin uses a new optional `cox` value in the tech configs and is left out when it can't be computed; multi-stage results are unchanged ([#223](https://github.com/analog-ml/CircuitGenome/pull/223)).
 - 🐛 Source-degenerated input pairs no longer look worse than they are — the resistor under each input transistor lowers its gain strength (`gm`) but raises its output resistance (`ro`) by the same factor, and only the loss was counted. Gain came out a flat 3.5 dB low for every degenerated design; counting both, the real cost is 1.3–2.6 dB ([#227](https://github.com/analog-ml/CircuitGenome/pull/227)).
 - 🐛 CMRR is now reported for source-degenerated input pairs — the code looked for the tail transistor right at the pair's source, but degeneration puts a resistor in between, so it found nothing and dropped CMRR for every such design (0 of 97). It now steps across the resistor to reach the tail ([#225](https://github.com/analog-ml/CircuitGenome/pull/225)).
