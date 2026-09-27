@@ -38,6 +38,12 @@ Repository = "https://github.com/analog-ml/CircuitGenome"
 Issues = "https://github.com/analog-ml/CircuitGenome/issues"
 Changelog = "https://github.com/analog-ml/CircuitGenome/blob/main/CHANGELOG.md"
 
+[tool.pytest.ini_options]
+markers = [
+    "spice: requires ngspice on PATH (skipped without it)",
+    "slow: takes over ~15 s, or shares a slow module fixture with a test that does",
+]
+
 [project.scripts]
 circuitgenome = "circuitgenome.cli:main"
 

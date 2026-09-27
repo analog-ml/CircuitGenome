@@ -84,8 +84,11 @@ def test_deck_sinks_iref_for_pmos_referenced_dut():
 
 # --- simulation (requires ngspice) -----------------------------------------
 
-ngspice = pytest.mark.skipif(not ngspice_available(),
-                             reason="ngspice not installed")
+def ngspice(test):
+    """Mark ``test`` ``spice`` and skip it when ngspice is not on PATH."""
+    skip = pytest.mark.skipif(not ngspice_available(),
+                              reason="ngspice not installed")
+    return pytest.mark.spice(skip(test))
 
 
 @ngspice
@@ -357,6 +360,7 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
 @ngspice
 @pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_inverting",
                                   "dda_cmfb_inverting"])
+@pytest.mark.slow
 def test_fd_two_stage_ac_metrics_are_real(cmfb):
     """A feasible two-stage FD folded-cascode op-amp reports measured
     gain/GBW/PM, not n/a (issue #61)."""
@@ -449,6 +453,7 @@ c1_comp2_n net_loadout1 net_mid2_n 1p
 
 
 @ngspice
+@pytest.mark.slow
 def test_fd_three_stage_ac_metrics_are_real():
     """#61's three-stage FD acceptance criterion: a feasible three-stage FD
     op-amp reports real (positive) gain/GBW/PM, not n/a.  With the #167 CMFB
@@ -477,6 +482,7 @@ def test_fd_three_stage_ac_metrics_are_real():
 
 
 @ngspice
+@pytest.mark.slow
 def test_fd_cmrr_psrr_measured():
     """#184 acceptance: an FD topology with a clean differential AC gain reports
     SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
@@ -684,6 +690,7 @@ def test_cmrr_psrr_none_without_clean_gain():
 
 
 @ngspice
+@pytest.mark.slow
 def test_fd_large_signal_metrics_stay_none():
     """Swing and slew are single-ended-only benches: a fully-differential
     circuit keeps them (and, absent a clean FD gain, CMRR/PSRR) as None."""

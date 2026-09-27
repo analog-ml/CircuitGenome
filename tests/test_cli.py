@@ -117,6 +117,7 @@ def test_size_feasible_verdict(capsys, tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not (_C0019.exists() and _PTM_SPEC.exists() and ngspice_available()),
                     reason="needs ngspice + ptm45 two-stage fixtures")
+@pytest.mark.spice
 def test_size_spice_bias_infeasible(capsys):
     """circuit_0019 passes the analytical (tail-only) check but rails in SPICE →
     the SPICE DC verdict downgrades it to INFEASIBLE (optimistic table suppressed).
@@ -132,6 +133,7 @@ def test_size_spice_bias_infeasible(capsys):
 
 @pytest.mark.skipif(not (_C0001.exists() and _PTM_SPEC.exists() and ngspice_available()),
                     reason="needs ngspice + ptm45 two-stage fixtures")
+@pytest.mark.spice
 def test_size_ptm45_metrics_from_spice(capsys):
     """A PTM (BSIM4) tech reports the metrics measured by ngspice, not
     analytical: the table is titled as SPICE-sourced and includes the
