@@ -342,6 +342,7 @@ def two_stage_fully_diff_fixtures():
     "input_pair,load,tail_current,cmfb,comp_p,comp_n,amp_stage,follower",
     _TWO_STAGE_FULLY_DIFF_COMBOS,
 )
+@pytest.mark.slow
 def test_round_trip_two_stage_fully_diff(
     two_stage_fully_diff_fixtures,
     input_pair, load, tail_current, cmfb,
@@ -575,6 +576,7 @@ def _run_three_stage_fd(modules, topology, input_pair, load, tail_current, cmfb,
     "topo_name,input_pair,load,tail_current,ss,ts,follower,comp1,comp2",
     _THREE_STAGE_SE_COMBOS,
 )
+@pytest.mark.slow
 def test_round_trip_three_stage_se(
     three_stage_topos,
     topo_name, input_pair, load, tail_current, ss, ts, follower, comp1, comp2,
@@ -591,6 +593,7 @@ def test_round_trip_three_stage_se(
     "topo_name,input_pair,load,tail_current,cmfb,ss,ts,follower,c1,c2",
     _THREE_STAGE_FD_COMBOS,
 )
+@pytest.mark.slow
 def test_round_trip_three_stage_fd(
     three_stage_topos,
     topo_name, input_pair, load, tail_current, cmfb, ss, ts, follower, c1, c2,
