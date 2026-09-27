@@ -429,13 +429,14 @@ valid ones:
 The ``bias_generation`` slot adds no factor — it is constructed per combination
 (see `Demand-driven bias construction`_ below), so every core combination
 carries exactly one matched bias generator.  Fully-differential templates
-additionally carry a **CMFB** slot: the ¶ filter expands their 48 core
-combinations to **72** effective ``load``/``cmfb`` combinations (the 24 with a
-differential-cardinality load keep both CMFB variants, the other 24 keep one);
+additionally carry a **CMFB** slot: the ¶ filter keeps only the 24 core
+combinations with a differential-cardinality load, each with both CMFB
+variants, giving **48** effective ``load``/``cmfb`` combinations;
 single-ended templates have no CMFB.  A fully-differential template also
-duplicates its amplification and compensation slots — one per output path — so
-those per-path factors are squared.  Each template's circuit count then follows
-from the slots it adds:
+duplicates its amplification and compensation slots — one per output path.
+The ** filter makes both paths use the same amplification variant, so only
+the compensation factor is squared.  Each template's circuit count then
+follows from the slots it adds:
 
 .. list-table::
    :header-rows: 1
@@ -451,8 +452,8 @@ from the slots it adds:
      - 60 × 1 ``amplification_stage`` § × 3 ``compensation`` ‖
      - 180
    * - ``two_stage_opamp_fully_differential``
-     - 48 → 72 ``load``/``cmfb`` ¶ × (1 ``amplification_stage`` § × 3 ``compensation`` ‖)²
-     - 648
+     - 48 ``load``/``cmfb`` ¶ × 1 ``amplification_stage`` § ** × (3 ``compensation`` ‖)²
+     - 432
    * - ``three_stage_opamp_nmc_single_ended``
      - 60 × 1 gm2 § × 2 gm3 × 9 ``compensation`` ‖
      - 1,080
@@ -460,8 +461,8 @@ from the slots it adds:
      - 60 × 1 gm2 § × 2 gm3 × 9 ``compensation`` ‖
      - 1,080
    * - ``three_stage_opamp_{nmc,rnmc}_fully_differential``
-     - 48 → 72 ``load``/``cmfb`` ¶ × (1 gm2 § × 2 gm3 × 9 ``compensation`` ‖)²
-     - 23,328
+     - 48 ``load``/``cmfb`` ¶ × 1 gm2 § × 2 gm3 ** × (9 ``compensation`` ‖)²
+     - 7,776
 
 **Compatibility filters** (section-local symbols):
 
@@ -479,28 +480,35 @@ from the slots it adds:
   slot in a 3-stage template keeps both CS variants.)
 | **¶** :ref:`CMFB <compat-cmfb>` — of the 48 fully-differential combinations,
   the 24 with a ``"differential"``-cardinality load keep both CMFB variants
-  (24 × 2) while the other 24 collapse to one (24 × 1), giving 72 effective
-  ``load``/``cmfb`` combinations.
+  (24 × 2 = 48 effective ``load``/``cmfb`` combinations).  The other 24 have
+  no CMFB consumer, so nothing regulates their output common mode; they are
+  skipped as bias-infeasible (issue #208) and return, collapsed to one CMFB
+  variant each, only with ``config={"include_infeasible": True}``.
 | **‖** :ref:`Compensation parity <compat-compensation>` — in the 2-stage
   template the single ``compensation`` slot wraps the second stage directly, so
   the non-inverting stage is rejected (positive feedback), leaving one CS stage
   per polarity. The 3-stage NMC scheme's nested ``Cm1`` instead *requires* a
   non-inverting gm2, supplied by the ``noninverting_stage_*`` variants (issue
   #139); before they existed the NMC templates enumerated zero.
+| **\*\*** :ref:`Half-circuit symmetry <compat-symmetry>` — a fully-differential
+  template's ``_p``/``_n`` amplification and output-stage slots must use the
+  same variant; mixed halves sit at different DC levels and split the outputs
+  apart (issue #208).  Compensation may still differ between the two paths.
 
 .. note::
 
    ``60`` = 30 PMOS-pair + 30 NMOS-pair combinations.
 
    A `Buffered templates`_ variant's follower ``output_stage`` slot multiplies
-   the base count by its follower variants — **×2** for single-ended (one
-   follower slot) and **×4** for fully-differential (one per output path, 2²).
+   the base count by its follower variants — **×2**, for single-ended (one
+   follower slot) and fully-differential alike (one per output path, but both
+   paths use the same follower **).
    Both compensation schemes stay identical, exactly as in the base templates:
 
    | ``two_stage_opamp_buffered_single_ended`` = 180 × 2 = **360**
-   | ``two_stage_opamp_buffered_fully_differential`` = 648 × 4 = **2,592**
+   | ``two_stage_opamp_buffered_fully_differential`` = 432 × 2 = **864**
    | ``three_stage_opamp_{nmc,rnmc}_buffered_single_ended`` = 1,080 × 2 = **2,160**
-   | ``three_stage_opamp_{nmc,rnmc}_buffered_fully_differential`` = 23,328 × 4 = **93,312**
+   | ``three_stage_opamp_{nmc,rnmc}_buffered_fully_differential`` = 7,776 × 2 = **15,552**
 
    The full per-template table (all 13 templates) is in the
    :doc:`Overview <../overview>`.

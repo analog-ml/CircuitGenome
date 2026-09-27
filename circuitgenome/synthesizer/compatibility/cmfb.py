@@ -58,6 +58,22 @@ def is_cmfb_compatible(variant_map: dict[str, ModuleVariant]) -> bool:
     return variant_map["cmfb"].name == CANONICAL_CMFB_VARIANT
 
 
+def has_cm_control(variant_map: dict[str, ModuleVariant]) -> bool:
+    """Return ``False`` for a fully-differential combination with no output-CM control.
+
+    Topologies without a ``cmfb`` slot are unaffected. When ``load`` doesn't
+    consume ``cmfb.out`` (see :func:`prune_cmfb`), nothing senses or sets the
+    output common mode: open-loop the outputs rail or split apart (issue
+    #208 -- 216/216 of the two-stage FD ``cmfb_absent`` circuits fail the
+    SPICE ``.op`` bias gate on gf180), so
+    :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits` treats
+    these combinations as bias-infeasible.
+    """
+    if "cmfb" not in variant_map:
+        return True
+    return variant_map["load"].output_cardinality == _CMFB_CONSUMING_CARDINALITY
+
+
 def prune_cmfb(variant: ModuleVariant, load: ModuleVariant) -> ModuleVariant:
     """Return an empty placeholder if *load* doesn't consume ``cmfb.out``.
 

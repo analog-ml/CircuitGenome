@@ -53,7 +53,8 @@ Two kinds of check
 variant's transistors and resistors really connect to — and need no metadata.
 They classify new variants automatically: the
 :ref:`stage-interface <compat-stage-interface>`,
-:ref:`compensation-parity <compat-compensation>`, and
+:ref:`compensation-parity <compat-compensation>`,
+:ref:`half-circuit symmetry <compat-symmetry>`, and
 :ref:`untapped-load-branch <compat-load-branch>` filters are structural.
 
 **Tag-based** checks read a declared field from ``opamp_modules.yaml``
@@ -88,6 +89,11 @@ The filters at a glance
      - structural
      - Miller compensation wrapped around a non-inverting stage chain *with
        gain* (positive feedback, immeasurable AC response).
+   * - :ref:`Half-circuit symmetry <compat-symmetry>`
+     - filter
+     - structural
+     - Fully-differential ``_p``/``_n`` stage slots holding different
+       variants (the halves sit at different DC levels; outputs split).
    * - :ref:`Output-cardinality <compat-output-cardinality>`
      - filter
      - tag
@@ -115,7 +121,8 @@ Where they run
 The filters run in a fixed order inside
 :func:`~circuitgenome.synthesizer.synthesizer.enumerate_circuits`, after the
 variant product is formed and before the circuit is assembled: polarity →
-stage-interface → compensation → output-cardinality → untapped-load-branch →
+stage-interface → compensation → half-circuit symmetry → output-cardinality →
+untapped-load-branch →
 CMFB (filter, then prune) → tail-current (filter, then prune). The two prunes
 must precede
 :func:`~circuitgenome.synthesizer.bias_construction.construct_bias_generation`
@@ -214,6 +221,27 @@ slots in the buffered topologies) sit after the gain stages and outside the
 compensation wrap, so they are not part of any chain this filter checks
 (:mod:`~circuitgenome.synthesizer.compatibility.compensation`).
 
+.. _compat-symmetry:
+
+Half-circuit symmetry filter
+----------------------------
+
+A ``fully_differential`` topology builds its two output paths from separate
+``<name>_p``/``<name>_n`` slots (``second_stage_p``/``_n``,
+``third_stage_p``/``_n``, ``output_stage_p``/``_n``), each filled
+independently from the same pool. A mixed pairing is not a differential
+amplifier: a common-source NMOS stage on one path and a PMOS one on the other,
+or a PMOS follower on one output and an NMOS follower on the other, puts the
+two halves at different DC levels. The CMFB still centres the *average*
+output at Vcm, but at zero differential input the outputs sit ~2.3 V apart
+(issue #208, gf180), and the DC bias gate rejects the circuit.
+
+``enumerate_circuits`` therefore requires every ``_p``/``_n`` pair of
+``amplification_stage``/``output_stage`` slots to use the same variant.
+Compensation slots are exempt: ``comp_p ≠ comp_n`` changes only the AC
+network, not the operating point
+(:mod:`~circuitgenome.synthesizer.compatibility.symmetry`).
+
 .. _compat-output-cardinality:
 
 Output-cardinality compatibility filter
@@ -297,6 +325,17 @@ that port is dropped from these circuits' ``external_ports`` (issue #18,
 ``.subckt`` interface has no unconnected pin
 (:mod:`~circuitgenome.synthesizer.compatibility.cmfb`).
 
+Such a combination has nothing regulating its output common mode: the
+outputs sit wherever two opposing current sources happen to balance, which
+in SPICE is a rail, a split, or an arbitrary off-centre level (issue #208 —
+216/216 of the two-stage ``cmfb_absent`` circuits failed the DC bias gate on
+gf180). ``enumerate_circuits`` therefore treats these combinations as
+bias-infeasible
+(:func:`~circuitgenome.synthesizer.compatibility.cmfb.has_cm_control`): they
+are skipped by default and enumerated only with
+``config={"include_infeasible": True}`` (CLI ``--include-infeasible``), where
+the collapse and prune above still apply.
+
 .. _compat-tail-current:
 
 Tail-current compatibility filter
@@ -341,6 +380,7 @@ the sections above; these pages are the API surface (import from the
    ../api/compatibility/polarity
    ../api/compatibility/stage_interface
    ../api/compatibility/compensation
+   ../api/compatibility/symmetry
    ../api/compatibility/output
    ../api/compatibility/load_branch
    ../api/compatibility/cmfb

@@ -19,9 +19,11 @@ from typing import Iterator
 
 from .bias_construction import construct_bias_generation
 from .compatibility import (
+    has_cm_control,
     is_cmfb_compatible,
     is_combination_valid,
     is_compensation_compatible,
+    is_half_symmetric,
     is_load_branch_compatible,
     is_output_type_compatible,
     is_stage_interface_compatible,
@@ -142,6 +144,7 @@ def build_circuit(
     :func:`~circuitgenome.synthesizer.compatibility.polarity.is_combination_valid`,
     :func:`~circuitgenome.synthesizer.compatibility.stage_interface.is_stage_interface_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.compensation.is_compensation_compatible`,
+    :func:`~circuitgenome.synthesizer.compatibility.symmetry.is_half_symmetric`,
     :func:`~circuitgenome.synthesizer.compatibility.output.is_output_type_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.load_branch.is_load_branch_compatible`,
     :func:`~circuitgenome.synthesizer.compatibility.cmfb.is_cmfb_compatible`, or
@@ -164,6 +167,8 @@ def build_circuit(
     if not is_stage_interface_compatible(topology, variant_map):
         return None
     if not is_compensation_compatible(topology, variant_map):
+        return None
+    if not is_half_symmetric(topology, variant_map):
         return None
     if not is_output_type_compatible(topology, variant_map):
         return None
@@ -239,6 +244,11 @@ def enumerate_circuits(
     ``config={"include_infeasible": True}``. Unlike ``unsupported`` variants
     these build into a complete, valid netlist; they are retained for
     design-space exploration as correct-but-infeasible mutation seeds.
+    The same flag gates fully-differential combinations whose ``load``
+    doesn't consume the CMFB (the ``cmfb_absent`` circuits, see
+    :func:`~circuitgenome.synthesizer.compatibility.cmfb.has_cm_control`):
+    nothing regulates their output common mode, so they rail or split at
+    the DC bias gate (issue #208).
 
     Combinations that mix incompatible ``polarity`` tags (see
     :func:`~circuitgenome.synthesizer.compatibility.polarity.is_combination_valid`) are
@@ -261,6 +271,13 @@ def enumerate_circuits(
     positive feedback, producing a right-half-plane AC response whose
     gain/GBW/PM cannot be measured (issue #114). Pure follower chains (zero
     inversions, no gain) are benign and stay allowed.
+
+    Fully-differential combinations whose ``_p``/``_n`` amplification or
+    output-stage slots hold different variants (see
+    :func:`~circuitgenome.synthesizer.compatibility.symmetry.is_half_symmetric`)
+    are also skipped: the two halves sit at different DC levels, so the
+    outputs split apart at zero differential input (issue #208).
+    Compensation may still differ between the halves.
 
     Combinations where ``load``'s ``output_cardinality`` tag (if set) doesn't
     match *topology*'s ``output_type`` (see
@@ -337,7 +354,8 @@ def enumerate_circuits(
                    ``include_infeasible`` (bool, default ``False``) — when
                    ``True``, variants tagged ``bias_infeasible:`` (currently
                    the ``stacked_cascode_current_mirror_tail_*``, issue #111)
-                   are enumerated anyway. Intended for design-space
+                   and the fully-differential ``cmfb_absent`` combinations
+                   (issue #208) are enumerated anyway. Intended for design-space
                    exploration, which wants the full set of functionally-
                    correct wirings including ones the default spec class
                    cannot bias; not for acceptance-oriented design runs.
@@ -378,6 +396,8 @@ def enumerate_circuits(
             slot.name: variant
             for slot, variant in zip(product_slots, combo)
         }
+        if not include_infeasible and not has_cm_control(variant_map):
+            continue
         circuit = build_circuit(topology, variant_map, bias_legs)
         if circuit is not None:
             yield circuit

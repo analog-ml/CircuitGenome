@@ -37,7 +37,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                        help="Also enumerate bias-infeasible variants "
                             "(functionally-correct wiring the default spec "
                             "class cannot bias, e.g. stacked-diode cascode "
-                            "tails). For design-space exploration.")
+                            "tails or FD circuits without a CMFB). For "
+                            "design-space exploration.")
 
     sub.add_parser("visualize", help="Launch the topology visualizer (Streamlit web UI)")
 
@@ -86,7 +87,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Also evaluate bias-infeasible variants "
                              "(functionally-correct wiring the default spec "
                              "class cannot bias, e.g. stacked-diode cascode "
-                             "tails). For design-space exploration; these are "
+                             "tails or FD circuits without a CMFB). For "
+                             "design-space exploration; these are "
                              "expected to be rejected at the DC bias gate.")
 
     return parser.parse_args(argv)

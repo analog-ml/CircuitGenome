@@ -117,7 +117,8 @@ variants back into the candidate pool:
      - bool
      - Also enumerate ``bias_infeasible`` variants — functionally-correct
        wiring the default (low-voltage) spec class cannot bias (e.g. the
-       stacked-diode cascode tails, issue #111). Intended for design-space
+       stacked-diode cascode tails, issue #111) — and the fully-differential
+       combinations whose load has no CMFB input (issue #208). Intended for design-space
        exploration: the circuits build into complete, valid netlists but are
        expected to be rejected at the DC bias gate. See the
        :doc:`Topology Synthesizer module page <../modules/synthesizer>` for the

@@ -53,12 +53,15 @@ SPICE netlists.
     filter (`is_stage_interface_compatible`).
   - `compatibility/compensation.py` — compensation inversion-parity filter
     (`is_compensation_compatible`, helper `stage_inversions`).
+  - `compatibility/symmetry.py` — FD half-circuit symmetry filter
+    (`is_half_symmetric`).
   - `compatibility/output.py` — output-cardinality compatibility filter
     (`is_output_type_compatible`).
   - `compatibility/load_branch.py` — untapped-load-branch compatibility filter
     (`is_load_branch_compatible`, helper `untapped_branch_is_dc_defined`).
   - `compatibility/cmfb.py` — cmfb-slot compatibility filter and pruning
-    (`is_cmfb_compatible`, `prune_cmfb`).
+    (`is_cmfb_compatible`, `prune_cmfb`), plus the FD output-CM-control
+    predicate `has_cm_control` (bias-infeasible gate, issue #208).
   - `compatibility/tail_current.py` — tail_current-slot compatibility filter
     and pruning (`is_tail_current_compatible`, `prune_tail_current`).
 - `bias_construction.py` — demand-driven bias construction
@@ -68,7 +71,7 @@ SPICE netlists.
 - `net_aliasing.py` — net-merge pass for `load` ports declared `alias_of`
   another `load` port (`compute_alias_net_rename`, `apply_net_rename`).
 
-These nine modules all follow the same shape (see "Pattern for small internal
+These ten modules all follow the same shape (see "Pattern for small internal
 pure-function modules" below) and are invoked, in this order, from
 `enumerate_circuits` (see "pipeline order" below).
 
@@ -252,6 +255,26 @@ so it contributes nothing and `cmfb.bias` is not counted by
 `cmfb` consumer, tag it `output_cardinality: "differential"` and give it a
 real `bias_cmfb: role: input` -- no code changes needed here.
 
+These `cmfb_absent` combinations have nothing regulating their output common
+mode, so SPICE puts the outputs at a rail, split apart, or at an arbitrary
+off-centre level (issue #208: 216/216 two-stage FD `cmfb_absent` circuits
+failed the `.op` bias gate on gf180). `has_cm_control` flags them, and
+`enumerate_circuits` skips them unless `config={"include_infeasible": True}`
+— the same opt-in as the `bias_infeasible` variant tag, but decided per
+combination, before `build_circuit`, so the collapse/prune above still
+applies when they are included.
+
+## Half-circuit symmetry filter (`compatibility/symmetry.py`)
+
+FD topologies fill `<name>_p`/`<name>_n` slots (`second_stage_*`,
+`third_stage_*`, `output_stage_*`) independently. A mixed pairing (e.g. CS
+NMOS on one path, CS PMOS on the other; PMOS follower on one output, NMOS on
+the other) puts the halves at different DC levels: the CMFB centres the
+average, but the outputs split ~2.3 V apart at zero differential input
+(issue #208). `is_half_symmetric` requires each `amplification_stage`/
+`output_stage` `_p`/`_n` pair to use the same variant; compensation slots are
+exempt (`comp_p != comp_n` only changes the AC network).
+
 ## Tail-current compatibility filter & pruning (`compatibility/tail_current.py`)
 
 Of the 5 `input_pair` variants, only the 4 `differential_pair_*` variants
@@ -397,7 +420,8 @@ must invert (CS) and gm3 must not (`noninverting_stage_*`). Until #236 the
 templates started comp1 at gm2's output instead, leaving no cap around the
 whole chain: CS+CS enumerated, and no sizing could compensate it (SPICE PM
 −15° plain, 10–25° with a nulling resistor; ~90° once rewired). Counts are
-unchanged (972 / 23,328 / 1,944 / 93,312) — only gm3's variant flips.
+unchanged by #236 (972 / 1,944 SE; FD since cut by #208's filters) — only
+gm3's variant flips.
 
 ## Bias-infeasible (DSE-only) variants
 
@@ -412,7 +436,11 @@ intent, not mechanism — an `unsupported` variant is unbuildable/mis-modeled
 netlist and would size normally, it is just predicted to be rejected at the
 DC bias gate (the designer's `"bias_infeasible"` outcome). It is kept for
 **design-space exploration**, which wants the full set of correct wirings —
-including correct-but-infeasible ones — as mutation seeds. Currently tagged:
+including correct-but-infeasible ones — as mutation seeds.
+
+The same opt-in also restores the FD `cmfb_absent` *combinations* (issue
+#208, see "CMFB compatibility filter" above) — a combination-level rather
+than variant-level tag. Currently tagged variants:
 
 - `stacked_cascode_current_mirror_tail_pmos` / `_nmos` (issue #111): the
   classic self-biased stacked-diode cascode mirror. Its output cascode's
@@ -439,14 +467,17 @@ including correct-but-infeasible ones — as mutation seeds. Currently tagged:
    from the pool unless `config={"include_unsupported": True}`, and variants
    tagged `bias_infeasible` unless `config={"include_infeasible": True}`,
    see "Unsupported (parked) variants" / "Bias-infeasible (DSE-only)
-   variants" above).
+   variants" above). Without `include_infeasible`, FD combinations failing
+   `has_cm_control` are skipped here too, before `build_circuit`.
 2. `is_combination_valid(variant_map)` — skip on polarity mismatch.
 3. `is_stage_interface_compatible(topology, variant_map)` — skip on
    stage-interface level mismatch (see "Stage-interface compatibility
    filter" above).
 4. `is_compensation_compatible(topology, variant_map)` — skip if a
    compensation slot wraps a non-inverting stage chain with gain (see
-   "Compensation parity filter" above).
+   "Compensation parity filter" above); then
+   `is_half_symmetric(topology, variant_map)` — skip FD `_p`/`_n` stage
+   slots with mismatched variants (see "Half-circuit symmetry filter").
 5. `is_output_type_compatible(topology, variant_map)` — skip on
    output-cardinality mismatch.
 6. `is_load_branch_compatible(topology, variant_map)` — skip if a
@@ -492,5 +523,5 @@ relevant slot's entry in `variant_map`" pattern.
 - Broad coverage uses `pytest.mark.parametrize` over variant names / expected
   sets.
 - Full-enumeration count tests are exact for 1- and 2-stage topologies; the
-  3-stage fully-differential topology (~1.56M combos) is only checked via
+  3-stage fully-differential topology (7,776 circuits) is only checked via
   `next()` (non-empty) for speed, never materialized in full.

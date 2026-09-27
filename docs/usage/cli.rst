@@ -82,24 +82,25 @@ Generating circuits
      --output-dir ./circuits/
 
    # Design-space exploration — also emit bias-infeasible (but functionally
-   # correct) wirings, e.g. the stacked-diode cascode tails
+   # correct) wirings, e.g. the stacked-diode cascode tails or FD circuits
+   # whose load has no CMFB input
    circuitgenome synthesize --stages 2 --include-infeasible --dry-run
 
 Sample output (``--stages 2 --dry-run``)::
 
    Topology: two_stage_opamp_single_ended
-     Generated 180 circuits
+     Generated 162 circuits
 
    Topology: two_stage_opamp_fully_differential
-     Generated 648 circuits
+     Generated 432 circuits
 
    Topology: two_stage_opamp_buffered_single_ended
-     Generated 360 circuits
+     Generated 324 circuits
 
    Topology: two_stage_opamp_buffered_fully_differential
-     Generated 2592 circuits
+     Generated 864 circuits
 
-   Total: 3780 circuits (dry run — no files written)
+   Total: 1782 circuits (dry run — no files written)
 
 Output filenames follow the pattern ``circuit_NNNN_flat.ckt`` /
 ``circuit_NNNN_hier.ckt``, numbered sequentially within each topology.
@@ -135,7 +136,9 @@ Options
    * - ``--include-infeasible``
      - Also enumerate ``bias_infeasible`` variants — functionally-correct
        wiring the default (low-voltage) spec class cannot bias (e.g. the
-       stacked-diode cascode tails, issue #111). For design-space exploration.
+       stacked-diode cascode tails, issue #111), and fully-differential
+       circuits whose load has no CMFB input (issue #208). For design-space
+       exploration.
      - off
    * - ``--list-topologies``
      - Print topology names and exit

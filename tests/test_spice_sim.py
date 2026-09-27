@@ -316,12 +316,15 @@ def test_sky130_width_max_device_is_modelable():
 
 # --- FD bias gate (issue #162) ----------------------------------------------
 
-def _fd_circuit(want: dict[str, str]):
-    """First FD two-stage circuit matching ``want``; return (text, parsed, fbr, topo)."""
+def _fd_circuit(want: dict[str, str], include_infeasible: bool = False):
+    """First FD two-stage circuit matching ``want``; return (text, parsed, fbr, topo).
+
+    ``include_infeasible`` reaches the cmfb_absent combinations (#208)."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_fully_differential")
-    circ = next(c for c in enumerate_circuits(topo, mods)
+    circ = next(c for c in enumerate_circuits(
+                    topo, mods, config={"include_infeasible": include_infeasible})
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
                        for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
@@ -361,7 +364,7 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
         "load": "active_load_pmos",
         "tail_current": "resistor_tail_gnd",
         "comp_p": "miller_cap_with_nulling_resistor",
-        "comp_n": "miller_cap"})
+        "comp_n": "miller_cap"}, include_infeasible=True)
     tech = load_tech("ptm45")
     spec = SizingSpec(vdd=1.0, vss=0.0, ibias=20e-6, cl=5e-12,
                       second_stage_current_ratio=2.5, gain_min_db=45,

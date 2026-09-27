@@ -254,7 +254,9 @@ def test_fd_load_resistors_sized():
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_fully_differential")
-    c = next(c for c in enumerate_circuits(topo, mods)
+    # A cmfb_absent combination: skipped by default since #208.
+    c = next(c for c in enumerate_circuits(topo, mods,
+                                           config={"include_infeasible": True})
              if c.variant_map["load"].name == "resistor_load_gnd")
     parsed = parse(to_flat_spice(c))
     fbr = assign_slots(recognize(parsed), topo)

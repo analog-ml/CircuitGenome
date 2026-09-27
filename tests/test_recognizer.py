@@ -362,7 +362,9 @@ def test_round_trip_two_stage_fully_diff(
     }
     if follower:
         simple_modules["output_stage"] = [v for v in modules["output_stage"] if v.name == follower]
-    circuit = next(enumerate_circuits(topology, simple_modules))
+    # The resistor/active-load rows are cmfb_absent combinations, skipped by
+    # default (issue #208); the pinned pool keeps the flag from adding others.
+    circuit = next(enumerate_circuits(topology, simple_modules, _INCLUDE_INFEASIBLE))
 
     sr_result = recognize(parse(to_flat_spice(circuit)))
 

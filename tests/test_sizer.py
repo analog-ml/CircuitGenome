@@ -36,13 +36,16 @@ def _tech():
 
 
 def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = None,
-                  include_unsupported: bool = False):
+                  include_unsupported: bool = False, include_infeasible: bool = False):
     # include_unsupported opts parked variants (inverter_based_input #113,
-    # differential_ota_second_stage #114) back into the pool.
+    # differential_ota_second_stage #114) back into the pool;
+    # include_infeasible does the same for bias-infeasible ones (e.g. the FD
+    # cmfb_absent combinations, #208).
     modules = load_modules()
     topologies = load_topologies()
     topology = next(t for t in topologies if t.name == topology_name)
-    config = {"include_unsupported": True} if include_unsupported else None
+    config = {"include_unsupported": include_unsupported,
+              "include_infeasible": include_infeasible}
     for circuit in enumerate_circuits(topology, modules, config=config):
         if variant_filter is None:
             return topology, circuit
@@ -52,9 +55,9 @@ def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = No
 
 
 def _fbr(topology_name: str, variant_filter: dict[str, str] | None = None,
-         include_unsupported: bool = False):
+         include_unsupported: bool = False, include_infeasible: bool = False):
     topology, circuit = _make_circuit(topology_name, variant_filter,
-                                      include_unsupported)
+                                      include_unsupported, include_infeasible)
     spice = to_flat_spice(circuit)
     parsed = parse(spice)
     sr_result = recognize(parsed)
@@ -1248,9 +1251,10 @@ _PTM45_FD_SPEC = dict(
 )
 
 
-def _size_fd(tech_name, variants, **spec_overrides):
+def _size_fd(tech_name, variants, include_infeasible=False, **spec_overrides):
     tech = load_tech(tech_name)
-    parsed, sr_result, fbr_result, topology = _fbr(_FD_TOPO, variants)
+    parsed, sr_result, fbr_result, topology = _fbr(
+        _FD_TOPO, variants, include_infeasible=include_infeasible)
     base = dict(_PTM45_FD_SPEC) if tech_name == "ptm45" else dict(_GF180_SPEC)
     spec = SizingSpec(**{**base, **spec_overrides})
     return spec, size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -1282,7 +1286,7 @@ def test_fd_stage_interface_exempts_mirror_load():
     unwarned; the family's real gate is an FD .op verdict (issue #162)."""
     _, result = _size_fd("gf180mcu", {
         "input_pair": "differential_pair_pmos",
-        "load": "active_load_nmos"})
+        "load": "active_load_nmos"}, include_infeasible=True)
     assert result.solver_status == "GMID"
     assert not any("FD stage interface" in w for w in result.warnings)
 
@@ -1292,7 +1296,7 @@ def test_fd_stage_interface_skips_resistor_load():
     exempt from the FD equality check."""
     _, result = _size_fd("gf180mcu", {
         "input_pair": "differential_pair_pmos",
-        "load": "resistor_load_gnd"})
+        "load": "resistor_load_gnd"}, include_infeasible=True)
     assert result.solver_status == "GMID"
     assert not any("FD stage interface" in w for w in result.warnings)
 
