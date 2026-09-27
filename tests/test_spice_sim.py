@@ -632,6 +632,46 @@ def test_honest_twin_measurement_unaffected():
     assert pm is not None and 0 < pm <= 180
 
 
+# Three ideal gain stages with coincident poles (each 1 MΩ || 10 pF, the last
+# pole set by the bench's own 10 pF load) and ~126 dB of differential gain:
+# three poles well below the crossing, so it is unstable by construction.
+_FD_UNSTABLE_BEHAVIOURAL = """\
+.subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
+rib ibias gnd! 1k
+g1 x1 gnd! in1 in2 1e-4
+r1 x1 gnd! 1meg
+c1 x1 gnd! 10p
+g2 x2 gnd! x1 gnd! 1e-4
+r2 x2 gnd! 1meg
+c2 x2 gnd! 10p
+g3p outp vcm_ref x2 gnd! 1e-4
+r3p outp vcm_ref 1meg
+g3n outn vcm_ref x2 gnd! -1e-4
+r3n outn vcm_ref 1meg
+.ends"""
+
+
+@ngspice
+def test_fd_instability_reported_not_discarded():
+    """Issue #236: the FD bench has no feedback loop for a wrong input
+    polarity to corrupt, so a PM ≤ 0° there is a real instability.  It is
+    reported as measured (gain, GBW and the negative PM) with a note, not
+    discarded as an "extraction artifact" — the SE guard is unchanged (see
+    test_implausible_pm_extraction_is_discarded)."""
+    from circuitgenome.sizer.models import SizingResult
+    result = SizingResult(transistors={}, cc_pf=None, metrics={}, margins={},
+                          solver_status="behavioural")
+    spec = SizingSpec(vdd=1.8, vss=0.0, ibias=10e-6, cl=10e-12)
+    sim = simulate_metrics(_FD_UNSTABLE_BEHAVIOURAL, result,
+                           load_tech("generic"), spec)
+    assert sim["gain_db"] is not None and sim["gain_db"] > 100
+    assert sim["gbw_hz"] is not None
+    assert sim["phase_margin_deg"] is not None and sim["phase_margin_deg"] < 0
+    notes = sim.get("notes", [])
+    assert any("unstable" in n for n in notes)
+    assert not any("artifact" in n for n in notes)
+
+
 # --- CMRR / PSRR / output swing / two-edge slew -----------------------------
 
 @ngspice

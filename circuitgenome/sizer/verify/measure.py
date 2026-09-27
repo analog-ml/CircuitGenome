@@ -82,10 +82,12 @@ def _pm_plausible(pm: float | None) -> bool:
     ``PM = 180° + phase`` lands in ``(0°, 180°]``.  A value **above 180°**
     (phase lead on a falling gain) is a non-minimum-phase — right-half-plane —
     response: a genuinely mis-compensated circuit, e.g. Miller-family
-    compensation wrapped around a non-inverting second stage.  A value ≤ 0°
-    means the crossing came from a corrupted sweep — typically the wrong
-    feedback polarity settling into a measurable but meaningless response, or
-    a phase-unwrap glitch.  Neither is a usable gain/GBW/PM measurement.
+    compensation wrapped around a non-inverting second stage.  On the SE
+    bench a value ≤ 0° means the crossing came from a corrupted sweep —
+    typically the wrong feedback polarity settling into a measurable but
+    meaningless response, or a phase-unwrap glitch.  Neither is a usable
+    gain/GBW/PM measurement.  (The FD bench has no feedback loop to corrupt,
+    so :func:`_measure_ac` reports its PM ≤ 0° as a real instability.)
     ``None`` (no crossing found) carries no such evidence.
     """
     return pm is None or 0.0 < pm <= 180.0
@@ -135,8 +137,10 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
     mis-biased circuit that does not amplify) — ``gbw``/``pm`` are then ``None``
     (no 0-dB crossing) and ``reason`` explains why.  When every settled branch
     is corrupt (PM outside ``(0°, 180°]``) the whole extraction is discarded:
-    all three values are ``None`` and ``reason`` says so.  ``reason`` is
-    ``None`` on a normal (positive-gain) measurement.
+    all three values are ``None`` and ``reason`` says so.  The one exception
+    is a fully-differential PM ≤ 0°, which is a real open-loop instability and
+    is returned as measured (issue #236).  ``reason`` is ``None`` on a normal
+    (positive-gain) measurement.
     """
     settled = False
     best: tuple[float, float | None, float | None] | None = None
@@ -213,6 +217,13 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
                 f"AC phase leads at the 0-dB crossing (PM {pm:.0f}° > 180°) — "
                 "right-half-plane response; the stage-inversion/compensation "
                 "combination is unsound"), None
+        if topo.fd:
+            # The FD bench has no loop around the DUT (resistor-anchored
+            # inputs, the CMFB owns the output CM), so the input polarity only
+            # flips the sign of v(outp)-v(outn): it cannot corrupt the sweep.
+            # PM ≤ 0° is a real instability at this load — report it, so the
+            # design fails its PM spec on the number (issue #236).
+            return gain_db, gbw, pm, None, best_pol
         # Every settled branch was corrupt: its gain/GBW come from the same
         # meaningless sweep, so discard the extraction rather than report it.
         return None, None, None, (
