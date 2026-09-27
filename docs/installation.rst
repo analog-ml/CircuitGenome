@@ -23,6 +23,26 @@ Install from source
    cd CircuitGenome
    pip install -e .
 
+Running the tests
+-----------------
+
+The test runner, pytest, is declared in the ``dev`` dependency group.  With
+`uv <https://docs.astral.sh/uv/>`_, which installs that group by default:
+
+.. code-block:: bash
+
+   uv run pytest tests/
+
+With pip 25.1 or later:
+
+.. code-block:: bash
+
+   pip install -e . --group dev
+   pytest tests/
+
+Tests that simulate with ngspice are skipped when ``ngspice`` is not on your
+``PATH``.
+
 Building the documentation
 --------------------------
 
