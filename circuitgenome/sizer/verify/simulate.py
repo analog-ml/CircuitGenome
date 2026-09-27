@@ -24,8 +24,10 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``,
     ``cmrr_db``, ``psrr_db``.  Missing/failed measurements are ``None``
     (slew rate and output swing are single-ended-only; CMRR/PSRR need a
-    measured differential gain first).  ``corner`` overrides the PDK library
-    corner (foundry techs only); ``None`` uses the tech's nominal corner.
+    measured differential gain first).  Every bench loads each output with
+    ``spec.cl`` — the load ``evaluate_metrics`` predicts against.  ``corner``
+    overrides the PDK library corner (foundry techs only); ``None`` uses the
+    tech's nominal corner.
     """
     name, ports, body = _parse_subckt(netlist_text)
     unsized = unsized_mos_refs(body, result)
@@ -35,7 +37,7 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     vdd = spec.vdd
     ibias = spec.ibias
     vcm = (spec.vdd + spec.vss) / 2.0
-    args = (name, ports, body_dut, topo, vdd, ibias, vcm)
+    args = (name, ports, body_dut, topo, vdd, ibias, spec.cl, vcm)
 
     out: dict[str, float | None] = {
         "power_w": None, "gain_db": None, "gbw_hz": None,

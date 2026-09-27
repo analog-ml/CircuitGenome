@@ -110,11 +110,11 @@
 
   <h2>Part 1 &middot; Why this file exists</h2>
 
-  <blockquote><p><strong>The one job:</strong> six testbenches all need the same scaffolding around the DUT &mdash; a supply, a bias current, and a wiring map. Write it once. Then handle the two things about that scaffolding which are <em>not</em> the same for every circuit.</p></blockquote>
+  <blockquote><p><strong>The one job:</strong> six testbenches all need the same scaffolding around the DUT &mdash; a supply, a bias current, a load, and a wiring map. Write it once. Then handle the two things about that scaffolding which are <em>not</em> the same for every circuit.</p></blockquote>
 
   <p class="beat">The boring part is boring. The interesting part is what refuses to stay constant.</p>
 
-  <p><a href="verify-deck_explained.html"><code>deck.py</code></a> hands over a DUT block: a <code>.subckt</code> with real device sizes and a real model card. It is inert. To measure anything you have to surround it with a bench &mdash; power it, bias it, drive it, and connect its pins to the nets your stimulus lives on.</p>
+  <p><a href="verify-deck_explained.html"><code>deck.py</code></a> hands over a DUT block: a <code>.subckt</code> with real device sizes and a real model card. It is inert. To measure anything you have to surround it with a bench &mdash; power it, bias it, load it, drive it, and connect its pins to the nets your stimulus lives on.</p>
 
   <p>Most of that is identical across the six benches, and this file factors it out. But two pieces are <strong>circuit-dependent in a way you cannot read off the netlist directly</strong>, and both will silently ruin a measurement if you guess:</p>
 
@@ -140,7 +140,7 @@
         self.out     = [<span class="tok-str">"outp"</span>, <span class="tok-str">"outn"</span>] <span class="tok-kw">if</span> self.fd <span class="tok-kw">else</span> [<span class="tok-str">"out"</span>]
         self.has_vcm = <span class="tok-str">"vcm_ref"</span> <span class="tok-kw">in</span> ports</code></pre>
 
-  <p>Twelve lines, and every bench branches on them. A fully-differential circuit needs its output read as a <em>difference</em> (<code>v(outp)-v(outn)</code>), needs both outputs checked for railing, and &mdash; if it exposes <code>vcm_ref</code> &mdash; needs that pin driven to the common-mode voltage or its CMFB loop has no reference to servo against.</p>
+  <p>Twelve lines, and every bench branches on them. A fully-differential circuit needs its output read as a <em>difference</em> (<code>v(outp)-v(outn)</code>), needs both outputs checked for railing and both loaded, and &mdash; if it exposes <code>vcm_ref</code> &mdash; needs that pin driven to the common-mode voltage or its CMFB loop has no reference to servo against.</p>
 
   <p><code>has_vcm</code> is separate from <code>fd</code> for a real reason: when a fully-differential topology has its CMFB pruned, the <code>vcm_ref</code> pin goes with it. So "is differential" and "wants a CM reference" are two questions, not one.</p>
 
@@ -221,34 +221,38 @@
 
   <p>Swapping the polarity is nothing more than passing <code>(in2, in1)</code> instead of <code>(in1, in2)</code>. That is what makes trying both cheap enough to do by brute force.</p>
 
-  <p>Then <code>_deck()</code> concatenates the five pieces in order &mdash; and its signature is worth reading as documentation of what a testbench <em>is</em>:</p>
+  <p>Then <code>_deck()</code> concatenates the six pieces in order &mdash; and its signature is worth reading as documentation of what a testbench <em>is</em>:</p>
 
   <figure class="fig">
-    <svg viewBox="0 0 800 200" role="img" aria-label="Five concatenated pieces make one ngspice deck">
+    <svg viewBox="0 0 800 200" role="img" aria-label="Six concatenated pieces make one ngspice deck">
       <g font-size="11" text-anchor="middle">
-        <rect x="20" y="40" width="140" height="46" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-        <text x="90" y="60" font-weight="600" fill="var(--fig-accent)">body_dut</text>
-        <text x="90" y="76" font-size="9.5" fill="var(--fig-muted)">model + .subckt</text>
+        <rect x="16" y="40" width="118" height="46" rx="7" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+        <text x="75" y="60" font-weight="600" fill="var(--fig-accent)">body_dut</text>
+        <text x="75" y="76" font-size="9.5" fill="var(--fig-muted)">model + .subckt</text>
 
-        <rect x="176" y="40" width="130" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="241" y="60" font-weight="600">_rig()</text>
-        <text x="241" y="76" font-size="9.5" fill="var(--fig-muted)">Vsup + Iref</text>
+        <rect x="146" y="40" width="118" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="205" y="60" font-weight="600">_rig()</text>
+        <text x="205" y="76" font-size="9.5" fill="var(--fig-muted)">Vsup + Iref</text>
 
-        <rect x="322" y="40" width="130" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="387" y="60" font-weight="600">fb</text>
-        <text x="387" y="76" font-size="9.5" fill="var(--fig-muted)">per-bench stimulus</text>
+        <rect x="276" y="40" width="118" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="335" y="60" font-weight="600">loads</text>
+        <text x="335" y="76" font-size="9.5" fill="var(--fig-muted)">Cload per output</text>
 
-        <rect x="468" y="40" width="140" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="538" y="60" font-weight="600">_xline()</text>
-        <text x="538" y="76" font-size="9.5" fill="var(--fig-muted)">Xdut via netmap</text>
+        <rect x="406" y="40" width="118" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="465" y="60" font-weight="600">fb</text>
+        <text x="465" y="76" font-size="9.5" fill="var(--fig-muted)">per-bench stimulus</text>
 
-        <rect x="624" y="40" width="150" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="699" y="60" font-weight="600">.control</text>
-        <text x="699" y="76" font-size="9.5" fill="var(--fig-muted)">op / ac / tran</text>
+        <rect x="536" y="40" width="118" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="595" y="60" font-weight="600">_xline()</text>
+        <text x="595" y="76" font-size="9.5" fill="var(--fig-muted)">Xdut via netmap</text>
+
+        <rect x="666" y="40" width="118" height="46" rx="7" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+        <text x="725" y="60" font-weight="600">.control</text>
+        <text x="725" y="76" font-size="9.5" fill="var(--fig-muted)">op / ac / tran</text>
       </g>
       <g stroke="var(--fig-muted)" stroke-width="2" fill="none">
-        <path d="M160,63 L172,63"/><path d="M306,63 L318,63"/>
-        <path d="M452,63 L464,63"/><path d="M608,63 L620,63"/>
+        <path d="M134,63 L142,63"/><path d="M264,63 L272,63"/><path d="M394,63 L402,63"/>
+        <path d="M524,63 L532,63"/><path d="M654,63 L662,63"/>
       </g>
       <path d="M400,92 L400,120" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#a3)"/>
       <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
@@ -256,8 +260,10 @@
       <text x="400" y="143" text-anchor="middle" font-size="12" font-weight="600" fill="var(--fig-accent2)">one deck string</text>
       <text x="400" y="159" text-anchor="middle" font-size="10" fill="var(--fig-muted)">handed to ngspice, numbers come back or None does</text>
     </svg>
-    <figcaption>Only the third and fifth pieces differ between benches. The DUT, the supplies and the instantiation are the same every time &mdash; which is exactly why this file exists.</figcaption>
+    <figcaption>Only <code>fb</code> and <code>.control</code> differ between benches. The DUT, the supplies, the load and the instantiation are the same every time &mdash; which is exactly why this file exists.</figcaption>
   </figure>
+
+  <p>The load is the one piece that is not bookkeeping. <code>evaluate_metrics</code> predicts the amplifier <em>driving</em> <code>spec.cl</code>: for a single stage that capacitor <em>is</em> the compensation &mdash; it sets GBW&nbsp;=&nbsp;g<sub>m1</sub>/2&pi;C<sub>L</sub> &mdash; and for a Miller stage it holds the output pole g<sub>m2</sub>/C<sub>L</sub> that phase margin depends on. Without it the bench measures a different circuit: before issue #222 a GF180 single stage read 1.7&nbsp;GHz and 8&deg; of phase margin at every C<sub>L</sub> from 1 to 50&nbsp;pF, where the model said 0.3&ndash;16&nbsp;MHz and 90&deg;. So <code>_deck()</code> hangs <code>Cload_&lt;port&gt;</code> from each output to ground &mdash; both outputs of a fully-differential DUT &mdash; for every bench. Living here rather than in each bench is what makes it impossible for a bench to forget.</p>
 
 </section>
 
@@ -269,11 +275,12 @@
     <li>It does not <em>find</em> the input polarity. It only makes both choices equally easy to wire, so the AC bench can try them and pick. See <a href="verify-measure_explained.html"><code>measure.py</code></a>.</li>
     <li>The bias-direction heuristic is textual. It looks for <code>d == g == ibias</code> in the device lines; a bias generator that references its current some other way would not be recognised, and the fallback is to inject.</li>
     <li>Both rails carrying a reference diode is treated as "unknown", not "both". That case is not expected to occur, and if it ever does the fallback quietly hides it.</li>
+    <li>The load is one capacitor per output to ground. A resistive load, or a C<sub>L</sub> across <code>outp</code>&ndash;<code>outn</code>, is not modelled &mdash; <code>SizingSpec</code> has no field for either.</li>
     <li>Nothing here is a measurement. Every function returns a <em>string</em>; not one of them runs a simulator.</li>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>rig.py</code> is the boilerplate every testbench would otherwise repeat &mdash; supplies, bias source, pin-to-net wiring and deck assembly &mdash; plus the one piece of real circuit reasoning that boilerplate needs: reading the reference diode's rail to decide whether the bias current must be pushed in or pulled out.</p>
+  <p><strong>In one sentence:</strong> <code>rig.py</code> is the boilerplate every testbench would otherwise repeat &mdash; supplies, bias source, output load, pin-to-net wiring and deck assembly &mdash; plus the one piece of real circuit reasoning that boilerplate needs: reading the reference diode's rail to decide whether the bias current must be pushed in or pulled out.</p>
 
 </section>
 
