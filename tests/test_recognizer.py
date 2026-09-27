@@ -319,6 +319,13 @@ _TWO_STAGE_FULLY_DIFF_COMBOS = [
     # cmfb_absent via the compatibility hook (resistor loads set their own CM).
     ("differential_pair_pmos",              "resistor_load_gnd",                                    "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
     ("differential_pair_nmos",              "resistor_load_vdd",                                    "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
+    # Active loads (issue #216): same gap as #160 -- without out1/out2 pins on
+    # active_load_* every load candidate scores 0, and the tail mirror (which
+    # also matches the active-load pattern) took the slot.
+    ("differential_pair_pmos",              "active_load_nmos",                                     "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
+    ("differential_pair_nmos",              "active_load_pmos",                                     "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
+    ("differential_pair_pmos",              "active_load_nmos",                                     "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       "common_drain_pmos"),
+    ("differential_pair_nmos",              "active_load_pmos",                                     "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  "common_drain_nmos"),
     # fmt: on
 ]
 
