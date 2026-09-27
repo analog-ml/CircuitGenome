@@ -310,7 +310,7 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
   <pre class="code"><code>fb = (<span class="tok-str">f"Rfb out inn 10meg\nRin src inn 10meg\n"</span>
       <span class="tok-str">f"Vp inp 0 dc {vcm}\nVin src 0 dc {vcm}\n"</span>)   <span class="tok-com"># sweep Vin, not the input pin</span></code></pre>
 
-  <p>The input stage now sits still while the output is driven across the supply. Ten-megohm resistors keep the DUT's output effectively unloaded.</p>
+  <p>The input stage now sits still while the output is driven across the supply. Ten-megohm resistors keep the DUT's output effectively unloaded &mdash; the load capacitor every bench carries (see <a href="verify-rig_explained.html#part-4"><code>rig.py</code></a>) is invisible to a DC sweep.</p>
 
   <h3>Reading the edges: the tracking region</h3>
   <p>You cannot just take the extremes of <code>v(out)</code> &mdash; past saturation the output stops following and the curve flattens at whatever the rail allows. Instead the bench finds where the loop is still <em>working</em>:</p>

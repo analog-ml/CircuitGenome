@@ -2,7 +2,8 @@
 
 Every measurement wraps the same sized DUT block in a small rig; the helpers
 here remove the per-testbench boilerplate: the port→net map for a chosen input
-polarity (:func:`_fb_netmap`), and full-deck assembly (:func:`_deck`).  The
+polarity (:func:`_fb_netmap`), and full-deck assembly (:func:`_deck`), which
+also hangs the spec load capacitance on every output.  The
 input polarity — which of (in1, in2) is the non-inverting input — is detected
 once by the AC testbench (via the DC-settle check) and reused by the slew,
 swing, CMRR and PSRR benches.
@@ -88,13 +89,20 @@ def _fb_netmap(topo: _Topo, inp: str, inn: str) -> dict:
 
 
 def _deck(name: str, ports: list[str], body_dut: str, vdd: float, ibias: float,
-          fb: str, netmap: dict, control: str, sup_ac: bool = False) -> str:
-    """Assemble a full ngspice deck: DUT + supplies + testbench ``fb`` + control.
+          cl: float, fb: str, netmap: dict, control: str,
+          sup_ac: bool = False) -> str:
+    """Assemble a full ngspice deck: DUT + supplies + load + testbench ``fb``
+    + control.
 
     The bias-current direction adapts to the DUT block's reference diode
-    (:func:`_iref_sink`).
+    (:func:`_iref_sink`).  Every DUT output carries the load capacitance ``cl``
+    (F) to ground — both outputs of a fully-differential DUT — because that is
+    the amplifier ``evaluate_metrics`` predicts: ``cl`` *is* a single stage's
+    compensation, and a Miller stage's output pole sits on it (issue #222).
     """
+    loads = "".join(f"Cload_{o} {netmap[o]} 0 {cl}\n"
+                    for o in _Topo(ports).out)
     return (body_dut.replace("__PORTS__", " ".join(ports))
             + _rig(vdd, ibias, sup_ac, sink=_iref_sink(body_dut.splitlines()))
-            + fb + _xline(name, ports, netmap) + "\n"
+            + loads + fb + _xline(name, ports, netmap) + "\n"
             + f".control\n{control}\n.endc\n.end\n")
