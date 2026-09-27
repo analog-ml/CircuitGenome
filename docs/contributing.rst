@@ -50,5 +50,21 @@ CircuitGenome is developed on GitHub:
   the test suite with ``pytest`` before opening the PR.  Small, focused PRs are
   easiest to review.
 
+Cutting a release
+-----------------
+
+Build the wheel and sdist from a **fresh clone of the release tag**, never from a
+working tree:
+
+.. code-block:: bash
+
+   git clone --branch vX.Y.Z https://github.com/analog-ml/CircuitGenome.git
+   cd CircuitGenome && python -m build
+
+Package discovery scans the disk, not git, so any gitignored package with an
+``__init__.py`` — or stale output in ``build/`` — ends up in whatever is built
+from a working tree.  That is how an ignored local example shipped in the 0.3.0
+wheel (`#211 <https://github.com/analog-ml/CircuitGenome/issues/211>`_).
+
 Not sure where something fits, or want to discuss a larger change before building
 it?  Open an issue first — early discussion saves rework.
