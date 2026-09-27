@@ -134,18 +134,19 @@ def orient_cmfb(variant: ModuleVariant, topology,
     first.  All four CMFB-consuming loads respond the same way (``cmfb.out``
     up → first-stage output CM down), so the loop sign depends on the *net
     inversion parity* of the chosen stage chain (:func:`_cm_loop_inversions`
-    over *variant_map* — NOT the stage count: the NMC three-stage chain is
-    ``noninverting_stage`` + common source, the same odd parity as a
-    two-stage despite its three stages):
+    over *variant_map* — NOT the stage count: both three-stage chains pair
+    one ``noninverting_stage`` with one common source — NMC puts it at gm2,
+    RNMC at gm3 — the same odd parity as a two-stage despite their three
+    stages):
 
-    - **odd** parity (net-inverting chain — two-stage, NMC three-stage): the
+    - **odd** parity (net-inverting chain — every shipped FD template): the
       loop is positive with the stock amp orientation — swap the sense/vref
       gates (``<name>_inverting``) so a rising output CM lowers ``cmfb.out``;
-    - **even** parity (RNMC three-stage's CS+CS chain): the stock orientation
-      is already negative — returned unchanged.
+    - **even** parity (a net non-inverting chain, e.g. CS+CS): the stock
+      orientation is already negative — returned unchanged.
 
-    An unclassifiable chain falls back to the stage-count rule (two-stage →
-    inverting).  ``cmfb_absent`` placeholders pass through untouched.
+    An unclassifiable chain is assumed net-inverting, like every shipped
+    chain.  ``cmfb_absent`` placeholders pass through untouched.
     """
     if not variant.devices:
         return variant
@@ -154,7 +155,7 @@ def orient_cmfb(variant: ModuleVariant, topology,
         return variant
     inversions = _cm_loop_inversions(topology, variant_map)
     if inversions is None:
-        inversions = 1 if topology.config.get("stages") == 2 else 2
+        inversions = 1
     if inversions % 2 == 0:
         return variant
     devices = [

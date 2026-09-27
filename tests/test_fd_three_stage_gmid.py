@@ -60,12 +60,13 @@ def test_fd_two_stage_gmid(cmfb):
     # followers moved to the output_stage category (issue #125) and can no
     # longer be a gain stage, so plain NMC enumerates zero -- use the buffered
     # NMC topology with the parity-legal ota second stage (ota + CS = 3
-    # inversions) and a follower output_stage. RNMC wraps single stages, so
-    # CS+CS stays valid there (plain topology, no output stage).
+    # inversions) and a follower output_stage. RNMC's comp1 wraps the same
+    # cascade but its comp2 wraps ss alone (issue #236), so it takes an
+    # inverting CS ss and a non-inverting ts (1 + 2 = 3; plain topology).
     ("three_stage_opamp_nmc_buffered_single_ended", "folded_cascode_load_pmos_input_single_output",
      "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos"),
     ("three_stage_opamp_rnmc_single_ended", "folded_cascode_load_pmos_input_single_output",
-     "common_source_nmos", "common_source_nmos", None),
+     "common_source_nmos", "noninverting_stage_pmos", None),
 ])
 def test_three_stage_se_gmid(topo, load, ss, ts, follower):
     # fc_pmos_single's bias1 is gnd-flavored, the tail and stages vdd-flavored

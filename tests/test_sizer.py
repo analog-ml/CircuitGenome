@@ -692,11 +692,11 @@ _THREE_STAGE_SPEC = dict(
 
 @pytest.fixture(scope="module")
 def three_stage_buffered_se_fbr():
-    # Three gain stages (input + two common-source) plus a source-follower
-    # output buffer in the output_stage slot. The old NMC follower-second-stage
-    # shape was removed: followers are now output_stage buffers (not gain
-    # stages), and buffered NMC is still CS+CS parity-rejected, so buffered
-    # RNMC is the enumerable three-stage-with-buffer topology. Exercises the
+    # Three gain stages (input + common-source + non-inverting; RNMC's comp1
+    # wraps the last two, issue #236) plus a source-follower output buffer in
+    # the output_stage slot. The old NMC follower-second-stage shape was
+    # removed: followers are now output_stage buffers (not gain stages).
+    # Exercises the
     # three-stage sizing path with a follower present (follower reads the
     # wide-swing amp output net_ampout, not a load window).
     return _fbr("three_stage_opamp_rnmc_buffered_single_ended", {
@@ -704,7 +704,7 @@ def three_stage_buffered_se_fbr():
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
         "second_stage": "common_source_nmos",
-        "third_stage":  "common_source_nmos",
+        "third_stage":  "noninverting_stage_pmos",
         "output_stage": "common_drain_pmos",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
@@ -718,7 +718,7 @@ def three_stage_rnmc_se_fbr():
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
         "second_stage": "common_source_nmos",
-        "third_stage":  "common_source_nmos",
+        "third_stage":  "noninverting_stage_pmos",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
     })
@@ -726,17 +726,19 @@ def three_stage_rnmc_se_fbr():
 
 @pytest.fixture(scope="module")
 def three_stage_buffered_fd_fbr():
-    # FD counterpart of three_stage_buffered_se_fbr: two CS gain stages per
-    # path plus a follower output buffer per path (output_stage_p/n).
+    # FD counterpart of three_stage_buffered_se_fbr: a CS and a non-inverting
+    # gain stage per path plus a follower output buffer per path
+    # (output_stage_p/n).  The chain is net-inverting, so the CMFB takes the
+    # inverting orientation.
     return _fbr("three_stage_opamp_rnmc_buffered_fully_differential", {
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb",
+        "cmfb":            "resistive_sense_cmfb_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
-        "third_stage_p":   "common_source_nmos",
-        "third_stage_n":   "common_source_nmos",
+        "third_stage_p":   "noninverting_stage_pmos",
+        "third_stage_n":   "noninverting_stage_pmos",
         "output_stage_p":  "common_drain_pmos",
         "output_stage_n":  "common_drain_pmos",
         "comp1_p":         "miller_cap",
@@ -752,11 +754,11 @@ def three_stage_rnmc_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb",
+        "cmfb":            "resistive_sense_cmfb_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
-        "third_stage_p":   "common_source_nmos",
-        "third_stage_n":   "common_source_nmos",
+        "third_stage_p":   "noninverting_stage_pmos",
+        "third_stage_n":   "noninverting_stage_pmos",
         "comp1_p":         "miller_cap",
         "comp1_n":         "miller_cap",
         "comp2_p":         "miller_cap",

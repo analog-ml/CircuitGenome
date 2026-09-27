@@ -226,12 +226,14 @@ role is filled by the ``noninverting_stage_{nmos,pmos}`` variants (issue
        - Cm2 spans gm3 only — gm2's output → final output (the inner loop).
        - Both capacitors return to the final output node.
    * - Reversed Nested Miller (RNMC)
-     - - Cm1 spans gm3 only — gm2's output → final output.
-       - Cm2 spans gm2 only — gm1's output → gm2's output, instead of
-         returning to the final output.
+     - - Cm1 spans gm2+gm3 — gm1's output → final output (the outer loop,
+         same as NMC).
+       - Cm2 spans gm2 only — gm1's output → gm2's output (the inner loop,
+         "reversed" onto gm2 instead of returning to the final output).
+       - Both capacitors start at gm1's output; gm2 inverts and gm3 does
+         not, so gm3 is a ``noninverting_stage_*`` variant.
 
-       Reduces loading on the output node — useful when gm3 is a low-gain
-       buffer stage.
+       Cm2 never loads the output node, which keeps the output pole high.
 
 Modular interface contract
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

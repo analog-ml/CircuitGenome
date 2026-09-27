@@ -243,9 +243,12 @@ topologies:
       - {slot: comp2,        port: out,   net: out}
 
   # ── 3-STAGE OTA, REVERSED NESTED MILLER COMPENSATION (single-ended) ─────
-  # Cm1 (comp1) wraps the inner loop:  net_mid2 -> out
-  # Cm2 (comp2) wraps the outer loop, but returns to the stage1 output
-  # (net_mid1 -> net_mid2) instead of the final output — the "reversed" nest.
+  # Both caps start at the stage1 output (issue #236):
+  # Cm1 (comp1) wraps the outer loop:  net_mid1 -> out   (gm2 + gm3)
+  # Cm2 (comp2) wraps the inner loop:  net_mid1 -> net_mid2   (gm2 only)
+  # The inner loop is "reversed" onto stage 2 instead of the output stage, so
+  # Cm2 never loads the output.  gm2 must invert and gm3 must not (the parity
+  # filter enforces both), so gm3 is a noninverting_stage_*.
   - name: three_stage_opamp_rnmc_single_ended
     config:
       output_type: single_ended
@@ -294,7 +297,7 @@ topologies:
       - {slot: third_stage,  port: in,    net: net_mid2}
       - {slot: third_stage,  port: out,   net: out}
       - {slot: third_stage,  port: bias,  net: net_bias6}
-      - {slot: comp1,        port: in,    net: net_mid2}
+      - {slot: comp1,        port: in,    net: net_mid1}
       - {slot: comp1,        port: out,   net: out}
       - {slot: comp2,        port: in,    net: net_mid1}
       - {slot: comp2,        port: out,   net: net_mid2}
@@ -437,7 +440,7 @@ topologies:
       - {slot: third_stage_p,   port: in,    net: net_mid2_p}
       - {slot: third_stage_p,   port: out,   net: outp}
       - {slot: third_stage_p,   port: bias,  net: net_bias6}
-      - {slot: comp1_p,         port: in,    net: net_mid2_p}
+      - {slot: comp1_p,         port: in,    net: net_loadout2}
       - {slot: comp1_p,         port: out,   net: outp}
       - {slot: comp2_p,         port: in,    net: net_loadout2}
       - {slot: comp2_p,         port: out,   net: net_mid2_p}
@@ -448,7 +451,7 @@ topologies:
       - {slot: third_stage_n,   port: in,    net: net_mid2_n}
       - {slot: third_stage_n,   port: out,   net: outn}
       - {slot: third_stage_n,   port: bias,  net: net_bias6}
-      - {slot: comp1_n,         port: in,    net: net_mid2_n}
+      - {slot: comp1_n,         port: in,    net: net_loadout1}
       - {slot: comp1_n,         port: out,   net: outn}
       - {slot: comp2_n,         port: in,    net: net_loadout1}
       - {slot: comp2_n,         port: out,   net: net_mid2_n}
@@ -696,7 +699,7 @@ topologies:
       - {slot: output_stage, port: in,    net: net_ampout}
       - {slot: output_stage, port: out,   net: out}
       - {slot: output_stage, port: bias,  net: net_bias9}
-      - {slot: comp1,        port: in,    net: net_mid2}
+      - {slot: comp1,        port: in,    net: net_mid1}
       - {slot: comp1,        port: out,   net: net_ampout}
       - {slot: comp2,        port: in,    net: net_mid1}
       - {slot: comp2,        port: out,   net: net_mid2}
@@ -850,7 +853,7 @@ topologies:
       - {slot: output_stage_p,  port: in,    net: net_ampout_p}
       - {slot: output_stage_p,  port: out,   net: outp}
       - {slot: output_stage_p,  port: bias,  net: net_bias9}
-      - {slot: comp1_p,         port: in,    net: net_mid2_p}
+      - {slot: comp1_p,         port: in,    net: net_loadout2}
       - {slot: comp1_p,         port: out,   net: net_ampout_p}
       - {slot: comp2_p,         port: in,    net: net_loadout2}
       - {slot: comp2_p,         port: out,   net: net_mid2_p}
@@ -864,7 +867,7 @@ topologies:
       - {slot: output_stage_n,  port: in,    net: net_ampout_n}
       - {slot: output_stage_n,  port: out,   net: outn}
       - {slot: output_stage_n,  port: bias,  net: net_bias9}
-      - {slot: comp1_n,         port: in,    net: net_mid2_n}
+      - {slot: comp1_n,         port: in,    net: net_loadout1}
       - {slot: comp1_n,         port: out,   net: net_ampout_n}
       - {slot: comp2_n,         port: in,    net: net_loadout1}
       - {slot: comp2_n,         port: out,   net: net_mid2_n}
