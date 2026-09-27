@@ -388,8 +388,16 @@ single dominant pole (the mirror's second inversion is at a low-Z diode
 node, out-of-band). Used as gm2 they make comp1's wrapped cascade odd
 (2 + 1), so all four NMC templates enumerate again (SE 1080, buffered SE
 2160, both FD non-empty; the non-inverting stage is filtered *out* of
-2-stage and RNMC slots, where a single comp wraps it directly → even →
-positive feedback, so those counts are unchanged).
+2-stage slots and RNMC's gm2, where a single comp wraps it directly → even →
+positive feedback).
+
+RNMC is the mirror image (issue #236): both caps start at the first-stage
+output — comp1 wraps gm2 + gm3 to the output, comp2 wraps gm2 alone — so gm2
+must invert (CS) and gm3 must not (`noninverting_stage_*`). Until #236 the
+templates started comp1 at gm2's output instead, leaving no cap around the
+whole chain: CS+CS enumerated, and no sizing could compensate it (SPICE PM
+−15° plain, 10–25° with a nulling resistor; ~90° once rewired). Counts are
+unchanged (972 / 23,328 / 1,944 / 93,312) — only gm3's variant flips.
 
 ## Bias-infeasible (DSE-only) variants
 

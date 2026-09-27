@@ -414,9 +414,9 @@ def test_fd_two_stage_ac_metrics_are_real(cmfb):
 # A GMID-sized three-stage FD op-amp (rnmc, folded-cascode differential-output
 # load), frozen because enumerating this topology live takes minutes. The CMFB
 # senses the true outputs (outp/outn) per #167, so the output CM regulates and
-# the open-loop FD bench measures a real ~66 dB gain -- but only unloaded: at
-# its rated CL the sized design is unstable (#236), see
-# test_fd_three_stage_ac_metrics_are_real.
+# the open-loop FD bench measures a real ~71 dB gain.  Both caps start at the
+# first-stage output and the third stage is non-inverting (issue #236): the
+# old wiring left no cap around the whole chain and measured PM -5° at CL.
 _FD_THREE_STAGE_NETLIST = """\
 .subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
 m1_input_pair net_diff1 in1 net_tail net_tail pmos
@@ -456,41 +456,39 @@ mp6_bias_gen net_bias6 net_bias6 vdd! vdd! pmos
 mn7_bias_gen net_bias7 ibias gnd! gnd! nmos
 r1_cmfb outp cmfb_sense 1k
 r2_cmfb outn cmfb_sense 1k
-m1_cmfb cmfb_d1 cmfb_sense cmfb_tail gnd! nmos
-m2_cmfb net_cmfb_out vcm_ref cmfb_tail gnd! nmos
+m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
+m2_cmfb net_cmfb_out cmfb_sense cmfb_tail gnd! nmos
 m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
 m4_cmfb net_cmfb_out cmfb_d1 vdd! vdd! pmos
 m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
 mn1_second_stage_p net_mid2_p net_loadout2 gnd! gnd! nmos
 mp1_second_stage_p net_mid2_p net_bias5 vdd! vdd! pmos
-mn1_third_stage_p outp net_mid2_p gnd! gnd! nmos
-mp1_third_stage_p outp net_bias6 vdd! vdd! pmos
-c1_comp1_p net_mid2_p outp 1p
+mp1_third_stage_p third_stage_p_pmir net_mid2_p vdd! vdd! pmos
+mn2_third_stage_p outp third_stage_p_pmir gnd! gnd! nmos
+mn1_third_stage_p third_stage_p_pmir third_stage_p_pmir gnd! gnd! nmos
+mp2_third_stage_p outp net_bias6 vdd! vdd! pmos
+c1_comp1_p net_loadout2 outp 1p
 c1_comp2_p net_loadout2 net_mid2_p 1p
 mn1_second_stage_n net_mid2_n net_loadout1 gnd! gnd! nmos
 mp1_second_stage_n net_mid2_n net_bias5 vdd! vdd! pmos
-mn1_third_stage_n outn net_mid2_n gnd! gnd! nmos
-mp1_third_stage_n outn net_bias6 vdd! vdd! pmos
-c1_comp1_n net_mid2_n outn 1p
+mp1_third_stage_n third_stage_n_pmir net_mid2_n vdd! vdd! pmos
+mn2_third_stage_n outn third_stage_n_pmir gnd! gnd! nmos
+mn1_third_stage_n third_stage_n_pmir third_stage_n_pmir gnd! gnd! nmos
+mp2_third_stage_n outn net_bias6 vdd! vdd! pmos
+c1_comp1_n net_loadout1 outn 1p
 c1_comp2_n net_loadout1 net_mid2_n 1p
 .ends"""
 
 
 @ngspice
-@pytest.mark.xfail(strict=True, reason=(
-    "#236: loaded with its rated CL (#222) this GMID-sized design is unstable "
-    "(SPICE PM -5 deg vs the sizer's 58.6 deg), so the AC bench discards it"))
 @pytest.mark.slow
 def test_fd_three_stage_ac_metrics_are_real():
     """#61's three-stage FD acceptance criterion: a feasible three-stage FD
     op-amp reports real (positive) gain/GBW/PM, not n/a.  With the #167 CMFB
     output-sense wiring the output CM regulates, so the open-loop bench measures
-    ~66 dB.  (PM is only checked to be physical, not >= the 60° spec target: a
+    ~71 dB.  (PM is only checked to be physical, not >= the 60° spec target: a
     GMID-sized variant can be marginally stable and still be a real, non-n/a
-    measurement -- which is all #61 requires.)
-
-    Expected to fail until #236: this fixture only ever passed unloaded (PM
-    +3.9°).  Strict, so it flags when a sizer fix makes it stable."""
+    measurement -- which is all #61 requires.)"""
     parsed = parse(_FD_THREE_STAGE_NETLIST)
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_rnmc_fully_differential")
@@ -522,26 +520,20 @@ def test_fd_cmrr_psrr_measured():
     the differential gain, so each must land above the gain floor (a matched FD
     deck converts common-mode/supply to a near-zero differential output --
     numerically small but real, not the garbage-against-garbage the SE guard in
-    test_cmrr_psrr_none_without_clean_gain rejects).
-
-    Uses the two-stage FD fixture of test_fd_two_stage_ac_metrics_are_real:
-    the three-stage one has no clean gain at its rated load (#236)."""
-    text, parsed, fbr, topo = _fd_circuit({
-        "input_pair": "differential_pair_pmos",
-        "load": "folded_cascode_load_pmos_input_differential_output",
-        "tail_current": "current_mirror_tail_pmos",
-        "comp_p": "miller_cap", "comp_n": "miller_cap",
-        "second_stage_p": "common_source_nmos",
-        "second_stage_n": "common_source_nmos",
-        "cmfb": "resistive_sense_cmfb_inverting"})
+    test_cmrr_psrr_none_without_clean_gain rejects)."""
+    parsed = parse(_FD_THREE_STAGE_NETLIST)
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_fully_differential")
+    fbr = assign_slots(recognize(parsed), topo)
     tech = load_tech("ptm45")
     spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=2e-12,
-                      second_stage_current_ratio=2.5, gain_min_db=50,
-                      gbw_min_hz=2e6, phase_margin_min_deg=60, slew_rate_min_vps=1e6,
-                      output_swing_max_v=0.8, output_swing_min_v=0.2)
+                      second_stage_current_ratio=2.5, third_stage_current_ratio=5.0,
+                      gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=1e6, output_swing_max_v=0.8,
+                      output_swing_min_v=0.2)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     assert result.solver_status == "GMID"
-    sim = simulate_metrics(text, result, tech, spec)
+    sim = simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
 
     gain = sim["gain_db"]
     assert gain is not None and gain > 0
@@ -644,6 +636,46 @@ def test_honest_twin_measurement_unaffected():
     assert sim["gain_db"] is not None and sim["gain_db"] > 0
     pm = sim["phase_margin_deg"]
     assert pm is not None and 0 < pm <= 180
+
+
+# Three ideal gain stages with coincident poles (each 1 MΩ || 10 pF, the last
+# pole set by the bench's own 10 pF load) and ~126 dB of differential gain:
+# three poles well below the crossing, so it is unstable by construction.
+_FD_UNSTABLE_BEHAVIOURAL = """\
+.subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
+rib ibias gnd! 1k
+g1 x1 gnd! in1 in2 1e-4
+r1 x1 gnd! 1meg
+c1 x1 gnd! 10p
+g2 x2 gnd! x1 gnd! 1e-4
+r2 x2 gnd! 1meg
+c2 x2 gnd! 10p
+g3p outp vcm_ref x2 gnd! 1e-4
+r3p outp vcm_ref 1meg
+g3n outn vcm_ref x2 gnd! -1e-4
+r3n outn vcm_ref 1meg
+.ends"""
+
+
+@ngspice
+def test_fd_instability_reported_not_discarded():
+    """Issue #236: the FD bench has no feedback loop for a wrong input
+    polarity to corrupt, so a PM ≤ 0° there is a real instability.  It is
+    reported as measured (gain, GBW and the negative PM) with a note, not
+    discarded as an "extraction artifact" — the SE guard is unchanged (see
+    test_implausible_pm_extraction_is_discarded)."""
+    from circuitgenome.sizer.models import SizingResult
+    result = SizingResult(transistors={}, cc_pf=None, metrics={}, margins={},
+                          solver_status="behavioural")
+    spec = SizingSpec(vdd=1.8, vss=0.0, ibias=10e-6, cl=10e-12)
+    sim = simulate_metrics(_FD_UNSTABLE_BEHAVIOURAL, result,
+                           load_tech("generic"), spec)
+    assert sim["gain_db"] is not None and sim["gain_db"] > 100
+    assert sim["gbw_hz"] is not None
+    assert sim["phase_margin_deg"] is not None and sim["phase_margin_deg"] < 0
+    notes = sim.get("notes", [])
+    assert any("unstable" in n for n in notes)
+    assert not any("artifact" in n for n in notes)
 
 
 # --- CMRR / PSRR / output swing / two-edge slew -----------------------------

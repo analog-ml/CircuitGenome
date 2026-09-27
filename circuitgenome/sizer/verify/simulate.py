@@ -24,10 +24,12 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``,
     ``cmrr_db``, ``psrr_db``.  Missing/failed measurements are ``None``
     (slew rate and output swing are single-ended-only; CMRR/PSRR need a
-    measured differential gain first).  Every bench loads each output with
-    ``spec.cl`` — the load ``evaluate_metrics`` predicts against.  ``corner``
-    overrides the PDK library corner (foundry techs only); ``None`` uses the
-    tech's nominal corner.
+    measured differential gain first).  A fully-differential design can
+    report a phase margin ≤ 0 — a real instability, flagged in ``notes``;
+    the single-ended bench discards one as a corrupt sweep.  Every bench
+    loads each output with ``spec.cl`` — the load ``evaluate_metrics``
+    predicts against.  ``corner`` overrides the PDK library corner (foundry
+    techs only); ``None`` uses the tech's nominal corner.
     """
     name, ports, body = _parse_subckt(netlist_text)
     unsized = unsized_mos_refs(body, result)
@@ -62,6 +64,9 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
         g, gbw, pm, reason, polarity = _measure_ac(*args)
         out["gain_db"], out["gbw_hz"], out["phase_margin_deg"] = g, gbw, pm
         ac_clean = reason is None   # positive gain from an uncorrupted sweep
+        if pm is not None and pm <= 0:
+            notes.append(f"phase margin {pm:.0f}° ≤ 0 — the amplifier is "
+                         f"unstable at its {spec.cl * 1e12:g} pF load")
         if reason:
             notes.append(reason + " (GBW/PM not measurable)")
             bias = _bias_diagnostic(netlist_text, result, tech, spec)
