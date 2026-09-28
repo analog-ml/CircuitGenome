@@ -112,14 +112,13 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-
+  <p><strong>TLDR:</strong> <code>intent.py</code> makes analog design intent explicit as a three-level hierarchy — a spec at the top, a registry of per-building-block <code>BlockIntent</code> records in the tunable middle (each naming a gm/Id inversion region, a channel length, and a human rationale, with <code>None</code> for the gain-path signal devices whose region is solved from the spec — all but the source-follower output stage, which is signal yet carries a fixed region), resolved by <code>functional_block</code> and <code>resolve_transistor_intents</code> onto one explainable, overridable <code>TransistorIntent</code> per device.</p>
   <blockquote><p><strong>The one job:</strong> take every fuzzy human sentence like <em>"the current-source load should be strong-ish for high output resistance"</em> and turn it into a small, named, overridable data object the sizer can read top-down — and that it can later explain back to you.</p></blockquote>
 
   <p class="beat">Here is the whole story before a single line of code.</p>
 
   <p>A gm/Id sizer has to answer a hundred tiny "how strong should this transistor be?" questions. Each answer is really a <strong>design decision</strong>: which inversion region to put the device in, how long to make its channel, and <em>why</em>. The naive way is to sprinkle magic numbers through the sizing code — <code>gm_id = 10</code> here, <code>L = 4 * Lmin</code> there — with the reasoning living only in the author's head.</p>
 
-  <p>Think of it like a recipe. You <em>could</em> write "add some salt" in ten different places and hope every cook guesses the same amount. Or you could write one <strong>ingredients table</strong> at the top — salt: 1 tsp, "brings out the sweetness" — that every step reads from, that a guest can inspect, and that you can tweak in exactly one place. <code>intent.py</code> is that ingredients table for transistor sizing.</p>
 
   <h3>The three levels of intent</h3>
   <p>The file's whole shape is a <strong>three-level hierarchy</strong>. The spec says <em>what</em> the circuit must do; the middle layer says <em>how each building block should behave and why</em>; the bottom layer is that intent stamped onto each physical device.</p>
@@ -230,14 +229,12 @@
     <figcaption>The resolver on top; a lookup function and a registry feed it; the output is one TransistorIntent per device. We'll learn it bottom-up so the top reads easily.</figcaption>
   </figure>
 
-  <blockquote><p><strong>Looking ahead:</strong> before any code, Part&nbsp;2 builds the one idea the whole file rests on — that <code>gm/Id</code> is not a measurement but a <em>choice</em> of inversion region.</p></blockquote>
 </section>
 
 <!-- ================= PART 2 ================= -->
 <section class="part" id="part-2">
   <h2>Part 2 · gm/Id is a design choice, not a reading</h2>
 
-  <p class="beat">You need exactly one concept before the code makes sense. It's less scary than it looks.</p>
 
   <h3>First — what is gm/Id?</h3>
   <p><code>gm</code> is a transistor's <strong>transconductance</strong>: how much output current wiggle you get per volt of input wiggle. It's the raw material of gain. <code>Id</code> is the DC current the device burns. So <code>gm/Id</code> is <strong>transconductance efficiency</strong> — <em>how much gain you buy per microamp of current</em>. Units: 1/V.</p>
@@ -746,7 +743,7 @@ INTENT_BY_TECH: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>
   <p>The whole design rides one move: <strong>turn a fuzzy design decision into an immutable, named, copyable data record, and attach its reason to it.</strong> That single move buys explainability (the rationale rides into the result), tunability (copy-one-key overrides), and safety (frozen defaults, fresh-copy factories) — all without a line of control flow. The three-level hierarchy is just this record applied at three altitudes.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>intent.py</code> makes analog design intent explicit as a three-level hierarchy — a spec at the top, a registry of per-building-block <code>BlockIntent</code> records in the tunable middle (each naming a gm/Id inversion region, a channel length, and a human rationale, with <code>None</code> for the gain-path signal devices whose region is solved from the spec — all but the source-follower output stage, which is signal yet carries a fixed region), resolved by <code>functional_block</code> and <code>resolve_transistor_intents</code> onto one explainable, overridable <code>TransistorIntent</code> per device.</p>
+
 </section>
 
 </main>

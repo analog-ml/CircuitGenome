@@ -110,7 +110,7 @@
 <section class="part" id="part-1">
   <h2>Part 1 &middot; Why this file even exists</h2>
 
-  <blockquote><p><strong>The one job:</strong> turn the recognizer's output into the one structural picture every sizer starts from &mdash; which devices are in which slot, one entry per distinct device, and a warning if the circuit does not look like the topology it claims to be.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> turn the recognizer's output into the one structural picture every sizer starts from &mdash; which devices are in which slot, one entry per distinct device, and a warning if the circuit does not look like the topology it claims to be.</p></blockquote>
 
   <p class="beat">The idea, before any code.</p>
 
@@ -133,7 +133,7 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 <section class="part" id="part-2">
   <h2>Part 2 · Slot extraction — the humble first step</h2>
 
-  <blockquote><p><strong>The one job:</strong> the recognizer already grouped devices into named <em>slots</em> (<code>input_pair</code>, <code>load</code>, <code>tail_current</code>…); these two functions just fish the MOSFETs (or the resistors) out of each slot into a tidy <code>{slot: [devices]}</code> dictionary.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> the recognizer already grouped devices into named <em>slots</em> (<code>input_pair</code>, <code>load</code>, <code>tail_current</code>…); these two functions just fish the MOSFETs (or the resistors) out of each slot into a tidy <code>{slot: [devices]}</code> dictionary.</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">extract_slot_transistors</span>(fbr_result) -> <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>, <span class="tok-kw">list</span>[Device]]:
     result = {}
@@ -143,9 +143,9 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
             result[slot_name] = mosfets
     <span class="tok-kw">return</span> result</code></pre>
 
-  <p>Analogy: the recognizer handed us a set of labeled drawers (a drawer marked <code>input_pair</code>, one marked <code>load</code>, …). Each drawer is a jumble of parts. This function walks every drawer and keeps only the transistors, skipping caps, resistors, and anything else. <code>extract_slot_resistors</code> is the identical walk, but it keeps <code>type == "resistor"</code> instead.</p>
+  <p> This function walks every FBR results and keeps only the transistors, skipping caps, resistors, and anything else. <code>extract_slot_resistors</code> is the identical walk, but it keeps <code>type == "resistor"</code> instead.</p>
 
-  <p>The one subtlety: <strong>a slot with no matching device is dropped, not stored as an empty list.</strong> That's the <code>if mosfets:</code> guard. So later code can write <code>slot_transistors.get("load", [])</code> and trust that a present key always has at least one device — a small invariant that removes a lot of "is it empty?" checks downstream.</p>
+  <p>The one subtlety: <strong>a slot with no matching device is dropped, not stored as an empty list. That empty-drop rule is the whole cleverness. Everything that follows leans on it.</strong></p>
 
   <figure class="fig">
     <svg viewBox="0 0 560 260" role="img" aria-label="Slot assignments filtered into transistors-per-slot and resistors-per-slot">
@@ -190,7 +190,6 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
     <figcaption>One pass, one type filter. A slot survives only if it actually holds a device of the wanted kind — so present keys are never empty.</figcaption>
   </figure>
 
-  <p>That empty-drop rule is the whole cleverness. Everything that follows leans on it.</p>
 </section>
 
 <section class="part" id="part-3">
@@ -198,11 +197,9 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 
   <blockquote><p><strong>The one job:</strong> a transistor the recognizer could not place belongs to <em>some</em> slot. Find it a home before anything else reads the slot map.</p></blockquote>
 
-  <p>Pattern matching is not perfect. A device can fall out of every slot when its structure is ambiguous &mdash; two identical parallel diodes on one net &mdash; or incomplete, like a load whose expected partner has been pruned away. The consequence is silent and bad: a device in no slot never gets sized, so ngspice runs it at its default W/L and the measured circuit is not the designed one. Worse, the analytical metrics never see its output conductance, so the predicted gain comes out <em>higher</em> than the real circuit can deliver.</p>
+  <p>Pattern matching is not perfect. A device can fall out of every slot when its structure is ambiguous &mdash;. The consequence is silent and bad: a device in no slot never gets sized and reported results are incorrect.</p>
 
-  <p>This is not a rare safety net, but it is a narrow one. Sweeping all 13 topologies &mdash; 4,540 circuits &mdash; strays appear in 162 of them, and every single one belongs to a <em>two-stage</em> fully-differential topology: 54 of 400 plain, 108 of 400 buffered. The three-stage fully-differential topologies are clean, as is everything single-ended. The shape is always the same: CMFB has been pruned, the <code>load</code> slot no longer matches, and both load transistors arrive here as orphans. Sizing one such circuit with this pass disabled reports about 5&nbsp;dB more gain, from exactly those two uncounted devices.</p>
-
-  <p>Synthesized netlists name every device <code>{ref}_{slot_name}</code>, so an orphan carries its own address:</p>
+  <p>Fortunately, synthesized netlists name every device <code>{ref}_{slot_name}</code>, so an orphan carries its own address:</p>
 
   <pre class="code"><code>slot = <span class="tok-fn">next</span>((s <span class="tok-kw">for</span> s <span class="tok-kw">in</span> slot_names <span class="tok-kw">if</span> dev.ref.endswith(<span class="tok-str">"_"</span> + s)), <span class="tok-kw">None</span>)
 <span class="tok-kw">if</span> slot <span class="tok-kw">is not None</span>:
@@ -214,7 +211,7 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
   <p>This is the ordering constraint the whole module is arranged around. The raw slot map is built first; this pass patches it; and only then do dedup and the topology check read it. Both sizers inherit that order for free by calling <code>analyze_circuit</code>, instead of each having to remember it.</p>
 
   <h3>It reports, it does not paper over</h3>
-  <p>An adoption means functional-block recognition could not place a device the netlist plainly contains. Sizing is correct afterwards, but the gap is real &mdash; and the rescue only works because <em>synthesized</em> netlists name devices <code>{ref}_{slot}</code>. Hand the same circuit in from outside with different ref names and nothing saves it.</p>
+  <p>The rescue only works because <em>synthesized</em> netlists name devices <code>{ref}_{slot}</code>. Hand the same circuit in from outside with different ref names and nothing saves it.</p>
 
   <p>So the pass returns what it adopted, the view carries it as <code>view.adopted</code>, and each sizer turns that into a warning on its result. It is deliberately <em>not</em> folded into <code>view.warnings</code>: a consumer that reads the first warning to explain why a candidate failed to bias should not be handed a recognizer advisory instead.</p>
 
@@ -223,11 +220,10 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 <section class="part" id="part-4">
   <h2>Part 4 · <code>check_topology_match()</code> — the sanity inspector</h2>
 
-  <blockquote><p><strong>The one job:</strong> catch the case where the netlist you handed in does not actually realize the topology you asked to size for — and say so, loudly, instead of silently producing garbage gain/PM numbers.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> catch the case where the netlist you handed in does not actually realize the topology you asked to size for — and say so, loudly, instead of silently producing garbage gain/PM numbers.</p></blockquote>
 
-  <p>Analogy: you asked the builder for a two-car garage, but the blueprint clearly shows one car space. Rather than pour a foundation that half-fits, the inspector stops and says "this blueprint doesn't match the order." That's this function.</p>
 
-  <p>The tell-tale sign of a valid gain stage: <strong>every stage slot holds exactly one <em>signal</em> transistor</strong> — a device whose gate is driven by the previous stage's output, not a bias rail. If a stage slot exists but contains <em>no</em> signal device (just bias-generator leftovers shoved in), the netlist doesn't match the chosen topology.</p>
+  <p>This function makes sure <strong>every stage slot holds exactly one <em>signal</em> transistor</strong> — a device whose gate is driven by the previous stage's output, not a bias rail. If a stage slot exists but contains <em>no</em> signal device, the netlist doesn't match the chosen topology.</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">check_topology_match</span>(slot_transistors, topology_name) -> <span class="tok-kw">list</span>[<span class="tok-kw">str</span>]:
     warnings = []
@@ -256,7 +252,7 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
     <figcaption>An occupied stage slot with only bias devices means single-ended vs fully-differential was mixed up — worth a warning, not silence.</figcaption>
   </figure>
 
-  <p>Why does this matter so much? Because the downstream gain, phase-margin, and PSRR math <em>reads</em> the second/third-stage signal device. If that device is missing, those metrics would silently drop out and the sizer would happily report numbers for a circuit it never actually sized. A concrete trigger: sizing a single-ended netlist against a fully-differential <code>--topology</code>, where a bias-generator leftover gets shoehorned into <code>second_stage_p</code>. The function doesn't fix it — it just refuses to be silent about it.</p>
+  <p>Why does this matter so much? Because the downstream gain, phase-margin, and PSRR math <em>reads</em> the second/third-stage signal device. If that device is missing, those metrics would silently drop out and the sizer would happily report numbers for a circuit it never actually sized. The function doesn't fix it — it just refuses to be silent about it.</p>
 
   <p>Note the <code>if devs and …</code>: an <em>absent</em> stage slot is fine (a two-stage amp simply has no third stage). Only a slot that exists <em>but has no signal device</em> trips the warning.</p>
 </section>
@@ -264,9 +260,8 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
 <section class="part" id="part-5">
   <h2>Part 5 · <code>deduplicate_devices()</code> — one ref, one home</h2>
 
-  <blockquote><p><strong>The one job:</strong> a single physical transistor can appear in two slots at once; before we assign it a current, decide which slot "owns" it — the higher-priority slot wins.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> a single physical transistor can appear in two slots at once; before we assign it a current, decide which slot "owns" it — the higher-priority slot wins.</p></blockquote>
 
-  <p>Analogy: an employee is listed on two org charts (they help two teams). For <em>payroll</em>, you must pick exactly one home team so they don't get paid twice. This function picks that home team using a fixed priority list.</p>
 
   <p>The classic collision: a tail-mirror <strong>reference</strong> transistor legitimately shows up in both <code>tail_current</code> and <code>bias_gen</code>. If we assigned current from both slots we'd double-count. So we impose an order and let the <em>first</em> slot encountered win.</p>
 
@@ -282,7 +277,6 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
                 seen[d.ref] = (d, slot)     <span class="tok-com"># first (highest-priority) slot wins</span>
     <span class="tok-kw">return</span> seen</code></pre>
 
-  <p>The two-line trick worth admiring: <code>sorted(..., key=priority.index)</code> walks the slots in priority order, and <code>if d.ref not in seen</code> means a ref is claimed exactly once — by whichever high-priority slot reached it first. Unknown slots sort to the very end (<code>len(priority)</code>), so they only ever claim refs nobody else wanted.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 540 210" role="img" aria-label="A shared reference transistor claimed by the higher-priority slot">
@@ -327,12 +321,10 @@ view.warnings           <span class="tok-com"># topology-mismatch advisories</sp
         adopted=adopted,
     )</code></pre>
 
-  <p>Every helper it calls is underscore-private. That is the point: the module's interface is this one function, so there is no way for a caller to run three of the four steps, or to run them out of order. Everything downstream &mdash; requirement derivation, the stage chain, the gm/Id block view &mdash; takes the finished <code>CircuitView</code>.</p>
+  <p>Every helper it calls is underscore-private. Everything downstream &mdash; requirement derivation, the stage chain, the gm/Id block view &mdash; takes the finished <code>CircuitView</code>.</p>
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
-    <li>It reads structure only. Not one current, width or voltage is decided here &mdash; that is <a href="physics-preprocess_explained.html"><code>preprocess.py</code></a> and the sizers.</li>
-    <li>The topology check is <strong>advisory</strong>. A mismatch produces a warning, never a refusal: an unusual circuit is still sized, and the caller decides what the warning is worth.</li>
     <li>Orphan adoption only works where refs carry slot suffixes, i.e. synthesized netlists. An external netlist with a genuinely unplaceable device still loses it.</li>
   </ul>
 
