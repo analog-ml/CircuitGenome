@@ -243,7 +243,7 @@ def phase_margin_three_stage_deg(
 
 
 # ---------------------------------------------------------------------------
-# Reversed nested Miller (RNMC) three-stage compensation (PR #RNMCPR)
+# Reversed nested Miller (RNMC) three-stage compensation (PR #249)
 # ---------------------------------------------------------------------------
 # RNMC puts both caps on the first-stage output: Cc1 to the output (around
 # gm2·gm3) and Cc2 to the second-stage output (around gm2 only).  With stage 2

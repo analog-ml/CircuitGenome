@@ -1,4 +1,4 @@
-"""Reversed-nested-Miller (RNMC) compensation sizing (PR #RNMCPR).
+"""Reversed-nested-Miller (RNMC) compensation sizing (PR #249).
 
 RNMC puts both compensation caps on the first-stage output: ``Cc1`` to the
 amplifier output and ``Cc2`` to the second-stage output.  That makes the two

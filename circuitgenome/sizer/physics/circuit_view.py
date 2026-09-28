@@ -36,7 +36,7 @@ class CircuitView:
     :param compensation_scheme: the template's three-stage compensation
         (``"nested_miller"`` / ``"reversed_nested_miller"``), ``None`` when
         the template does not declare one.  Selects the RNMC sizing rules and
-        phase-margin model (PR #RNMCPR).
+        phase-margin model (PR #249).
     """
     slot_transistors: dict[str, list[Device]] = field(default_factory=dict)
     slot_resistors: dict[str, list[Device]] = field(default_factory=dict)
