@@ -227,7 +227,9 @@ def phase_margin_three_stage_deg(
     :param gm2: Second-stage signal transistor gm in A/V.
     :param gm3: Third-stage signal transistor gm in A/V.
     :param cc1_f: Outer (primary) compensation capacitor in F.
-    :param cc2_f: Inner compensation capacitor in F (Cc2 = Cc1/4 by default).
+    :param cc2_f: Inner compensation capacitor in F (Cc1/4 for RNMC; sized
+        for the inner pole-pair damping for NMC — see
+        :func:`~.preprocess.compute_requirements`).
     :param cl_f: Output load capacitance in F.
     """
     wt = gm1 / cc1_f

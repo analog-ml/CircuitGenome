@@ -33,6 +33,12 @@ _RESISTOR_LOAD_OVERDRIVE = 0.15
 # Cc > 0.22·CL, rounded up for margin).
 _CC_STABILITY_RATIO = 0.25
 
+# Three-stage nested-Miller inner loop (issue #208 follow-up): floor on
+# gm3/gm2 and the damping Cc2 is sized for.  gf180 SPICE (open-loop kick)
+# rings at gm3/gm2 ≈ 2 for any Cc2, and at ζ ≲ 0.2 even with gm3/gm2 ≈ 3.8.
+_NMC_GM3_OVER_GM2 = 3.5
+_NMC_INNER_ZETA = 0.3
+
 
 def size_load_resistors(
     slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
@@ -227,6 +233,7 @@ def compute_requirements(
     spec: SizingSpec,
     model: DeviceModel,
     gd_load_r: float = 0.0,
+    nested_miller: bool = False,
 ) -> tuple[dict[str, float], dict[str, float], float | None, float | None, list[str]]:
     """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
@@ -235,6 +242,11 @@ def compute_requirements(
     ceiling (the spec cannot be met at this bias current).  Output conductances
     come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
     model reproduces the geometry-free ``λ·Id`` exactly.
+
+    ``nested_miller`` marks a three-stage NMC template (``compensation_scheme:
+    nested_miller``): its inner loop (Cc2 around the third stage) is then sized
+    for damping — ``gm3 ≥ _NMC_GM3_OVER_GM2·gm2`` and Cc2 for
+    ``_NMC_INNER_ZETA`` — instead of the ``Cc2 = Cc1/4`` default.
     """
     is_three_stage = any(s in slot_transistors for s in THIRD_STAGE_SLOTS)
     has_second_stage = (
@@ -313,7 +325,7 @@ def compute_requirements(
             cc_ub_f = min(cc_ub_f, spec.ibias / spec.slew_rate_min_vps)
         cc_f = max(cc_min_f, min(_CC_STABILITY_RATIO * spec.cl, cc_ub_f))
 
-    # Cc2 for three-stage (inner cap = Cc1/4); None for two-stage and one-stage.
+    # Cc2 for three-stage (see below); None for two-stage and one-stage.
     cc2_pf: float | None = None
     cc2_f: float = 0.0
 
@@ -331,8 +343,14 @@ def compute_requirements(
             cc_f = min(cc_f, cc_max_f)
 
         if is_three_stage:
-            # Three-stage: inner cap = Cc1/4.
+            # Inner cap = Cc1/4, except NMC: its non-dominant poles form a pair
+            # with damping ζ = (r−1)/2·√(Cc2/(r·CL)), r = gm3/gm2 (Leung &
+            # Mok), so size Cc2 for ζ = _NMC_INNER_ZETA at the gm3/gm2 floor
+            # enforced below (a larger realized r only damps it more).
             cc2_f = cc_f / 4.0
+            if nested_miller:
+                r = _NMC_GM3_OVER_GM2
+                cc2_f = min(cc_f, 4.0 * _NMC_INNER_ZETA ** 2 * r * spec.cl / (r - 1.0) ** 2)
             cc2_pf = cc2_f * 1e12
 
             # Phase margin (split phase budget equally between two non-dominant poles).
@@ -355,6 +373,14 @@ def compute_requirements(
                 A0 = 10.0 ** (spec.gain_min_db / 20.0)
                 gm3_from_gain = A0 / (k_fs * gm1_req * rout1 * gm2_req * rout2 * rout3)
                 gm3_req = max(gm3_req, gm3_from_gain)
+
+            # The gm3/gm2 floor the Cc2 above assumes, against the gm2 the
+            # second stage will really deliver.  At gm3 ≈ 2·gm2 the inner loop
+            # rings above GBW, which the open-loop AC bench cannot see (#208).
+            ss_sig = next((d for d in ss_devices if is_signal_device(d)), None)
+            if nested_miller and ss_sig is not None:
+                gm2_real = model.realized_gm(ss_sig.type, gm2_req, ids_2)
+                gm3_req = max(gm3_req, _NMC_GM3_OVER_GM2 * gm2_real)
 
         else:
             # Two-stage: gain A0 = k_fs·gm1·Rout1·gm2·Rout2.
@@ -444,10 +470,16 @@ def compute_requirements(
     vdd = spec.vdd
     vss = spec.vss
 
-    # All second- and third-stage device lists (constrain output swing on every path).
+    # Second- and third-stage device lists (constrain output swing on every
+    # path).  NMC skips the second stage: it never drives the output, and a
+    # swing floor there only inflates gm2 (gm/Id ↑ at fixed Id), squeezing the
+    # gm3/gm2 ratio its inner loop needs.  (RNMC is left as is: its inner
+    # loop wraps the second stage, and gf180 SPICE rings without the floor.)
+    swing_slots = (THIRD_STAGE_SLOTS if nested_miller
+                   else (*SECOND_STAGE_SLOTS, *THIRD_STAGE_SLOTS))
     all_ss_device_lists = [
         slot_transistors[s]
-        for s in (*SECOND_STAGE_SLOTS, *THIRD_STAGE_SLOTS)
+        for s in swing_slots
         if s in slot_transistors
     ]
 

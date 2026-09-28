@@ -415,16 +415,20 @@ def test_fd_cm_gate_condemns_high_gain_cmfb():
 
 @ngspice
 @pytest.mark.slow
-@pytest.mark.parametrize("comp2,settles", [
-    ("miller_cap", False),
-    ("miller_cap_with_nulling_resistor", True),
+@pytest.mark.parametrize("comp2,gm3_scale,settles", [
+    ("miller_cap", 1.0, True),
+    ("miller_cap_with_nulling_resistor", 1.0, True),
+    ("miller_cap", 0.3, False),
 ])
-def test_fd_settling_gate_catches_local_loop_oscillation(comp2, settles):
-    """Issue #208: a gf180 NMC FD whose inner Miller loop (comp2 around the
-    third stage) is a plain cap rings differentially at ~25 MHz — far above
-    its ~7.7 MHz crossover, while the open-loop AC bench still reads PM ≈ 88°
-    (it only sees the global loop).  The settling gate's one-sided kick
-    excites that mode and condemns it; a nulling resistor in comp2 settles."""
+def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settles):
+    """Issue #208: a gf180 NMC FD whose inner nested-Miller pole pair is
+    under-damped rings differentially at ~25 MHz — far above its ~7.7 MHz
+    crossover, while the open-loop AC bench still reads PM ≈ 88° (it only
+    sees the global loop).  The sizer keeps gm3 ≥ 3.5·gm2 and sizes Cc2 for
+    the inner pair's damping, so both a plain and a nulling-resistor comp2
+    settle; restoring the old inner loop by hand (third-stage signal W × 0.3
+    → gm3 ≈ 2·gm2, Cc2 = Cc1/4) brings the ringing back, and the settling
+    gate's one-sided kick must condemn it."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_nmc_fully_differential")
@@ -442,6 +446,11 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, settles):
                       second_stage_current_ratio=2.5, third_stage_current_ratio=5.0,
                       gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    if gm3_scale != 1.0:  # restore the old inner loop: gm3 ≈ 2·gm2, Cc2 = Cc1/4
+        tr = {ref: (replace(s, w_um=s.w_um * gm3_scale)
+                    if ref.startswith("mn1_third_stage") else s)
+              for ref, s in result.transistors.items()}
+        result = replace(result, transistors=tr, cc2_pf=result.cc_pf / 4.0)
     ok, reason = check_bias_soundness(text, result, tech, spec)
     assert ok is settles, reason
     if not settles:

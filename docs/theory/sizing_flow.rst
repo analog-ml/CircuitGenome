@@ -743,13 +743,15 @@ Design variables
    * - :math:`C_{c1}` (outer)
      - :math:`\min(I_{bias}/SR,\; g_{m1}/(2\pi \cdot GBW))`
    * - :math:`C_{c2}` (inner)
-     - :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic)
+     - NMC: inner-pair damping :math:`\zeta \geq 0.3` (see below);
+       RNMC: :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic)
    * - :math:`g_{m1}`
      - CMRR + GBW (same as two-stage)
    * - :math:`g_{m2}`
      - Inner-pole PM condition (see below)
    * - :math:`g_{m3}`
-     - Gain + outer-pole PM condition (see below)
+     - Gain + outer-pole PM condition (see below); NMC also
+       :math:`g_{m3} \geq 3.5\,g_{m2}`
 
 Phase margin derivation
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -794,6 +796,44 @@ at :math:`\approx 3.73 \times \omega_t`.
    These are **sufficient conditions** — both poles are individually bounded,
    so the actual PM will be ≥ :math:`\text{PM}_{\min}` even if one pole is
    at its minimum.
+
+NMC inner-loop damping (gm3 ≫ gm2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The two non-dominant poles are not really separate: for NMC they form the
+pair :math:`1 + s\,C_{c2}(g_{m3}-g_{m2})/(g_{m2}g_{m3}) + s^2 C_L C_{c2}/(g_{m2}g_{m3})`
+(Leung & Mok), whose damping
+
+.. math::
+
+   \zeta = \frac{r-1}{2}\sqrt{\frac{C_{c2}}{r\,C_L}}, \qquad r = g_{m3}/g_{m2}
+
+depends only on the ratio :math:`r` and on :math:`C_{c2}/C_L`.  The
+separate-pole formula above cannot see it, and neither can the open-loop AC
+bench, which only measures the global loop.  With :math:`r \approx 2`
+(equal gm/Id, :math:`I_3 = 2 I_2`) and :math:`C_{c2} = C_{c1}/4`,
+:math:`\zeta \approx 0.09`: gf180 NMC FD designs ring at ~25 MHz after a
+kick while the AC bench reads PM ≈ 88° (issue #208).  For NMC templates
+(``compensation_scheme: nested_miller``) the sizer therefore
+
+* floors :math:`g_{m3} \geq 3.5\,g_{m2}`, with :math:`g_{m2}` the gm the
+  second stage will really deliver (``DeviceModel.realized_gm`` — on the
+  gm/Id path a request below the table's strongest-inversion gm/Id is built
+  at that floor, e.g. gf180 at 50 µA: 300 µS for a ~50 µS ask);
+* sizes :math:`C_{c2}` for :math:`\zeta = 0.3` at that ratio,
+  :math:`C_{c2} = \min\bigl(C_{c1},\; 4\zeta^2 r\,C_L/(r-1)^2\bigr)
+  \approx 0.2\,C_L` (a larger realized :math:`r` only damps it more);
+* keeps the output-swing :math:`V_{dsat}` budget on the third stage only —
+  the second stage never drives the output, and a swing floor there only
+  raises :math:`g_{m2}` and shrinks :math:`r`.
+
+Both levers are needed: in SPICE, :math:`r \approx 2` rings for every
+:math:`C_{c2}` tried (0.3–5.5 pF), and :math:`r \approx 3.8` still rings at
+:math:`\zeta \approx 0.18` when one side carries a nulling resistor in its
+outer loop.  A much larger :math:`C_{c2}` (Butterworth, :math:`\zeta \approx 0.7`)
+pulls the pair down onto the crossover and wrecks the measured PM.  RNMC
+keeps :math:`C_{c2} = C_{c1}/4`: its inner capacitor wraps the second stage,
+not the output stage, so this pair does not apply.
 
 Gain requirement
 ~~~~~~~~~~~~~~~~

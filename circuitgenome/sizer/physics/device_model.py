@@ -88,9 +88,9 @@ class DeviceModel(Protocol):
 
         A requirement derived from one stage feeds the next one's requirement
         (PM needs the gm1 the input pair will really have, not the gm1 that was
-        asked for).  Where the geometry step rounds up to a discrete grid, the
-        delivered gm overshoots the request and the model says so; where it does
-        not, ``gm_req`` comes back unchanged.
+        asked for).  Where the geometry step rounds up to a discrete grid or
+        floors the operating point, the delivered gm overshoots the request and
+        the model says so; otherwise ``gm_req`` comes back unchanged.
         """
         ...
 
@@ -264,13 +264,14 @@ class GmIdModel:
         return gm / self.lut.gm_gds(dtype, gm_id, l_um)
 
     def realized_gm(self, dtype, gm_req, ids):
-        """``gm_req`` unchanged — geometry is computed from it, not searched.
+        """``gm_req``, floored at the table's strongest-inversion gm/Id.
 
-        The forward pass solves W from the gm/Id target and Phase 5 re-evaluates
-        PM from the snapped geometry, so there is no grid ceiling to anticipate
-        here.
+        The forward pass solves W from the gm/Id target, so there is no grid
+        ceiling to anticipate — but :meth:`geometry_for` never goes below the
+        table's smallest gm/Id, so a request under ``gm_id_axis[0]·|Id|`` is
+        delivered at that floor (e.g. gf180 at 10 µA: 60 µS for a 16 µS ask).
         """
-        return gm_req
+        return max(gm_req, float(self.lut.gm_id_axis[0]) * abs(ids))
 
     # -- geometry inversion (procedural sizer) -----------------------------
     def geometry_for(

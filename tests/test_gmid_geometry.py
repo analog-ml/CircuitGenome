@@ -43,6 +43,18 @@ def _intents(roles):
             for ref, role in roles.items()}
 
 
+def test_realized_gm_matches_geometry_floor(tech, model):
+    """A gm request below the table's strongest-inversion gm/Id is delivered
+    at that floor — realized_gm must predict the gm the geometry builds."""
+    ids = 10e-6
+    floor = float(model.lut.gm_id_axis[0]) * ids
+    assert model.realized_gm("nmos", 0.2 * floor, ids) == pytest.approx(floor)
+    assert model.realized_gm("nmos", 2.0 * floor, ids) == pytest.approx(2.0 * floor)
+    geo = model.geometry_for("nmos", ids, SIGNAL, 0.2 * floor)
+    built = model.gm("nmos", geo.w_um, geo.l_um, ids)
+    assert built == pytest.approx(model.realized_gm("nmos", 0.2 * floor, ids), rel=0.02)
+
+
 def test_mirror_ratio_is_exact(tech, model):
     """Output width tracks the current ratio off the diode-connected reference."""
     ref = Device(ref="mref", type="nmos",

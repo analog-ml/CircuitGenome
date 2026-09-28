@@ -60,7 +60,8 @@ def size_gmid(
     currents = assign_currents(view, spec, tech, intent)
 
     # Phase 3 — Plan: gm requirements + compensation caps + per-device intent.
-    plan = plan_devices(view, currents, spec, tech, intent)
+    plan = plan_devices(view, currents, spec, tech, intent, nested_miller=(
+        topology.config.get("compensation_scheme") == "nested_miller"))
 
     # Phase 4 — Size: LUT geometry, DC bias check/repair, resistor network.
     sizing, geom_warnings, geom_feasible = assign_geometry_gmid(
