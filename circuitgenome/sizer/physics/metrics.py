@@ -26,6 +26,12 @@ def evaluate_metrics(
     Stage count picks the compensation regime, not the metric set: single- and
     multi-stage chains alike report gain, GBW, phase margin, slew rate, CMRR
     and PSRR (issue #221).
+
+    One documented exception survives: a single stage whose load is a resistor
+    or a wide-swing telescopic cascode reports no ``phase_margin_deg``, because
+    this model cannot place that topology's non-dominant pole -- see
+    :func:`~.stage_chain._mirror_pole_hz` for why each is a deliberate omission
+    rather than a gap (issue #228).
     """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}
@@ -121,10 +127,14 @@ def evaluate_metrics(
         _record("cmrr_db", eq.cmrr_db(gm1, chain.gd_tail), spec.cmrr_min_db)
 
     # --- PSRR (approximate, from the output-driving stage and its load) ---
-    # Supply ripple reaches the output through the load device's gds and is
-    # rejected in proportion to that stage's own gm — the second stage on a
-    # multi-stage chain, the input pair itself on a single-stage one, where the
-    # single-ended tap costs the same factor k_fs the gain sees (#221).
+    # Supply ripple reaches the output through the load branch's conductance
+    # and is rejected in proportion to that stage's own gm — the second stage
+    # on a multi-stage chain, the input pair itself on a single-stage one,
+    # where the single-ended tap costs the same factor k_fs the gain sees
+    # (#221).  The conductance is the one the load presents to *its own*
+    # reference rail, which is the supply for a VDD-referenced load and ground
+    # for a GND-referenced one; the estimate does not distinguish the two, and
+    # never has (see eq.psrr_db_approx: "accurate PSRR requires simulation").
     gm_out = stages[1].gm if len(stages) > 1 else gm1_loop
     if chain.gain_measurable and gm_out > 0 and chain.gd_output_load > 0:
         _record("psrr_db", eq.psrr_db_approx(gm_out, chain.gd_output_load),
