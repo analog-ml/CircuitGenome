@@ -24,7 +24,7 @@ from circuitgenome.synthesizer.models import Device
 from .circuit_view import CircuitView
 from .device_model import DeviceModel
 from ..models import SizingSpec, TransistorSizing
-from .preprocess import _first_stage_gain_factor
+from .preprocess import _first_stage_gain_factor, _mirror_reference
 from .taxonomy import RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device
 
 
@@ -130,9 +130,9 @@ class StageChain:
         Cascode-aware on a single stage, and ``1/R`` for a resistor load, so
         every load family reports it (issue #228).
     :param mirror_pole_hz: current-mirror node pole in Hz, ``None`` when the
-        chain has no diode-connected mirror load or the tech supplies no
-        ``cox`` — see :func:`_mirror_pole_hz` for the two single-stage load
-        families that deliberately land there.  The first non-dominant pole of
+        chain has no mirror load or the tech supplies no ``cox`` — see
+        :func:`_mirror_pole_hz` for the single-stage load family (resistor
+        loads) that deliberately lands there.  The first non-dominant pole of
         a **load**-compensated single-stage OTA, so it sets that topology's
         phase margin; a Miller-compensated chain has its own non-dominant pole
         at the output and ignores this one.
@@ -294,43 +294,33 @@ def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
                    model, sizing) -> float | None:
     """Current-mirror node pole in Hz, or ``None`` when there is none.
 
-    A diode-connected load device pins its own node at ``1/gm``; the
-    capacitance that node drives is the gate capacitance of every device it
-    gates -- itself and the mirror devices copying it -- so the pole sits at
-    ``gm/(2π·ΣCgs)``.  This is the first non-dominant pole of a
-    load-compensated single-stage OTA (issue #221).
+    The mirror's reference device (:func:`~.preprocess._mirror_reference`)
+    pins its gate node at ``1/gm``; the capacitance that node drives is the
+    gate capacitance of every device it gates -- itself and the mirror devices
+    copying it -- so the pole sits at ``gm/(2π·ΣCgs)``.  This is the first
+    non-dominant pole of a load-compensated single-stage OTA (issue #221).
+    A wide-swing mirror closes its diode through a cascode rather than a
+    ``g == d`` device, but the node and its ``1/gm`` are the same (issue #241).
 
-    ``None`` when the load has no diode-connected device, when that device is
+    ``None`` when the load has no mirror, when the reference device is
     unsized, or when the technology supplies no ``cox`` for ``Cgs`` -- each a
     case where the pole genuinely cannot be placed, and the caller withholds
     phase margin rather than inventing one.
 
-    Two single-stage load families fall in that hole, and the omission is
-    deliberate in both (issue #228):
-
-    * **Resistor loads** have no internal node at all.  In this model such a
-      stage is genuinely single-pole, so the phase margin is exactly 90° for
-      *every* sizing -- a statement about the model, not about the design, and
-      one that would pass any ``phase_margin_min_deg`` a spec could set.
-    * **Wide-swing telescopic loads** bias their cascode gates from a level
-      rail instead of diode-connecting them.  A non-dominant pole does exist
-      there, at the cascode *source* node (``1/gm_cascode`` against that node's
-      capacitance), but the sizer models only ``Cgs`` -- and at a cascode
-      source the junction capacitance of the current source below it is the
-      larger term.  The pole can be bounded, not placed, so it is not reported.
-
-    Neither is "no non-dominant pole"; both are "no pole this model can place".
+    **Resistor loads** fall in that hole, deliberately (issue #228): they have
+    no internal node at all.  In this model such a stage is genuinely
+    single-pole, so the phase margin would be exactly 90° for *every* sizing --
+    a statement about the model, not about the design, and one that would pass
+    any ``phase_margin_min_deg`` a spec could set.
     """
-    diode = next((d for d in load_devs
-                  if d.terminals.get("g")
-                  and d.terminals.get("g") == d.terminals.get("d")), None)
-    if diode is None:
+    ref = _mirror_reference(load_devs)
+    if ref is None:
         return None
+    diode, net = ref
     s = sizing.get(diode.ref)
     if s is None:
         return None
     gm = model.gm(diode.type, s.w_um, s.l_um, s.ids_a)
-    net = diode.terminals["g"]
     c_f = 0.0
     for d in mosfets:
         sd = sizing.get(d.ref)

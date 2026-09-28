@@ -24,6 +24,7 @@ from circuitgenome.sizer.physics.equations import (
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
+from circuitgenome.synthesizer.models import Device
 from circuitgenome.recognizer import parse, recognize, assign_slots
 
 
@@ -1039,6 +1040,53 @@ def test_first_stage_gain_factor():
     assert _first_stage_gain_factor(current_source) == 0.5
     assert _first_stage_gain_factor(resistor) == 0.5
     assert _first_stage_gain_factor(fully_diff) == 1.0
+
+
+# A wide-swing (Sooch) mirror: the reference device m1 is gated by x, and x is
+# the drain of the cascode m3 stacked on m1 -- a diode closed through the
+# cascode, not by any single device's own g == d (issue #241).
+_CASCODED_DIODE_LOAD = [
+    Device(ref="m1_load", type="pmos", terminals={"g": "x", "d": "i1", "s": "vdd!"}),
+    Device(ref="m2_load", type="pmos", terminals={"g": "x", "d": "i2", "s": "vdd!"}),
+    Device(ref="m3_load", type="pmos", terminals={"g": "bias2", "d": "x", "s": "i1"}),
+    Device(ref="m4_load", type="pmos", terminals={"g": "bias2", "d": "out", "s": "i2"}),
+]
+
+
+def test_first_stage_gain_factor_sees_a_diode_closed_through_a_cascode():
+    """A wide-swing mirror combines both branches like any other mirror.
+
+    Missing it halved the first stage's gain and GBW (issue #241).
+    """
+    from circuitgenome.sizer.physics.preprocess import _first_stage_gain_factor
+
+    assert _first_stage_gain_factor({"load": _CASCODED_DIODE_LOAD}) == 1.0
+
+
+def test_mirror_reference_finds_the_device_the_mirror_copies():
+    """``(reference device, mirror gate net)`` for both diode shapes."""
+    from circuitgenome.sizer.physics.preprocess import _mirror_reference
+
+    plain = [
+        Device(ref="m1_load", type="nmos", terminals={"g": "x", "d": "x", "s": "0"}),
+        Device(ref="m2_load", type="nmos", terminals={"g": "x", "d": "y", "s": "0"}),
+    ]
+    dev, net = _mirror_reference(plain)
+    assert (dev.ref, net) == ("m1_load", "x")
+
+    dev, net = _mirror_reference(_CASCODED_DIODE_LOAD)
+    assert (dev.ref, net) == ("m1_load", "x")
+
+
+def test_mirror_reference_ignores_a_plain_cascode_stack():
+    """Series-stacked current sources gated from rails are not a mirror."""
+    from circuitgenome.sizer.physics.preprocess import _mirror_reference
+
+    stack = [
+        Device(ref="m1_load", type="pmos", terminals={"g": "bias1", "d": "i1", "s": "vdd!"}),
+        Device(ref="m3_load", type="pmos", terminals={"g": "bias2", "d": "out", "s": "i1"}),
+    ]
+    assert _mirror_reference(stack) is None
 
 
 def test_ptm45_uses_gmid_path_and_matches_pairs(two_stage_fbr):
