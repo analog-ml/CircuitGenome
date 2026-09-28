@@ -209,6 +209,8 @@ dm_p2p = np.ptp(vp - vn)             <span class="tok-com"># differential still 
 
   <p>Kicking one output, not both, is deliberate: it excites the common mode <em>and</em> the differential mode. The second one catches a different kind of oscillator: a <em>local</em> loop. An NMC design whose inner Miller cap is too small rings differentially at 25&nbsp;MHz, three times its 7.7&nbsp;MHz crossover, while the open-loop AC bench reports a phase margin of 88&deg; &mdash; because that bench only ever sees the outer loop. Either residual above 1% of Vdd condemns the circuit, and the reason says which mode rang.</p>
 
+  <p>One gap remains, and it hides in the simulator itself. A circuit oscillating rail to rail forces ngspice into tiny timesteps: a sized RNMC design with right-half-plane poles took 374&nbsp;s to finish this transient. Past the 60&nbsp;s timeout the transient returns nothing, and "nothing" is not evidence, so such a circuit <em>passes</em> this gate. A time budget cannot close the gap: on a heavily loaded machine a healthy design's transient took ~500&nbsp;CPU-seconds too. In practice those oscillators are still caught downstream &mdash; the AC bench flags their right-half-plane response and discards the gain &mdash; but not here.</p>
+
 </section>
 
 <section class="part" id="part-4">
