@@ -11,15 +11,23 @@ description: "PTM 45nm HP (BSIM4 bulk, metal-gate/high-K/strained-Si)"
 spice_model: models/ptm_45nm_HP.pm   # BSIM4 card for SPICE verification
 gmid_lut: models/ptm45_gmid.npz   # gm/Id LUT for the procedural PTM sizer
 
+# cox (F/µm²) = εox/toxe read straight off the BSIM4 card (epsrox=3.9,
+# toxe=1.25 nm nmos / 1.30 nm pmos).  Used only for Cgs = (2/3)·W·L·Cox, which
+# places a single-stage OTA's mirror pole.  At 45 nm this simple parallel-plate
+# Cgs runs ~2-4x above the LUT's ft-implied Cgg at L_min (overlap/fringe and
+# short-channel effects dominate there) and converges to within ~10% by
+# L ≈ 0.18 µm, so the single-stage phase margin is pessimistic at short L.
 nmos:
   mu_cox: 3.501367e-04   # A/V²  (effective µn·Cox)
   vth: 0.3740            # V
   lam: 0.1976            # 1/V
+  cox: 2.762e-14         # F/µm² (toxe = 1.25 nm)
 
 pmos:
   mu_cox: 1.593293e-04   # A/V²  (effective µp·Cox)
   vth: -0.4305           # V
   lam: 0.2577            # 1/V
+  cox: 2.656e-14         # F/µm² (toxe = 1.30 nm)
 
 width:
   min: 0.1

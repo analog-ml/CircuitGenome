@@ -78,6 +78,32 @@ def vgs_from_ids(
     return math.copysign(abs(vth) + overdrive, vth)
 
 
+# Fraction of the full gate-oxide capacitance W·L·Cox that appears as Cgs when
+# the device is saturated (the channel pinches off at the drain, so the inversion
+# layer couples to the source): the standard long-channel 2/3.
+_CGS_SAT_FRACTION = 2.0 / 3.0
+
+
+def cgs(cox_f_per_um2: float | None, w_um: float, l_um: float) -> float:
+    """Gate-source capacitance in F (saturation).
+
+    Cgs = (2/3)·W·L·Cox
+
+    The only capacitance the sizer models. It exists to place the mirror pole
+    of a load-compensated single-stage OTA (issue #221), where the dominant
+    pole is set by the external ``CL`` and the *non*-dominant one by the gate
+    capacitance on the mirror node. Overlap and fringe capacitance are ignored,
+    so this under-estimates Cgs at short L.
+
+    :param cox_f_per_um2: Gate-oxide capacitance per unit area in F/µm², or
+        ``None`` for a tech that does not supply one — which returns ``0.0``,
+        the caller's signal that no pole can be placed.
+    """
+    if not cox_f_per_um2:
+        return 0.0
+    return _CGS_SAT_FRACTION * w_um * l_um * cox_f_per_um2
+
+
 def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
     r"""Minimum \|VDS\| for saturation in V.
 
@@ -143,6 +169,31 @@ def unity_gain_bw(gm1_a_v: float, cc_f: float) -> float:
     :param cc_f: Compensation capacitor in F.
     """
     return gm1_a_v / (2.0 * math.pi * cc_f)
+
+
+def phase_margin_single_stage_deg(gbw_hz: float, mirror_pole_hz: float) -> float:
+    """Phase margin in degrees for a **load**-compensated single-stage OTA.
+
+    PM ≈ 90° − arctan(GBW / f_mirror)
+
+    A single-stage OTA has no Miller cap: its dominant pole is the output node
+    itself, ``1/(2π·Rout·CL)``, which alone would put the phase margin at
+    exactly 90°. The lag that pulls it below comes from the *next* pole — the
+    current-mirror node, whose low ``1/gm`` resistance works against the mirror
+    devices' gate capacitance. ``CL`` is normally orders of magnitude larger
+    than that gate capacitance, so a healthy single-stage OTA lands just under
+    90°; a design that pushes GBW toward the mirror pole is what this formula
+    is here to catch.
+
+    Contrast :func:`phase_margin_two_stage_deg`, whose dominant pole is the
+    Miller cap and whose non-dominant pole is the *output* — the roles of
+    ``CL`` and the internal node are exchanged, which is why the two cannot
+    share a formula.
+
+    :param gbw_hz: Unity-gain bandwidth in Hz (``gm1/(2π·CL)``).
+    :param mirror_pole_hz: Current-mirror node pole in Hz.
+    """
+    return 90.0 - math.degrees(math.atan(gbw_hz / mirror_pole_hz))
 
 
 def phase_margin_two_stage_deg(

@@ -43,13 +43,13 @@ def _pols(polarity):
     return (polarity, *(p for p in _POLARITIES if p != polarity))
 
 
-def _lf_mag(name, ports, body_dut, vdd, ibias, fb, netmap, outexpr,
+def _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr,
             sup_ac: bool = False):
     """Low-frequency (1 mHz, matching the gain bench's first AC point)
     magnitude of ``outexpr`` for a 1 V AC stimulus."""
     control = (f"ac lin 1 1e-3 1e-3\nlet vod={outexpr}\n"
                "wrdata __OUT__ real(vod) imag(vod)")
-    deck = _deck(name, ports, body_dut, vdd, ibias, fb, netmap, control,
+    deck = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap, control,
                  sup_ac=sup_ac)
     a = _run(deck, ["re", "im"])
     if a is None or a.shape[1] < 4:
@@ -58,7 +58,7 @@ def _lf_mag(name, ports, body_dut, vdd, ibias, fb, netmap, outexpr,
     return float(np.hypot(row[1], row[3]))
 
 
-def _measure_power(name, ports, body_dut, topo, vdd, ibias, vcm):
+def _measure_power(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
     """DC operating point → quiescent power."""
     netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
               "in1": "cm", "in2": "cm"}
@@ -66,7 +66,7 @@ def _measure_power(name, ports, body_dut, topo, vdd, ibias, vcm):
         netmap[o] = o
     if topo.has_vcm:
         netmap["vcm_ref"] = "cm"
-    deck = _deck(name, ports, body_dut, vdd, ibias, f"Vcm cm 0 {vcm}\n",
+    deck = _deck(name, ports, body_dut, vdd, ibias, cl, f"Vcm cm 0 {vcm}\n",
                  netmap, "op\nwrdata __OUT__ i(Vsup)")
     data = _run(deck, ["i(Vsup)"])
     if data is None:
@@ -82,10 +82,12 @@ def _pm_plausible(pm: float | None) -> bool:
     ``PM = 180° + phase`` lands in ``(0°, 180°]``.  A value **above 180°**
     (phase lead on a falling gain) is a non-minimum-phase — right-half-plane —
     response: a genuinely mis-compensated circuit, e.g. Miller-family
-    compensation wrapped around a non-inverting second stage.  A value ≤ 0°
-    means the crossing came from a corrupted sweep — typically the wrong
-    feedback polarity settling into a measurable but meaningless response, or
-    a phase-unwrap glitch.  Neither is a usable gain/GBW/PM measurement.
+    compensation wrapped around a non-inverting second stage.  On the SE
+    bench a value ≤ 0° means the crossing came from a corrupted sweep —
+    typically the wrong feedback polarity settling into a measurable but
+    meaningless response, or a phase-unwrap glitch.  Neither is a usable
+    gain/GBW/PM measurement.  (The FD bench has no feedback loop to corrupt,
+    so :func:`_measure_ac` reports its PM ≤ 0° as a real instability.)
     ``None`` (no crossing found) carries no such evidence.
     """
     return pm is None or 0.0 < pm <= 180.0
@@ -118,7 +120,7 @@ def _loop_fb(topo, vcm, drive: str) -> tuple[str, str]:
     return fb, "v(out)"
 
 
-def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
+def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
     """Open-loop AC: returns ``(gain_db, gbw_hz, pm_deg, reason, polarity)``.
 
     AC-coupled feedback: huge L closes the loop at DC (sets bias ≈ CM), huge C
@@ -135,8 +137,10 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
     mis-biased circuit that does not amplify) — ``gbw``/``pm`` are then ``None``
     (no 0-dB crossing) and ``reason`` explains why.  When every settled branch
     is corrupt (PM outside ``(0°, 180°]``) the whole extraction is discarded:
-    all three values are ``None`` and ``reason`` says so.  ``reason`` is
-    ``None`` on a normal (positive-gain) measurement.
+    all three values are ``None`` and ``reason`` says so.  The one exception
+    is a fully-differential PM ≤ 0°, which is a real open-loop instability and
+    is returned as measured (issue #236).  ``reason`` is ``None`` on a normal
+    (positive-gain) measurement.
     """
     settled = False
     best: tuple[float, float | None, float | None] | None = None
@@ -148,7 +152,7 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         drive = ("Vid inp inn ac 1\n" if topo.fd else "Vid inp cm ac 1\n")
         fb, outexpr = _loop_fb(topo, vcm, drive)
         # DC check: output must settle near CM (negative feedback), else swap.
-        dc = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
+        dc = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap,
                    f"op\nlet vchk={outexpr}\nwrdata __OUT__ vchk")
         d = _run(dc, ["vchk"])
         if d is None:
@@ -164,7 +168,7 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
         # sub-Hz dominant pole (high-gain designs): the phase baseline and the
         # reported low-frequency gain are then genuinely DC values — starting
         # at 1 Hz skews the phase reference (and thus PM) by tens of degrees.
-        ac = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
+        ac = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap,
                    f"ac dec 30 1e-3 1e10\nlet vod={outexpr}\n"
                    "wrdata __OUT__ real(vod) imag(vod)")
         a = _run(ac, ["re", "im"])
@@ -213,6 +217,13 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, vcm):
                 f"AC phase leads at the 0-dB crossing (PM {pm:.0f}° > 180°) — "
                 "right-half-plane response; the stage-inversion/compensation "
                 "combination is unsound"), None
+        if topo.fd:
+            # The FD bench has no loop around the DUT (resistor-anchored
+            # inputs, the CMFB owns the output CM), so the input polarity only
+            # flips the sign of v(outp)-v(outn): it cannot corrupt the sweep.
+            # PM ≤ 0° is a real instability at this load — report it, so the
+            # design fails its PM spec on the number (issue #236).
+            return gain_db, gbw, pm, None, best_pol
         # Every settled branch was corrupt: its gain/GBW come from the same
         # meaningless sweep, so discard the extraction rather than report it.
         return None, None, None, (
@@ -267,7 +278,7 @@ def _edge_slew(t, vo, vdd) -> float | None:
     return float(np.max(np.abs(vo[j] - vo[i])[good] / dt[good]))
 
 
-def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
+def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
                 sr_hint: float | None = None):
     """Unity-gain large-signal pulse → slew rate (V/s), the **min of the
     rising and falling edges**.  SE only (best-effort).
@@ -289,7 +300,7 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
         # unity buffer: out -> inverting input (direct), pulse the non-inverting input
         fb = (f"Rfb out inn 1\n"
               f"Vstep inp 0 pulse({vcm} {vcm + step} {t0} 10p 10p {t_edge} 1)\n")
-        deck = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
+        deck = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap,
                      f"tran {(t0 + 2 * t_edge) / 2000} {t0 + 2 * t_edge}\n"
                      "wrdata __OUT__ v(out)")
         a = _run(deck, ["v(out)"])
@@ -307,7 +318,7 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None,
     return None
 
 
-def _measure_swing(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None):
+def _measure_swing(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None):
     """Inverting −1 DC sweep → ``(swing_max, swing_min)`` in V.  SE only.
 
     The output is driven across the supply through an inverting gain −1
@@ -329,7 +340,7 @@ def _measure_swing(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None):
         netmap = _fb_netmap(topo, inp, inn)
         fb = (f"Rfb out inn 10meg\nRin src inn 10meg\n"
               f"Vp inp 0 dc {vcm}\nVin src 0 dc {vcm}\n")
-        deck = _deck(name, ports, body_dut, vdd, ibias, fb, netmap,
+        deck = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap,
                      f"dc Vin 0 {vdd} {step}\nwrdata __OUT__ v(out)")
         a = _run(deck, ["v(out)"])
         if a is None or a.shape[0] < 20 or a.shape[1] < 2:
@@ -349,7 +360,7 @@ def _measure_swing(name, ports, body_dut, topo, vdd, ibias, vcm, polarity=None):
     return None, None
 
 
-def _measure_cmrr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity,
+def _measure_cmrr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity,
                   adm_db):
     """Common-mode rejection: ``CMRR = Adm − Acm`` in dB.
 
@@ -370,13 +381,13 @@ def _measure_cmrr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity,
     else:
         fb, outexpr = _loop_fb(topo, vcm, "Vid inp cm dc 0\n")
         fb = fb.replace(f"Vcm cm 0 {vcm}\n", f"Vcm cm 0 dc {vcm} ac 1\n")
-    acm = _lf_mag(name, ports, body_dut, vdd, ibias, fb, netmap, outexpr)
+    acm = _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr)
     if acm is None or acm <= 1e-12:   # numerical zero → nothing was measured
         return None
     return adm_db - 20.0 * np.log10(acm)
 
 
-def _measure_psrr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity,
+def _measure_psrr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity,
                   adm_db):
     """Positive-supply rejection: ``PSRR+ = Adm − Avdd`` in dB.
 
@@ -389,7 +400,7 @@ def _measure_psrr(name, ports, body_dut, topo, vdd, ibias, vcm, polarity,
     netmap = _fb_netmap(topo, inp, inn)
     drive = ("Vid inp inn dc 0\n" if topo.fd else "Vid inp cm dc 0\n")
     fb, outexpr = _loop_fb(topo, vcm, drive)
-    avdd = _lf_mag(name, ports, body_dut, vdd, ibias, fb, netmap, outexpr,
+    avdd = _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr,
                    sup_ac=True)
     if avdd is None or avdd <= 1e-12:   # numerical zero → nothing was measured
         return None

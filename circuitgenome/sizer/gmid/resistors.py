@@ -20,7 +20,7 @@ from circuitgenome.synthesizer.models import Device
 from ..models import SizingSpec, TechParams, TransistorSizing
 from ..physics.stage_chain import StageChain
 from ..physics.taxonomy import RAILS, is_signal_device
-from .blocks import OpAmpBlocks
+from .analyze import OpAmpBlocks
 from .intent import GmIdIntent
 
 

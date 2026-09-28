@@ -136,12 +136,14 @@ def test_design_requires_ngspice(monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
+@pytest.mark.spice
 def test_design_rejects_unknown_template(tmp_path):
     with pytest.raises(ValueError, match="unknown template"):
         design(_spec(), tmp_path, templates=["no_such_template"])
 
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
+@pytest.mark.spice
 def test_design_rejects_tech_without_gmid_lut(tmp_path):
     with pytest.raises(ValueError, match="gm/Id LUT"):
         design(_spec(), tmp_path, templates=["one_stage_opamp"], tech="generic")
@@ -159,6 +161,8 @@ _TOPO = "two_stage_opamp_single_ended"
 
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
+@pytest.mark.slow
+@pytest.mark.spice
 def test_design_end_to_end_loose_spec(tmp_path):
     # Loose spec: metrics only need to exist and clear trivial bars.  The
     # limit reaches the active-load variants (indices 48+), which measure a
@@ -212,6 +216,7 @@ def test_design_end_to_end_loose_spec(tmp_path):
 
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
+@pytest.mark.spice
 def test_design_impossible_spec_yields_no_solutions(tmp_path):
     spec = _spec(gain_min_db=200)  # physically impossible
     report = design(spec, tmp_path, templates=[_TOPO], limit=5)
@@ -247,6 +252,7 @@ def test_cli_design_errors_without_ngspice(tmp_path, monkeypatch, capsys):
 
 
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
+@pytest.mark.spice
 def test_cli_design_summary_output(tmp_path, capsys):
     from circuitgenome.cli import main
     spec = tmp_path / "spec.yaml"

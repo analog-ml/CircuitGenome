@@ -211,7 +211,7 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
       <rect x="60" y="82" width="180" height="28" rx="5" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
       <rect x="250" y="82" width="280" height="28" rx="5" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2.5"/>
       <rect x="540" y="82" width="180" height="28" rx="5" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-      <text x="150" y="101" text-anchor="middle" font-size="11" font-weight="600">artefact</text>
+      <text x="150" y="101" text-anchor="middle" font-size="11" font-weight="600">artefact (SE)</text>
       <text x="390" y="101" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent2)">usable measurement</text>
       <text x="630" y="101" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-accent)">RHP response</text>
 
@@ -223,13 +223,15 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
       <text x="630" y="56" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gain: non-minimum-phase.</text>
       <text x="630" y="70" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">A real design fault.</text>
 
-      <text x="390" y="152" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Both extremes discard the measurement &mdash; but only one of them is the circuit's fault,</text>
+      <text x="390" y="152" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">On the SE bench both extremes discard the measurement &mdash; only one is the circuit's fault,</text>
       <text x="390" y="167" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">and the returned <tspan font-family="ui-monospace,monospace">reason</tspan> string says which.</text>
     </svg>
     <figcaption>A phase margin above 180&deg; is not noise. It means the loop gain has a right-half-plane contribution — Miller-family compensation wrapped around a non-inverting stage will do it — and the message names that specifically rather than reporting "unmeasurable".</figcaption>
   </figure>
 
   <p>Note also what happens to the gain when the PM is implausible: it is <strong>discarded too</strong>. The gain and the phase came off the same sweep, so if the phase is meaningless the gain is meaningless with it. Reporting a confident-looking gain from a sweep you have just declared corrupt would be the worst of both worlds.</p>
+
+  <p>The &le;&nbsp;0&deg; box has one exception: the fully-differential bench. It closes no loop around the DUT &mdash; the inputs are resistor-anchored and the CMFB owns the output common mode (<a href="#part-5">Part 5</a>) &mdash; so swapping the input polarity only flips the sign of <code>v(outp)-v(outn)</code>. There is no wrong-polarity equilibrium for it to settle into, so a PM &le;&nbsp;0&deg; there is the circuit's own verdict: <em>unstable at this load</em>. The FD bench reports the gain, GBW and the negative PM, and <code>simulate_metrics</code> adds a note saying so (issue #236). The design then fails its phase-margin spec on a number rather than on an n/a.</p>
 
   <p>Separately, a <em>plausible</em> measurement of a circuit that simply does not amplify &mdash; gain &le; 0&nbsp;dB &mdash; <strong>is</strong> reported, with a reason attached. That is a real property of a mis-biased design, and hiding it would be dishonest in the other direction.</p>
 
@@ -310,7 +312,7 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
   <pre class="code"><code>fb = (<span class="tok-str">f"Rfb out inn 10meg\nRin src inn 10meg\n"</span>
       <span class="tok-str">f"Vp inp 0 dc {vcm}\nVin src 0 dc {vcm}\n"</span>)   <span class="tok-com"># sweep Vin, not the input pin</span></code></pre>
 
-  <p>The input stage now sits still while the output is driven across the supply. Ten-megohm resistors keep the DUT's output effectively unloaded.</p>
+  <p>The input stage now sits still while the output is driven across the supply. Ten-megohm resistors keep the DUT's output effectively unloaded &mdash; the load capacitor every bench carries (see <a href="verify-rig_explained.html#part-4"><code>rig.py</code></a>) is invisible to a DC sweep.</p>
 
   <h3>Reading the edges: the tracking region</h3>
   <p>You cannot just take the extremes of <code>v(out)</code> &mdash; past saturation the output stops following and the curve flattens at whatever the rail allows. Instead the bench finds where the loop is still <em>working</em>:</p>

@@ -74,7 +74,8 @@ targets** the sizer solves against:
      - Minimum phase margin (dominant-pole model)
    * - ``slew_rate_min_vps``
      - V/s
-     - Minimum slew rate (``ibias / Cc``)
+     - Minimum slew rate (``ibias / Cc``; ``ibias / CL`` on a
+       load-compensated single stage)
    * - ``cmrr_min_db``
      - dB
      - Minimum common-mode rejection ratio
@@ -84,6 +85,42 @@ targets** the sizer solves against:
    * - ``output_swing_max_v`` / ``output_swing_min_v``
      - V
      - Output voltage swing limits
+
+A metric the model cannot support is **omitted** from
+:attr:`~circuitgenome.sizer.models.SizingResult.metrics` rather than reported as
+zero, so a caller can tell "this design fails the spec" from "this quantity was
+not computed".  One such omission is topology-dependent and worth stating up
+front.
+
+.. _single-stage-phase-margin:
+
+Single-stage phase margin
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A single-stage OTA is *load* compensated: ``CL`` sets the dominant pole, and the
+phase margin is fixed by the first **non-dominant** pole.  The sizer places that
+pole at a diode-connected load device's node, ``gm/(2π·ΣCgs)``.  Two of the
+catalog's ten ``load`` variants have no such device, and for them
+``phase_margin_deg`` is deliberately withheld:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - ``load`` variant
+     - Why no phase margin
+   * - ``resistor_load_vdd`` / ``resistor_load_gnd``
+     - No internal node at all.  In this model the stage is genuinely
+       single-pole, so the answer would be exactly 90° for every sizing — a
+       statement about the model, not about the design.
+   * - ``telescopic_cascode_load_wideswing_nmos`` / ``..._wideswing_pmos``
+     - The cascode gates are biased from a level rail rather than
+       diode-connected.  A non-dominant pole does exist, at the cascode
+       *source* node, but its capacitance is dominated by a junction term the
+       sizer does not model — the pole can be bounded, not placed.
+
+The other eight variants report all seven metrics.  Gain, GBW, slew rate, CMRR
+and PSRR are reported for all ten.
 
 Analytical Sizer
 ----------------
@@ -194,7 +231,9 @@ Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loo
 AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
 unity-gain pulse (the min of the rising and falling edges); output swing from a
 unity-buffer DC sweep; CMRR and PSRR+ from the same feedback loop with the AC
-stimulus riding on the input common mode / the positive supply.  Single-ended
+stimulus riding on the input common mode / the positive supply.  Every bench
+loads each output (both, on a fully-differential design) with the spec's ``cl``
+to ground — the load the analytical metrics are predicted against.  Single-ended
 op-amps are the most robust; fully-differential AC metrics (which depend on the
 on-chip CMFB operating point), the single-ended-only swing/slew benches on FD
 circuits, and any non-converging measurement are reported as ``n/a`` rather than

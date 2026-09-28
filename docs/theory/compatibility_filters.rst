@@ -203,9 +203,12 @@ where a ``compensation`` slot wraps a chain whose total inversion count is a
 3-stage topologies ``comp1`` wraps the second+third stage cascade, so two
 common-source stages (non-inverting composite with gain) are rejected —
 standard nested-Miller sign structure requires a non-inverting second
-stage and an inverting output stage. The check is structural (device
-terminal walks, no YAML tags), so new ``amplification_stage`` and
-``compensation`` variants are classified automatically; anything
+stage and an inverting output stage. RNMC is the mirror image: its ``comp1``
+wraps the same cascade but its ``comp2`` wraps the second stage alone, so
+the second stage must invert and the third must not (issue #236). The check
+is structural (device terminal walks, no YAML tags), so new
+``amplification_stage`` and ``compensation`` variants are classified
+automatically; anything
 unclassifiable imposes no constraint. Source followers (``output_stage``
 slots in the buffered topologies) sit after the gain stages and outside the
 compensation wrap, so they are not part of any chain this filter checks

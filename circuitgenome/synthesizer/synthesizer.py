@@ -174,9 +174,9 @@ def build_circuit(
     if "cmfb" in variant_map:
         variant_map["cmfb"] = prune_cmfb(variant_map["cmfb"], variant_map["load"])
         # Output-sensing CM loop polarity (issue #165): a net-inverting stage
-        # chain to the outputs (two-stage, NMC three-stage) needs the
-        # inverting amp orientation; a net non-inverting one (RNMC) keeps
-        # the stock one.
+        # chain to the outputs (two-stage, NMC and RNMC three-stage) needs
+        # the inverting amp orientation; a net non-inverting one keeps the
+        # stock one.
         variant_map["cmfb"] = orient_cmfb(variant_map["cmfb"], topology,
                                           variant_map)
 

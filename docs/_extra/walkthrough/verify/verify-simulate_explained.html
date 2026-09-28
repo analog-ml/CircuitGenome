@@ -219,7 +219,7 @@
 unsized = unsized_mos_refs(body, result)
 body    = _inject_sizes(body, result)
 body_dut = _dut(tech, name, body, corner)
-args = (name, ports, body_dut, _Topo(ports), vdd, ibias, vcm)</code></pre>
+args = (name, ports, body_dut, _Topo(ports), vdd, ibias, spec.cl, vcm)</code></pre>
 
   <p>One DUT block, built once, reused by all six. But two things are <em>discovered</em> rather than computed, and both come out of the AC bench:</p>
 

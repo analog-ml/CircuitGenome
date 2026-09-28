@@ -4,6 +4,8 @@ The simulation tests are skipped when ngspice is not on PATH.
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from circuitgenome.recognizer import parse, recognize
@@ -73,19 +75,43 @@ def test_iref_direction_follows_reference_diode():
 
 def test_deck_sinks_iref_for_pmos_referenced_dut():
     """_deck adapts the Iref direction to the DUT block it instantiates."""
-    ports = ["ibias", "vdd!", "gnd!"]
-    netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0"}
+    ports = ["ibias", "vdd!", "gnd!", "out"]
+    netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0", "out": "out"}
     for diode, expect in (("mp1 ibias ibias vdd! vdd! pmos", "Iref ibias 0"),
                           ("mn1 ibias ibias gnd! gnd! nmos", "Iref 0 ibias")):
         body_dut = f"* t\n.subckt dut __PORTS__\n{diode}\n.ends\n"
-        d = rig._deck("dut", ports, body_dut, 3.3, 2e-5, "", netmap, "op")
+        d = rig._deck("dut", ports, body_dut, 3.3, 2e-5, 5e-12, "", netmap, "op")
         assert expect in d
+
+
+def _top_level_caps(deck_text: str) -> set[tuple[str, str, float]]:
+    """``(node, node, farads)`` of every capacitor outside the DUT subckt."""
+    top = deck_text.split(".ends", 1)[1]
+    return {(t[1], t[2], float(t[3])) for t in map(str.split, top.splitlines())
+            if t and t[0][0] in "Cc"}
+
+
+@pytest.mark.parametrize("outs", [["out"], ["outp", "outn"]])
+def test_deck_loads_every_output_with_cl(outs):
+    """Issue #222: _deck hangs the spec load capacitance from each DUT output
+    to ground — ``out`` single-ended, both ``outp`` and ``outn`` fully
+    differential.  Every bench is built by _deck, so none can measure an
+    unloaded amplifier."""
+    ports = ["ibias", "vdd!", "gnd!", *outs]
+    netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
+              **{o: o for o in outs}}
+    body_dut = "* t\n.subckt dut __PORTS__\n.ends\n"
+    d = rig._deck("dut", ports, body_dut, 3.3, 2e-5, 5e-12, "", netmap, "op")
+    assert _top_level_caps(d) == {(o, "0", 5e-12) for o in outs}
 
 
 # --- simulation (requires ngspice) -----------------------------------------
 
-ngspice = pytest.mark.skipif(not ngspice_available(),
-                             reason="ngspice not installed")
+def ngspice(test):
+    """Mark ``test`` ``spice`` and skip it when ngspice is not on PATH."""
+    skip = pytest.mark.skipif(not ngspice_available(),
+                              reason="ngspice not installed")
+    return pytest.mark.spice(skip(test))
 
 
 @ngspice
@@ -268,6 +294,40 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
 
 
 @ngspice
+@pytest.mark.parametrize("follower", ["common_drain_pmos", "common_drain_nmos"])
+def test_bias_gate_rejects_latched_polarity_behind_follower(follower):
+    """Issue #242: the SE .op tries both feedback polarities.  The wrong one
+    is positive feedback and latches, and a source follower level-shifts the
+    latched rail by a Vgs (PMOS: 0 V → ~0.8 V; NMOS: 3.3 V → ~2.3 V), so the
+    output lands inside the 0.1–0.9·Vdd window.  The gate must keep the
+    polarity whose output settles at Vcm, not the first in-window one (which
+    read the latched state as starved/triode devices)."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_buffered_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+            "tail_current": "cascode_current_mirror_tail_pmos",
+            "second_stage": "common_source_nmos",
+            "third_stage": "noninverting_stage_nmos", "output_stage": follower,
+            "comp1": "miller_cap", "comp2": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=3e5, power_max_w=2e-3,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
+    assert ok and reason is None, reason
+
+
+@ngspice
 def test_sky130_width_max_device_is_modelable():
     """Regression (#77): a device snapped to sky130's width.max must still land in
     a PDK model bin. The bin wmax=100 µm is an EXCLUSIVE bound, so a device at
@@ -357,6 +417,7 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
 @ngspice
 @pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_inverting",
                                   "dda_cmfb_inverting"])
+@pytest.mark.slow
 def test_fd_two_stage_ac_metrics_are_real(cmfb):
     """A feasible two-stage FD folded-cascode op-amp reports measured
     gain/GBW/PM, not n/a (issue #61)."""
@@ -387,8 +448,9 @@ def test_fd_two_stage_ac_metrics_are_real(cmfb):
 # A GMID-sized three-stage FD op-amp (rnmc, folded-cascode differential-output
 # load), frozen because enumerating this topology live takes minutes. The CMFB
 # senses the true outputs (outp/outn) per #167, so the output CM regulates and
-# the open-loop FD bench measures a real ~66 dB gain -- see
-# test_fd_three_stage_ac_metrics_are_real.
+# the open-loop FD bench measures a real ~71 dB gain.  Both caps start at the
+# first-stage output and the third stage is non-inverting (issue #236): the
+# old wiring left no cap around the whole chain and measured PM -5° at CL.
 _FD_THREE_STAGE_NETLIST = """\
 .subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
 m1_input_pair net_diff1 in1 net_tail net_tail pmos
@@ -428,32 +490,37 @@ mp6_bias_gen net_bias6 net_bias6 vdd! vdd! pmos
 mn7_bias_gen net_bias7 ibias gnd! gnd! nmos
 r1_cmfb outp cmfb_sense 1k
 r2_cmfb outn cmfb_sense 1k
-m1_cmfb cmfb_d1 cmfb_sense cmfb_tail gnd! nmos
-m2_cmfb net_cmfb_out vcm_ref cmfb_tail gnd! nmos
+m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
+m2_cmfb net_cmfb_out cmfb_sense cmfb_tail gnd! nmos
 m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
 m4_cmfb net_cmfb_out cmfb_d1 vdd! vdd! pmos
 m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
 mn1_second_stage_p net_mid2_p net_loadout2 gnd! gnd! nmos
 mp1_second_stage_p net_mid2_p net_bias5 vdd! vdd! pmos
-mn1_third_stage_p outp net_mid2_p gnd! gnd! nmos
-mp1_third_stage_p outp net_bias6 vdd! vdd! pmos
-c1_comp1_p net_mid2_p outp 1p
+mp1_third_stage_p third_stage_p_pmir net_mid2_p vdd! vdd! pmos
+mn2_third_stage_p outp third_stage_p_pmir gnd! gnd! nmos
+mn1_third_stage_p third_stage_p_pmir third_stage_p_pmir gnd! gnd! nmos
+mp2_third_stage_p outp net_bias6 vdd! vdd! pmos
+c1_comp1_p net_loadout2 outp 1p
 c1_comp2_p net_loadout2 net_mid2_p 1p
 mn1_second_stage_n net_mid2_n net_loadout1 gnd! gnd! nmos
 mp1_second_stage_n net_mid2_n net_bias5 vdd! vdd! pmos
-mn1_third_stage_n outn net_mid2_n gnd! gnd! nmos
-mp1_third_stage_n outn net_bias6 vdd! vdd! pmos
-c1_comp1_n net_mid2_n outn 1p
+mp1_third_stage_n third_stage_n_pmir net_mid2_n vdd! vdd! pmos
+mn2_third_stage_n outn third_stage_n_pmir gnd! gnd! nmos
+mn1_third_stage_n third_stage_n_pmir third_stage_n_pmir gnd! gnd! nmos
+mp2_third_stage_n outn net_bias6 vdd! vdd! pmos
+c1_comp1_n net_loadout1 outn 1p
 c1_comp2_n net_loadout1 net_mid2_n 1p
 .ends"""
 
 
 @ngspice
+@pytest.mark.slow
 def test_fd_three_stage_ac_metrics_are_real():
     """#61's three-stage FD acceptance criterion: a feasible three-stage FD
     op-amp reports real (positive) gain/GBW/PM, not n/a.  With the #167 CMFB
     output-sense wiring the output CM regulates, so the open-loop bench measures
-    ~66 dB.  (PM is only checked to be physical, not >= the 60° spec target: a
+    ~71 dB.  (PM is only checked to be physical, not >= the 60° spec target: a
     GMID-sized variant can be marginally stable and still be a real, non-n/a
     measurement -- which is all #61 requires.)"""
     parsed = parse(_FD_THREE_STAGE_NETLIST)
@@ -477,6 +544,7 @@ def test_fd_three_stage_ac_metrics_are_real():
 
 
 @ngspice
+@pytest.mark.slow
 def test_fd_cmrr_psrr_measured():
     """#184 acceptance: an FD topology with a clean differential AC gain reports
     SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
@@ -604,6 +672,46 @@ def test_honest_twin_measurement_unaffected():
     assert pm is not None and 0 < pm <= 180
 
 
+# Three ideal gain stages with coincident poles (each 1 MΩ || 10 pF, the last
+# pole set by the bench's own 10 pF load) and ~126 dB of differential gain:
+# three poles well below the crossing, so it is unstable by construction.
+_FD_UNSTABLE_BEHAVIOURAL = """\
+.subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
+rib ibias gnd! 1k
+g1 x1 gnd! in1 in2 1e-4
+r1 x1 gnd! 1meg
+c1 x1 gnd! 10p
+g2 x2 gnd! x1 gnd! 1e-4
+r2 x2 gnd! 1meg
+c2 x2 gnd! 10p
+g3p outp vcm_ref x2 gnd! 1e-4
+r3p outp vcm_ref 1meg
+g3n outn vcm_ref x2 gnd! -1e-4
+r3n outn vcm_ref 1meg
+.ends"""
+
+
+@ngspice
+def test_fd_instability_reported_not_discarded():
+    """Issue #236: the FD bench has no feedback loop for a wrong input
+    polarity to corrupt, so a PM ≤ 0° there is a real instability.  It is
+    reported as measured (gain, GBW and the negative PM) with a note, not
+    discarded as an "extraction artifact" — the SE guard is unchanged (see
+    test_implausible_pm_extraction_is_discarded)."""
+    from circuitgenome.sizer.models import SizingResult
+    result = SizingResult(transistors={}, cc_pf=None, metrics={}, margins={},
+                          solver_status="behavioural")
+    spec = SizingSpec(vdd=1.8, vss=0.0, ibias=10e-6, cl=10e-12)
+    sim = simulate_metrics(_FD_UNSTABLE_BEHAVIOURAL, result,
+                           load_tech("generic"), spec)
+    assert sim["gain_db"] is not None and sim["gain_db"] > 100
+    assert sim["gbw_hz"] is not None
+    assert sim["phase_margin_deg"] is not None and sim["phase_margin_deg"] < 0
+    notes = sim.get("notes", [])
+    assert any("unstable" in n for n in notes)
+    assert not any("artifact" in n for n in notes)
+
+
 # --- CMRR / PSRR / output swing / two-edge slew -----------------------------
 
 @ngspice
@@ -652,6 +760,50 @@ def test_slew_swing_measured_on_real_device_techs(tech, vdd):
     assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
 
 
+# --- load capacitance (issue #222) ------------------------------------------
+
+def _active_load_one_stage(tech_name, vdd):
+    """Size an active-load one-stage OTA; return (netlist, result, tech, spec)."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+            "tail_current": "current_mirror_tail_pmos"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k).name == v for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech(tech_name)
+    spec = SizingSpec(vdd=vdd, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=40,
+                      gbw_min_hz=1e5, phase_margin_min_deg=45)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    return text, result, tech, spec
+
+
+@ngspice
+def test_measured_ac_responds_to_load_capacitance():
+    """Issue #222: the benches load the DUT with ``spec.cl``.  The sizing is
+    held fixed and only the bench's CL changes, so any response comes from the
+    rig — before the fix every number here was identical across CL.
+
+    A load-compensated single stage's GBW is ``gm1/(2π·CL)``: 10x the load
+    cuts it ~10x.  A Miller two-stage's GBW is set by Cc, but its phase margin
+    falls as CL pulls the output pole ``gm2/CL`` in."""
+    text, result, tech, spec = _active_load_one_stage("gf180mcu", 3.3)
+    light, heavy = (simulate_metrics(text, result, tech, replace(spec, cl=cl))
+                    for cl in (1e-12, 10e-12))
+    assert light["gbw_hz"] is not None and heavy["gbw_hz"] is not None
+    assert 5.0 < light["gbw_hz"] / heavy["gbw_hz"] < 15.0
+
+    text, result, tech, spec = _active_load_two_stage_se(
+        "gf180mcu", 3.3, 60, 5e5)
+    light, heavy = (simulate_metrics(text, result, tech, replace(spec, cl=cl))
+                    for cl in (1e-12, 50e-12))
+    assert light["phase_margin_deg"] is not None
+    assert heavy["phase_margin_deg"] is not None
+    assert heavy["phase_margin_deg"] < light["phase_margin_deg"] - 10.0
+
+
 @ngspice
 def test_cmrr_psrr_none_without_clean_gain():
     """CMRR/PSRR are ratios against the differential gain: a circuit whose AC
@@ -684,6 +836,7 @@ def test_cmrr_psrr_none_without_clean_gain():
 
 
 @ngspice
+@pytest.mark.slow
 def test_fd_large_signal_metrics_stay_none():
     """Swing and slew are single-ended-only benches: a fully-differential
     circuit keeps them (and, absent a clean FD gain, CMRR/PSRR) as None."""
