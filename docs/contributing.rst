@@ -46,9 +46,8 @@ CircuitGenome is developed on GitHub:
   electrical-correctness report, follow the guidance above.
 - **Submit a change** — fork the repository, create a branch, and open a
   `pull request <https://github.com/analog-ml/CircuitGenome/pulls>`_.  Set up a
-  development install with ``pip install -e .`` (see :doc:`installation`) and run
-  the test suite with ``pytest`` before opening the PR.  Small, focused PRs are
-  easiest to review.
+  development install and run the test suite (see :doc:`installation`) before
+  opening the PR.  Small, focused PRs are easiest to review.
 
 Not sure where something fits, or want to discuss a larger change before building
 it?  Open an issue first — early discussion saves rework.

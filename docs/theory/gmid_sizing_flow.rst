@@ -225,7 +225,7 @@ Phase 1 — Analyze: the structural view
 :func:`~circuitgenome.sizer.gmid.analyze.analyze_circuit` derives everything the
 later phases need to know about the circuit's *structure*, once, into a
 :class:`~circuitgenome.sizer.gmid.analyze.CircuitView`: the per-slot MOSFET and
-resistor lists, the typed block view (:func:`~circuitgenome.sizer.gmid.blocks.build_blocks`
+resistor lists, the typed block view (:func:`~circuitgenome.sizer.gmid.analyze.build_blocks`
 classifies each load's *kind* — MIRROR / CASCODE / RESISTOR / CURRENT_SOURCE),
 the deduplicated ``ref → (Device, slot)`` map (a device appearing in several
 slots is attributed to the highest-priority one), the cascode device refs, and a
@@ -494,14 +494,20 @@ Phase 5 — Evaluate: analytical metrics
 :func:`~circuitgenome.sizer.gmid.evaluate.evaluate_circuit` produces the
 analytical, ngspice-free estimate of gain / GBW / PM / etc.  When the first-stage
 load is a cascode it first computes the output resistance cascode-aware
-(:func:`~circuitgenome.sizer.gmid.blocks.node_rout` — the ``gm·ro·ro`` boost a
+(:func:`~circuitgenome.sizer.physics.stage_chain.node_rout` — the ``gm·ro·ro`` boost a
 single-``gds`` estimate misses, treating the input-pair tail node as AC ground),
 and it applies the Phase-4c :class:`~circuitgenome.sizer.gmid.resistors.MetricModifiers`.
+The Phase-4c resistor *values* go in alongside them: a source-degeneration
+resistor is degeneration in the same sense a cascode is, so it boosts the pair's
+own ``ro`` by ``1 + gm·R`` — the other half of the effect ``gm1_factor``
+derates, and one the modifiers cannot carry because it lands *inside* the
+first stage's parallel combination rather than on top of it.
 
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.evaluate import evaluate_circuit
-   metrics, margins, notes = evaluate_circuit(view, currents, plan, sizing, modifiers, spec, tech)
+   metrics, margins, notes = evaluate_circuit(view, currents, plan, sizing, modifiers,
+                                             spec, tech, resistor_ohms=extra_r)
    print({k: round(v, 2) for k, v in metrics.items()})
 
 .. code-block:: text

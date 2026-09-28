@@ -23,6 +23,35 @@ Install from source
    cd CircuitGenome
    pip install -e .
 
+Running the tests
+-----------------
+
+The test runner, pytest, is declared in the ``dev`` dependency group.  With
+`uv <https://docs.astral.sh/uv/>`_, which installs that group by default:
+
+.. code-block:: bash
+
+   uv run pytest tests/
+
+With pip 25.1 or later:
+
+.. code-block:: bash
+
+   pip install -e . --group dev
+   pytest tests/
+
+Tests that simulate with ngspice are marked ``spice`` and are skipped when
+``ngspice`` is not on your ``PATH``.
+
+The full suite takes the better part of an hour, almost all of it in a few
+dozen tests marked ``slow``.  Leave those out for a quick check (about two
+minutes) while you work, and run everything before opening a PR:
+
+.. code-block:: bash
+
+   uv run pytest tests/ -m "not slow"      # quick check
+   uv run pytest tests/ -m "not spice"     # without ngspice tests
+
 Building the documentation
 --------------------------
 

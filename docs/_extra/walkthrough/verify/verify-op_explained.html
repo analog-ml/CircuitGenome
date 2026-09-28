@@ -143,7 +143,9 @@
   <p>Get that path wrong and nothing errors. ngspice prints nothing for the unknown handle, the regex matches nothing, and the file concludes the simulation failed. <strong>The bias verdict for an entire PDK silently becomes "sim-failed".</strong> That is a lot of weight on one string.</p>
 
   <h3>Single-ended: bias it in unity feedback</h3>
-  <p>The SE reader biases the circuit through the same <code>Lfb</code>/<code>Cfb</code> loop the gain bench uses, and auto-detects polarity the same way &mdash; whichever assignment settles. That matters: the operating point being read should be the one the <em>measurements</em> happen at, not some other DC state.</p>
+  <p>The SE reader biases the circuit through the same <code>Lfb</code>/<code>Cfb</code> loop the gain bench uses, and tries both input polarities the same way. That matters: the operating point being read should be the one the <em>measurements</em> happen at, not some other DC state.</p>
+
+  <p>"Settles inside the 0.1&ndash;0.9&middot;Vdd window" is not enough to pick the winner. The wrong polarity is positive feedback, so the amplifier latches to a rail &mdash; but behind a source-follower output stage the latched rail comes out shifted by one Vgs (a PMOS follower turns 0&nbsp;V into ~0.8&nbsp;V), which is inside the window. Taking the first in-window polarity then reads the latched state and condemns a healthy circuit as starved (issue #242). So the reader runs both and keeps the one whose output sits <strong>closest to Vcm</strong>: in unity feedback <code>v(out)&nbsp;&minus;&nbsp;Vcm</code> is the input voltage the loop is holding, near zero once the loop has closed and hundreds of millivolts when it has latched.</p>
 
 </section>
 

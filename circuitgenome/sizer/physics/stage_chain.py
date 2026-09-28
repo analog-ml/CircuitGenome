@@ -9,8 +9,10 @@ from a solved sizing (:func:`build_stage_chain`), so
 
 Output resistances come from :func:`node_rout`, a cascode-aware walk of the
 device graph: a cascode device boosts the resistance below it by ``1 + gm·R``,
-which a per-device ``gds`` sum cannot see.  It reads only ``model.gm`` and
-``model.gds``, so both the Level-1 and gm/Id backends get the same treatment.
+which a per-device ``gds`` sum cannot see -- as does a source-degeneration
+resistor, which is the same effect with a resistor in place of the device.  It
+reads only ``model.gm`` and ``model.gds``, so both the Level-1 and gm/Id
+backends get the same treatment.
 """
 from __future__ import annotations
 
@@ -38,7 +40,7 @@ def _by_drain(mosfets: list[Device]) -> dict[str, Device]:
     return by_drain
 
 
-def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
+def _looking_in_drain(device, by_drain, model, sizing, stop, degen) -> float:
     """Resistance (Ω) looking into ``device``'s drain, cascode-aware.
 
     A cascode device (source on another device's drain) boosts its own ``ro`` by
@@ -46,6 +48,15 @@ def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
     whose source is a rail or in ``stop`` (e.g. the input-pair tail node, an AC
     ground for the differential half-circuit) contributes just ``ro``.  Shallow
     recursion handles multi-high stacks.
+
+    ``degen`` maps a net to the series resistance between it and AC ground --
+    a source-degeneration resistor, which is degeneration in exactly the sense
+    a cascode is and boosts ``ro`` by the same ``1 + gm·R``.  The walk is over
+    MOSFETs, so ``by_drain`` has no entry for such a net and the device would
+    otherwise report a bare ``ro`` (issue #226).  Checked before ``stop``: the
+    pair's own source is pinned there as the differential AC ground, and with
+    degeneration that ground is one resistor further down.  The ``+ R`` series
+    term is dropped, as in the cascode branch above.
     """
     s = sizing.get(device.ref)
     if s is None:
@@ -53,29 +64,36 @@ def _looking_in_drain(device, by_drain, model, sizing, stop) -> float:
     gds = model.gds(device.type, s.w_um, s.l_um, s.ids_a)
     ro = 1.0 / gds if gds > 0 else float("inf")
     src = device.terminals.get("s")
+    r_deg = degen.get(src)
+    if r_deg:
+        gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
+        return ro * (1.0 + gm * r_deg)
     if src in RAILS or src in stop or src is None:
         return ro
     below = by_drain.get(src)
     if below is not None and below.ref != device.ref and below.type == device.type:
         gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
-        r_src = _looking_in_drain(below, by_drain, model, sizing, stop)
+        r_src = _looking_in_drain(below, by_drain, model, sizing, stop, degen)
         return ro * (1.0 + gm * r_src) if r_src != float("inf") else float("inf")
     return ro
 
 
 def node_rout(out_net: str, mosfets: list[Device], model, sizing,
-              stop: frozenset = frozenset()) -> float:
+              stop: frozenset = frozenset(),
+              degen: dict[str, float] | None = None) -> float:
     """Cascode-aware output resistance (Ω) at ``out_net`` = parallel of every
     device whose drain is ``out_net`` (each looking-in, cascode-boosted).
 
     ``stop`` lists nets to treat as AC ground (typically the input-pair tail node)
     so the input pair contributes ``ro``, not a tail-degenerated cascode.
+    ``degen`` maps a net to the series source resistance between it and that AC
+    ground, which boosts the device above it by ``1 + gm·R``.
     """
     by_drain = _by_drain(mosfets)
     g = 0.0
     for d in mosfets:
         if d.type in ("nmos", "pmos") and d.terminals.get("d") == out_net:
-            r = _looking_in_drain(d, by_drain, model, sizing, stop)
+            r = _looking_in_drain(d, by_drain, model, sizing, stop, degen or {})
             if r > 0:
                 g += 1.0 / r
     return 1.0 / g if g > 0 else float("inf")
@@ -196,6 +214,34 @@ def _first_present(slot_transistors: dict[str, list[Device]],
     return []
 
 
+def _tail_current_net(pair_source: str | None,
+                      ip_resistors: list[Device]) -> str | None:
+    """The net the tail current source's drain actually sits on.
+
+    For a plain differential pair that is the pair's own source net.  A
+    **source-degenerated** pair puts a resistor between each device's source
+    and the shared tail node, so the pair's source is one hop short of it:
+    nothing but a resistor touches that net, and a MOSFET-only walk like
+    :func:`node_rout` finds no drain there and reports infinite resistance --
+    which read as "no tail" and withheld CMRR for every degenerated pair with
+    a transistor tail (issue #224).
+
+    Hopping the series resistor costs 0.02 dB of CMRR to ignore in the other
+    direction: the degeneration R is ~0.25% of a simple mirror tail's ``ro``
+    (5.1 kΩ against 2.05 MΩ on GF180) and ~0.0006% of a cascode tail's, so the
+    series term is dropped and only the node resolution is corrected.
+    """
+    if pair_source is None:
+        return None
+    for r in ip_resistors:
+        t1, t2 = r.terminals.get("t1"), r.terminals.get("t2")
+        if t1 == pair_source and t2:
+            return t2
+        if t2 == pair_source and t1:
+            return t1
+    return pair_source
+
+
 def _signal_path_nets(ip_devs: list[Device],
                       mosfets: list[Device]) -> frozenset[str]:
     """Every net the input pair drives, walking up through cascodes above it.
@@ -295,6 +341,28 @@ def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
     return gm / (2.0 * math.pi * c_f)
 
 
+def _source_degeneration_r(ip_devs: list[Device], ip_resistors: list[Device],
+                           resistor_ohms: dict[str, float]) -> dict[str, float]:
+    """``{input-pair source net: series R (Ω) down to the tail}``.
+
+    Only degeneration resistors that were actually *sized* count: the
+    synthesizer emits every resistor at a 1 kΩ placeholder, and
+    :func:`~circuitgenome.sizer.gmid.resistors.size_resistors` leaves that
+    placeholder alone when the intent asks for no degeneration, so an unsized
+    r1/r2 must not boost anything.
+    """
+    sources = {d.terminals.get("s") for d in ip_devs}
+    out: dict[str, float] = {}
+    for r in ip_resistors:
+        ohms = resistor_ohms.get(r.ref, 0.0)
+        if ohms <= 0.0:
+            continue
+        for net in (r.terminals.get("t1"), r.terminals.get("t2")):
+            if net and net in sources:
+                out[net] = ohms
+    return out
+
+
 def build_stage_chain(
     view: CircuitView,
     sizing: dict[str, TransistorSizing],
@@ -304,25 +372,33 @@ def build_stage_chain(
     cc_pf: float | None = None,
     cc2_pf: float | None = None,
     gd_load_r: float = 0.0,
+    resistor_ohms: dict[str, float] | None = None,
 ) -> StageChain:
     """Extract the :class:`StageChain` from a solved sizing.
 
     ``gd_load_r`` is the first-stage load resistor's conductance in A/V; it
     loads the first stage's output node, which ``node_rout`` — a walk over
-    MOSFETs — cannot see.
+    MOSFETs — cannot see.  ``resistor_ohms`` is the sized ``{ref: Ω}`` map;
+    the walk reads the input pair's degeneration resistors out of it so a
+    degenerated pair gets its ``ro·(1+gm·R)`` boost (issue #226).
 
-    The input pair's source is the tail node, treated as an AC ground so the
-    pair contributes ``ro`` rather than a tail-degenerated cascode.  The first
-    stage's output is the *next* stage's signal gate, not the pair's drain:
-    on a folded cascode those are different nets.  With no next stage the
-    output node is resolved structurally instead — again not the pair's drain,
-    for the same reason (issue #228).
+    The input pair's source is treated as an AC ground so the pair contributes
+    ``ro`` rather than a tail-degenerated cascode — or ``ro·(1+gm·R)`` when it
+    reaches that ground through a degeneration resistor.  That net is the tail
+    node only for a plain pair; a source-degenerated one reaches its tail
+    through a resistor, which :func:`_tail_current_net` hops for the CMRR
+    conductance (issue #224).  The first stage's output is the *next* stage's
+    signal gate, not the pair's drain: on a folded cascode those are different
+    nets.  With no next stage the output node is resolved structurally
+    instead — again not the pair's drain, for the same reason (issue #228).
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
     ip_devs = slot_transistors.get("input_pair", [])
+    ip_resistors = view.slot_resistors.get("input_pair", [])
     tail_net = ip_devs[0].terminals.get("s") if ip_devs else None
     stop = frozenset({tail_net}) if tail_net else frozenset()
+    degen = _source_degeneration_r(ip_devs, ip_resistors, resistor_ohms or {})
 
     def _gm(d: Device) -> float:
         s = sizing.get(d.ref)
@@ -334,7 +410,7 @@ def build_stage_chain(
     def _rout(net: str | None, extra_gd: float = 0.0) -> float:
         if not net:
             return float("inf")
-        r = node_rout(net, mosfets, model, sizing, stop)
+        r = node_rout(net, mosfets, model, sizing, stop, degen)
         g = (1.0 / r if r != float("inf") else 0.0) + extra_gd
         return 1.0 / g if g > 0 else float("inf")
 
@@ -397,7 +473,7 @@ def build_stage_chain(
             if (sizing.get(d.ref) is None or d.terminals.get("d") != out1
                     or d.terminals.get("s") in signal_nets):
                 continue
-            r = _looking_in_drain(d, by_drain, model, sizing, stop)
+            r = _looking_in_drain(d, by_drain, model, sizing, stop, degen)
             gd_output_load = 1.0 / r if 0.0 < r < float("inf") else 0.0
         # A resistor load has no device to read: the output-node conductance is
         # exactly 1/R, which the sizer already solved for and passed in here.
@@ -405,9 +481,15 @@ def build_stage_chain(
             gd_output_load = gd_load_r
 
     # --- Tail conductance (CMRR): the full stack down to the rail ---
+    # Resolved from the pair's source *through* any degeneration resistor, so
+    # the walk starts on the net the tail device's drain is really on (#224).
+    # Deliberately not reused for ``stop`` above: that set wants the pair's own
+    # source pinned as AC ground, with the hop down to it carried by ``degen``
+    # as a ``ro`` boost (#226) alongside the ``with_first_stage_gm`` derate.
+    tail_current_net = _tail_current_net(tail_net, ip_resistors)
     gd_tail = 0.0
-    if slot_transistors.get("tail_current") and tail_net:
-        r_tail = node_rout(tail_net, mosfets, model, sizing, frozenset())
+    if slot_transistors.get("tail_current") and tail_current_net:
+        r_tail = node_rout(tail_current_net, mosfets, model, sizing, frozenset())
         gd_tail = 1.0 / r_tail if r_tail and r_tail != float("inf") else 0.0
 
     # --- Output swing: the second stage's Vdsat per polarity ---

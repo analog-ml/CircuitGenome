@@ -94,7 +94,8 @@ heuristics, bug fixes, and documentation improvements.
 
 - Browse or open issues: <https://github.com/analog-ml/CircuitGenome/issues>
 - Fork the repo, create a feature branch, and open a pull request against `main`.
-- Run the test suite before submitting: `python3 -m pytest tests/ -v`.
+- Run the test suite before submitting: `uv run pytest tests/ -v` (uv installs
+  pytest from the `dev` dependency group on first run).
 - Adding a new module variant usually needs **no code changes** — just edit
   `opamp_modules.yaml` (see the docs for details).
 

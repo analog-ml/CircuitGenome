@@ -564,6 +564,7 @@ def two_stage_fd_fbr():
     })
 
 
+@pytest.mark.slow
 def test_size_fd_basic(two_stage_fd_fbr):
     """FD two-stage: solver returns OPTIMAL/FEASIBLE with Cc and valid W/L."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -591,6 +592,7 @@ def test_size_fd_basic(two_stage_fd_fbr):
         assert s.vds_sat_v > 0
 
 
+@pytest.mark.slow
 def test_fd_specs_met(two_stage_fd_fbr):
     """FD: gain, GBW, PM, and SR all meet the spec."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -616,6 +618,7 @@ def test_fd_specs_met(two_stage_fd_fbr):
         assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
 
 
+@pytest.mark.slow
 def test_fd_second_stage_symmetry(two_stage_fd_fbr):
     """second_stage_p and second_stage_n must have equal W and L per transistor type."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -643,6 +646,7 @@ def test_fd_second_stage_symmetry(two_stage_fd_fbr):
         assert p_bases[base].l_um == n_bases[base].l_um, f"{base}: L mismatch p vs n"
 
 
+@pytest.mark.slow
 def test_fd_power_two_second_stages(two_stage_fd_fbr):
     """FD power should include current from both second-stage paths."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -660,6 +664,7 @@ def test_fd_power_two_second_stages(two_stage_fd_fbr):
     assert result.metrics["power_w"] >= min_expected_power * 0.9
 
 
+@pytest.mark.slow
 def test_fd_cc_from_sr(two_stage_fd_fbr):
     """FD: Cc should satisfy the slew-rate constraint (Cc ≤ ibias / SR)."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -692,11 +697,11 @@ _THREE_STAGE_SPEC = dict(
 
 @pytest.fixture(scope="module")
 def three_stage_buffered_se_fbr():
-    # Three gain stages (input + two common-source) plus a source-follower
-    # output buffer in the output_stage slot. The old NMC follower-second-stage
-    # shape was removed: followers are now output_stage buffers (not gain
-    # stages), and buffered NMC is still CS+CS parity-rejected, so buffered
-    # RNMC is the enumerable three-stage-with-buffer topology. Exercises the
+    # Three gain stages (input + common-source + non-inverting; RNMC's comp1
+    # wraps the last two, issue #236) plus a source-follower output buffer in
+    # the output_stage slot. The old NMC follower-second-stage shape was
+    # removed: followers are now output_stage buffers (not gain stages).
+    # Exercises the
     # three-stage sizing path with a follower present (follower reads the
     # wide-swing amp output net_ampout, not a load window).
     return _fbr("three_stage_opamp_rnmc_buffered_single_ended", {
@@ -704,7 +709,7 @@ def three_stage_buffered_se_fbr():
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
         "second_stage": "common_source_nmos",
-        "third_stage":  "common_source_nmos",
+        "third_stage":  "noninverting_stage_pmos",
         "output_stage": "common_drain_pmos",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
@@ -718,7 +723,7 @@ def three_stage_rnmc_se_fbr():
         "load":         "folded_cascode_load_pmos_input_single_output",
         "tail_current": "current_mirror_tail_pmos",
         "second_stage": "common_source_nmos",
-        "third_stage":  "common_source_nmos",
+        "third_stage":  "noninverting_stage_pmos",
         "comp1":        "miller_cap",
         "comp2":        "miller_cap",
     })
@@ -726,17 +731,19 @@ def three_stage_rnmc_se_fbr():
 
 @pytest.fixture(scope="module")
 def three_stage_buffered_fd_fbr():
-    # FD counterpart of three_stage_buffered_se_fbr: two CS gain stages per
-    # path plus a follower output buffer per path (output_stage_p/n).
+    # FD counterpart of three_stage_buffered_se_fbr: a CS and a non-inverting
+    # gain stage per path plus a follower output buffer per path
+    # (output_stage_p/n).  The chain is net-inverting, so the CMFB takes the
+    # inverting orientation.
     return _fbr("three_stage_opamp_rnmc_buffered_fully_differential", {
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb",
+        "cmfb":            "resistive_sense_cmfb_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
-        "third_stage_p":   "common_source_nmos",
-        "third_stage_n":   "common_source_nmos",
+        "third_stage_p":   "noninverting_stage_pmos",
+        "third_stage_n":   "noninverting_stage_pmos",
         "output_stage_p":  "common_drain_pmos",
         "output_stage_n":  "common_drain_pmos",
         "comp1_p":         "miller_cap",
@@ -752,11 +759,11 @@ def three_stage_rnmc_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb",
+        "cmfb":            "resistive_sense_cmfb_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
-        "third_stage_p":   "common_source_nmos",
-        "third_stage_n":   "common_source_nmos",
+        "third_stage_p":   "noninverting_stage_pmos",
+        "third_stage_n":   "noninverting_stage_pmos",
         "comp1_p":         "miller_cap",
         "comp1_n":         "miller_cap",
         "comp2_p":         "miller_cap",
@@ -837,6 +844,7 @@ def test_size_three_stage_rnmc_se_basic(three_stage_rnmc_se_fbr):
 
 # --- FD NMC ---
 
+@pytest.mark.slow
 def test_size_three_stage_fd_basic(three_stage_buffered_fd_fbr):
     """Three-stage NMC FD: OPTIMAL/FEASIBLE; both caps present."""
     parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
@@ -849,6 +857,7 @@ def test_size_three_stage_fd_basic(three_stage_buffered_fd_fbr):
     assert result.cc2_pf is not None and result.cc2_pf > 0
 
 
+@pytest.mark.slow
 def test_three_stage_fd_second_stage_symmetry(three_stage_buffered_fd_fbr):
     """second_stage_p and second_stage_n must have equal W and L."""
     parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
@@ -866,6 +875,7 @@ def test_three_stage_fd_second_stage_symmetry(three_stage_buffered_fd_fbr):
             assert p_devs[base].l_um == n_devs[base].l_um, f"{base}: L mismatch"
 
 
+@pytest.mark.slow
 def test_three_stage_fd_third_stage_symmetry(three_stage_buffered_fd_fbr):
     """third_stage_p and third_stage_n must have equal W and L."""
     parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
@@ -885,6 +895,7 @@ def test_three_stage_fd_third_stage_symmetry(three_stage_buffered_fd_fbr):
         assert p_devs[base].l_um == n_devs[base].l_um, f"{base}: L mismatch"
 
 
+@pytest.mark.slow
 def test_three_stage_fd_power(three_stage_buffered_fd_fbr):
     """FD three-stage power accounts for 2×second + 2×third stage currents."""
     parsed, sr_result, fbr_result, topology = three_stage_buffered_fd_fbr
@@ -900,6 +911,7 @@ def test_three_stage_fd_power(three_stage_buffered_fd_fbr):
 
 # --- FD RNMC ---
 
+@pytest.mark.slow
 def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
     """Three-stage RNMC FD: OPTIMAL/FEASIBLE; both caps present."""
     parsed, sr_result, fbr_result, topology = three_stage_rnmc_fd_fbr
@@ -937,6 +949,7 @@ def _fbr_pmos_cs_second_stage(topology_name: str):
     raise AssertionError(f"no PMOS-CS second-stage variant found for {topology_name}")
 
 
+@pytest.mark.slow
 def test_three_stage_pmos_cs_metrics_present():
     """PMOS-common-source stages must still report gain, PM, and PSRR+.
 
@@ -1381,6 +1394,7 @@ def test_ptm45_example_two_stage_se_met(two_stage_fbr):
     _assert_example_ptm45_met(two_stage_fbr, "two_stage_se_specs")
 
 
+@pytest.mark.slow
 def test_ptm45_example_two_stage_fd_met(two_stage_fd_fbr):
     _assert_example_ptm45_met(two_stage_fd_fbr, "two_stage_fd_specs")
 
@@ -1389,6 +1403,7 @@ def test_ptm45_example_three_stage_se_met(three_stage_rnmc_se_fbr):
     _assert_example_ptm45_met(three_stage_rnmc_se_fbr, "three_stage_se_specs")
 
 
+@pytest.mark.slow
 def test_ptm45_example_three_stage_fd_met(three_stage_rnmc_fd_fbr):
     _assert_example_ptm45_met(three_stage_rnmc_fd_fbr, "three_stage_fd_specs")
 

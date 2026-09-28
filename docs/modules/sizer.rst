@@ -231,7 +231,9 @@ Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loo
 AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
 unity-gain pulse (the min of the rising and falling edges); output swing from a
 unity-buffer DC sweep; CMRR and PSRR+ from the same feedback loop with the AC
-stimulus riding on the input common mode / the positive supply.  Single-ended
+stimulus riding on the input common mode / the positive supply.  Every bench
+loads each output (both, on a fully-differential design) with the spec's ``cl``
+to ground — the load the analytical metrics are predicted against.  Single-ended
 op-amps are the most robust; fully-differential AC metrics (which depend on the
 on-chip CMFB operating point), the single-ended-only swing/slew benches on FD
 circuits, and any non-converging measurement are reported as ``n/a`` rather than

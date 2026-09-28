@@ -719,9 +719,12 @@ Circuit topology
 *NMC:* :math:`C_{c1}` closes the outer loop (stage-3 output → stage-1 output);
 :math:`C_{c2}` closes the inner loop (stage-3 output → stage-2 output).
 
-*RNMC:* :math:`C_{c1}` closes the inner loop (stage-3 output → stage-2 output);
-:math:`C_{c2}` closes the reversed outer loop (stage-2 output → stage-1 output).
-The sizer uses the same conservative equations for both schemes.
+*RNMC:* :math:`C_{c1}` closes the same outer loop (stage-3 output → stage-1
+output); :math:`C_{c2}` closes the inner loop reversed onto the second stage
+(stage-2 output → stage-1 output), so it never loads the output.  The second
+stage inverts and the third does not.  Both schemes put the dominant pole at
+:math:`C_{c1}` and split the same two non-dominant poles, so the sizer uses the
+same conservative equations for both.
 
 Design variables
 ~~~~~~~~~~~~~~~~
