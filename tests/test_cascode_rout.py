@@ -105,3 +105,25 @@ def test_degeneration_boost_only_lifts_its_own_leg():
     b = D("m_b", "pmos", g="in2", d="out", s="s2")
     r = node_rout("out", [a, b], model, sizing, frozenset(), {"s1": 500.0})
     assert r == pytest.approx(1.0 / (1.0 / 1.5e6 + 1.0 / 1e6))
+
+
+# --------------------------------------------------------------------------- #
+# Folded cascode: two drains meet below the cascode (issue #240)
+# --------------------------------------------------------------------------- #
+def test_folded_cascode_boost_sees_every_drain_on_the_folding_node():
+    """The PMOS cascode sources from the folding node, where the NMOS pair and
+    the PMOS current source both drain -- both sit below it, in parallel.
+
+    Before #240 the walk kept only the first drain on the net.  That is the
+    pair, listed first as the netlists list it, and being the opposite type it
+    gave the cascode no boost at all: a bare ``ro`` where ``gm·ro·(ro ∥ ro)``
+    belongs, ~30 dB of gain on every folded-cascode design.
+    """
+    model = _FakeModel(gm=1e-3, gds=1e-6)                       # ro = 1 MΩ
+    ip = D("m_ip", "nmos", g="in", d="fold", s="net_tail")
+    src = D("m_src", "pmos", g="b1", d="fold", s="vdd!")
+    casc = D("m_casc", "pmos", g="b2", d="out", s="fold")
+    sizing = {d.ref: _Sz() for d in (ip, src, casc)}
+    r = node_rout("out", [ip, src, casc], model, sizing, frozenset({"net_tail"}))
+    # ro·(1 + gm·(ro ∥ ro)) = 1e6·(1 + 1e-3·0.5e6) = 501 MΩ
+    assert math.isclose(r, 1e6 * (1 + 1e-3 * 0.5e6), rel_tol=1e-9)
