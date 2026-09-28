@@ -819,6 +819,52 @@ def test_slew_swing_measured_on_real_device_techs(tech, vdd):
     assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
 
 
+# --- follower output-stage swing (PR #239 follow-up) ------------------------
+
+@ngspice
+@pytest.mark.slow
+@pytest.mark.parametrize("template", ["two_stage_opamp_buffered_single_ended",
+                                      "two_stage_opamp_buffered_fully_differential"])
+@pytest.mark.parametrize("follower", ["common_drain_pmos", "common_drain_nmos"])
+def test_follower_swing_model_tracks_spice(template, follower):
+    """A source-follower output stage shifts one swing edge a whole |Vgs|
+    away from its rail — the model used to ignore it (predicting ~0.1 V from
+    each rail where gf180 SPICE measures ~0.85 V / ~1.0 V).  The level-shifted
+    edge must now land within the follower gate's tolerance of the bench, and
+    the gf180 0.3–3.0 V swing spec must be flagged by the sizer before SPICE."""
+    from circuitgenome.sizer.physics.stage_chain import _FOLLOWER_SWING_TOL_V
+    topo = next(t for t in load_topologies() if t.name == template)
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if any(v is not None and v.name == follower
+                       for k, v in c.variant_map.items() if k.startswith("output_stage")))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=3e5, power_max_w=2e-3,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert not result.bias_feasible
+    assert any("source-follower" in w for w in result.warnings)
+
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    hi, lo = measure._measure_swing(name, ports, body_dut, rig._Topo(ports),
+                                    spec.vdd, spec.ibias, spec.cl, spec.vdd / 2)
+    if hi is None or lo is None:
+        pytest.skip("swing bench did not complete in this environment")
+    if follower == "common_drain_pmos":      # low edge lifted by |Vgs|
+        model, spice = result.metrics["output_swing_min_v"], lo
+        assert spice > 0.6
+    else:                                    # high edge dropped by Vgs (+ body)
+        model, spice = result.metrics["output_swing_max_v"], hi
+        assert spice < spec.vdd - 0.6
+    assert model == pytest.approx(spice, abs=_FOLLOWER_SWING_TOL_V)
+
+
 # --- load capacitance (issue #222) ------------------------------------------
 
 def _active_load_one_stage(tech_name, vdd):

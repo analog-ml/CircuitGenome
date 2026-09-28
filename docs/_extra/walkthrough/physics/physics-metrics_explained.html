@@ -305,7 +305,8 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
   </figure>
 
   <h3>Output swing — from the saturation voltage</h3>
-  <p>The output cannot reach the rail; it stops a saturation voltage short. So the max output is <code>Vdd − Vds_sat</code> of the top (PMOS) device, and the min is <code>Vss + Vds_sat</code> of the bottom (NMOS). With <code>Vds_sat = 0.1 V</code> and <code>Vdd = 1.0 V</code>, the top swing is <code>0.9 V</code>.</p>
+  <p>The output cannot reach the rail; it stops a saturation voltage short. So the max output is <code>Vdd − Vds_sat</code> of the top (PMOS) device, and the min is <code>Vss + Vds_sat</code> of the bottom (NMOS). With <code>Vds_sat = 0.1 V</code> and <code>Vdd = 1.0 V</code>, the top swing is <code>0.9 V</code>. The chain hands these over as <code>swing_headroom</code> — how close the output gets to each rail — so the metric is just <code>Vdd − headroom_high</code> and <code>Vss + headroom_low</code>.</p>
+  <p>A buffered op-amp adds a source follower after the last gain stage, and a follower's output sits a whole <code>|Vgs|</code> away from its input. So one headroom grows by that much: a PMOS follower cannot pull the output lower than <code>Vds_sat(driver) + |Vgs|</code> above <code>Vss</code> (≈ 0.85 V on gf180), an NMOS follower cannot lift it higher than <code>Vds_sat(driver) + Vgs</code> below <code>Vdd</code>. <code>output_swing_headroom</code> in <code>stage_chain.py</code> works this out; the metric code does not change.</p>
 
   <h3>CMRR — rejecting common-mode noise</h3>
   <p>A differential pair is only as good at ignoring common-mode input as its tail current source is stiff. A leaky tail (large <code>gd_tail</code>) lets common-mode signal through:</p>

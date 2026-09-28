@@ -205,6 +205,12 @@ as its unbuffered sibling — buffering changes what the output can drive, not t
 small-signal gain figure.  The six buffered templates enumerate alongside their
 plain counterparts and reuse every compatibility filter unchanged.
 
+Buffering does cost **output swing**: the follower's output sits one ``|Vgs|``
+above (PMOS) or below (NMOS) the node driving it, so one edge of the swing ends
+roughly a threshold voltage short of its rail.  The sizer models that level
+shift and rejects buffered sizings whose swing spec it rules out (see
+:doc:`../theory/sizing_flow`, *Output swing*).
+
 Three-stage compensation schemes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
