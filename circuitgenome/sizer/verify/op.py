@@ -22,7 +22,9 @@ def read_op_operating_point(
     """Return ``{ref: {'id','vds','vdsat'}}`` from a DC ``.op``.
 
     Single-ended: biases the sized circuit in unity feedback (``Lfb``/``Cfb``
-    rig, polarity auto-detected via the settled output).  Fully differential
+    rig) at both input polarities and keeps the one whose output settles
+    closest to Vcm — the wrong polarity is positive feedback and can latch at
+    an in-window level behind a source follower (issue #242).  Fully differential
     (issue #162): both inputs and ``vcm_ref`` sit at Vcm with no feedback loop
     — the CMFB / loads own the output CM, which is exactly the DC state the
     metric benches run at.  Either way each MOSFET's actual operating point is
@@ -66,6 +68,7 @@ def _read_op(
         for pre in prefixes.values()
     )
     ran = False
+    best: tuple[float, dict[str, dict[str, float]]] | None = None
     for inp, inn in (("in1", "in2"), ("in2", "in1")):
         netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
                   inp: "inp", inn: "inn", "out": "out"}
@@ -82,11 +85,17 @@ def _read_op(
         if not mo:
             continue
         ran = True
-        if not (0.1 * vdd < float(mo.group(1)) < 0.9 * vdd):
+        vout = float(mo.group(1))
+        if not (0.1 * vdd < vout < 0.9 * vdd):
             continue  # wrong polarity → output railed
         op = _parse_probes(prefixes, txt)
-        if op:
-            return op, None
+        # Unity feedback holds v(out) − Vcm across the inputs: ~0 once the loop
+        # closes, large when the wrong polarity latched — which a source
+        # follower's Vgs shift can land inside the window (issue #242).
+        if op and (best is None or abs(vout - vcm) < best[0]):
+            best = (abs(vout - vcm), op)
+    if best:
+        return best[1], None
     return None, ("railed" if ran else "sim-failed")
 
 
