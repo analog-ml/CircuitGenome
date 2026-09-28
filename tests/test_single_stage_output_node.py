@@ -182,19 +182,30 @@ def test_folded_cascode_gain_lands_with_the_telescopic_one(one_stage_by_load):
         assert gain == pytest.approx(telescopic, abs=6.0), name
 
 
-def test_phase_margin_withheld_only_for_the_two_documented_load_families(
-        one_stage_by_load):
-    """Resistor and wide-swing telescopic loads report no PM, by decision.
+def test_phase_margin_withheld_only_for_resistor_loads(one_stage_by_load):
+    """Resistor loads report no PM, by decision.
 
-    Neither has a diode-connected load device, so this model cannot place a
-    non-dominant pole: a resistor-loaded stage is single-pole here (PM would be
-    exactly 90° for every sizing), and a wide-swing cascode's pole sits at the
-    cascode source against a capacitance the sizer does not model.  Withholding
-    is the documented answer; this test is what makes it a decision rather than
-    a gap that could silently spread to another load family.
+    A resistor-loaded stage has no mirror node, so in this model it is
+    single-pole (PM would be exactly 90° for every sizing).  Withholding is the
+    documented answer; this test is what makes it a decision rather than a gap
+    that could silently spread to another load family.  The wide-swing
+    telescopic loads used to be withheld too, because their mirror diode is
+    closed through a cascode and was not recognised (issue #241).
     """
     silent = {name for name, r in one_stage_by_load.items()
               if r.transistors and "phase_margin_deg" not in r.metrics}
-    assert silent == {"resistor_load_vdd", "resistor_load_gnd",
-                      "telescopic_cascode_load_wideswing_nmos",
-                      "telescopic_cascode_load_wideswing_pmos"}
+    assert silent == {"resistor_load_vdd", "resistor_load_gnd"}
+
+
+def test_wideswing_loads_are_credited_as_mirrors(one_stage_by_load):
+    """A wide-swing mirror combines both branches like the plain telescopic.
+
+    Both loads share the input pair, current and CL, so they must report the
+    same GBW -- before issue #241 the wide-swing one was taken for a
+    non-mirror load and reported half.
+    """
+    for polarity in ("nmos", "pmos"):
+        plain = one_stage_by_load[f"telescopic_cascode_load_{polarity}"]
+        wide = one_stage_by_load[f"telescopic_cascode_load_wideswing_{polarity}"]
+        assert wide.metrics["gbw_hz"] == pytest.approx(
+            plain.metrics["gbw_hz"], rel=0.25)

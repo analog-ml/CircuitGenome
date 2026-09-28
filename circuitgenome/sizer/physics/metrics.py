@@ -28,10 +28,9 @@ def evaluate_metrics(
     and PSRR (issue #221).
 
     One documented exception survives: a single stage whose load is a resistor
-    or a wide-swing telescopic cascode reports no ``phase_margin_deg``, because
-    this model cannot place that topology's non-dominant pole -- see
-    :func:`~.stage_chain._mirror_pole_hz` for why each is a deliberate omission
-    rather than a gap (issue #228).
+    reports no ``phase_margin_deg``, because in this model it has no
+    non-dominant pole to place -- see :func:`~.stage_chain._mirror_pole_hz`
+    for why that is a deliberate omission rather than a gap (issue #228).
     """
     metrics: dict[str, float] = {}
     margins: dict[str, float] = {}

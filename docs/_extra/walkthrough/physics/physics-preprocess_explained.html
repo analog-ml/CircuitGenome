@@ -293,10 +293,10 @@ i_casc = spec.ibias / <span class="tok-num">2.0</span>
     <span class="tok-kw">if</span> <span class="tok-fn">any</span>(s <span class="tok-kw">in</span> slot_transistors <span class="tok-kw">for</span> s <span class="tok-kw">in</span>
            (<span class="tok-str">"second_stage_p"</span>, <span class="tok-str">"second_stage_n"</span>, <span class="tok-str">"third_stage_p"</span>, <span class="tok-str">"third_stage_n"</span>)):
         <span class="tok-kw">return</span> <span class="tok-num">1.0</span>   <span class="tok-com"># fully-differential: both branches drive the next stage</span>
-    mosfets = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> slot_transistors.get(<span class="tok-str">"load"</span>, []) <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>)]
-    is_mirror = <span class="tok-fn">any</span>(d.terminals.get(<span class="tok-str">"g"</span>) == d.terminals.get(<span class="tok-str">"d"</span>) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets)
+    is_mirror = <span class="tok-fn">_mirror_reference</span>(slot_transistors.get(<span class="tok-str">"load"</span>, [])) <span class="tok-kw">is not</span> <span class="tok-kw">None</span>
     <span class="tok-kw">return</span> <span class="tok-num">1.0</span> <span class="tok-kw">if</span> is_mirror <span class="tok-kw">else</span> <span class="tok-num">0.5</span></code></pre>
 
+  <p>The mirror test is beautifully cheap: a current-mirror load has a <strong>reference</strong> device whose gate is wired back onto its own current path, and <code>_mirror_reference()</code> finds it by comparing terminals. The usual shape is <strong>diode-connected</strong>: <code>gate == drain</code> (<code>g</code> and <code>d</code> on the same net). The wide-swing (Sooch) mirror closes the same loop <em>through a cascode</em>: the reference device's gate is the drain of the cascode stacked on it, so no single device has <code>g == d</code>. Checking only the first shape mistook the wide-swing telescopic loads for non-mirror loads and cost them half their gain and GBW (issue #241).</p>
 
 </section>
 

@@ -781,6 +781,38 @@ def _active_load_one_stage(tech_name, vdd):
 
 
 @ngspice
+@pytest.mark.parametrize("input_pair,load", [
+    ("differential_pair_pmos", "telescopic_cascode_load_wideswing_pmos"),
+    ("differential_pair_nmos", "telescopic_cascode_load_wideswing_nmos"),
+])
+def test_wideswing_one_stage_gbw_and_pm_track_spice(input_pair, load):
+    """Issue #241: a wide-swing mirror closes its diode through a cascode.
+
+    Missed, the sizer took it for a non-mirror load: it reported no phase
+    margin and sized the input pair for twice the gm it needed, so the SPICE
+    GBW came out ~1.9x the analytical one.  Recognised, both track ngspice.
+    """
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if c.variant_map["load"].name == load
+                and c.variant_map["input_pair"].name == input_pair)
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=2e-12, gain_min_db=40)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gbw_hz"] is not None
+    assert 0.75 < sim["gbw_hz"] / result.metrics["gbw_hz"] < 1.33
+    assert sim["phase_margin_deg"] is not None
+    assert result.metrics["phase_margin_deg"] == pytest.approx(
+        sim["phase_margin_deg"], abs=5.0)
+
+
+@ngspice
 def test_measured_ac_responds_to_load_capacitance():
     """Issue #222: the benches load the DUT with ``spec.cl``.  The sizing is
     held fixed and only the bench's CL changes, so any response comes from the
