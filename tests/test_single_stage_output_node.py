@@ -166,6 +166,22 @@ def test_cascode_loads_measure_gain_above_the_pair_drain(one_stage_by_load):
         assert one_stage_by_load[name].metrics["gain_db"] > plain
 
 
+def test_folded_cascode_gain_lands_with_the_telescopic_one(one_stage_by_load):
+    """Both cascode families earn the same ``gm·ro`` boost (issue #240).
+
+    A folded cascode's cascode device sources from the folding node, which
+    carries two drains -- the input pair's and the current source's.  The walk
+    used to see only the pair's, of the opposite type, and granted no boost,
+    so folded designs came out 31-37 dB below an otherwise equal telescopic
+    one.  With both drains in parallel below the cascode the two agree.
+    """
+    telescopic = one_stage_by_load["telescopic_cascode_load_pmos"].metrics["gain_db"]
+    for name in ("folded_cascode_load_nmos_input_single_output",
+                 "folded_cascode_load_pmos_input_single_output"):
+        gain = one_stage_by_load[name].metrics["gain_db"]
+        assert gain == pytest.approx(telescopic, abs=6.0), name
+
+
 def test_phase_margin_withheld_only_for_resistor_loads(one_stage_by_load):
     """Resistor loads report no PM, by decision.
 

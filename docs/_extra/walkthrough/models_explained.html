@@ -99,33 +99,19 @@
   <div class="label">Contents</div>
   <a href="#part-1">1 · Why this file exists</a>
   <a href="#part-2">2 · The atoms: MosfetParams &amp; GridSpec</a>
-  <a href="#part-3">3 · SpiceLib — the PDK pointer</a>
-  <a href="#part-4">4 · TechParams — the aggregate spec</a>
-  <a href="#part-5">5 · SizingSpec — what you ask for</a>
-  <a href="#part-6">6 · The outputs &amp; the hidden idea</a>
+  <a href="#part-3">3 · SpiceLib</a>
+  <a href="#part-4">4 · TechParams</a>
+  <a href="#part-5">5 · SizingSpec</a>
+  <a href="#part-6">6 · SizingResult</a>
 </nav>
 
 <main>
 
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
-  <h2>Part 1 · Why this file even exists</h2>
+This file defines the typed seams (@dataclass) between stages in the sizing pipeline.
 
-  <blockquote><p><strong>The one job:</strong> give every stage of the sizer a small set of <em>named boxes</em> to put data in, so the phases can hand work to each other without agreeing on the shape of a loose dictionary.</p></blockquote>
-
-  <p class="beat">Here is the whole story without touching a line of code.</p>
-
-  <p>The Initial Sizing module is a <strong>pipeline</strong>. One stage reads a YAML file and figures out the process technology. Another reads what the user wants from the amplifier. A third actually solves for transistor widths. A fourth reports the answer. Each stage needs to <em>hand something</em> to the next.</p>
-
-  <p>You could pass a raw Python <code>dict</code> between them — but then every stage has to <em>remember</em> which keys exist, guess their types, and pray nobody typos <code>"vdd"</code> as <code>"vdd_v"</code>. That's how pipelines rot.</p>
-
-  <p>Think of these dataclasses as the <strong>labelled shipping crates</strong> on an assembly line. Instead of tossing loose parts down the belt in a cardboard box, each hand-off is a crate with printed compartments: <em>this</em> slot holds the supply voltage, <em>that</em> slot holds the load capacitance. Anyone opening the crate knows exactly what's inside and where — the editor even autocompletes the compartments for you.</p>
-
-  <p>So this file carries <strong>no logic at all</strong>. Every structure here is a plain <code>@dataclass</code> — a record type, nothing more. It defines the <em>typed seams</em> between stages: the specs going in, the sizings coming out.</p>
-
-  <h3>The cast of characters</h3>
-  <p>Not functions calling functions — these are <strong>records nesting records</strong>. Two big crates matter most: <code>TechParams</code> (everything about the process) on the way <em>in</em>, and <code>SizingResult</code> (the sized circuit) on the way <em>out</em>. Everything else is a small crate that lives inside one of them. Hover a crate to trace its hand-off arrow.</p>
-
+    <p><code>models.py</code> defines the logic-free dataclasses that are the typed seams of the sizer — small atoms (<code>MosfetParams</code>, <code>GridSpec</code>, <code>SpiceLib</code>) that compose into the incoming crates (<code>TechParams</code>, <code>SizingSpec</code>) and the outgoing crate (<code>SizingResult</code>, holding one <code>TransistorSizing</code> per device) — so every pipeline stage hands work to the next through a stable, named contract instead of a loose dictionary.</p>
   <figure class="fig interactive">
     <svg viewBox="0 0 660 360" role="img" aria-label="Entity-relationship diagram: TechParams and SizingSpec feed size_circuit, which returns SizingResult; each aggregate nests smaller records">
       <defs>
@@ -216,10 +202,8 @@
     <figcaption>The two hand-off crates. <code>TechParams</code> and <code>SizingSpec</code> go into the sizer; <code>SizingResult</code> comes out. Notice the nesting: an aggregate is just smaller records in named slots.</figcaption>
   </figure>
 
-  <p>Read the diagram as an <strong>entity-relationship</strong> sketch, not a call graph. An arrow from a small crate <em>into</em> a big one means "lives inside." <code>TechParams</code> <em>contains</em> two <code>MosfetParams</code>, three <code>GridSpec</code>s, and (optionally) one <code>SpiceLib</code>. <code>SizingResult</code> <em>contains</em> a whole dictionary of <code>TransistorSizing</code> records, one per device.</p>
 
-  <h3>How we'll learn them</h3>
-  <p>We'll go <strong>smallest crate first</strong>, biggest last — the opposite of the file's own order, because you can't understand the aggregate until you know the parts it nests. That means:</p>
+  <p>We'll go <strong>smallest crate first</strong>, biggest last (you can't understand the aggregate until you know the parts it nests). That means:</p>
 
   <figure class="fig">
     <svg viewBox="0 0 620 96" role="img" aria-label="Learning order: atoms first, then the pointer, then the two aggregates">
@@ -246,14 +230,14 @@
     <figcaption>Our path through the file: build the vocabulary of atoms, then watch them nest into the crates the pipeline actually ships.</figcaption>
   </figure>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 opens the two smallest crates — <code>MosfetParams</code> (three process numbers) and <code>GridSpec</code> (a min/max/step ruler). Everything bigger is built from these.</p></blockquote>
+  
 </section>
 
 <!-- ================= PART 2 ================= -->
 <section class="part" id="part-2">
-  <h2>Part 2 · The atoms — <code>MosfetParams</code> &amp; <code>GridSpec</code></h2>
+  <h2>The atoms — <code>MosfetParams</code> &amp; <code>GridSpec</code></h2>
 
-  <blockquote><p><strong>The one job:</strong> hold the two smallest, most-reused facts about a process — the electrical character of one transistor polarity, and the discrete ruler that legal geometries snap to.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> hold the two smallest, most-reused facts about a process and the discrete ruler that legal geometries snap to.</p></blockquote>
 
   <h3><code>MosfetParams</code> — five fields that describe a device</h3>
 
@@ -267,7 +251,6 @@
 
   <p>The first three are the square-law numbers, and they're now optional (<code>None</code>): a gm/Id LUT tech reads its operating point straight from the table, so it can omit them entirely (#158). The last two, <code>gamma</code>/<code>phi</code>, carry the body-effect model and default to <code>0.0</code>/<code>0.7</code> (#190).</p>
 
-  <p>Analogy: a transistor is like a car engine, and these three numbers are the spec-sheet line items — how hard it pulls (<code>mu_cox</code>), the ignition point it won't run below (<code>vth</code>), and how much it "leaks" torque as load rises (<code>lam</code>). The analytical (Level-1) sizer plugs exactly these three into the Shichman–Hodges equations to size a device on paper, with no SPICE at all.</p>
 
   <table>
     <thead><tr><th>Field</th><th>Meaning</th><th>Example (NMOS)</th></tr></thead>
@@ -278,7 +261,7 @@
     </tbody>
   </table>
 
-  <p>A whole <code>TechParams</code> carries <strong>two</strong> of these — one for <code>nmos</code>, one for <code>pmos</code> — because the two polarities have genuinely different physics (the PMOS <code>vth</code> is negative).</p>
+  <p>A whole <code>TechParams</code> carries <strong>two</strong> of these: <code>nmos</code>,  <code>pmos</code> — because the two polarities have genuinely different physics (the PMOS <code>vth</code> is negative).</p>
 
   <h3><code>GridSpec</code> — a ruler with three ticks that matter</h3>
 
@@ -292,51 +275,16 @@
         v = <span class="tok-fn">round</span>(x / self.step) * self.step
         <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))</code></pre>
 
-  <p>Analogy: you can't order lumber at any length — the yard sells it in fixed increments, with a shortest and longest board. <code>GridSpec</code> <em>is</em> that catalogue: "widths from 0.5 to 4.5 µm, in 0.5 µm steps." The solver is only ever allowed to pick a value that lands on a tick and stays inside the two ends.</p>
-
-  <h3>Traced with real numbers</h3>
-  <p>Take a width grid <code>GridSpec(min=0.5, max=4.5, step=0.5)</code>. Suppose the sizer computes an ideal width of <code>2.34 µm</code>. It isn't legal — so <code>snap</code> moves it to the nearest tick:</p>
-  <pre class="code"><code>width.<span class="tok-fn">snap</span>(<span class="tok-num">2.34</span>)
-  round(2.34 / 0.5) * 0.5  =  round(4.68) * 0.5  =  5 * 0.5  =  2.5 µm
-  clamped into [0.5, 4.5]                                    ->  2.5 µm</code></pre>
-
-  <figure class="fig">
-    <svg viewBox="0 0 500 130" role="img" aria-label="A GridSpec drawn as a ruler; the asked-for 2.34 micron snaps to the nearest tick at 2.5">
-      <line x1="50" y1="75" x2="450" y2="75" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <!-- 9 ticks: 0.5 .. 4.5 -->
-      <g stroke="var(--fig-muted)" stroke-width="1.5">
-        <line x1="50"  y1="68" x2="50"  y2="82"/>
-        <line x1="100" y1="68" x2="100" y2="82"/>
-        <line x1="150" y1="68" x2="150" y2="82"/>
-        <line x1="200" y1="68" x2="200" y2="82"/>
-        <line x1="300" y1="68" x2="300" y2="82"/>
-        <line x1="350" y1="68" x2="350" y2="82"/>
-        <line x1="400" y1="68" x2="400" y2="82"/>
-        <line x1="450" y1="68" x2="450" y2="82"/>
-      </g>
-      <!-- snapped tick at 2.5 -> index 4 -> x=250 -->
-      <line x1="250" y1="64" x2="250" y2="86" stroke="var(--fig-accent)" stroke-width="3"/>
-      <text x="50"  y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">0.5 min</text>
-      <text x="150" y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">step 0.5</text>
-      <text x="450" y="100" text-anchor="middle" font-size="10" fill="var(--fig-muted)">4.5 max</text>
-      <!-- asked -->
-      <text x="235" y="40" text-anchor="middle" font-size="11" fill="var(--fig-accent)">asked 2.34 µm</text>
-      <line x1="235" y1="46" x2="250" y2="62" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar)"/>
-      <text x="250" y="120" text-anchor="middle" font-size="11" fill="var(--fig-accent)">snaps → 2.5 µm</text>
-    </svg>
-    <figcaption>A <code>GridSpec</code> is just a ruler: <code>min</code> and <code>max</code> are the ends, <code>step</code> the tick spacing. Any computed value lands on the nearest tick.</figcaption>
-  </figure>
 
   <p>The same three-number record is reused for <em>three</em> different quantities in <code>TechParams</code>: transistor <code>width</code>, transistor <code>length</code>, and compensation <code>cap</code>. One tiny class, three jobs — that's the payoff of a well-chosen atom. Because <code>snap</code> is a method rather than a loose helper, all three rulers snap by the same rule, and a caller writes <code>tech.width.snap(w)</code> or <code>tech.length.snap(l)</code> without ever restating the arithmetic.</p>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 meets the one atom that isn't just numbers — <code>SpiceLib</code>, a <em>pointer</em> to a foundry PDK on disk, and the reason a couple of extra fields ride alongside it.</p></blockquote>
 </section>
 
 <!-- ================= PART 3 ================= -->
 <section class="part" id="part-3">
-  <h2>Part 3 · <code>SpiceLib</code> — a pointer to a real foundry kit</h2>
+  <h2> <code>SpiceLib</code> — a pointer to a real foundry kit</h2>
 
-  <blockquote><p><strong>The one job:</strong> remember <em>where</em> a foundry PDK lives on disk and <em>which</em> process corner to use, so the SPICE-verification step can build a netlist against the real device models.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> remember <em>where</em> a foundry PDK lives on disk and <em>which</em> process corner to use, so the SPICE-verification step can build a netlist against the real device models.</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">@dataclass</span>
 <span class="tok-kw">class</span> <span class="tok-fn">SpiceLib</span>:
@@ -345,10 +293,8 @@
     design: <span class="tok-kw">str</span> | <span class="tok-kw">None</span> = <span class="tok-kw">None</span>                  <span class="tok-com"># optional global settings to .include</span>
     corners: <span class="tok-kw">list</span>[<span class="tok-kw">str</span>] = field(default_factory=<span class="tok-fn">list</span>)  <span class="tok-com"># corners to re-measure in the CLI</span></code></pre>
 
-  <p>Analogy: <code>MosfetParams</code> was the engine spec printed <em>on the page</em>; <code>SpiceLib</code> is a <strong>library card</strong> that says "the real, exhaustive manual is on shelf <code>sm141064.ngspice</code>, and read the <code>typical</code> edition." The data itself lives elsewhere; this record just holds the reference.</p>
-
   <h3>Why a PDK needs more than a flat model file</h3>
-  <p>This is the subtlety worth slowing down for. There are two totally different ways a technology can supply its transistors, and <code>SpiceLib</code> exists to mark the harder one:</p>
+  <p>There are totally different ways a technology can supply its transistors, and <code>SpiceLib</code> exists to mark the harder one:</p>
 
   <figure class="fig">
     <svg viewBox="0 0 540 210" role="img" aria-label="Contrast: a flat spice_model include gives M-devices, a spice_lib PDK gives X-subcircuits and needs a device_map">
@@ -378,14 +324,14 @@
   <h3>The <code>field(default_factory=list)</code> detail</h3>
   <p>Notice <code>corners</code> uses <code>field(default_factory=list)</code>, not <code>corners = []</code>. Why? A bare <code>[]</code> default would be <strong>shared by every instance</strong> — a classic Python trap where two <code>SpiceLib</code> objects secretly point at the <em>same</em> list. <code>default_factory=list</code> says "make a fresh empty list for each new record." A quiet correctness detail you'll see again in <code>SizingResult</code>.</p>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;4 assembles all the atoms into <code>TechParams</code> — the big incoming crate — and shows how its optional fields silently pick which sizing engine runs.</p></blockquote>
+  
 </section>
 
 <!-- ================= PART 4 ================= -->
 <section class="part" id="part-4">
-  <h2>Part 4 · <code>TechParams</code> — everything the process gives us</h2>
-
-  <blockquote><p><strong>The one job:</strong> bundle a complete process technology — its two device models, its three geometry grids, and whatever SPICE/gm-Id assets exist — into one crate loaded from a YAML config.</p></blockquote>
+  <h2><code>TechParams</code> — everything the process gives us</h2>
+  <p>So far, we have walkthrough main ingredients to build <code>TechParams</code>. Now, it's time to understand this seam</p>
+  <blockquote><p><strong>Main task:</strong> bundle a complete process technology: its two device models, its three geometry grids, and whatever SPICE/gm-Id assets exist into one crate loaded from a YAML config.</p></blockquote>
 
   <p>This is the first <strong>aggregate</strong>: a record whose fields are <em>other records</em>. We've already met every part, so the whole is easy now.</p>
 
@@ -459,18 +405,16 @@
     <figcaption>Same crate, four destinies. Which optional asset is filled in silently decides which engine sizes and verifies the circuit — the record doubles as the router.</figcaption>
   </figure>
 
-  <p>The <code>__future__</code> import at the top of the file is what lets those <code>str | None</code> annotations work as plain strings (they're never evaluated), and <code>device_handle</code> / <code>wl_units</code> exist only to paper over foundry quirks — GF180 names its device instance <code>m0</code> and expects SI units; sky130 names it after the cell and uses bare microns. Plumbing, honestly labelled.</p>
+  <p>The <code>__future__</code> import at the top of the file is what lets those <code>str | None</code> annotations work as plain strings (they're never evaluated), and <code>device_handle</code> / <code>wl_units</code> exist only to paper over foundry quirks: GF180 names its device instance <code>m0</code> and expects SI units; sky130 names it after the cell and uses bare microns. </p>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;5 turns to the <em>other</em> incoming crate — <code>SizingSpec</code>, where the user says what the amplifier must achieve, and where <code>None</code> means "don't care."</p></blockquote>
 </section>
 
 <!-- ================= PART 5 ================= -->
 <section class="part" id="part-5">
-  <h2>Part 5 · <code>SizingSpec</code> — the wish list</h2>
+  <h2><code>SizingSpec</code> — the target specification</h2>
 
-  <blockquote><p><strong>The one job:</strong> capture what the designer asks of the amplifier — the operating conditions that are fixed, and the performance bounds that are optional targets.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> capture what the designer asks for (Gain, GBW, Power...)</p></blockquote>
 
-  <p>Where <code>TechParams</code> says "here's the silicon you have," <code>SizingSpec</code> says "here's what I want out of it." It's a flat record — no nesting — but it has a strong shape: a handful of <strong>required</strong> facts and a long tail of <strong>optional</strong> constraints.</p>
 
   <pre class="code"><code><span class="tok-kw">@dataclass</span>
 <span class="tok-kw">class</span> <span class="tok-fn">SizingSpec</span>:
@@ -494,16 +438,13 @@
     <span class="tok-kw">def</span> <span class="tok-fn">rail_v</span>(self, net: <span class="tok-kw">str</span>) -&gt; <span class="tok-kw">float</span>:  <span class="tok-com"># net name → its DC level</span>
         <span class="tok-kw">return</span> self.vdd <span class="tok-kw">if</span> net == <span class="tok-str">"vdd!"</span> <span class="tok-kw">else</span> self.vss</code></pre>
 
-  <p>Analogy: it's a <strong>restaurant order</strong>. Four things you <em>must</em> state — table (supply rails), party size (bias current), and what's on the table already (load cap). Everything else is a preference: "at least 90&nbsp;dB of gain," "no more than 2&nbsp;mW of power." Leave a preference blank and the kitchen simply won't check it.</p>
 
-  <h3>Two derived readings</h3>
-  <p>The record answers two questions so often that it answers them itself. Neither adds state — both are one line over <code>vdd</code> and <code>vss</code>.</p>
+  <h3>Two commonly used method </h3>
   <ul>
-    <li><code>spec.vcm</code> — the <strong>input common mode</strong>. Today it is simply the supply midpoint, and saying so as a named property makes the assumption visible instead of leaving <code>(vdd + vss) / 2</code> scattered through the sizer looking like arithmetic. If a spec ever states an input CM explicitly, this is the one place it lands.</li>
-    <li><code>spec.rail_v(net)</code> — the DC level of a <strong>supply net</strong>, so a walker that arrives at <code>"vdd!"</code> or <code>"gnd!"</code> can turn the name into a voltage. Read it literally: everything that is not <code>"vdd!"</code> maps to <code>vss</code>. Since every shipped spec is single-supply (<code>vss = 0.0</code>), <code>gnd!</code> correctly reads as 0&nbsp;V — but a dual-supply spec would report ground as the negative rail, which is why the method's docstring says so out loud.</li>
+    <li><code>spec.vcm</code> — the <strong>input common mode</strong>, simply the supply midpoint, and saying so as a named property makes the assumption visible instead of leaving <code>(vdd + vss) / 2</code> scattered through the sizer looking like arithmetic.</li>
+    <li><code>spec.rail_v(net)</code> — the DC level of a <strong>supply net</strong>, so a walker that arrives at <code>"vdd!"</code> or <code>"gnd!"</code> can turn the name into a voltage.</li>
   </ul>
 
-  <p>The distinction <code>vcm</code> draws matters more than it looks. Two places in the sizer compute the same midpoint and deliberately <em>don't</em> call <code>spec.vcm</code>: a follower's quiescent <em>output</em> level, and the <em>output</em> common mode a CMFB servos. They match today by coincidence, not by meaning — and an explicit input-CM field would move <code>vcm</code> while leaving those two alone.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 210" role="img" aria-label="SizingSpec split into a solid required zone and a dashed optional zone where None means skip">
@@ -533,21 +474,20 @@
     <figcaption>Two zones in one record. Solid box: the conditions the sizer needs to run at all. Dashed box: bounds it checks only when you fill them in.</figcaption>
   </figure>
 
-  <h3>Traced with real numbers</h3>
+  <h3>Example</h3>
   <p>A 5&nbsp;V single-supply op-amp driving 10&nbsp;pF, asking for at least 90&nbsp;dB gain and 3&nbsp;MHz bandwidth, silent on everything else:</p>
   <pre class="code"><code>SizingSpec(vdd=<span class="tok-num">5.0</span>, vss=<span class="tok-num">0.0</span>, ibias=<span class="tok-num">10e-6</span>, cl=<span class="tok-num">10e-12</span>,
            gain_min_db=<span class="tok-num">90.0</span>, gbw_min_hz=<span class="tok-num">3.0e6</span>)
 <span class="tok-com"># phase_margin_min_deg, power_max_w, cmrr_min_db … all stay None → not enforced</span></code></pre>
   <p>The <code>None</code> convention is doing real work: it lets one record express "constrain gain and bandwidth, but I don't care about CMRR" without any special flags. Absence <em>is</em> the signal.</p>
 
-  <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;6 opens the crate that comes back out — <code>TransistorSizing</code> and the aggregate <code>SizingResult</code> — and names the single idea this whole file quietly enforces.</p></blockquote>
 </section>
 
 <!-- ================= PART 6 ================= -->
 <section class="part" id="part-6">
-  <h2>Part 6 · The outputs, the exception, and the hidden idea</h2>
+  <h2>The outputs (<code>SizingResult</code>), the exception, and the hidden idea</h2>
 
-  <blockquote><p><strong>The one job:</strong> package the sizer's answer — every transistor's dimensions plus circuit-level results and an honest verdict — into one crate the caller can trust and print.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> package the sizer's answer — every transistor's dimensions plus circuit-level results and an honest verdict — into one crate the caller can trust and print.</p></blockquote>
 
   <h3><code>TransistorSizing</code> — the answer for one device</h3>
   <pre class="code"><code><span class="tok-kw">@dataclass</span>
@@ -559,7 +499,7 @@
     vgs_v: <span class="tok-kw">float</span>     <span class="tok-com"># quiescent gate-source voltage</span>
     vds_sat_v: <span class="tok-kw">float</span> <span class="tok-com"># minimum |Vds| for saturation</span></code></pre>
 
-  <p>This is the mirror image of <code>MosfetParams</code>. That atom described a <em>device type</em> in the abstract; this one describes a <em>specific, sized transistor</em> in the final circuit — its geometry and its DC operating point. And a whole amplifier has many of them, so <code>SizingResult</code> keeps a dictionary keyed by <code>ref</code>.</p>
+  <p>That atom described a <em>device type</em> in the abstract; this one describes a <em>specific, sized transistor</em> in the final circuit — its geometry and its DC operating point. And a whole amplifier has many of them, so <code>SizingResult</code> keeps a dictionary keyed by <code>ref</code>.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 560 230" role="img" aria-label="SizingResult.transistors is a dict mapping device references to TransistorSizing cards">
@@ -619,46 +559,8 @@
     <span class="tok-str">"""Raised when a technology can't be sized by the requested method."""</span></code></pre>
   <p>It's here for the same reason as the records: it's part of the <strong>vocabulary of the seam</strong>. When a PTM/SPICE node has no gm/Id LUT, the analytical sizer isn't a valid fallback — so rather than return a garbage <code>SizingResult</code>, a stage raises this specific error and the caller can catch exactly it. A named failure is as much a contract as a named field.</p>
 
-  <h3>The hidden idea: typed seams and data contracts</h3>
-  <p>Step back and the whole file is implementing one principle it never states:</p>
-
-  <div class="eq-center"><span class="boxed-eq">every hand-off between stages is a <strong>named, typed record</strong> — never a loose dict</span></div>
-
-  <p>That's the payoff of a file with no logic. Each stage depends only on the <em>shape</em> of these crates, not on the internals of the stage before it. You can rewrite the gm/Id sizer completely, and as long as it still returns a <code>SizingResult</code>, every downstream printer, verifier, and CLI keeps working untouched. The dataclasses are the <strong>stable interface</strong>; the logic around them is free to churn.</p>
-
-  <figure class="fig">
-    <svg viewBox="0 0 560 120" role="img" aria-label="Pipeline stages connected only through typed record seams">
-      <g text-anchor="middle" font-size="11">
-        <rect x="10"  y="42" width="110" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="65"  y="66">load config</text>
-        <rect x="225" y="42" width="110" height="40" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="280" y="66">size circuit</text>
-        <rect x="440" y="42" width="110" height="40" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-        <text x="495" y="66">report / verify</text>
-      </g>
-      <g stroke="var(--fig-stroke)" stroke-width="2">
-        <line x1="120" y1="62" x2="225" y2="62" marker-end="url(#ar)"/>
-        <line x1="335" y1="62" x2="440" y2="62" marker-end="url(#ar)"/>
-      </g>
-      <text x="172" y="34" text-anchor="middle" font-size="10" fill="var(--fig-accent)">TechParams · SizingSpec</text>
-      <text x="387" y="34" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">SizingResult</text>
-    </svg>
-    <figcaption>The records are the only thing that crosses between stages. Swap a stage's insides freely — the typed seam is the contract that holds the pipeline together.</figcaption>
-  </figure>
-
-  <h3>What this file honestly does <em>not</em> do</h3>
-  <ul>
-    <li><strong>No validation.</strong> Nothing here checks that <code>vdd &gt; vss</code> or that a width lands on the grid — these are dumb records; the surrounding stages enforce meaning.</li>
-    <li><strong>Not actually immutable.</strong> They're plain dataclasses, not <code>frozen=True</code>. The docstring's "freely inspected or passed" is a <em>convention</em>, not an enforced guarantee — a stage <em>could</em> mutate one, and nothing would stop it.</li>
-    <li><strong>Almost no behaviour.</strong> Three methods in the whole file — <code>GridSpec.snap</code>, <code>SizingSpec.vcm</code> and <code>SizingSpec.rail_v</code> — and each reads nothing but the record's own fields: no other state, no side effects. Every real computation still lives elsewhere; this file stays inert enough to import anywhere.</li>
-    <li><strong>Defaults, not intelligence.</strong> <code>corner="typical"</code>, <code>wl_units="m"</code>, ratios of <code>2.0</code>/<code>5.0</code> — reasonable starting points, but the file never reasons about whether they fit your process.</li>
-  </ul>
-
-  <h3>Why it's elegant</h3>
-  <p>The whole design rides one restraint: <strong>keep the data types free of logic so they can be the shared language of every stage</strong> — the lone exception being a rule like <code>snap</code>, or a reading like <code>vcm</code> and <code>rail_v</code>, that is <em>about</em> the record and nothing else, and so belongs with it rather than copied into five call sites. Small atoms (<code>MosfetParams</code>, <code>GridSpec</code>) compose into aggregates (<code>TechParams</code>, <code>SizingResult</code>); optional fields double as routers; <code>None</code> and empty collections carry meaning without flags. It's the least code in the module and the most important, because everything else agrees to speak through it.</p>
-
   <hr>
-  <p><strong>In one sentence:</strong> <code>models.py</code> defines the logic-free dataclasses that are the typed seams of the sizer — small atoms (<code>MosfetParams</code>, <code>GridSpec</code>, <code>SpiceLib</code>) that compose into the incoming crates (<code>TechParams</code>, <code>SizingSpec</code>) and the outgoing crate (<code>SizingResult</code>, holding one <code>TransistorSizing</code> per device) — so every pipeline stage hands work to the next through a stable, named contract instead of a loose dictionary.</p>
+
 </section>
 
 </main>

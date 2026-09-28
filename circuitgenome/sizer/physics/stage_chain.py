@@ -31,13 +31,23 @@ from .taxonomy import RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_de
 # --------------------------------------------------------------------------- #
 # Cascode-aware output resistance
 # --------------------------------------------------------------------------- #
-def _by_drain(mosfets: list[Device]) -> dict[str, Device]:
-    """Net -> the MOSFET whose drain sits on it (first wins, for the walk)."""
-    by_drain: dict[str, Device] = {}
+def _by_drain(mosfets: list[Device]) -> dict[str, list[Device]]:
+    """Net -> every MOSFET whose drain sits on it."""
+    by_drain: dict[str, list[Device]] = {}
     for d in mosfets:
         if d.type in ("nmos", "pmos"):
-            by_drain.setdefault(d.terminals.get("d"), d)
+            by_drain.setdefault(d.terminals.get("d"), []).append(d)
     return by_drain
+
+
+def _parallel_rout(devices, by_drain, model, sizing, stop, degen) -> float:
+    """Parallel combination (Ω) of each device's looking-in drain resistance."""
+    g = 0.0
+    for d in devices:
+        r = _looking_in_drain(d, by_drain, model, sizing, stop, degen)
+        if r > 0:
+            g += 1.0 / r
+    return 1.0 / g if g > 0 else float("inf")
 
 
 def _looking_in_drain(device, by_drain, model, sizing, stop, degen) -> float:
@@ -48,6 +58,12 @@ def _looking_in_drain(device, by_drain, model, sizing, stop, degen) -> float:
     whose source is a rail or in ``stop`` (e.g. the input-pair tail node, an AC
     ground for the differential half-circuit) contributes just ``ro``.  Shallow
     recursion handles multi-high stacks.
+
+    ``R_source`` is every device draining onto the source net, in parallel,
+    whatever its type.  On a folded cascode that net is the folding node, where
+    the input pair and the current source below the cascode both drain, so
+    ``R_source = ro_pair ∥ ro_source``.  Taking only the first drain there found
+    the opposite-type pair and dropped the boost entirely (issue #240).
 
     ``degen`` maps a net to the series resistance between it and AC ground --
     a source-degeneration resistor, which is degeneration in exactly the sense
@@ -70,12 +86,12 @@ def _looking_in_drain(device, by_drain, model, sizing, stop, degen) -> float:
         return ro * (1.0 + gm * r_deg)
     if src in RAILS or src in stop or src is None:
         return ro
-    below = by_drain.get(src)
-    if below is not None and below.ref != device.ref and below.type == device.type:
-        gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
-        r_src = _looking_in_drain(below, by_drain, model, sizing, stop, degen)
-        return ro * (1.0 + gm * r_src) if r_src != float("inf") else float("inf")
-    return ro
+    below = [d for d in by_drain.get(src, []) if d.ref != device.ref]
+    if not below:
+        return ro
+    gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
+    r_src = _parallel_rout(below, by_drain, model, sizing, stop, degen)
+    return ro * (1.0 + gm * r_src) if r_src != float("inf") else float("inf")
 
 
 def node_rout(out_net: str, mosfets: list[Device], model, sizing,
@@ -90,13 +106,8 @@ def node_rout(out_net: str, mosfets: list[Device], model, sizing,
     ground, which boosts the device above it by ``1 + gm·R``.
     """
     by_drain = _by_drain(mosfets)
-    g = 0.0
-    for d in mosfets:
-        if d.type in ("nmos", "pmos") and d.terminals.get("d") == out_net:
-            r = _looking_in_drain(d, by_drain, model, sizing, stop, degen or {})
-            if r > 0:
-                g += 1.0 / r
-    return 1.0 / g if g > 0 else float("inf")
+    return _parallel_rout(by_drain.get(out_net, []), by_drain, model, sizing,
+                          stop, degen or {})
 
 
 # --------------------------------------------------------------------------- #
