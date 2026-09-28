@@ -193,15 +193,17 @@ from ``mu_cox``/``vth``/``lam`` for ``generic``:
 
 Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loop
 AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
-unity-gain pulse (the min of the rising and falling edges); output swing from a
-unity-buffer DC sweep; CMRR and PSRR+ from the same feedback loop with the AC
+unity-gain pulse (the min of the rising and falling edges); output swing from an
+inverting −1 DC sweep (fully-differential designs: a differential-only −1 rig,
+both per output); CMRR and PSRR+ from the same feedback loop with the AC
 stimulus riding on the input common mode / the positive supply.  Every bench
 loads each output (both, on a fully-differential design) with the spec's ``cl``
 to ground — the load the analytical metrics are predicted against.  Single-ended
 op-amps are the most robust; fully-differential AC metrics (which depend on the
-on-chip CMFB operating point), the single-ended-only swing/slew benches on FD
-circuits, and any non-converging measurement are reported as ``n/a`` rather than
-as wrong numbers.
+on-chip CMFB operating point) and any non-converging measurement are reported as
+``n/a`` rather than as wrong numbers.  A fully-differential design must also
+*settle*: the DC bias check kicks one output and rejects a design whose common
+mode or differential output keeps ringing (issue #208).
 
 Example output
 --------------

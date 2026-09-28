@@ -42,8 +42,7 @@ filters are the two filter + prune pairs.
 .. admonition:: Example
 
    A ``load`` that does not consume ``bias_cmfb`` leaves the ``cmfb`` slot
-   driving nothing, so the ``resistive_sense_cmfb`` and ``dda_cmfb`` choices
-   would emit the same circuit — the filter keeps the canonical one and the
+   driving nothing, so every ``cmfb`` choice would emit the same circuit — the filter keeps the canonical one and the
    prune empties it.
 
 Two kinds of check
@@ -108,7 +107,9 @@ The filters at a glance
      - filter + prune
      - tag
      - The ``cmfb`` variant choice when the ``load`` does not consume it;
-       prune empties the placeholder so rail 4 is not needed.
+       prune empties the placeholder so rail 4 is not needed.  For a
+       consuming load, a ``cmfb`` whose output diode does not match the
+       gated devices' type (it is their mirror reference).
    * - :ref:`Tail-current <compat-tail-current>`
      - filter + prune
      - structural
@@ -313,10 +314,22 @@ or ``mp1``/``mp2``) and ``current_source_load_{pmos,nmos}`` (gating both
 branch devices; issue #112). The other 8 declare it ``role: optional`` and
 never reference it, so ``net_cmfb_out`` would drive nothing.
 
+For a consuming load the CMFB's output stage must match it. Each CMFB amp's
+``out`` is a diode-connected device that current-mirrors into the load's
+CMFB-gated devices (issue #208): the CM loop's transconductance is then about
+the CMFB pair's ``gm/2``, so it crosses near the differential GBW and
+inherits the Miller compensation's margin. The earlier high-gain amps drove
+those gates as a voltage, putting the CM crossover tens of times above GBW —
+27 of 28 sampled gf180 FD circuits oscillated in common mode — and a
+compensation cap on ``net_cmfb_out`` only made it worse (a second slow pole).
+A diode mirrors only into devices of its own type, so the filter keeps a
+``*_pmos_mirror`` CMFB for PMOS-gated loads and a ``*_nmos_mirror`` one for
+NMOS-gated loads, both read structurally from the devices' gate connections.
+
 For a ``load`` whose ``output_cardinality`` isn't ``"differential"``, only the
-canonical ``resistive_sense_cmfb`` variant is allowed through -- the
-``dda_cmfb`` choice would otherwise be enumerated as a duplicate no-op
-circuit. That canonical variant is then pruned to an empty placeholder (no
+canonical ``resistive_sense_cmfb_pmos_mirror`` variant is allowed through --
+the other ``cmfb`` choices would otherwise be enumerated as duplicate no-op
+circuits. That canonical variant is then pruned to an empty placeholder (no
 ports, no devices), so it contributes no devices to the assembled circuit and
 ``cmfb.bias`` is no longer counted as a needed bias rail. Because
 ``cmfb.vref`` is the only connection referencing the ``vcm_ref`` external port,

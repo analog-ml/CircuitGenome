@@ -75,9 +75,11 @@ explained below the table.
        | Resistor (GND-side)
        | :strike:`Stacked-diode cascode mirror (PMOS)` ‡
        | :strike:`Stacked-diode cascode mirror (NMOS)` ‡
-   * - CMFB (2)
-     - | Resistive-sense 5T OTA
-       | Differential-difference amplifier (DDA)
+   * - CMFB (4)
+     - | Resistive-sense amp, PMOS-mirror output
+       | Resistive-sense amp, NMOS-mirror output
+       | Differential-difference amplifier (DDA), PMOS-mirror output
+       | Differential-difference amplifier (DDA), NMOS-mirror output
    * - Compensation (3)
      - | Miller capacitor
        | Miller cap with nulling resistor
@@ -303,8 +305,12 @@ internal device structure is invisible to the template.
        - ``out`` — drives ``load.bias_cmfb`` via ``net_cmfb_out``.
        - ``vdd`` / ``gnd`` — supply rails.
 
-       Two variants: ``resistive_sense_cmfb`` (resistive averager + 5T OTA)
-       and ``dda_cmfb`` (differential-difference amplifier). Present only when
+       Two amps — ``resistive_sense_cmfb_*`` (resistive averager + pair)
+       and ``dda_cmfb_*`` (differential-difference amplifier) — each in a
+       ``*_pmos_mirror`` and ``*_nmos_mirror`` form: ``out`` is a
+       diode-connected device that current-mirrors into the load's
+       CMFB-gated devices (a low-gain CMFB whose loop crosses near GBW,
+       issue #208), so its type must match theirs. Present only when
        ``load``'s ``output_cardinality`` is ``"differential"`` (see "CMFB
        compatibility filter" below); otherwise pruned to an empty placeholder
        and ``vcm_ref`` is dropped from ``external_ports`` (issue #18).
@@ -434,7 +440,7 @@ combinations with a differential-cardinality load, each with both CMFB
 variants, giving **48** effective ``load``/``cmfb`` combinations;
 single-ended templates have no CMFB.  A fully-differential template also
 duplicates its amplification and compensation slots — one per output path.
-The ** filter makes both paths use the same amplification variant, so only
+The †† filter makes both paths use the same amplification variant, so only
 the compensation factor is squared.  Each template's circuit count then
 follows from the slots it adds:
 
@@ -452,7 +458,7 @@ follows from the slots it adds:
      - 60 × 1 ``amplification_stage`` § × 3 ``compensation`` ‖
      - 180
    * - ``two_stage_opamp_fully_differential``
-     - 48 ``load``/``cmfb`` ¶ × 1 ``amplification_stage`` § ** × (3 ``compensation`` ‖)²
+     - 48 ``load``/``cmfb`` ¶ × 1 ``amplification_stage`` § †† × (3 ``compensation`` ‖)²
      - 432
    * - ``three_stage_opamp_nmc_single_ended``
      - 60 × 1 gm2 § × 2 gm3 × 9 ``compensation`` ‖
@@ -461,7 +467,7 @@ follows from the slots it adds:
      - 60 × 1 gm2 § × 2 gm3 × 9 ``compensation`` ‖
      - 1,080
    * - ``three_stage_opamp_{nmc,rnmc}_fully_differential``
-     - 48 ``load``/``cmfb`` ¶ × 1 gm2 § × 2 gm3 ** × (9 ``compensation`` ‖)²
+     - 48 ``load``/``cmfb`` ¶ × 1 gm2 § × 2 gm3 †† × (9 ``compensation`` ‖)²
      - 7,776
 
 **Compatibility filters** (section-local symbols):
@@ -479,8 +485,9 @@ follows from the slots it adds:
   variants: one CS + one non-inverting stage per input-pair polarity. (The gm3
   slot in a 3-stage template keeps both CS variants.)
 | **¶** :ref:`CMFB <compat-cmfb>` — of the 48 fully-differential combinations,
-  the 24 with a ``"differential"``-cardinality load keep both CMFB variants
-  (24 × 2 = 48 effective ``load``/``cmfb`` combinations).  The other 24 have
+  the 24 with a ``"differential"``-cardinality load keep both CMFB amps, each
+  in the mirror form matching the load's gated devices (24 × 2 = 48 effective
+  ``load``/``cmfb`` combinations).  The other 24 have
   no CMFB consumer, so nothing regulates their output common mode; they are
   skipped as bias-infeasible (issue #208) and return, collapsed to one CMFB
   variant each, only with ``config={"include_infeasible": True}``.
@@ -490,7 +497,7 @@ follows from the slots it adds:
   per polarity. The 3-stage NMC scheme's nested ``Cm1`` instead *requires* a
   non-inverting gm2, supplied by the ``noninverting_stage_*`` variants (issue
   #139); before they existed the NMC templates enumerated zero.
-| **\*\*** :ref:`Half-circuit symmetry <compat-symmetry>` — a fully-differential
+| **††** :ref:`Half-circuit symmetry <compat-symmetry>` — a fully-differential
   template's ``_p``/``_n`` amplification and output-stage slots must use the
   same variant; mixed halves sit at different DC levels and split the outputs
   apart (issue #208).  Compensation may still differ between the two paths.
@@ -502,7 +509,7 @@ follows from the slots it adds:
    A `Buffered templates`_ variant's follower ``output_stage`` slot multiplies
    the base count by its follower variants — **×2**, for single-ended (one
    follower slot) and fully-differential alike (one per output path, but both
-   paths use the same follower **).
+   paths use the same follower, ††).
    Both compensation schemes stay identical, exactly as in the base templates:
 
    | ``two_stage_opamp_buffered_single_ended`` = 180 × 2 = **360**

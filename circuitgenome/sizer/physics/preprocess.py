@@ -118,6 +118,51 @@ def _cascode_load_current_plan(
             for d in load}
 
 
+def _cmfb_current_plan(
+    slot_transistors: dict[str, list[Device]], spec: SizingSpec,
+) -> dict[str, float]:
+    """Per-device IDS inside the CMFB amp, by KCL from its tail(s).
+
+    The CMFB's output is a diode that mirrors into the load's CMFB-gated
+    devices (issue #208), so the diode's planned current *sets* the load
+    current through the mirror ratio (the gm/Id geometry pass sizes the load
+    as ``W_diode · I_load / I_diode``) and must be the current it really
+    carries.  Structure, read from the assembled netlist:
+
+    * **tails** — gate on a bias rail (``net_bias*``): ``ibias`` each, like
+      the bias-generator leg they mirror.
+    * **pair devices** — source on a tail's drain: split that tail's current.
+    * **everything else** — the sum of the known currents entering its drain
+      net (a diode fed by its branch), or else a copy of the diode it mirrors
+      (same gate, same type).
+
+    Returns ``{}`` when there is no CMFB.
+    """
+    devs = [d for d in slot_transistors.get("cmfb", []) if d.type in ("nmos", "pmos")]
+    tails = [d for d in devs if d.terminals.get("g", "").startswith("net_bias")]
+    ids = {d.ref: spec.ibias for d in tails}
+    for t in tails:
+        pair = [d for d in devs if d.terminals.get("s") == t.terminals.get("d")]
+        for d in pair:
+            ids[d.ref] = spec.ibias / len(pair)
+    for _ in devs:   # fixed point: each pass settles at least one device
+        for d in devs:
+            if d.ref in ids:
+                continue
+            fed = [ids[o.ref] for o in devs if o is not d and o.ref in ids
+                   and o.terminals.get("d") == d.terminals.get("d")]
+            if fed:
+                ids[d.ref] = sum(fed)
+                continue
+            ref = next((o for o in devs if o is not d and o.ref in ids
+                        and o.type == d.type
+                        and o.terminals.get("g") == d.terminals.get("g")
+                        == o.terminals.get("d")), None)
+            if ref is not None:
+                ids[d.ref] = ids[ref.ref]
+    return ids
+
+
 def assign_ids(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
@@ -126,10 +171,13 @@ def assign_ids(
     """Assign quiescent IDS to each transistor from KCL + spec.ibias."""
     ids_2 = spec.ibias * spec.second_stage_current_ratio
     cascode_load = _cascode_load_current_plan(slot_transistors, spec)
+    cmfb = _cmfb_current_plan(slot_transistors, spec)
     ids_map: dict[str, float] = {}
     for ref, (device, slot) in all_transistors.items():
         if slot == "load" and ref in cascode_load:
             ids_map[ref] = cascode_load[ref]
+        elif slot == "cmfb" and ref in cmfb:
+            ids_map[ref] = cmfb[ref]
         elif slot in HALF_BIAS_SLOTS:
             # Each transistor in a 2-transistor group carries ibias/2.
             # For n devices in the slot (e.g. degenerated pairs), divide equally.

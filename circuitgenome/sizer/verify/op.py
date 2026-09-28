@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
+
 from ..models import SizingResult, SizingSpec, TechParams
 from .deck import (
     _MOS_MODELS,
@@ -10,6 +12,7 @@ from .deck import (
     _dut,
     _inject_sizes,
     _parse_subckt,
+    _run,
     _run_capture,
     ngspice_available,
 )
@@ -158,6 +161,58 @@ def _read_op_fd(name, ports, body, topo: _Topo, result: SizingResult,
     return (op, None) if op else (None, "sim-failed")
 
 
+#: Output excursion (fraction of Vdd) the settling check kicks ``outp`` by.
+_KICK_FRAC = 0.05
+#: Largest peak-to-peak (fraction of Vdd) the output CM or differential may
+#: still show over the last quarter of the window: a settled amplifier is
+#: flat there, an unstable one keeps ringing.
+_SETTLED_FRAC = 0.01
+
+
+def _fd_ringing(netlist_text: str, result: SizingResult, tech: TechParams,
+                spec: SizingSpec) -> tuple[float, float] | None:
+    """Residual ``(cm_p2p, dm_p2p)`` (V) an FD amplifier still shows after a kick.
+
+    ``.op`` also converges on an *unstable* equilibrium, and the AC bench
+    only sees the global differential loop, so two kinds of oscillator are
+    otherwise invisible (issue #208): a CMFB loop that rings in common mode
+    (27/28 sampled gf180 FD circuits with the old high-gain CMFB), and a
+    *local* loop — e.g. an NMC inner Miller loop — ringing well above the
+    measured GBW while the open-loop PM reads a healthy 88°.  In the ``.op``
+    DC state (inputs and ``vcm_ref`` at Vcm) a current pulse into ``outp``
+    alone moves it by ``_KICK_FRAC``·Vdd, exciting both modes; the residual
+    is read over the last quarter of a window of ~40 GBW periods (the CM loop
+    crosses near GBW).  ``None`` when the transient cannot run.
+    """
+    name, ports, body = _parse_subckt(netlist_text)
+    topo = _Topo(ports)
+    body_dut = _dut(tech, name, _inject_sizes(body, result))
+    vdd, ibias = spec.vdd, spec.ibias
+    vcm = (spec.vdd + spec.vss) / 2.0
+    t_kick = _KICK_FRAC * vdd * spec.cl / ibias
+    gbw = result.metrics.get("gbw_hz") or 1e6
+    t_end = max(40.0 / gbw, 20.0 * t_kick)
+    netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
+              "in1": "inp", "in2": "inn", "outp": "outp", "outn": "outn"}
+    fb = (f"Vip inp 0 {vcm}\nVin inn 0 {vcm}\n"
+          f"Ik 0 outp pulse(0 {ibias} {t_end / 100} 1n 1n {t_kick} 1)\n")
+    if topo.has_vcm:
+        netmap["vcm_ref"] = "ocm"
+        fb += f"Vocm ocm 0 {vcm}\n"
+    deck = (body_dut.replace("__PORTS__", " ".join(ports))
+            + _rig(vdd, ibias, sink=_iref_sink(body))
+            + f"Cl1 outp 0 {spec.cl}\nCl2 outn 0 {spec.cl}\n"
+            + fb + _xline(name, ports, netmap) + "\n"
+            + f".control\ntran {t_end / 4000} {t_end}\n"
+            + "wrdata __OUT__ v(outp) v(outn)\n.endc\n.end\n")
+    a = _run(deck, ["v(outp)", "v(outn)"])
+    if a is None or a.shape[0] < 20 or a.shape[1] < 4:
+        return None
+    late = a[:, 0] >= 0.75 * a[-1, 0]
+    vp, vn = a[late, 1], a[late, 3]
+    return float(np.ptp((vp + vn) / 2.0)), float(np.ptp(vp - vn))
+
+
 def _op_bias_problems(op: dict[str, dict[str, float]]) -> tuple[list[str], list[str]]:
     """Return ``(triode_refs, starved_refs)`` from an operating-point dict.
 
@@ -190,7 +245,10 @@ def check_bias_soundness(netlist_text: str, result: SizingResult,
     would reject every low-voltage CMFB variant that measurably amplifies at
     this very operating point; a dead FD circuit rails/splits its outputs
     instead, which the ``.op`` verdict already catches (the benches quantify
-    any marginality).  Conservative by design: returns ``(True, None)`` when
+    any marginality).  An FD operating point must also be *stable*: an
+    amplifier whose outputs keep ringing after a kick — in common mode (an
+    unstable CMFB loop) or differentially (an unstable local loop the AC
+    bench cannot see) — is condemned too (:func:`_fd_ringing`, issue #208).  Conservative by design: returns ``(True, None)`` when
     it cannot check (ngspice absent), so it only ever downgrades a feasible
     verdict.
     """
@@ -206,7 +264,20 @@ def check_bias_soundness(netlist_text: str, result: SizingResult,
                        "converge — no operating point to assess.")
     _, ports, _ = _parse_subckt(netlist_text)
     if _Topo(ports).fd:
-        return True, None   # output-state verdict above is the FD gate
+        # Output-state verdict above plus settling after a kick: the FD gate.
+        ring = _fd_ringing(netlist_text, result, tech, spec)
+        limit = _SETTLED_FRAC * spec.vdd
+        if ring is not None and max(ring) > limit:
+            cm, dm = ring
+            which = ("the differential output oscillates — a local loop is "
+                     "unstable" if dm > limit else
+                     "the output common mode oscillates — the CMFB loop is "
+                     "unstable")
+            return False, (f"SPICE bias check: the outputs do not settle "
+                           f"after a disturbance ({which}; residual CM "
+                           f"{cm * 1e3:.0f} mV, differential {dm * 1e3:.0f} mV "
+                           f"p-p).")
+        return True, None
     triode, starved = _op_bias_problems(op)
     if starved or triode:
         parts = []

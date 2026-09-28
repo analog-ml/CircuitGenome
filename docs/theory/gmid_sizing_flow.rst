@@ -455,7 +455,10 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
 
 .. note::
 
-   This is a fast **analytical pre-check**, and it is tail-focused: a SPICE DC
+   This is a fast **analytical pre-check**, and it is tail-focused — the input
+   pair's tail and, on fully-differential designs, the CMFB amp's tail (its pair's
+   gates sit at the output CM; since issue #208 its branch current is mirrored into
+   the load, so a starved CMFB tail starves the first stage).  A SPICE DC
    bias-soundness check
    (:func:`~circuitgenome.sizer.verify.check_bias_soundness`) grounds the final
    verdict for PTM / foundry techs.  So ``bias_feasible = True`` is *necessary but not

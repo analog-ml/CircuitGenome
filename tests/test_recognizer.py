@@ -299,33 +299,33 @@ def test_round_trip_two_stage_opamp(
 _TWO_STAGE_FULLY_DIFF_COMBOS = [
     # fmt: off
     # input_pair                             load                                                  tail_current                         bias_gen                        cmfb                     comp_p                              comp_n                              amp_stage             follower
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "dda_cmfb",              "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_source_nmos",       "common_drain_pmos"),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "cascode_current_mirror_tail_pmos",  "resistive_sense_cmfb",  "indirect_compensation",            "indirect_compensation",            "common_source_nmos",       None),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source_nmos",       "common_drain_pmos"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "resistive_sense_cmfb",  "miller_cap",                       "indirect_compensation",            "common_source_pmos",  None),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb",              "indirect_compensation",            "miller_cap",                       "common_source_pmos",  "common_drain_nmos"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "indirect_compensation",            "common_source_pmos",  "common_drain_nmos"),
-    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source_pmos",  None),
-    ("differential_pair_pmos_degenerated",  "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "resistive_sense_cmfb",  "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_source_nmos",       None),
-    ("differential_pair_nmos_degenerated",  "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source_pmos",  "common_drain_nmos"),
-    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source_nmos",       "common_drain_pmos"),
-    ("differential_pair_pmos",              "current_source_load_nmos",                             "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
-    ("differential_pair_nmos",              "current_source_load_pmos",                             "current_mirror_tail_nmos",          "dda_cmfb",              "indirect_compensation",            "indirect_compensation",            "common_source_pmos",  None),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "dda_cmfb_pmos_mirror",              "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_source_nmos",       "common_drain_pmos"),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "cascode_current_mirror_tail_pmos",  "resistive_sense_cmfb_pmos_mirror",  "indirect_compensation",            "indirect_compensation",            "common_source_nmos",       None),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "current_mirror_tail_pmos",          "dda_cmfb_pmos_mirror",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source_nmos",       "common_drain_pmos"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "resistive_sense_cmfb_nmos_mirror",  "miller_cap",                       "indirect_compensation",            "common_source_pmos",  None),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb_nmos_mirror",              "indirect_compensation",            "miller_cap",                       "common_source_pmos",  "common_drain_nmos"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "resistive_sense_cmfb_nmos_mirror",  "miller_cap_with_nulling_resistor",  "indirect_compensation",            "common_source_pmos",  "common_drain_nmos"),
+    ("differential_pair_nmos",              "folded_cascode_load_nmos_input_differential_output",  "resistor_tail_gnd",                 "dda_cmfb_nmos_mirror",              "miller_cap",                       "miller_cap_with_nulling_resistor",  "common_source_pmos",  None),
+    ("differential_pair_pmos_degenerated",  "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "resistive_sense_cmfb_pmos_mirror",  "miller_cap_with_nulling_resistor",  "miller_cap_with_nulling_resistor",  "common_source_nmos",       None),
+    ("differential_pair_nmos_degenerated",  "folded_cascode_load_nmos_input_differential_output",  "cascode_current_mirror_tail_nmos",  "dda_cmfb_nmos_mirror",              "indirect_compensation",            "indirect_compensation",            "common_source_pmos",  "common_drain_nmos"),
+    ("differential_pair_pmos",              "folded_cascode_load_pmos_input_differential_output",  "resistor_tail_vdd",                 "dda_cmfb_pmos_mirror",              "indirect_compensation",            "indirect_compensation",            "common_source_nmos",       "common_drain_pmos"),
+    ("differential_pair_pmos",              "current_source_load_nmos",                             "current_mirror_tail_pmos",          "resistive_sense_cmfb_nmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
+    ("differential_pair_nmos",              "current_source_load_pmos",                             "current_mirror_tail_nmos",          "dda_cmfb_pmos_mirror",              "indirect_compensation",            "indirect_compensation",            "common_source_pmos",  None),
     # Resistor loads (issue #160): the FD load slot wires its nets under
     # out1/out2, which the resistor_load_* patterns must expose or every load
     # candidate scores 0 and the slot is filled arbitrarily (the tail mirror
     # won, leaving r1/r2_load slotless and unsized). The cmfb column becomes
     # cmfb_absent via the compatibility hook (resistor loads set their own CM).
-    ("differential_pair_pmos",              "resistor_load_gnd",                                    "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
-    ("differential_pair_nmos",              "resistor_load_vdd",                                    "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
+    ("differential_pair_pmos",              "resistor_load_gnd",                                    "current_mirror_tail_pmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
+    ("differential_pair_nmos",              "resistor_load_vdd",                                    "current_mirror_tail_nmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
     # Active loads (issue #216): same gap as #160 -- without out1/out2 pins on
     # active_load_* every load candidate scores 0, and the tail mirror (which
     # also matches the active-load pattern) took the slot.
-    ("differential_pair_pmos",              "active_load_nmos",                                     "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
-    ("differential_pair_nmos",              "active_load_pmos",                                     "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
-    ("differential_pair_pmos",              "active_load_nmos",                                     "current_mirror_tail_pmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       "common_drain_pmos"),
-    ("differential_pair_nmos",              "active_load_pmos",                                     "current_mirror_tail_nmos",          "resistive_sense_cmfb",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  "common_drain_nmos"),
+    ("differential_pair_pmos",              "active_load_nmos",                                     "current_mirror_tail_pmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       None),
+    ("differential_pair_nmos",              "active_load_pmos",                                     "current_mirror_tail_nmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  None),
+    ("differential_pair_pmos",              "active_load_nmos",                                     "current_mirror_tail_pmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_nmos",       "common_drain_pmos"),
+    ("differential_pair_nmos",              "active_load_pmos",                                     "current_mirror_tail_nmos",          "resistive_sense_cmfb_pmos_mirror",  "miller_cap",                       "miller_cap",                       "common_source_pmos",  "common_drain_nmos"),
     # fmt: on
 ]
 
@@ -471,33 +471,33 @@ _THREE_STAGE_FD_COMBOS = [
     # mirrors the SE combos.
     # Plain RNMC FD (CS ss + non-inverting ts; issue #236):
     (_RNMC_FD_PLAIN, "differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "current_mirror_tail_pmos", "resistive_sense_cmfb",
+     "current_mirror_tail_pmos", "resistive_sense_cmfb_pmos_mirror",
      "common_source_nmos", "noninverting_stage_nmos", None, "miller_cap", "miller_cap"),
     (_RNMC_FD_PLAIN, "differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
-     "cascode_current_mirror_tail_nmos", "resistive_sense_cmfb",
+     "cascode_current_mirror_tail_nmos", "resistive_sense_cmfb_nmos_mirror",
      "common_source_pmos", "noninverting_stage_pmos", None, "indirect_compensation", "indirect_compensation"),
     (_RNMC_FD_PLAIN, "differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "resistor_tail_vdd", "dda_cmfb",
+     "resistor_tail_vdd", "dda_cmfb_pmos_mirror",
      "common_source_nmos", "noninverting_stage_pmos", None, "miller_cap", "indirect_compensation"),
     # Buffered RNMC FD (CS ss + non-inverting ts + follower output_stage):
     (_RNMC_FD_BUF, "differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
-     "cascode_current_mirror_tail_nmos", "dda_cmfb",
+     "cascode_current_mirror_tail_nmos", "dda_cmfb_nmos_mirror",
      "common_source_pmos", "noninverting_stage_nmos", "common_drain_nmos", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     (_RNMC_FD_BUF, "differential_pair_pmos_degenerated", "folded_cascode_load_pmos_input_differential_output",
-     "resistor_tail_vdd", "resistive_sense_cmfb",
+     "resistor_tail_vdd", "resistive_sense_cmfb_pmos_mirror",
      "common_source_nmos", "noninverting_stage_pmos", "common_drain_pmos", "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     (_RNMC_FD_BUF, "differential_pair_nmos", "folded_cascode_load_nmos_input_differential_output",
-     "resistor_tail_gnd", "resistive_sense_cmfb",
+     "resistor_tail_gnd", "resistive_sense_cmfb_nmos_mirror",
      "common_source_pmos", "noninverting_stage_pmos", "common_drain_nmos", "miller_cap", "miller_cap"),
     # Buffered NMC FD (ota ss + CS ts + follower output_stage; include_unsupported):
     (_NMC_FD, "differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "resistor_tail_vdd", "dda_cmfb",
+     "resistor_tail_vdd", "dda_cmfb_pmos_mirror",
      "differential_ota_second_stage", "common_source_nmos", "common_drain_pmos",
      "miller_cap_with_nulling_resistor", "miller_cap_with_nulling_resistor"),
     # Plain NMC FD (noninverting_stage_* ss + CS ts; issue #139) -- first-class
     # enumerable, no include_unsupported:
     (_NMC_FD_PLAIN, "differential_pair_pmos", "folded_cascode_load_pmos_input_differential_output",
-     "current_mirror_tail_pmos", "resistive_sense_cmfb",
+     "current_mirror_tail_pmos", "resistive_sense_cmfb_pmos_mirror",
      "noninverting_stage_nmos", "common_source_nmos", None, "miller_cap", "miller_cap"),
 ]
 

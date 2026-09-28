@@ -297,6 +297,8 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
 
   <p>The running extreme (<code>np.maximum.accumulate</code>) is used to locate that crossing, so end-of-edge ringing cannot cut a window short. And the reported figure is the <strong>minimum of the rising and falling edges</strong> &mdash; an amplifier is only as fast as its slower direction.</p>
 
+  <p>A fully-differential circuit is measured the same way, through the FD gain &minus;1 rig of <a href="#part-7">Part 7</a>: a differential step of 0.6&middot;Vdd moves <em>each</em> output by 0.3&middot;Vdd &mdash; the single-ended step &mdash; and the figure is the minimum over the rising and falling edge of both outputs. Per output, because that is what the sizer predicts: each half slews its own Miller capacitor.</p>
+
 </section>
 
 <section class="part" id="part-7">
@@ -323,6 +325,19 @@ track = slope &lt;= -<span class="tok-num">0.7</span>            <span class="to
 <span class="tok-kw">return</span> <span class="tok-fn">float</span>(vo[lo]), <span class="tok-fn">float</span>(vo[hi])</code></pre>
 
   <p>It starts at the CM sample and expands in both directions while the slope stays near &minus;1. The values at the edges of that contiguous region are the reachable extremes. If the loop is not even tracking at CM, this polarity is wrong and the bench moves on.</p>
+
+  <h3>Fully differential: feed back the difference, and only the difference</h3>
+  <p>The FD version is the same idea &mdash; an inverting &minus;1 loop with the inputs held at CM &mdash; but the obvious way to build it is wrong in a way that took a waveform to see. A resistor network (<code>outp</code>&rarr;<code>inn</code>, <code>outn</code>&rarr;<code>inp</code>) ties the <em>input</em> common mode to the <em>output</em> common mode. If both outputs sit at a rail, the inputs are dragged out of range, the input pair turns off, and the outputs stay at the rail. That is a self-consistent operating point, and ngspice happily converges on it: the first slew transient started with both outputs at 3.3&nbsp;V.</p>
+
+  <p>So the rig closes the loop with behavioural sources that see only the differential output:</p>
+
+  <pre class="code"><code>fb = <span class="tok-str">"(v(vd)+v(outp)-v(outn))/4"</span>
+<span class="tok-str">f"Binn inn 0 v={vcm}+{fb}"</span>       <span class="tok-com"># summing-node voltages of a resistive -1 loop</span>
+<span class="tok-str">f"Binp inp 0 v={vcm}-{fb}"</span>       <span class="tok-com"># input CM pinned at Vcm, whatever the outputs do</span></code></pre>
+
+  <p>Those are exactly the voltages a resistive &minus;1 network would put on the summing nodes (&beta; = &frac12;), so the differential loop behaves the same &mdash; but the input CM can no longer follow the output CM, and the sources draw no current, so the outputs carry only their load capacitors. Sweeping the differential source <code>vd</code> from &minus;Vdd to +Vdd drives each output across the whole supply.</p>
+
+  <p>The tracking region then requires <strong>both</strong> outputs to follow (each at &ge;&nbsp;0.7 of its ideal &frac12; slope). Tracking the difference alone is not enough: with a differential-difference CMFB, each output feeds its own sensing pair, and once an output moves ~&radic;2&middot;V<sub>ov</sub> from CM that pair switches fully and the common mode is no longer regulated. The difference still tracks &mdash; because the CM is collapsing &mdash; but one output has stopped following. The reported swing is per output, as the sizer defines it: the lower of the two outputs' highs and the higher of their lows.</p>
 
 </section>
 
@@ -354,7 +369,7 @@ track = slope &lt;= -<span class="tok-num">0.7</span>            <span class="to
   <h2>Part 9 &middot; What it honestly does not do</h2>
 
   <ul>
-    <li><strong>Slew rate and output swing are single-ended only.</strong> Both return <code>None</code> for a fully-differential circuit &mdash; the rigs have not been built.</li>
+    <li><strong>Fully-differential slew rate and swing are per output.</strong> They say how far and how fast each output goes while both still follow, not what the differential signal alone does.</li>
     <li>PSRR is positive-supply only. There is no PSRR&minus;.</li>
     <li>Every measurement is at one operating point and one corner. Corners are re-measured by calling the whole thing again with a different <code>corner</code>, not by sweeping inside a bench.</li>
     <li>The polarity search tries exactly two assignments. That is all a two-input amplifier has, but it does mean a circuit that settles under <em>neither</em> yields nothing at all &mdash; correctly, since there is no configuration in which it works.</li>

@@ -15,6 +15,8 @@ operating point):
   the inverting input to the ``cm`` node.
 * **FD loop** (AC/CMRR/PSRR): ``L1``/``L2`` close outp→inn / outn→inp at DC.
 * **Unity buffer** (slew/swing): out→inn direct — the large-signal rigs.
+* **FD gain −1** (slew/swing): behavioural sources feed back only the
+  differential output, pinning the input CM at Vcm (:func:`_fd_inverting_fb`).
 """
 from __future__ import annotations
 
@@ -234,6 +236,27 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
     return gain_db, gbw, pm, reason, best_pol
 
 
+def _fd_inverting_fb(vcm, drive: str) -> str:
+    """FD inverting gain −1 feedback around the DUT (the swing/slew rig).
+
+    Ideal behavioural sources close the loop on the **differential** signal
+    only: each input sits at ``Vcm ± (v(vd) + v(outp) − v(outn))/4`` — the
+    summing-node voltages of a resistive −1 network (β = ½), so
+    ``v(outp) − v(outn) → −v(vd)`` while the CMFB holds the output CM at
+    ``ocm``.  The input CM stays pinned at Vcm, so the rig measures
+    **output** limits, never ICMR (the FD twin of :func:`_measure_swing`'s
+    inverting sweep, issue #126).  A real resistor network would instead tie
+    the input CM to the output CM: an output pair stuck at a rail drags the
+    inputs out of range, which turns the pair off and holds the outputs there
+    — a latched operating point ngspice finds (issue #208).  The sources also
+    draw no current, so the outputs carry only ``cl``.  ``drive`` must define
+    the differential source node ``vd``.
+    """
+    fb = "(v(vd)+v(outp)-v(outn))/4"
+    return (f"Vocm ocm 0 {vcm}\n" + drive
+            + f"Binn inn 0 v={vcm}+{fb}\nBinp inp 0 v={vcm}-{fb}\n")
+
+
 _SR_SPAN = 0.2   # fraction of the total edge swing the slew window spans
 
 
@@ -281,7 +304,7 @@ def _edge_slew(t, vo, vdd) -> float | None:
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
                 sr_hint: float | None = None):
     """Unity-gain large-signal pulse → slew rate (V/s), the **min of the
-    rising and falling edges**.  SE only (best-effort).
+    rising and falling edges** (best-effort).  FD: :func:`_measure_sr_fd`.
 
     The transient starts from the DC operating point (no ``uic`` — a
     zero-state start would measure the power-up transient instead of the step
@@ -289,7 +312,8 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
     the spec target (``sr_hint``) completes its transition inside the window.
     """
     if topo.fd:
-        return None   # FD direct-feedback SR harness omitted in this pass
+        return _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
+                              polarity, sr_hint)
     step = 0.3 * vdd
     # Window long enough for 3× the spec-implied transition time (default 1 µs
     # per edge when the spec does not constrain slew rate).
@@ -319,7 +343,8 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
 
 
 def _measure_swing(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None):
-    """Inverting −1 DC sweep → ``(swing_max, swing_min)`` in V.  SE only.
+    """Inverting −1 DC sweep → ``(swing_max, swing_min)`` in V.  FD:
+    :func:`_measure_swing_fd`.
 
     The output is driven across the supply through an inverting gain −1
     network while the non-inverting input stays at CM, so the input stage
@@ -334,7 +359,8 @@ def _measure_swing(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=No
     reachable output extremes.
     """
     if topo.fd:
-        return None, None
+        return _measure_swing_fd(name, ports, body_dut, topo, vdd, ibias, cl,
+                                 vcm, polarity)
     step = max(vdd / 200.0, 1e-3)
     for inp, inn in _pols(polarity):
         netmap = _fb_netmap(topo, inp, inn)
@@ -357,6 +383,82 @@ def _measure_swing(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=No
         while hi < len(track) - 1 and track[hi + 1]:
             hi += 1
         return float(vo[lo]), float(vo[hi])  # inverting: max at low vin
+    return None, None
+
+
+def _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
+                   polarity=None, sr_hint: float | None = None):
+    """FD slew rate (V/s): a differential step through the gain −1 rig
+    (:func:`_fd_inverting_fb`), the **min over the rising and falling edge of
+    each output**.
+
+    Per output, like the SE bench and like the sizer's ``ibias/Cc`` (each half
+    slews its own Miller cap): the differential source steps 0.6·Vdd, so each
+    output moves 0.3·Vdd — the same excursion as the SE unity-buffer step.  Pulse
+    width scales with ``sr_hint`` as in :func:`_measure_sr`.
+    """
+    step = 0.3 * vdd
+    t_edge = max(3.0 * step / sr_hint, 60e-9) if sr_hint else 1e-6
+    t0 = 0.02 * t_edge
+    src = f"Vd vd 0 pulse(0 {2 * step} {t0} 10p 10p {t_edge} 1)\n"
+    for inp, inn in _pols(polarity):
+        netmap = _fb_netmap(topo, inp, inn)
+        deck = _deck(name, ports, body_dut, vdd, ibias, cl,
+                     _fd_inverting_fb(vcm, src), netmap,
+                     f"tran {(t0 + 2 * t_edge) / 2000} {t0 + 2 * t_edge}\n"
+                     "wrdata __OUT__ v(outp) v(outn)")
+        a = _run(deck, ["v(outp)", "v(outn)"])
+        if a is None or a.shape[0] < 10 or a.shape[1] < 4:
+            continue
+        t, vp, vn = a[:, 0], a[:, 1], a[:, 3]
+        # Negative feedback holds both outputs at the CM before the step; the
+        # wrong polarity latches them apart.
+        if abs(vp[0] - vcm) > 0.4 * vdd or abs(vn[0] - vcm) > 0.4 * vdd:
+            continue
+        first = t < t0 + t_edge            # pulse returns at t0 + t_edge
+        edges = [s for vo in (vp, vn) for part in (first, ~first)
+                 if (s := _edge_slew(t[part], vo[part], vdd)) is not None]
+        if len(edges) == 4:
+            return float(min(edges))
+    return None
+
+
+def _measure_swing_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
+                      polarity=None):
+    """FD output swing ``(swing_max, swing_min)`` in V, per output.
+
+    DC-sweeps the differential source ``vd`` from −Vdd to +Vdd through the
+    gain −1 rig (:func:`_fd_inverting_fb`), so ideally
+    ``outp = Vocm − vd/2`` and ``outn`` its mirror, each crossing the whole
+    supply.  The tracking region is the contiguous span around ``vd = 0``
+    where **both** outputs still follow (absolute slope ≥ 0.7 of the ideal ½); at
+    its edge the first output has saturated.  Reported per output, as the
+    sizer predicts
+    it (``Vdd − Vdsat`` / ``Vss + Vdsat`` of the output device): the lower of
+    the two outputs' highs and the higher of their lows.
+    """
+    step = max(vdd / 200.0, 1e-3)
+    src = "Vd vd 0 dc 0\n"
+    for inp, inn in _pols(polarity):
+        netmap = _fb_netmap(topo, inp, inn)
+        deck = _deck(name, ports, body_dut, vdd, ibias, cl,
+                     _fd_inverting_fb(vcm, src), netmap,
+                     f"dc Vd {-vdd} {vdd} {step}\nwrdata __OUT__ v(outp) v(outn)")
+        a = _run(deck, ["v(outp)", "v(outn)"])
+        if a is None or a.shape[0] < 20 or a.shape[1] < 4:
+            continue
+        vd, vp, vn = a[:, 0], a[:, 1], a[:, 3]
+        track = (np.gradient(vp, vd) <= -0.35) & (np.gradient(vn, vd) >= 0.35)
+        icm = int(np.argmin(np.abs(vd)))
+        if not track[icm]:
+            continue   # does not track at CM → wrong polarity (latched)
+        lo = hi = icm
+        while lo > 0 and track[lo - 1]:
+            lo -= 1
+        while hi < len(track) - 1 and track[hi + 1]:
+            hi += 1
+        # outp peaks at the low-vd edge, outn at the high-vd edge.
+        return (float(min(vp[lo], vn[hi])), float(max(vp[hi], vn[lo])))
     return None, None
 
 

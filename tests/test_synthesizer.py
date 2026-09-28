@@ -174,7 +174,7 @@ def test_synthesize_differential_output_folded_cascode_wires_distinct_bias_rails
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_nmos_mirror"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "amplification_stage": [v for v in modules["amplification_stage"] if v.name == "common_source_pmos"],
     }
@@ -216,19 +216,45 @@ def test_tail_current_variant_names():
 
 
 def test_cmfb_variant_names_and_ports():
-    """The cmfb category exposes 2 variants (resistive-sense 5T OTA and
-    differential-difference amplifier), both sharing the canonical
+    """The cmfb category exposes the resistive-sense and differential-
+    difference amps, each in a PMOS- and an NMOS-mirror output form (the
+    low-gain CMFB, issue #208), all sharing the canonical
     in1/in2/vref/bias/out/vdd/gnd port signature and untagged for polarity/
-    output_cardinality (compatible with any combination)."""
+    output_cardinality.  Every form's ``out`` is a diode-connected device."""
     modules = load_modules()
     names = {v.name for v in modules["cmfb"]}
-    assert names == {"resistive_sense_cmfb", "dda_cmfb"}
+    assert names == {f"{amp}_cmfb_{form}_mirror"
+                     for amp in ("resistive_sense", "dda")
+                     for form in ("pmos", "nmos")}
 
     for variant in modules["cmfb"]:
         port_names = [p.name for p in variant.ports]
         assert port_names == ["in1", "in2", "vref", "bias", "out", "vdd", "gnd"], variant.name
         assert variant.polarity is None
         assert variant.output_cardinality is None
+        diode = [d for d in variant.devices
+                 if d.terminals.get("d") == d.terminals.get("g") == "out"]
+        assert [d.type for d in diode] == [variant.name.split("_")[-2]], variant.name
+
+
+def test_is_cmfb_compatible_matches_output_diode_to_load():
+    """Issue #208: the CMFB's output diode is the mirror reference of the
+    load devices it gates, so it must share their type; a load without a
+    CMFB input admits only the canonical variant."""
+    modules = load_modules()
+    loads = {v.name: v for v in modules["load"]}
+    cmfbs = {v.name: v for v in modules["cmfb"]}
+    for load, form in (("current_source_load_nmos", "nmos"),
+                       ("current_source_load_pmos", "pmos"),
+                       ("folded_cascode_load_nmos_input_differential_output", "nmos"),
+                       ("folded_cascode_load_pmos_input_differential_output", "pmos")):
+        ok = {n for n, c in cmfbs.items()
+              if is_cmfb_compatible({"load": loads[load], "cmfb": c})}
+        assert ok == {f"resistive_sense_cmfb_{form}_mirror",
+                      f"dda_cmfb_{form}_mirror"}, load
+    ok = {n for n, c in cmfbs.items()
+          if is_cmfb_compatible({"load": loads["resistor_load_gnd"], "cmfb": c})}
+    assert ok == {CANONICAL_CMFB_VARIANT}
 
 
 def test_bias_leg_library_structure():
@@ -895,13 +921,15 @@ def test_load_branch_is_redundant_with_output_cardinality_today():
 def test_is_cmfb_compatible_differential_load_allows_both_cmfb_variants():
     """A load with output_cardinality "differential" has a real bias_cmfb
     consumer (folded_cascode_load_*_input_differential_output's mn3/mn4 or
-    mp1/mp2), so either cmfb variant produces a meaningfully different
-    circuit -- both are compatible."""
+    mp1/mp2), so either cmfb amp produces a meaningfully different circuit --
+    both are compatible in the mirror form matching the gated devices (NMOS
+    mn3/mn4 here; the pairing rule is test_is_cmfb_compatible_matches_output_diode_to_load)."""
     modules = load_modules()
     diff_load = next(v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output")
 
     for cmfb_variant in modules["cmfb"]:
-        assert is_cmfb_compatible({"load": diff_load, "cmfb": cmfb_variant})
+        if cmfb_variant.name.endswith("_nmos_mirror"):
+            assert is_cmfb_compatible({"load": diff_load, "cmfb": cmfb_variant})
 
 
 def test_is_cmfb_compatible_other_loads_only_allow_canonical_variant():
@@ -1015,7 +1043,7 @@ def _stage_variants(modules, **slot_names):
 def test_orient_cmfb_inverts_for_two_stage_fd():
     """Two-stage FD (issue #165): the output-sensing CM loop traverses one
     inverting stage, so orient_cmfb swaps the amp's sense/vref gates (sense
-    to the mirror-output side) and renames the variant *_inverting.  The
+    from the m1/m3 gates to m2/m4) and renames the variant *_inverting.  The
     resistive averager and every non-amp device are untouched."""
     from circuitgenome.synthesizer.compatibility import orient_cmfb
     modules = load_modules()
@@ -1023,16 +1051,16 @@ def test_orient_cmfb_inverts_for_two_stage_fd():
                  if t.name == "two_stage_opamp_fully_differential")
     vmap = _stage_variants(modules, second_stage_p="common_source_nmos",
                            second_stage_n="common_source_nmos")
-    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_pmos_mirror")
     inv = orient_cmfb(rs, topo2, vmap)
-    assert inv.name == "resistive_sense_cmfb_inverting"
+    assert inv.name == "resistive_sense_cmfb_pmos_mirror_inverting"
     gates = {d.ref: d.terminals.get("g") for d in inv.devices if d.type != "resistor"}
     assert gates["m1"] == "vref" and gates["m2"] == "sense"
     assert gates["m5"] == "bias"  # tail untouched
     # dda: both pairs swap; the sensed outputs land on the output-side gates.
-    dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb")
+    dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb_pmos_mirror")
     dinv = orient_cmfb(dda, topo2, vmap)
-    assert dinv.name == "dda_cmfb_inverting"
+    assert dinv.name == "dda_cmfb_pmos_mirror_inverting"
     dg = {d.ref: d.terminals.get("g") for d in dinv.devices}
     assert dg["m1"] == "vref" and dg["m2"] == "in1"
     assert dg["m3"] == "vref" and dg["m4"] == "in2"
@@ -1055,7 +1083,7 @@ def test_orient_cmfb_keeps_stock_polarity_for_even_parity_chain():
                             third_stage_p="common_source_pmos",
                             second_stage_n="common_source_nmos",
                             third_stage_n="common_source_pmos")
-    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_pmos_mirror")
     assert orient_cmfb(rs, topo3, vmap3) is rs
     absent = dataclasses.replace(rs, name="cmfb_absent", ports=[], devices=[])
     assert orient_cmfb(absent, topo2, {}) is absent
@@ -1072,8 +1100,8 @@ def test_orient_cmfb_inverts_for_rnmc_three_stage_fd():
                            third_stage_p="noninverting_stage_pmos",
                            second_stage_n="common_source_nmos",
                            third_stage_n="noninverting_stage_pmos")
-    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
-    assert orient_cmfb(rs, topo, vmap).name == "resistive_sense_cmfb_inverting"
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_pmos_mirror")
+    assert orient_cmfb(rs, topo, vmap).name == "resistive_sense_cmfb_pmos_mirror_inverting"
 
 
 def test_orient_cmfb_inverts_for_nmc_three_stage_fd():
@@ -1089,10 +1117,10 @@ def test_orient_cmfb_inverts_for_nmc_three_stage_fd():
                            third_stage_p="common_source_pmos",
                            second_stage_n="noninverting_stage_nmos",
                            third_stage_n="common_source_pmos")
-    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb")
-    assert orient_cmfb(rs, topo, vmap).name == "resistive_sense_cmfb_inverting"
-    dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb")
-    assert orient_cmfb(dda, topo, vmap).name == "dda_cmfb_inverting"
+    rs = next(v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_pmos_mirror")
+    assert orient_cmfb(rs, topo, vmap).name == "resistive_sense_cmfb_pmos_mirror_inverting"
+    dda = next(v for v in modules["cmfb"] if v.name == "dda_cmfb_pmos_mirror")
+    assert orient_cmfb(dda, topo, vmap).name == "dda_cmfb_pmos_mirror_inverting"
 
 
 def test_enumerate_circuits_cmfb_present_iff_differential_load():
@@ -1923,7 +1951,7 @@ def test_required_rail_kinds_third_stage_uses_rail_6():
     assert required_rail_kinds(topo, variant_map) == {5: "gate_vdd", 6: "gate_vdd"}
 
 
-@pytest.mark.parametrize("cmfb_name", ["resistive_sense_cmfb", "dda_cmfb"])
+@pytest.mark.parametrize("cmfb_name", ["resistive_sense_cmfb_nmos_mirror", "dda_cmfb_nmos_mirror"])
 def test_required_rail_kinds_cmfb_rail_4(cmfb_name):
     """Both cmfb variants sink their tail current through an NMOS gated by
     rail 4 (source at gnd), so a real cmfb always makes rail 4 gate_gnd --
@@ -2108,7 +2136,7 @@ def test_construct_bias_generation_mixed_flavors_share_one_generator():
         {
             "load": "folded_cascode_load_nmos_input_differential_output",
             "tail_current": "resistor_tail_gnd",
-            "cmfb": "resistive_sense_cmfb",
+            "cmfb": "resistive_sense_cmfb_nmos_mirror",
             "second_stage_p": "common_source_nmos",
             "second_stage_n": "common_source_nmos",
         },
@@ -2276,7 +2304,7 @@ def test_enumerate_circuits_fd_mixed_flavor_bias_in_one_generator():
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_nmos_mirror"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "amplification_stage": [v for v in modules["amplification_stage"] if v.name == "common_source_pmos"],
     }
@@ -2554,7 +2582,7 @@ def test_enumerate_circuits_second_stage_p_and_n_share_rail_5():
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_pmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_gnd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_vdd"],
-        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_pmos_mirror"],
         "amplification_stage": [v for v in modules["amplification_stage"] if v.name == "common_source_nmos"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
     }
@@ -2597,7 +2625,7 @@ def test_enumerate_circuits_all_seven_bias_rails_independent():
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_nmos_mirror"],
         "amplification_stage": [v for v in modules["amplification_stage"]
                                 if v.name in ("common_source_pmos", "noninverting_stage_nmos")],
         "output_stage": [v for v in modules["output_stage"] if v.name == "common_drain_nmos"],
@@ -2649,7 +2677,7 @@ def test_synthesize_differential_output_folded_cascode_has_nondegenerate_cascode
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "folded_cascode_load_nmos_input_differential_output"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "current_mirror_tail_nmos"],
-        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_nmos_mirror"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "amplification_stage": [v for v in modules["amplification_stage"] if v.name == "common_source_pmos"],
     }
@@ -2708,7 +2736,7 @@ def test_synthesize_alias_of_load_merges_in_and_out_nets():
         "input_pair": [v for v in modules["input_pair"] if v.name == "differential_pair_nmos"],
         "load": [v for v in modules["load"] if v.name == "resistor_load_vdd"],
         "tail_current": [v for v in modules["tail_current"] if v.name == "resistor_tail_gnd"],
-        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb"],
+        "cmfb": [v for v in modules["cmfb"] if v.name == "resistive_sense_cmfb_pmos_mirror"],
         "compensation": [v for v in modules["compensation"] if v.name == "miller_cap"],
         "amplification_stage": [v for v in modules["amplification_stage"] if v.name == "common_source_pmos"],
     }

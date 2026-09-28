@@ -183,6 +183,11 @@ linearises in W and L (see `CP-SAT integer linearisation`_).
    * - ``second_stage``
      - :math:`I_{bias} \times \text{ratio}`
      - Set by ``second_stage_current_ratio`` in the spec (default 2.0)
+   * - ``cmfb``
+     - tail :math:`I_{bias}`; pair :math:`I_{bias}/n`; diodes and mirrors by
+       KCL at their drain
+     - The output diode mirrors into the load, so it must be planned at the
+       current it really carries (issue #208)
 
 ----
 

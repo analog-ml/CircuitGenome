@@ -135,11 +135,15 @@ templates the synthesizer produces -- 43 patterns across eight categories:
        All four use hooks (below) to discover however many output legs are
        present.
    * - ``cmfb``
-     - 2
-     - - ``resistive_sense_cmfb`` — 2 resistors + 5T OTA (resistive averager
-         feeds a differential pair whose output mirrors onto ``out``).
-       - ``dda_cmfb`` — differential-difference amplifier (4 NMOS + 2 PMOS + 2
-         NMOS tails; two input pairs sharing a diode-connected PMOS mirror).
+     - 8
+     - - ``resistive_sense_cmfb_{pmos,nmos}_mirror`` — 2 resistors averaging
+         into a differential pair; the output is a diode-connected PMOS
+         (``pmos_mirror``) or an added NMOS diode fed by a PMOS copy of the
+         sense-side branch (``nmos_mirror``), mirrored into the load.
+       - ``dda_cmfb_{pmos,nmos}_mirror`` — differential-difference amplifier
+         (two input pairs on two NMOS tails) with the same two output forms.
+       - Each has an ``*_inverting`` twin (sense/vref gates swapped, issue
+         #165).
 
        Both use ``{in1, in2, vref, bias, out}`` pins. Present only when ``load``
        has ``output_cardinality: "differential"``; otherwise pruned to

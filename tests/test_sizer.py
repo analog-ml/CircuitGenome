@@ -559,7 +559,7 @@ def two_stage_fd_fbr():
         "load":           "folded_cascode_load_pmos_input_differential_output",
         "tail_current":   "current_mirror_tail_pmos",
         # Two-stage FD gets the inverting CMFB orientation (issue #165).
-        "cmfb":           "resistive_sense_cmfb_inverting",
+        "cmfb":           "resistive_sense_cmfb_pmos_mirror_inverting",
         "comp_p":         "miller_cap",
         "comp_n":         "miller_cap",
         "second_stage_p": "common_source_nmos",
@@ -742,7 +742,7 @@ def three_stage_buffered_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb_inverting",
+        "cmfb":            "resistive_sense_cmfb_pmos_mirror_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
         "third_stage_p":   "noninverting_stage_pmos",
@@ -762,7 +762,7 @@ def three_stage_rnmc_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb_inverting",
+        "cmfb":            "resistive_sense_cmfb_pmos_mirror_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
         "third_stage_p":   "noninverting_stage_pmos",
@@ -1260,6 +1260,48 @@ def _size_fd(tech_name, variants, include_infeasible=False, **spec_overrides):
     return spec, size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
 
 
+@pytest.mark.parametrize("load,cmfb,expected", [
+    # 5T amp: tail ibias, every branch device ibias/2 (incl. the output diode).
+    ("current_source_load_pmos", "resistive_sense_cmfb_pmos_mirror",
+     {"m5": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5}),
+    ("current_source_load_nmos", "resistive_sense_cmfb_nmos_mirror",
+     {"m5": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5, "m6": 0.5}),
+    # DDA: two ibias tails; each diode sums one side's two branches.
+    ("current_source_load_pmos", "dda_cmfb_pmos_mirror",
+     {"m7": 1.0, "m8": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5,
+      "m5": 1.0, "m6": 1.0}),
+    ("current_source_load_nmos", "dda_cmfb_nmos_mirror",
+     {"m7": 1.0, "m8": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5,
+      "m5": 1.0, "m6": 1.0, "m9": 1.0}),
+])
+def test_cmfb_current_plan_kcl(load, cmfb, expected):
+    """Issue #208: the low-gain CMFB's output diode sets the load current
+    through the mirror ratio, so every CMFB device is planned at the current
+    it really carries (KCL from the tail), not the flat ibias default."""
+    from circuitgenome.sizer.physics.preprocess import _cmfb_current_plan
+    pair = "differential_pair_pmos" if load.endswith("nmos") else "differential_pair_nmos"
+    _, circuit = _make_circuit(_FD_TOPO, {"input_pair": pair, "load": load,
+                                          "cmfb": cmfb + "_inverting"})
+    devs = [d for ref, d in circuit.devices if ref.endswith("_cmfb") and d.type != "resistor"]
+    spec = SizingSpec(**_GF180_SPEC)
+    plan = _cmfb_current_plan({"cmfb": devs}, spec)
+    assert plan == {f"{m}_cmfb": frac * spec.ibias for m, frac in expected.items()}
+
+
+def test_fd_load_mirrors_cmfb_output_diode():
+    """Issue #208: the load's CMFB-gated devices are mirror outputs of the
+    CMFB's output diode — same L, W scaled by the current ratio — so the
+    load carries its planned current when the CM loop is balanced."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
+    diode, load = result.transistors["m6_cmfb"], result.transistors["m1_load"]
+    assert load.l_um == diode.l_um
+    assert load.w_um / diode.w_um == pytest.approx(load.ids_a / diode.ids_a, rel=0.02)
+    assert not any("CMFB tail" in w for w in result.warnings)
+
+
 def test_fd_stage_interface_exempts_output_sensing_cmfb():
     """Post-#165 the CMFB senses outp/outn, so the interface equality the
     issue-#161 check enforced dissolves: the first stage self-biases to the
@@ -1272,7 +1314,7 @@ def test_fd_stage_interface_exempts_output_sensing_cmfb():
         _, result = _size_fd(tech_name, {
             "input_pair": "differential_pair_pmos",
             "load": "current_source_load_nmos",
-            "cmfb": "resistive_sense_cmfb_inverting"})
+            "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
         assert result.solver_status == "GMID"
         assert result.bias_feasible, tech_name
         assert not any("FD stage interface" in w for w in result.warnings)

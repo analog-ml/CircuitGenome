@@ -86,12 +86,55 @@ def _apply_headroom(
     tc = slot_transistors.get("tail_current", [])
     if not (ip and tc):
         return sizing, []
-    ip_dev, tc_dev = ip[0], tc[0]
+    return _repair_tail_headroom(model, ip, tc[0], all_transistors, sizing,
+                                 spec, tech, spec.vcm, "tail current source")
+
+
+def _cmfb_pair_and_tail(cmfb_devs: list) -> tuple[list, object | None]:
+    """The CMFB amp's differential pair(s) and a tail device (issue #208).
+
+    Tail: gate on a bias rail (``net_bias*``).  Pair: every device whose
+    source is a tail's drain (both pairs of a DDA).
+    """
+    tails = [d for d in cmfb_devs if d.terminals.get("g", "").startswith("net_bias")]
+    tail_drains = {t.terminals.get("d") for t in tails}
+    pair = [d for d in cmfb_devs if d.terminals.get("s") in tail_drains]
+    return pair, (tails[0] if tails else None)
+
+
+def _apply_cmfb_headroom(model, slot_transistors, all_transistors, sizing,
+                         spec, tech):
+    """Tail headroom repair for the CMFB amp (issue #208).
+
+    Its pair's gates sit at the output CM (``vcm_ref`` and the sensed outputs,
+    both mid-supply), so its tail faces exactly the input tail's problem at
+    low supplies — and since the low-gain CMFB mirrors its branch current
+    into the load, a tail starved in triode starves the whole first stage
+    (ptm45 at 1 V: 17 mV across a 160 mV-Vdsat tail, 1.6 of 10 µA).
+    """
+    devs = [d for d in slot_transistors.get("cmfb", []) if d.type in ("nmos", "pmos")]
+    pair, tail = _cmfb_pair_and_tail(devs)
+    if not (pair and tail):
+        return sizing, []
+    return _repair_tail_headroom(model, pair, tail, all_transistors, sizing,
+                                 spec, tech, (spec.vdd + spec.vss) / 2.0,
+                                 "CMFB tail current source")
+
+
+def _repair_tail_headroom(model, ip, tc_dev, all_transistors, sizing, spec,
+                          tech, vcm, label):
+    """Fit a tail under a differential pair whose gates sit at ``vcm``.
+
+    Shared by the input stage and the CMFB amp: re-size the tail's mirror
+    group toward weaker inversion (smaller Vdsat), and when that alone cannot
+    fit, move the pair toward weak inversion too (smaller ``|Vgs|`` → more
+    tail headroom).  ``label`` names the tail in the warning.
+    """
+    ip_dev = ip[0]
     s_ip, s_tc = sizing.get(ip_dev.ref), sizing.get(tc_dev.ref)
     if not (s_ip and s_tc):
         return sizing, []
 
-    vcm = spec.vcm
     vgs_pair = abs(model.vgs(ip_dev.type, s_ip.w_um, s_ip.l_um, s_ip.ids_a))
     # PMOS pair sits above the gate (source toward vdd); NMOS pair below (toward vss).
     if ip_dev.type == "pmos":
@@ -105,9 +148,9 @@ def _apply_headroom(
 
     def _warn() -> list[str]:
         return [
-            f"tail current source has insufficient saturation headroom "
+            f"{label} has insufficient saturation headroom "
             f"({headroom * 1e3:.0f} mV available vs {vdsat_tail * 1e3:.0f} mV Vdsat "
-            f"at Vcm={vcm:.2f} V) — the input-pair bias current will fall short; "
+            f"at Vcm={vcm:.2f} V) — the pair's bias current will fall short; "
             f"raise the supply, lower the input common-mode, or use the opposite "
             f"input polarity."
         ]
@@ -188,6 +231,9 @@ def check_dc_operating_point(
     """
     sizing, warnings = _apply_headroom(
         model, slot_transistors, all_transistors, ids_map, sizing, spec, tech)
+    sizing, cmfb_warnings = _apply_cmfb_headroom(
+        model, slot_transistors, all_transistors, sizing, spec, tech)
+    warnings += cmfb_warnings
     bias_feasible = not any("headroom" in w for w in warnings)
 
     # Cascode-aware budget: a stacked tail needs the *sum* of its devices' Vdsat.

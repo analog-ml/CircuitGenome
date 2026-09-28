@@ -23,8 +23,8 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     Keys: ``power_w``, ``gain_db``, ``gbw_hz``, ``phase_margin_deg``,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``,
     ``cmrr_db``, ``psrr_db``.  Missing/failed measurements are ``None``
-    (slew rate and output swing are single-ended-only; CMRR/PSRR need a
-    measured differential gain first).  A fully-differential design can
+    (CMRR/PSRR need a measured differential gain first).  Fully-differential
+    slew rate and swing are per output, like the single-ended ones.  A fully-differential design can
     report a phase margin ≤ 0 — a real instability, flagged in ``notes``;
     the single-ended bench discards one as a corrupt sweep.  Every bench
     loads each output with ``spec.cl`` — the load ``evaluate_metrics``

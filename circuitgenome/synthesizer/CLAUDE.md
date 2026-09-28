@@ -246,7 +246,7 @@ other 8 declare it `role: optional` and never reference it, so
 `cmfb.out -> net_cmfb_out -> load.bias_cmfb` drives nothing.
 `is_cmfb_compatible` rejects combinations where `load`'s
 `output_cardinality` isn't `"differential"` and `cmfb` isn't
-`CANONICAL_CMFB_VARIANT` (`resistive_sense_cmfb`) -- this collapses the
+`CANONICAL_CMFB_VARIANT` (`resistive_sense_cmfb_pmos_mirror`) -- this collapses the
 otherwise-duplicate choice between `cmfb` variants for those loads down to
 one. `prune_cmfb` then replaces that canonical variant with an empty
 placeholder (`name="cmfb_absent"`, no ports, no devices) for the same loads,
@@ -255,7 +255,25 @@ so it contributes nothing and `cmfb.bias` is not counted by
 `cmfb` consumer, tag it `output_cardinality: "differential"` and give it a
 real `bias_cmfb: role: input` -- no code changes needed here.
 
-These `cmfb_absent` combinations have nothing regulating their output common
+**Low-gain CMFB (issue #208).** Every CMFB variant's `out` is a
+diode-connected device that current-mirrors into the load's CMFB-gated
+devices, so the CM loop's transconductance is ~`gm_cmfb/2` and it crosses
+near GBW. (The old amps drove those gates as a voltage: 27/28 sampled gf180
+FD circuits oscillated in CM, and a cap on `net_cmfb_out` made it worse.)
+Each amp (`resistive_sense_cmfb_*`, `dda_cmfb_*`) therefore comes in a
+`*_pmos_mirror` and `*_nmos_mirror` form, and for a consuming load
+`is_cmfb_compatible` keeps only the form whose output diode type
+(`_output_diode_type`: `d == g == out`) matches the load devices gated by
+`bias_cmfb` (`_gated_device_types`) — structural, no tags. The gate swap in
+`orient_cmfb` is form-independent (stock: sense up → out up in both). The
+sizer plans CMFB currents by KCL (`physics/preprocess._cmfb_current_plan`)
+so the gm/Id mirror pass sizes the load as a ratio copy of the diode, and
+repairs the CMFB tail's headroom like the input tail's (`gmid/bias.py`).
+Recognizer note: `current_source_load_*` patterns expose `out1`/`out2`
+(alias pins) — without them the NMOS output diode plus one load device
+out-scored the real load pair as an `active_load`.
+
+The `cmfb_absent` combinations (first paragraph) have nothing regulating their output common
 mode, so SPICE puts the outputs at a rail, split apart, or at an arbitrary
 off-centre level (issue #208: 216/216 two-stage FD `cmfb_absent` circuits
 failed the `.op` bias gate on gf180). `has_cm_control` flags them, and
