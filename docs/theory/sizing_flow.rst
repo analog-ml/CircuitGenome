@@ -708,8 +708,9 @@ Three-Stage NMC / RNMC
 The sizer also supports all four three-stage topologies
 (``three_stage_opamp_nmc_single_ended``, ``three_stage_opamp_rnmc_single_ended``,
 ``three_stage_opamp_nmc_fully_differential``,
-``three_stage_opamp_rnmc_fully_differential``).  The same conservative
-equations are applied to both NMC and RNMC.
+``three_stage_opamp_rnmc_fully_differential``).  NMC uses the conservative
+two-separate-poles equations below; RNMC starts from them and then re-plans
+its inner loop (see `RNMC: the inner pole pair`_).
 
 Circuit topology
 ~~~~~~~~~~~~~~~~
@@ -728,8 +729,9 @@ Circuit topology
 output); :math:`C_{c2}` closes the inner loop reversed onto the second stage
 (stage-2 output → stage-1 output), so it never loads the output.  The second
 stage inverts and the third does not.  Both schemes put the dominant pole at
-:math:`C_{c1}` and split the same two non-dominant poles, so the sizer uses the
-same conservative equations for both.
+:math:`C_{c1}`, but only NMC's non-dominant poles are two separate real poles;
+RNMC's are a complex pair with its own stability condition, so it gets its own
+sizing rules and phase-margin model.
 
 Design variables
 ~~~~~~~~~~~~~~~~
@@ -744,7 +746,8 @@ Design variables
      - :math:`\min(I_{bias}/SR,\; g_{m1}/(2\pi \cdot GBW))`
    * - :math:`C_{c2}` (inner)
      - NMC: inner-pair damping :math:`\zeta \geq 0.3` (see below);
-       RNMC: :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic)
+       RNMC: :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic), which RNMC
+       sizing may raise up to :math:`C_{c1}`
    * - :math:`g_{m1}`
      - CMRR + GBW (same as two-stage)
    * - :math:`g_{m2}`
@@ -852,6 +855,10 @@ The sizer takes :math:`g_{m3,\text{req}} = \max(g_{m3,\text{gain}},\; g_{m3,\tex
 Numerical example
 ~~~~~~~~~~~~~~~~~
 
+The steps below are the NMC rules; an RNMC template then re-plans
+:math:`g_{m2}`, :math:`C_{c2}` and :math:`g_{m3}` as described in
+`RNMC: the inner pole pair`_.
+
 Specification: :math:`I_{bias}=10\,\mu\text{A}`,
 :math:`C_L=20\,\text{pF}`, :math:`SR=3.5\,\text{V/µs}`,
 :math:`GBW=2.5\,\text{MHz}`, :math:`\text{PM}\geq 60^{\circ}`,
@@ -875,6 +882,76 @@ Specification: :math:`I_{bias}=10\,\mu\text{A}`,
    than the two-stage :math:`g_{m2}` at the same spec because the phase budget
    is split — each non-dominant pole must be ~3.7× farther than the single
    pole in the two-stage case.
+
+.. _rnmc-inner-pair:
+
+RNMC: the inner pole pair
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With both caps on the first-stage output, the half-circuit nodal equations
+(second stage inverting, third non-inverting, :math:`C_2` the parasitic on the
+second-stage output — in practice the third stage's input gate) give, for high
+stage gains, the denominator
+
+.. math::
+
+   s\,C_{c1} g_{m2} g_{m3}\,\bigl(1 + a_1 s + a_2 s^2\bigr),\qquad
+   a_1 = \frac{C_{c2}\,\bigl((C_L + C_{c1})\,g_{m2} - C_{c1}\,g_{m3}\bigr)}{C_{c1}\,g_{m2}\,g_{m3}},\qquad
+   a_2 = \frac{C_L\,C_{c2}\,K}{g_{m2}\,g_{m3}}
+
+with :math:`K = 1 + C_2\,(1/C_{c2} + 1/C_{c1} + 1/C_L)`.  The two non-dominant
+poles are the roots of :math:`1 + a_1 s + a_2 s^2`: a pair, damped by
+:math:`\zeta = a_1 / (2\sqrt{a_2})`.  They sit in the left half plane only
+while :math:`a_1 > 0`:
+
+.. math::
+
+   g_{m3} \;<\; g_{m2}\,\bigl(1 + C_L/C_{c1}\bigr)
+   \qquad (g_{m3} < 5\,g_{m2}\ \text{at}\ C_{c1} = C_L/4)
+
+The NMC rules above violate this routinely: they push :math:`g_{m3}` to its
+ceiling for gain and leave :math:`g_{m2}` small, and the two-separate-poles PM
+formula cannot see the problem.  For RNMC the sizer instead
+(:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`):
+
+1. **raises** :math:`g_{m2}` from the damping floor :math:`\zeta \ge 0.7`
+   (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`)
+   until the full model's poles are damped to 0.7
+   (:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`) and the
+   phase-margin spec holds, up to the second stage's weak-inversion ceiling;
+2. then **raises** :math:`C_{c2}` in steps up to :math:`C_{c1}`;
+3. and only as a last resort **caps** :math:`g_{m3}` (on the third stage's
+   input device, so a non-inverting stage's mirror keeps its sizing).
+
+When no choice meets both :math:`\zeta \ge 0.7` and the PM spec, the PM spec
+(which SPICE verifies) comes first, keeping :math:`\zeta \ge 0.5`: the
+best-damped choice that meets it, else the highest-PM one; an advisory is
+emitted either way.  The phase
+margin itself comes from the full transfer function evaluated on a frequency
+sweep (:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`),
+including the stage-output parasitics, the third stage's mirror pole and — on
+the ``*_buffered_*`` templates — the source-follower output buffer, and is the
+**worst over every 0 dB crossing** — a lightly damped pair that lifts
+the gain back above 0 dB after the phase has passed :math:`-180^{\circ}` is a
+negative gain margin and reports a negative PM; an open loop with
+right-half-plane poles reports 0°.
+
+The buffer matters: :math:`C_{c1}` returns to the third stage's output, which
+then drives only the follower's gate, not :math:`C_L`.  With so little
+capacitance there the stability condition tightens to roughly
+:math:`g_{m3} < g_{m2}`, and a follower driving :math:`C_L` presents a
+negative input resistance above :math:`g_{m,f}/C_L` inside that loop.  Buffered
+designs that cannot be damped with :math:`g_{m2}`, :math:`C_{c2}` and
+:math:`g_{m3}` are reported with the RHP margin (0°) and an advisory; the
+follower itself is not re-sized.
+
+The Level-1 sizer applies these rules to its requirement estimates.  The gm/Id
+pipeline applies them after geometry
+(:mod:`~circuitgenome.sizer.gmid.rnmc_refine`): its DC-bias repair can move the
+input pair's :math:`g_{m1}` far above the GBW requirement (a ptm45 FD fixture
+lands at 27×), and only the sized circuit shows the third stage's real gate
+capacitance.  A :math:`g_{m2}` raise that breaks the stage-interface bias window
+is undone, leaving :math:`C_{c2}` and :math:`g_{m3}` as the knobs.
 
 Fully-differential three-stage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

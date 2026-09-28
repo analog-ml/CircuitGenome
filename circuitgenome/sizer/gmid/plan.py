@@ -19,6 +19,7 @@ from ..physics.device_model import GmIdModel, GmIdPolicy
 from ..physics.gmid_lut import GmIdLut
 from ..models import SizingSpec, TechParams
 from ..physics.preprocess import assign_ids, compute_requirements, size_load_resistors
+from ..physics.rnmc import RNMC
 from .analyze import GmIdCircuitView
 from .intent import GmIdIntent, TransistorIntent, resolve_transistor_intents
 
@@ -103,17 +104,20 @@ def plan_devices(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
-    nested_miller: bool = False,
 ) -> SizingPlan:
     """Derive gm requirements, compensation caps and per-device intent.
 
-    ``nested_miller`` flags a three-stage NMC template (see
-    :func:`~circuitgenome.sizer.physics.preprocess.compute_requirements`).
+    The view's three-stage ``compensation_scheme`` selects the NMC rules of
+    :func:`~circuitgenome.sizer.physics.preprocess.compute_requirements`.  An
+    RNMC template is planned with the default rules here and re-planned on
+    the sized circuit (:mod:`.rnmc_refine`): its requirement-time gm1 and
+    third-stage gate capacitance are estimates the geometry moves far from.
     """
     model = _model_for(tech, intent)
+    scheme = None if view.compensation_scheme == RNMC else view.compensation_scheme
     gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
         view.slot_transistors, view.all_transistors, currents.ids_map,
-        tech, spec, model, currents.gd_load_r, nested_miller=nested_miller,
+        tech, spec, model, currents.gd_load_r, compensation_scheme=scheme,
     )
     tintents = resolve_transistor_intents(
         view.all_transistors, view.cascode_refs, intent.block_intents)

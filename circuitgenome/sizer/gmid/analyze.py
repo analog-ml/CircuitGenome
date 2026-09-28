@@ -180,6 +180,7 @@ def analyze_circuit(
         all_transistors=view.all_transistors,
         warnings=view.warnings,
         adopted=view.adopted,
+        compensation_scheme=view.compensation_scheme,
         blocks=build_blocks(view.slot_transistors, view.slot_resistors),
         cascode_refs=cascode_device_refs(view.slot_transistors),
     )

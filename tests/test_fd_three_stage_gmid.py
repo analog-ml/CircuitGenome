@@ -116,7 +116,8 @@ def test_nmc_plan_damps_inner_loop():
                       gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60,
                       output_swing_max_v=3.0, output_swing_min_v=0.3)
     plan = plan_devices(view, assign_currents(view, spec, tech, DEFAULT_INTENT),
-                        spec, tech, DEFAULT_INTENT, nested_miller=True)
+                        spec, tech, DEFAULT_INTENT)
+    assert view.compensation_scheme == "nested_miller"
     ids2 = spec.ibias * spec.second_stage_current_ratio
     gm2 = plan.model.realized_gm("nmos", plan.gm_req_map["mn1_second_stage_p"], ids2)
     r = plan.gm_req_map["mn1_third_stage_p"] / gm2

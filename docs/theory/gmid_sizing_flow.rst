@@ -77,6 +77,7 @@ Flow at a glance
       ├─ Phase 4  Size
       │             a. geometry (LUT→W/L, sym, mirror)   (geometry.py)  ◄── core
       │             b. DC bias check + tail repair       (bias.py)
+      │                RNMC only: inner-loop re-plan, re-size a–b  (rnmc_refine.py)
       │             c. non-load resistors                (resistors.py) ─► MetricModifiers
       └─ Phase 5  Evaluate         (evaluate.py)  ─► metrics/margins
                     cascode-aware rout, analytical gain/GBW/PM
@@ -465,6 +466,18 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    sufficient* — it does not yet check, e.g., second-stage headroom.  Remedies for a
    failure: raise the supply, lower the input common-mode, flip the input polarity, or use
    a non-cascode tail.
+
+.. note::
+
+   **Reversed nested Miller (RNMC) templates** get one more step here.  The tail
+   repair above can push the input pair deep into weak inversion, so the loop's
+   real ``gm1`` can be many times what Phase 3 planned, and only the sized
+   circuit shows the third stage's input gate capacitance.
+   :func:`~circuitgenome.sizer.gmid.rnmc_refine.refine_rnmc_plan` re-plans the
+   inner loop on those real values — raise ``gm2``, then ``Cc2``, cap ``gm3``
+   last — and Phases 4a–4b re-run against the new requirements (a ``gm2`` raise
+   that breaks the stage-interface bias is undone).  See
+   :ref:`the RNMC section of the analytical flow <rnmc-inner-pair>`.
 
 Phase 4c — Size: non-load resistors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

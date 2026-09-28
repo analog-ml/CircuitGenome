@@ -54,7 +54,7 @@ def size_level1(
     dev_model = Level1Model(tech)
     gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r,
-        nested_miller=topology.config.get("compensation_scheme") == "nested_miller",
+        compensation_scheme=view.compensation_scheme,
     )
     all_warnings = (topology_warnings + gm_ceiling_warnings
                     + adoption_warnings(view.adopted))
