@@ -6,7 +6,7 @@ Each submodule owns one slot's rule for rejecting variant combinations that
 assemble into a non-functional or duplicate circuit. Two shapes recur:
 
 - **pure filters** (``polarity``, ``output``, ``load_branch``,
-  ``second_stage``, ``compensation``) -- an ``is_*_compatible`` predicate that
+  ``second_stage``, ``compensation``, ``symmetry``) -- an ``is_*_compatible`` predicate that
   drops a combination before it is ever assembled.
 - **filter + prune pairs** (``cmfb``, ``tail_current``) -- the filter collapses
   combinatorial duplication down to a single canonical variant, and the paired
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from .cmfb import (
     CANONICAL_CMFB_VARIANT,
+    has_cm_control,
     is_cmfb_compatible,
     orient_cmfb,
     prune_cmfb,
@@ -32,6 +33,7 @@ from .compensation import is_compensation_compatible, stage_inversions
 from .load_branch import is_load_branch_compatible, untapped_branch_is_dc_defined
 from .output import is_output_type_compatible
 from .polarity import is_combination_valid
+from .symmetry import is_half_symmetric
 from .stage_interface import (
     is_stage_interface_compatible,
     required_pair_type,
@@ -45,6 +47,7 @@ from .tail_current import (
 
 __all__ = [
     "CANONICAL_CMFB_VARIANT",
+    "has_cm_control",
     "is_cmfb_compatible",
     "orient_cmfb",
     "prune_cmfb",
@@ -54,6 +57,7 @@ __all__ = [
     "untapped_branch_is_dc_defined",
     "is_output_type_compatible",
     "is_combination_valid",
+    "is_half_symmetric",
     "is_stage_interface_compatible",
     "required_pair_type",
     "signal_device_type",

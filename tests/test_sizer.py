@@ -37,13 +37,16 @@ def _tech():
 
 
 def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = None,
-                  include_unsupported: bool = False):
+                  include_unsupported: bool = False, include_infeasible: bool = False):
     # include_unsupported opts parked variants (inverter_based_input #113,
-    # differential_ota_second_stage #114) back into the pool.
+    # differential_ota_second_stage #114) back into the pool;
+    # include_infeasible does the same for bias-infeasible ones (e.g. the FD
+    # cmfb_absent combinations, #208).
     modules = load_modules()
     topologies = load_topologies()
     topology = next(t for t in topologies if t.name == topology_name)
-    config = {"include_unsupported": True} if include_unsupported else None
+    config = {"include_unsupported": include_unsupported,
+              "include_infeasible": include_infeasible}
     for circuit in enumerate_circuits(topology, modules, config=config):
         if variant_filter is None:
             return topology, circuit
@@ -53,9 +56,9 @@ def _make_circuit(topology_name: str, variant_filter: dict[str, str] | None = No
 
 
 def _fbr(topology_name: str, variant_filter: dict[str, str] | None = None,
-         include_unsupported: bool = False):
+         include_unsupported: bool = False, include_infeasible: bool = False):
     topology, circuit = _make_circuit(topology_name, variant_filter,
-                                      include_unsupported)
+                                      include_unsupported, include_infeasible)
     spice = to_flat_spice(circuit)
     parsed = parse(spice)
     sr_result = recognize(parsed)
@@ -557,7 +560,7 @@ def two_stage_fd_fbr():
         "load":           "folded_cascode_load_pmos_input_differential_output",
         "tail_current":   "current_mirror_tail_pmos",
         # Two-stage FD gets the inverting CMFB orientation (issue #165).
-        "cmfb":           "resistive_sense_cmfb_inverting",
+        "cmfb":           "resistive_sense_cmfb_pmos_mirror_inverting",
         "comp_p":         "miller_cap",
         "comp_n":         "miller_cap",
         "second_stage_p": "common_source_nmos",
@@ -740,7 +743,7 @@ def three_stage_buffered_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb_inverting",
+        "cmfb":            "resistive_sense_cmfb_pmos_mirror_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
         "third_stage_p":   "noninverting_stage_pmos",
@@ -760,7 +763,7 @@ def three_stage_rnmc_fd_fbr():
         "input_pair":      "differential_pair_pmos",
         "load":            "folded_cascode_load_pmos_input_differential_output",
         "tail_current":    "current_mirror_tail_pmos",
-        "cmfb":            "resistive_sense_cmfb_inverting",
+        "cmfb":            "resistive_sense_cmfb_pmos_mirror_inverting",
         "second_stage_p":  "common_source_nmos",
         "second_stage_n":  "common_source_nmos",
         "third_stage_p":   "noninverting_stage_pmos",
@@ -790,19 +793,30 @@ def test_size_three_stage_se_basic(three_stage_buffered_se_fbr):
 
 
 def test_three_stage_se_cc2_ratio(three_stage_buffered_se_fbr):
-    """cc2_pf must equal cc_pf / 4 (Cc2 = Cc1/4 heuristic)."""
+    """Cc2 starts at Cc1/4; RNMC sizing may only raise it, and never past Cc1.
+
+    (This fixture is an RNMC template: raising Cc2 is its second knob for
+    damping the inner pole pair, after gm2.)
+    """
     parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.cc_pf is not None and result.cc2_pf is not None
-    assert result.cc2_pf == pytest.approx(result.cc_pf / 4.0, rel=1e-9)
+    assert result.cc_pf / 4.0 * (1 - 1e-9) <= result.cc2_pf <= result.cc_pf * (1 + 1e-9)
 
 
-def test_three_stage_se_specs_met(three_stage_buffered_se_fbr):
-    """Three-stage NMC SE: gain, GBW, PM, and SR all meet spec."""
-    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
+def test_three_stage_se_specs_met(three_stage_rnmc_se_fbr):
+    """Three-stage SE: gain, GBW, PM, and SR all meet spec.
+
+    Runs on the unbuffered RNMC circuit.  The buffered one used to pass only
+    because its PM model ignored the output follower: at minimum width and
+    10 µA it has a ~0.3 MHz pole into the 20 pF load, and SPICE measures
+    0.52 MHz GBW against the 2.5 MHz spec (see
+    ``test_rnmc_buffered_follower_is_in_the_pm_model``).
+    """
+    parsed, sr_result, fbr_result, topology = three_stage_rnmc_se_fbr
     tech = _tech()
     spec = SizingSpec(**_THREE_STAGE_SPEC)
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -815,6 +829,19 @@ def test_three_stage_se_specs_met(three_stage_buffered_se_fbr):
         assert result.metrics["phase_margin_deg"] >= spec.phase_margin_min_deg - 1.0, "PM not met"
     if "slew_rate_vps" in result.metrics:
         assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
+
+
+def test_rnmc_buffered_follower_is_in_the_pm_model(three_stage_buffered_se_fbr):
+    """The RNMC phase margin sees the output follower, so a buffered design
+    whose weak follower breaks the loop is no longer reported as meeting PM.
+
+    The Level-1 sizer leaves the follower at minimum width (no gm target);
+    the old two-pole formula still reported ~65°."""
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
+    spec = SizingSpec(**_THREE_STAGE_SPEC)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(), spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.metrics["phase_margin_deg"] < spec.phase_margin_min_deg
 
 
 def test_three_stage_se_power(three_stage_buffered_se_fbr):
@@ -841,6 +868,45 @@ def test_size_three_stage_rnmc_se_basic(three_stage_rnmc_se_fbr):
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.cc_pf is not None
     assert result.cc2_pf is not None
+
+
+def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
+    """RNMC re-plans gm2 so the inner pair is damped, not left in the RHP.
+
+    The generic three-stage rules push gm3 to its ceiling on the gain spec and
+    leave gm2 tiny — gm3 far above gm2·(1 + CL/Cc1).  With the scheme
+    threaded, gm2 is raised (the preferred knob) and the pair is stable.
+    """
+    from circuitgenome.sizer.physics import equations as eq
+    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+    from circuitgenome.sizer.physics.device_model import Level1Model
+    from circuitgenome.sizer.physics.preprocess import assign_ids, compute_requirements
+    from circuitgenome.sizer.physics.taxonomy import is_signal_device
+
+    _parsed, _sr, fbr_result, topology = three_stage_rnmc_se_fbr
+    tech, spec = _tech(), SizingSpec(**_THREE_STAGE_SPEC)
+    view = analyze_circuit(fbr_result, topology)
+    assert view.compensation_scheme == "reversed_nested_miller"
+    ids = assign_ids(view.slot_transistors, view.all_transistors, spec)
+
+    def gms(scheme):
+        gm, _v, cc, cc2, _w = compute_requirements(
+            view.slot_transistors, view.all_transistors, ids, tech, spec,
+            Level1Model(tech), compensation_scheme=scheme)
+        sig = {slot: max(gm[d.ref] for d in view.slot_transistors[slot]
+                         if is_signal_device(d))
+               for slot in ("second_stage", "third_stage")}
+        ts_in = next(d for d in view.slot_transistors["third_stage"]
+                     if d.terminals["g"] in {s.terminals["d"] for s in
+                                              view.slot_transistors["second_stage"]})
+        return sig["second_stage"], gm[ts_in.ref], cc * 1e-12, cc2 * 1e-12
+
+    gm2_old, gm3_old, cc1, _ = gms(None)
+    gm2_new, gm3_new, _, cc2_new = gms("reversed_nested_miller")
+    assert not eq.rnmc_stable(gm2_old, gm3_old, cc1, spec.cl)
+    assert gm2_new > gm2_old
+    assert eq.rnmc_stable(gm2_new, gm3_new, cc1, spec.cl)
+    assert eq.rnmc_inner_damping(gm2_new, gm3_new, cc1, cc2_new, spec.cl) > 0.5
 
 
 # --- FD NMC ---
@@ -1296,12 +1362,55 @@ _PTM45_FD_SPEC = dict(
 )
 
 
-def _size_fd(tech_name, variants, **spec_overrides):
+def _size_fd(tech_name, variants, include_infeasible=False, **spec_overrides):
     tech = load_tech(tech_name)
-    parsed, sr_result, fbr_result, topology = _fbr(_FD_TOPO, variants)
+    parsed, sr_result, fbr_result, topology = _fbr(
+        _FD_TOPO, variants, include_infeasible=include_infeasible)
     base = dict(_PTM45_FD_SPEC) if tech_name == "ptm45" else dict(_GF180_SPEC)
     spec = SizingSpec(**{**base, **spec_overrides})
     return spec, size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
+
+
+@pytest.mark.parametrize("load,cmfb,expected", [
+    # 5T amp: tail ibias, every branch device ibias/2 (incl. the output diode).
+    ("current_source_load_pmos", "resistive_sense_cmfb_pmos_mirror",
+     {"m5": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5}),
+    ("current_source_load_nmos", "resistive_sense_cmfb_nmos_mirror",
+     {"m5": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5, "m6": 0.5}),
+    # DDA: two ibias tails; each diode sums one side's two branches.
+    ("current_source_load_pmos", "dda_cmfb_pmos_mirror",
+     {"m7": 1.0, "m8": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5,
+      "m5": 1.0, "m6": 1.0}),
+    ("current_source_load_nmos", "dda_cmfb_nmos_mirror",
+     {"m7": 1.0, "m8": 1.0, "m1": 0.5, "m2": 0.5, "m3": 0.5, "m4": 0.5,
+      "m5": 1.0, "m6": 1.0, "m9": 1.0}),
+])
+def test_cmfb_current_plan_kcl(load, cmfb, expected):
+    """Issue #208: the low-gain CMFB's output diode sets the load current
+    through the mirror ratio, so every CMFB device is planned at the current
+    it really carries (KCL from the tail), not the flat ibias default."""
+    from circuitgenome.sizer.physics.preprocess import _cmfb_current_plan
+    pair = "differential_pair_pmos" if load.endswith("nmos") else "differential_pair_nmos"
+    _, circuit = _make_circuit(_FD_TOPO, {"input_pair": pair, "load": load,
+                                          "cmfb": cmfb + "_inverting"})
+    devs = [d for ref, d in circuit.devices if ref.endswith("_cmfb") and d.type != "resistor"]
+    spec = SizingSpec(**_GF180_SPEC)
+    plan = _cmfb_current_plan({"cmfb": devs}, spec)
+    assert plan == {f"{m}_cmfb": frac * spec.ibias for m, frac in expected.items()}
+
+
+def test_fd_load_mirrors_cmfb_output_diode():
+    """Issue #208: the load's CMFB-gated devices are mirror outputs of the
+    CMFB's output diode — same L, W scaled by the current ratio — so the
+    load carries its planned current when the CM loop is balanced."""
+    _, result = _size_fd("gf180mcu", {
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
+    diode, load = result.transistors["m6_cmfb"], result.transistors["m1_load"]
+    assert load.l_um == diode.l_um
+    assert load.w_um / diode.w_um == pytest.approx(load.ids_a / diode.ids_a, rel=0.02)
+    assert not any("CMFB tail" in w for w in result.warnings)
 
 
 def test_fd_stage_interface_exempts_output_sensing_cmfb():
@@ -1316,7 +1425,7 @@ def test_fd_stage_interface_exempts_output_sensing_cmfb():
         _, result = _size_fd(tech_name, {
             "input_pair": "differential_pair_pmos",
             "load": "current_source_load_nmos",
-            "cmfb": "resistive_sense_cmfb_inverting"})
+            "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
         assert result.solver_status == "GMID"
         assert result.bias_feasible, tech_name
         assert not any("FD stage interface" in w for w in result.warnings)
@@ -1330,7 +1439,7 @@ def test_fd_stage_interface_exempts_mirror_load():
     unwarned; the family's real gate is an FD .op verdict (issue #162)."""
     _, result = _size_fd("gf180mcu", {
         "input_pair": "differential_pair_pmos",
-        "load": "active_load_nmos"})
+        "load": "active_load_nmos"}, include_infeasible=True)
     assert result.solver_status == "GMID"
     assert not any("FD stage interface" in w for w in result.warnings)
 
@@ -1340,7 +1449,7 @@ def test_fd_stage_interface_skips_resistor_load():
     exempt from the FD equality check."""
     _, result = _size_fd("gf180mcu", {
         "input_pair": "differential_pair_pmos",
-        "load": "resistor_load_gnd"})
+        "load": "resistor_load_gnd"}, include_infeasible=True)
     assert result.solver_status == "GMID"
     assert not any("FD stage interface" in w for w in result.warnings)
 

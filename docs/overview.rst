@@ -47,7 +47,8 @@ An op-amp is assembled from these functional categories:
   cascode current mirror, resistor).
 - **Bias generation** — constructed per combination from what the other slots
   consume on each bias rail (not enumerated).
-- **CMFB** — common-mode feedback, present only for fully-differential loads.
+- **CMFB** — common-mode feedback, present only for fully-differential loads;
+  its output is a diode that current-mirrors into the load (low-gain CMFB).
 - **Compensation** — Miller capacitor, Miller cap with nulling resistor, or
   indirect compensation.
 - **Amplification stage** — the second / third gain stages (common-source or
@@ -78,6 +79,10 @@ An op-amp is assembled from these functional categories:
 .. figure:: ../gallery/modules-implementations/bias_generation+cmfb/cmfb.svg
    :alt: CMFB variants
    :width: 100%
+
+   The amplifier cores.  Since issue #208 each amp's output device is
+   diode-connected (PMOS) or feeds an added NMOS diode, and mirrors into the
+   load; the drawing still shows the earlier high-gain mirror output.
 
 Topology templates
 ~~~~~~~~~~~~~~~~~~

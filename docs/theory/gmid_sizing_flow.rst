@@ -77,6 +77,7 @@ Flow at a glance
       ├─ Phase 4  Size
       │             a. geometry (LUT→W/L, sym, mirror)   (geometry.py)  ◄── core
       │             b. DC bias check + tail repair       (bias.py)
+      │                RNMC only: inner-loop re-plan, re-size a–b  (rnmc_refine.py)
       │             c. non-load resistors                (resistors.py) ─► MetricModifiers
       └─ Phase 5  Evaluate         (evaluate.py)  ─► metrics/margins
                     cascode-aware rout, analytical gain/GBW/PM
@@ -455,13 +456,38 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
 
 .. note::
 
-   This is a fast **analytical pre-check**, and it is tail-focused: a SPICE DC
+   This is a fast **analytical pre-check**, and it is tail-focused — the input
+   pair's tail and, on fully-differential designs, the CMFB amp's tail (its pair's
+   gates sit at the output CM; since issue #208 its branch current is mirrored into
+   the load, so a starved CMFB tail starves the first stage).  A SPICE DC
    bias-soundness check
    (:func:`~circuitgenome.sizer.verify.check_bias_soundness`) grounds the final
    verdict for PTM / foundry techs.  So ``bias_feasible = True`` is *necessary but not
    sufficient* — it does not yet check, e.g., second-stage headroom.  Remedies for a
    failure: raise the supply, lower the input common-mode, flip the input polarity, or use
    a non-cascode tail.
+
+.. note::
+
+   **Reversed nested Miller (RNMC) templates** get one more step here.  The tail
+   repair above can push the input pair deep into weak inversion, so the loop's
+   real ``gm1`` can be many times what Phase 3 planned, and only the sized
+   circuit shows the third stage's input gate capacitance.
+   :func:`~circuitgenome.sizer.gmid.rnmc_refine.refine_rnmc_plan` re-plans the
+   inner loop on those real values — raise ``gm2``, then ``Cc2``, cap ``gm3``
+   last — and Phases 4a–4b re-run against the new requirements (a ``gm2`` raise
+   that breaks the stage-interface bias is undone).  See
+   :ref:`the RNMC section of the analytical flow <rnmc-inner-pair>`.
+
+   On a ``*_buffered_*`` template one more check joins the verdict after the
+   resistor phase: the source-follower output stage shifts one edge of the
+   output swing a whole ``|Vgs|`` away from its rail, and
+   :func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing` sets
+   ``bias_feasible = False`` (warning *"…source-follower output stage cannot
+   meet the swing spec…"*) when that edge misses the swing spec by more than
+   0.2 V.  On gf180 at 3.3 V a PMOS follower cannot pull the output below
+   ≈ 0.85 V and an NMOS follower cannot lift it above ≈ 2.2 V, so a
+   0.3–3.0 V swing spec rules out every buffered candidate before SPICE.
 
 Phase 4c — Size: non-load resistors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -350,12 +350,15 @@ def test_sky130_width_max_device_is_modelable():
 
 # --- FD bias gate (issue #162) ----------------------------------------------
 
-def _fd_circuit(want: dict[str, str]):
-    """First FD two-stage circuit matching ``want``; return (text, parsed, fbr, topo)."""
+def _fd_circuit(want: dict[str, str], include_infeasible: bool = False):
+    """First FD two-stage circuit matching ``want``; return (text, parsed, fbr, topo).
+
+    ``include_infeasible`` reaches the cmfb_absent combinations (#208)."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_fully_differential")
-    circ = next(c for c in enumerate_circuits(topo, mods)
+    circ = next(c for c in enumerate_circuits(
+                    topo, mods, config={"include_infeasible": include_infeasible})
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
                        for k, v in want.items()))
     text = to_flat_spice(circ, name="dut")
@@ -373,7 +376,7 @@ def test_fd_bias_gate_passes_cm_regulated_cmfb_family():
     text, parsed, fbr, topo = _fd_circuit({
         "input_pair": "differential_pair_pmos",
         "load": "current_source_load_nmos",
-        "cmfb": "resistive_sense_cmfb_inverting"})
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
     tech = load_tech("gf180mcu")
     spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
                       second_stage_current_ratio=2.5, gain_min_db=60,
@@ -395,7 +398,7 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
         "load": "active_load_pmos",
         "tail_current": "resistor_tail_gnd",
         "comp_p": "miller_cap_with_nulling_resistor",
-        "comp_n": "miller_cap"})
+        "comp_n": "miller_cap"}, include_infeasible=True)
     tech = load_tech("ptm45")
     spec = SizingSpec(vdd=1.0, vss=0.0, ibias=20e-6, cl=5e-12,
                       second_stage_current_ratio=2.5, gain_min_db=45,
@@ -403,6 +406,116 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     ok, reason = check_bias_soundness(text, result, tech, spec)
     assert not ok and reason and "SPICE bias" in reason
+
+
+def _gf180_fd_nmos_mirror():
+    """A sized gf180 two-stage FD with the low-gain NMOS-mirror CMFB."""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=3e5)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    return text, result, tech, spec
+
+
+@ngspice
+@pytest.mark.slow
+def test_fd_cm_gate_condemns_high_gain_cmfb():
+    """Issue #208: the pre-#208 high-gain CMFB (the amp's mirror output drives
+    the load gates as a voltage) puts the CM-loop crossover far above GBW, so
+    the output CM rings indefinitely after a kick — an unstable equilibrium
+    that .op and the differential benches cannot see.  The low-gain form
+    settles; rewiring the same sized circuit back to the high-gain amp (m2
+    drains into out, no output diode) must be condemned."""
+    import re
+    from circuitgenome.sizer.verify import op
+    text, result, tech, spec = _gf180_fd_nmos_mirror()
+    limit = op._SETTLED_FRAC * spec.vdd
+    ring = op._fd_ringing(text, result, tech, spec)
+    if ring is None:
+        pytest.skip("settling transient timed out (heavily loaded machine)")
+    assert max(ring) <= limit
+
+    high_gain = re.sub(r"^m2_cmfb vdd!", "m2_cmfb net_cmfb_out", text, flags=re.M)
+    high_gain = re.sub(r"^m6_cmfb .*\n", "", high_gain, flags=re.M)
+    assert high_gain != text
+    ring = op._fd_ringing(high_gain, result, tech, spec)
+    if ring is None:
+        pytest.skip("settling transient timed out (heavily loaded machine)")
+    cm, _dm = ring
+    assert cm > limit
+    ok, reason = check_bias_soundness(high_gain, result, tech, spec)
+    assert not ok and "do not settle" in reason and "CMFB" in reason
+
+
+@ngspice
+@pytest.mark.slow
+@pytest.mark.parametrize("comp2,gm3_scale,settles", [
+    ("miller_cap", 1.0, True),
+    ("miller_cap_with_nulling_resistor", 1.0, True),
+    ("miller_cap", 0.3, False),
+])
+def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settles):
+    """Issue #208: a gf180 NMC FD whose inner nested-Miller pole pair is
+    under-damped rings differentially at ~25 MHz — far above its ~7.7 MHz
+    crossover, while the open-loop AC bench still reads PM ≈ 88° (it only
+    sees the global loop).  The sizer keeps gm3 ≥ 3.5·gm2 and sizes Cc2 for
+    the inner pair's damping, so both a plain and a nulling-resistor comp2
+    settle; restoring the old inner loop by hand (third-stage signal W × 0.3
+    → gm3 ≈ 2·gm2, Cc2 = Cc1/4) brings the ringing back, and the settling
+    gate's one-sided kick must condemn it."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_fully_differential")
+    want = {"input_pair": "differential_pair_pmos", "load": "current_source_load_nmos",
+            "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting",
+            "comp1_p": "miller_cap", "comp1_n": "miller_cap",
+            "comp2_p": comp2, "comp2_n": comp2}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map[k].name == v for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, third_stage_current_ratio=5.0,
+                      gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    if gm3_scale != 1.0:  # restore the old inner loop: gm3 ≈ 2·gm2, Cc2 = Cc1/4
+        tr = {ref: (replace(s, w_um=s.w_um * gm3_scale)
+                    if ref.startswith("mn1_third_stage") else s)
+              for ref, s in result.transistors.items()}
+        result = replace(result, transistors=tr, cc2_pf=result.cc_pf / 4.0)
+    from circuitgenome.sizer.verify import op
+    if op._fd_ringing(text, result, tech, spec) is None:
+        # A timed-out transient is "no evidence" and the gate passes; the
+        # verdict this test pins cannot be observed then.
+        pytest.skip("settling transient timed out (heavily loaded machine)")
+    ok, reason = check_bias_soundness(text, result, tech, spec)
+    assert ok is settles, reason
+    if not settles:
+        assert "differential output oscillates" in reason
+
+
+@ngspice
+@pytest.mark.slow
+def test_fd_swing_and_slew_measured():
+    """Issue #208: FD output swing and slew rate are measured per output (the
+    sizer's definition), not left None — a None on a constrained spec left
+    every FD design "unverified".  A resistive-sense current-source-load
+    two-stage swings close to both rails, and slews at the same order as the
+    model's ibias/Cc."""
+    text, result, tech, spec = _gf180_fd_nmos_mirror()
+    sim = simulate_metrics(text, result, tech, spec)
+    assert sim["output_swing_max_v"] is not None and sim["output_swing_max_v"] > 0.9 * spec.vdd
+    assert sim["output_swing_min_v"] is not None and sim["output_swing_min_v"] < 0.1 * spec.vdd
+    sr, sr_model = sim["slew_rate_vps"], result.metrics["slew_rate_vps"]
+    assert sr is not None and 0.25 * sr_model < sr < 2.0 * sr_model
 
 
 # --- FD open-loop AC metrics (issue #61) ------------------------------------
@@ -415,8 +528,8 @@ def test_fd_bias_gate_catches_unregulated_mirror_family():
 # outp->inn/outn->inp DC feedback ties); these tests lock in real gain/GBW/PM.
 
 @ngspice
-@pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_inverting",
-                                  "dda_cmfb_inverting"])
+@pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_pmos_mirror_inverting",
+                                  "dda_cmfb_pmos_mirror_inverting"])
 @pytest.mark.slow
 def test_fd_two_stage_ac_metrics_are_real(cmfb):
     """A feasible two-stage FD folded-cascode op-amp reports measured
@@ -493,7 +606,7 @@ r2_cmfb outn cmfb_sense 1k
 m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
 m2_cmfb net_cmfb_out cmfb_sense cmfb_tail gnd! nmos
 m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
-m4_cmfb net_cmfb_out cmfb_d1 vdd! vdd! pmos
+m4_cmfb net_cmfb_out net_cmfb_out vdd! vdd! pmos
 m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
 mn1_second_stage_p net_mid2_p net_loadout2 gnd! gnd! nmos
 mp1_second_stage_p net_mid2_p net_bias5 vdd! vdd! pmos
@@ -760,6 +873,52 @@ def test_slew_swing_measured_on_real_device_techs(tech, vdd):
     assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
 
 
+# --- follower output-stage swing (PR #239 follow-up) ------------------------
+
+@ngspice
+@pytest.mark.slow
+@pytest.mark.parametrize("template", ["two_stage_opamp_buffered_single_ended",
+                                      "two_stage_opamp_buffered_fully_differential"])
+@pytest.mark.parametrize("follower", ["common_drain_pmos", "common_drain_nmos"])
+def test_follower_swing_model_tracks_spice(template, follower):
+    """A source-follower output stage shifts one swing edge a whole |Vgs|
+    away from its rail — the model used to ignore it (predicting ~0.1 V from
+    each rail where gf180 SPICE measures ~0.85 V / ~1.0 V).  The level-shifted
+    edge must now land within the follower gate's tolerance of the bench, and
+    the gf180 0.3–3.0 V swing spec must be flagged by the sizer before SPICE."""
+    from circuitgenome.sizer.physics.stage_chain import _FOLLOWER_SWING_TOL_V
+    topo = next(t for t in load_topologies() if t.name == template)
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if any(v is not None and v.name == follower
+                       for k, v in c.variant_map.items() if k.startswith("output_stage")))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=3e5, power_max_w=2e-3,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert not result.bias_feasible
+    assert any("source-follower" in w for w in result.warnings)
+
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    hi, lo = measure._measure_swing(name, ports, body_dut, rig._Topo(ports),
+                                    spec.vdd, spec.ibias, spec.cl, spec.vdd / 2)
+    if hi is None or lo is None:
+        pytest.skip("swing bench did not complete in this environment")
+    if follower == "common_drain_pmos":      # low edge lifted by |Vgs|
+        model, spice = result.metrics["output_swing_min_v"], lo
+        assert spice > 0.6
+    else:                                    # high edge dropped by Vgs (+ body)
+        model, spice = result.metrics["output_swing_max_v"], hi
+        assert spice < spec.vdd - 0.6
+    assert model == pytest.approx(spice, abs=_FOLLOWER_SWING_TOL_V)
+
+
 # --- load capacitance (issue #222) ------------------------------------------
 
 def _active_load_one_stage(tech_name, vdd):
@@ -869,9 +1028,11 @@ def test_cmrr_psrr_none_without_clean_gain():
 
 @ngspice
 @pytest.mark.slow
-def test_fd_large_signal_metrics_stay_none():
-    """Swing and slew are single-ended-only benches: a fully-differential
-    circuit keeps them (and, absent a clean FD gain, CMRR/PSRR) as None."""
+def test_fd_large_signal_metrics_measured_ptm45():
+    """Swing and slew are measured on a fully-differential circuit too
+    (issue #208 — they used to stay None and left FD designs "unverified"),
+    here at ptm45's 1 V supply: both outputs reach well past mid-rail in
+    each direction, and the slew is a real, positive rate."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "two_stage_opamp_fully_differential")
@@ -883,7 +1044,7 @@ def test_fd_large_signal_metrics_stay_none():
             "comp_p": "miller_cap", "comp_n": "miller_cap",
             "second_stage_p": "common_source_nmos", "second_stage_n": "common_source_nmos",
             # Two-stage FD gets the inverting CMFB orientation (issue #165).
-            "cmfb": "resistive_sense_cmfb_inverting"}
+            "cmfb": "resistive_sense_cmfb_pmos_mirror_inverting"}
     circ = next(c for c in enumerate_circuits(topo, mods)
                 if all(c.variant_map.get(k) and c.variant_map[k].name == v
                        for k, v in want.items()))
@@ -897,6 +1058,7 @@ def test_fd_large_signal_metrics_stay_none():
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     sim = simulate_metrics(text, result, tech, spec)
 
-    assert sim["slew_rate_vps"] is None
-    assert sim["output_swing_max_v"] is None
-    assert sim["output_swing_min_v"] is None
+    assert sim["slew_rate_vps"] is not None and sim["slew_rate_vps"] > 0
+    hi, lo = sim["output_swing_max_v"], sim["output_swing_min_v"]
+    assert hi is not None and lo is not None
+    assert 0.0 <= lo < 0.3 * spec.vdd < 0.7 * spec.vdd < hi <= spec.vdd

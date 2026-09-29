@@ -14,6 +14,8 @@ import math
 from circuitgenome.synthesizer.models import Device
 
 from . import equations as eq
+from . import rnmc
+from .rnmc import RNMC
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel
 from ..models import SizingSpec, TechParams
 from .taxonomy import (
@@ -32,6 +34,12 @@ _RESISTOR_LOAD_OVERDRIVE = 0.15
 # pole split wide enough for a ~60° phase-margin budget (Allen-Holberg's
 # Cc > 0.22·CL, rounded up for margin).
 _CC_STABILITY_RATIO = 0.25
+
+# Three-stage nested-Miller inner loop (issue #208 follow-up): floor on
+# gm3/gm2 and the damping Cc2 is sized for.  gf180 SPICE (open-loop kick)
+# rings at gm3/gm2 ≈ 2 for any Cc2, and at ζ ≲ 0.2 even with gm3/gm2 ≈ 3.8.
+_NMC_GM3_OVER_GM2 = 3.5
+_NMC_INNER_ZETA = 0.3
 
 
 def size_load_resistors(
@@ -118,6 +126,51 @@ def _cascode_load_current_plan(
             for d in load}
 
 
+def _cmfb_current_plan(
+    slot_transistors: dict[str, list[Device]], spec: SizingSpec,
+) -> dict[str, float]:
+    """Per-device IDS inside the CMFB amp, by KCL from its tail(s).
+
+    The CMFB's output is a diode that mirrors into the load's CMFB-gated
+    devices (issue #208), so the diode's planned current *sets* the load
+    current through the mirror ratio (the gm/Id geometry pass sizes the load
+    as ``W_diode · I_load / I_diode``) and must be the current it really
+    carries.  Structure, read from the assembled netlist:
+
+    * **tails** — gate on a bias rail (``net_bias*``): ``ibias`` each, like
+      the bias-generator leg they mirror.
+    * **pair devices** — source on a tail's drain: split that tail's current.
+    * **everything else** — the sum of the known currents entering its drain
+      net (a diode fed by its branch), or else a copy of the diode it mirrors
+      (same gate, same type).
+
+    Returns ``{}`` when there is no CMFB.
+    """
+    devs = [d for d in slot_transistors.get("cmfb", []) if d.type in ("nmos", "pmos")]
+    tails = [d for d in devs if d.terminals.get("g", "").startswith("net_bias")]
+    ids = {d.ref: spec.ibias for d in tails}
+    for t in tails:
+        pair = [d for d in devs if d.terminals.get("s") == t.terminals.get("d")]
+        for d in pair:
+            ids[d.ref] = spec.ibias / len(pair)
+    for _ in devs:   # fixed point: each pass settles at least one device
+        for d in devs:
+            if d.ref in ids:
+                continue
+            fed = [ids[o.ref] for o in devs if o is not d and o.ref in ids
+                   and o.terminals.get("d") == d.terminals.get("d")]
+            if fed:
+                ids[d.ref] = sum(fed)
+                continue
+            ref = next((o for o in devs if o is not d and o.ref in ids
+                        and o.type == d.type
+                        and o.terminals.get("g") == d.terminals.get("g")
+                        == o.terminals.get("d")), None)
+            if ref is not None:
+                ids[d.ref] = ids[ref.ref]
+    return ids
+
+
 def assign_ids(
     slot_transistors: dict[str, list[Device]],
     all_transistors: dict[str, tuple[Device, str]],
@@ -126,10 +179,13 @@ def assign_ids(
     """Assign quiescent IDS to each transistor from KCL + spec.ibias."""
     ids_2 = spec.ibias * spec.second_stage_current_ratio
     cascode_load = _cascode_load_current_plan(slot_transistors, spec)
+    cmfb = _cmfb_current_plan(slot_transistors, spec)
     ids_map: dict[str, float] = {}
     for ref, (device, slot) in all_transistors.items():
         if slot == "load" and ref in cascode_load:
             ids_map[ref] = cascode_load[ref]
+        elif slot == "cmfb" and ref in cmfb:
+            ids_map[ref] = cmfb[ref]
         elif slot in HALF_BIAS_SLOTS:
             # Each transistor in a 2-transistor group carries ibias/2.
             # For n devices in the slot (e.g. degenerated pairs), divide equally.
@@ -208,6 +264,7 @@ def compute_requirements(
     spec: SizingSpec,
     model: DeviceModel,
     gd_load_r: float = 0.0,
+    compensation_scheme: str | None = None,
 ) -> tuple[dict[str, float], dict[str, float], float | None, float | None, list[str]]:
     """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
@@ -216,7 +273,22 @@ def compute_requirements(
     ceiling (the spec cannot be met at this bias current).  Output conductances
     come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
     model reproduces the geometry-free ``λ·Id`` exactly.
+
+    ``compensation_scheme`` is the template's three-stage compensation
+    (``topology.config["compensation_scheme"]``):
+
+    * ``"nested_miller"`` (NMC) — its inner loop (Cc2 around the third stage)
+      is sized for damping: ``gm3 ≥ _NMC_GM3_OVER_GM2·gm2`` and Cc2 for
+      ``_NMC_INNER_ZETA`` — instead of the ``Cc2 = Cc1/4`` default.
+    * ``"reversed_nested_miller"`` (RNMC) — gm2, Cc2 and gm3 are re-planned
+      with :func:`~.rnmc.design_rnmc` (raise gm2, then Cc2, then cap gm3) so
+      the inner pole pair is damped and in the left half plane; its
+      advisories join ``warnings``.  Only the Level-1 sizer asks for this:
+      the gm/Id pipeline's geometry moves gm1 far from this estimate (bias
+      repair), so it re-plans RNMC on the sized circuit instead
+      (:mod:`~circuitgenome.sizer.gmid.rnmc_refine`).
     """
+    nested_miller = compensation_scheme == "nested_miller"
     is_three_stage = any(s in slot_transistors for s in THIRD_STAGE_SLOTS)
     has_second_stage = (
         any(s in slot_transistors for s in SECOND_STAGE_SLOTS) or is_three_stage
@@ -294,7 +366,7 @@ def compute_requirements(
             cc_ub_f = min(cc_ub_f, spec.ibias / spec.slew_rate_min_vps)
         cc_f = max(cc_min_f, min(_CC_STABILITY_RATIO * spec.cl, cc_ub_f))
 
-    # Cc2 for three-stage (inner cap = Cc1/4); None for two-stage and one-stage.
+    # Cc2 for three-stage (see below); None for two-stage and one-stage.
     cc2_pf: float | None = None
     cc2_f: float = 0.0
 
@@ -312,8 +384,14 @@ def compute_requirements(
             cc_f = min(cc_f, cc_max_f)
 
         if is_three_stage:
-            # Three-stage: inner cap = Cc1/4.
+            # Inner cap = Cc1/4, except NMC: its non-dominant poles form a pair
+            # with damping ζ = (r−1)/2·√(Cc2/(r·CL)), r = gm3/gm2 (Leung &
+            # Mok), so size Cc2 for ζ = _NMC_INNER_ZETA at the gm3/gm2 floor
+            # enforced below (a larger realized r only damps it more).
             cc2_f = cc_f / 4.0
+            if nested_miller:
+                r = _NMC_GM3_OVER_GM2
+                cc2_f = min(cc_f, 4.0 * _NMC_INNER_ZETA ** 2 * r * spec.cl / (r - 1.0) ** 2)
             cc2_pf = cc2_f * 1e12
 
             # Phase margin (split phase budget equally between two non-dominant poles).
@@ -336,6 +414,14 @@ def compute_requirements(
                 A0 = 10.0 ** (spec.gain_min_db / 20.0)
                 gm3_from_gain = A0 / (k_fs * gm1_req * rout1 * gm2_req * rout2 * rout3)
                 gm3_req = max(gm3_req, gm3_from_gain)
+
+            # The gm3/gm2 floor the Cc2 above assumes, against the gm2 the
+            # second stage will really deliver.  At gm3 ≈ 2·gm2 the inner loop
+            # rings above GBW, which the open-loop AC bench cannot see (#208).
+            ss_sig = next((d for d in ss_devices if is_signal_device(d)), None)
+            if nested_miller and ss_sig is not None:
+                gm2_real = model.realized_gm(ss_sig.type, gm2_req, ids_2)
+                gm3_req = max(gm3_req, _NMC_GM3_OVER_GM2 * gm2_real)
 
         else:
             # Two-stage: gain A0 = k_fs·gm1·Rout1·gm2·Rout2.
@@ -406,6 +492,26 @@ def compute_requirements(
             "third-stage gm requirement exceeds the weak-inversion ceiling — "
             "increase third_stage_current_ratio/ibias or relax gain.")
 
+    # --- RNMC: damp the inner pole pair (raise gm2, then Cc2, cap gm3) ---
+    # A gm3 cap lands on the third stage's input device only (see below).
+    gm3_in_req: float | None = None
+    if (compensation_scheme == RNMC and is_three_stage and cc2_f > 0
+            and gm1_req > 0 and gm3_req > 0 and ip_devices):
+        ip_dev = ip_devices[0]
+        gm1_loop = k_fs * model.realized_gm(ip_dev.type, gm1_req, spec.ibias / 2.0)
+        ts_sig = next((d for d in ts_devices if is_signal_device(d)), None)
+        c2_f = (rnmc.signal_cgs_estimate(model, ts_sig.type, gm3_req, ids_3, tech)
+                if ts_sig is not None else 0.0)
+        g = tuple(1.0 / r if r < float("inf") else 0.0 for r in (rout1, rout2, rout3))
+        design = rnmc.design_rnmc(
+            gm1_loop, max(gm2_req, 1e-12), gm3_req, cc1_f=cc_f, cc2_f=cc2_f,
+            cl_f=spec.cl, gm2_max=gm2_ceil,
+            pm_min_deg=spec.phase_margin_min_deg, c2_f=c2_f, g=g)
+        gm_ceiling_warnings += rnmc.design_warnings(
+            design, gm3_req, spec.phase_margin_min_deg)
+        gm2_req, gm3_in_req = design.gm2, design.gm3
+        cc2_pf = design.cc2_f * 1e12
+
     # --- Map requirements to individual transistors ---
     gm_req_map: dict[str, float] = {}
     vod_max_map: dict[str, float] = {}
@@ -420,15 +526,30 @@ def compute_requirements(
         elif slot in THIRD_STAGE_SLOTS:
             gm_req_map[ref] = gm3_req if is_signal_device(device) else 0.0
         # All other slots: no explicit gm requirement (sized by min W/L)
+    if gm3_in_req is not None:
+        # RNMC: the capped gm3 applies to the device gated by a second-stage
+        # output; a non-inverting stage's mirror keeps its (swing) sizing.
+        stage2_out = {d.terminals.get("d") for devs in (
+            slot_transistors.get(s, []) for s in SECOND_STAGE_SLOTS)
+            for d in devs if is_signal_device(d)}
+        for ref, (device, slot) in all_transistors.items():
+            if slot in THIRD_STAGE_SLOTS and device.terminals.get("g") in stage2_out:
+                gm_req_map[ref] = gm3_in_req
 
     # --- VDS_sat upper bounds from output swing specs ---
     vdd = spec.vdd
     vss = spec.vss
 
-    # All second- and third-stage device lists (constrain output swing on every path).
+    # Second- and third-stage device lists (constrain output swing on every
+    # path).  NMC skips the second stage: it never drives the output, and a
+    # swing floor there only inflates gm2 (gm/Id ↑ at fixed Id), squeezing the
+    # gm3/gm2 ratio its inner loop needs.  (RNMC is left as is: its inner
+    # loop wraps the second stage, and gf180 SPICE rings without the floor.)
+    swing_slots = (THIRD_STAGE_SLOTS if nested_miller
+                   else (*SECOND_STAGE_SLOTS, *THIRD_STAGE_SLOTS))
     all_ss_device_lists = [
         slot_transistors[s]
-        for s in (*SECOND_STAGE_SLOTS, *THIRD_STAGE_SLOTS)
+        for s in swing_slots
         if s in slot_transistors
     ]
 

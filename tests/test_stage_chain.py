@@ -9,12 +9,17 @@ import math
 import pytest
 
 from circuitgenome.sizer import SizingSpec
+from circuitgenome.sizer.models import TransistorSizing
 from circuitgenome.sizer.physics import equations as eq
+from circuitgenome.sizer.physics.circuit_view import CircuitView
 from circuitgenome.sizer.physics.metrics import evaluate_metrics
 from circuitgenome.synthesizer.models import Device
 from circuitgenome.sizer.physics.stage_chain import (
     Stage,
     StageChain,
+    _FOLLOWER_SWING_TOL_V,
+    check_follower_swing,
+    output_swing_headroom,
     _source_degeneration_r,
     _tail_current_net,
 )
@@ -264,7 +269,7 @@ def test_withheld_drops_gain_derived_metrics_only():
 # --------------------------------------------------------------------------- #
 def test_margin_sign_is_positive_when_met_for_min_and_max_specs():
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), cc_pf=2.0,
-                   supply_currents=(10e-6,), swing_vdsat=(0.2, 0.2))
+                   supply_currents=(10e-6,), swing_headroom=(0.2, 0.2))
     spec = _spec(gain_min_db=40, power_max_w=1.0, output_swing_min_v=1.0)
     m, margins = evaluate_metrics(chain, spec)
 
@@ -309,3 +314,129 @@ def test_transforms_do_not_mutate_the_original():
     assert chain.stages[0].gm == pytest.approx(1e-3)
     assert chain.stages[1].rout == pytest.approx(5e5)
     assert chain.gain_measurable
+
+
+# --------------------------------------------------------------------------- #
+# Output swing headroom: the follower output stage's level shift
+# --------------------------------------------------------------------------- #
+class _BodyModel:
+    """The one DeviceModel primitive the headroom walk needs."""
+
+    def __init__(self, gamma=0.0, phi=0.7):
+        self.gamma, self.phi = gamma, phi
+
+    def body_vth_shift(self, dtype, vsb):
+        return eq.body_vth_shift(self.gamma, self.phi, vsb)
+
+
+def _dev(ref, dtype, d, g, s, b=None):
+    rail = "gnd!" if dtype == "nmos" else "vdd!"
+    return Device(ref=ref, type=dtype,
+                  terminals={"d": d, "g": g, "s": s, "b": b or rail})
+
+
+def _sz(ref, vdsat, vgs=0.8):
+    return TransistorSizing(ref=ref, w_um=1.0, l_um=1.0, ids_a=1e-5,
+                            vgs_v=vgs, vds_sat_v=vdsat)
+
+
+# A second stage driving ``amp``: NMOS signal device, PMOS current-source load.
+_SS = [_dev("mn_ss", "nmos", "amp", "mid", "gnd!"),
+       _dev("mp_ss", "pmos", "amp", "net_bias5", "vdd!")]
+_SS_SIZING = {"mn_ss": _sz("mn_ss", 0.10), "mp_ss": _sz("mp_ss", 0.15)}
+
+_PMOS_FOLLOWER = [_dev("mp_f", "pmos", "gnd!", "amp", "out", b="out"),
+                  _dev("mp_cs", "pmos", "out", "net_bias6", "vdd!")]
+_NMOS_FOLLOWER = [_dev("mn_f", "nmos", "vdd!", "amp", "out"),
+                  _dev("mn_cs", "nmos", "out", "net_bias6", "gnd!")]
+_SIZING = {**_SS_SIZING,
+           "mp_f": _sz("mp_f", 0.1, vgs=-0.80), "mp_cs": _sz("mp_cs", 0.20),
+           "mn_f": _sz("mn_f", 0.1, vgs=0.70), "mn_cs": _sz("mn_cs", 0.25)}
+
+
+def _view(output_stage=None, slot="output_stage"):
+    slots = {"second_stage": list(_SS)}
+    if output_stage:
+        slots[slot] = list(output_stage)
+    return CircuitView(
+        slot_transistors=slots,
+        all_transistors={d.ref: (d, sl) for sl, devs in slots.items() for d in devs})
+
+
+def test_unbuffered_headroom_is_the_second_stage_vdsat():
+    head = output_swing_headroom(_view(), _SS_SIZING, _BodyModel(), _spec())
+    assert head == pytest.approx((0.15, 0.10))
+
+
+def test_pmos_follower_lifts_the_low_edge_by_its_vgs():
+    """out = in + |Vgs|: the low edge is the driver's Vdsat plus |Vgs|; the
+    high edge is the follower's own current source leaving saturation.  The
+    body is tied to the source, so no body effect even with gamma > 0."""
+    head = output_swing_headroom(_view(_PMOS_FOLLOWER), _SIZING,
+                                 _BodyModel(gamma=0.5), _spec())
+    assert head == pytest.approx((0.20, 0.10 + 0.80))
+
+
+def test_nmos_follower_drops_the_high_edge_by_its_vgs():
+    head = output_swing_headroom(_view(_NMOS_FOLLOWER), _SIZING, _BodyModel(), _spec())
+    assert head == pytest.approx((0.15 + 0.70, 0.25))
+
+
+def test_nmos_follower_body_effect_is_solved_at_the_swing_edge():
+    """Bulk at Vss: at the high edge the source sits (Vdd − headroom) above
+    the bulk, and the raised Vth must be consistent with that edge."""
+    spec, model = _spec(), _BodyModel(gamma=0.5, phi=0.7)
+    hi, lo = output_swing_headroom(_view(_NMOS_FOLLOWER), _SIZING, model, spec)
+    base = 0.15 + 0.70
+    assert hi > base + 0.2                       # body effect is not negligible
+    assert hi == pytest.approx(base + model.body_vth_shift("nmos", spec.vdd - hi),
+                               abs=1e-6)
+    assert lo == pytest.approx(0.25)
+
+
+def test_fd_follower_is_read_off_the_p_leg():
+    head = output_swing_headroom(_view(_PMOS_FOLLOWER, slot="output_stage_p"),
+                                 _SIZING, _BodyModel(), _spec())
+    assert head == pytest.approx((0.20, 0.90))
+
+
+def test_follower_headroom_is_none_when_its_driver_is_unsized():
+    sizing = {k: v for k, v in _SIZING.items() if k != "mn_ss"}
+    hi, lo = output_swing_headroom(_view(_PMOS_FOLLOWER), sizing, _BodyModel(), _spec())
+    assert hi == pytest.approx(0.20) and lo is None
+
+
+@pytest.mark.parametrize("follower,spec_kw,feasible", [
+    # PMOS follower: low edge at 0.90 V.
+    (_PMOS_FOLLOWER, dict(output_swing_min_v=0.3), False),
+    (_PMOS_FOLLOWER, dict(output_swing_min_v=0.9 - _FOLLOWER_SWING_TOL_V + 0.01), True),
+    (_PMOS_FOLLOWER, dict(output_swing_min_v=1.0), True),
+    (_PMOS_FOLLOWER, dict(output_swing_max_v=4.99), True),   # other side not gated
+    # NMOS follower: high edge at 5 − 0.85 = 4.15 V.
+    (_NMOS_FOLLOWER, dict(output_swing_max_v=4.8), False),
+    (_NMOS_FOLLOWER, dict(output_swing_max_v=4.15 + _FOLLOWER_SWING_TOL_V - 0.01), True),
+    (_NMOS_FOLLOWER, dict(output_swing_min_v=0.01), True),
+    (None, dict(output_swing_min_v=0.01, output_swing_max_v=4.99), True),
+])
+def test_follower_swing_gate(follower, spec_kw, feasible):
+    warnings, ok = check_follower_swing(_view(follower), _SIZING, _BodyModel(),
+                                        _spec(**spec_kw))
+    assert ok is feasible
+    assert bool(warnings) is not feasible
+    if warnings:
+        assert "source-follower" in warnings[0] and "swing spec" in warnings[0]
+
+
+def test_evaluate_metrics_reads_the_headroom_off_each_rail():
+    chain = _chain((1e-3, 1e6), (2e-3, 5e5), swing_headroom=(0.85, 0.25))
+    spec = _spec(output_swing_max_v=4.5, output_swing_min_v=0.3)
+    m, _ = evaluate_metrics(chain, spec)
+    assert m["output_swing_max_v"] == pytest.approx(5.0 - 0.85)
+    assert m["output_swing_min_v"] == pytest.approx(0.25)
+
+
+def test_body_vth_shift():
+    assert eq.body_vth_shift(0.0, 0.7, 1.0) == 0.0
+    assert eq.body_vth_shift(0.5, 0.7, -0.3) == 0.0          # forward bias clamped
+    assert eq.body_vth_shift(0.5, 0.7, 1.0) == pytest.approx(
+        0.5 * (math.sqrt(1.7) - math.sqrt(0.7)))

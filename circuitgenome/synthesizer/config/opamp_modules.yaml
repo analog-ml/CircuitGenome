@@ -953,11 +953,22 @@ modules:
 
   # ─── CMFB (COMMON-MODE FEEDBACK) ──────────────────────────────────────────
 
-  - name: resistive_sense_cmfb
+  # Low-gain CMFB (issue #208): the amp's output is a diode-connected device
+  # that current-mirrors into the load's CMFB-gated devices, so the CM loop
+  # transconductance is ~gm_cmfb/2 (not A_cmfb·gm_load) and its crossover sits
+  # near the differential GBW, inside the Miller compensation's margin.  The
+  # old high-gain voltage-drive output put the CM crossover tens of times above
+  # GBW: 27/28 sampled gf180 FD circuits oscillated in common mode.  The
+  # output diode must match the type of the load devices it gates (see
+  # compatibility/cmfb.py), hence a pmos_mirror and an nmos_mirror form of
+  # each amp.  In the stock orientation sense ↑ → out ↑ for both forms.
+
+  - name: resistive_sense_cmfb_pmos_mirror
     category: cmfb
-    display_name: "Resistive-Sense CMFB (5T OTA)"
-    # Two equal resistors average in1/in2 into a sense node; a 5T
-    # differential amplifier compares the sense node to vref and drives out.
+    display_name: "Resistive-Sense CMFB (PMOS mirror output)"
+    # Two equal resistors average in1/in2 into a sense node; a differential
+    # pair compares it to vref.  m4 is the diode-connected output: the m2
+    # branch current flows out of it and is mirrored into PMOS-gated loads.
     ports:
       - {name: in1,  role: input}
       - {name: in2,  role: input}
@@ -972,14 +983,39 @@ modules:
       - {ref: m1, type: nmos, d: d1,   g: sense, s: tail, b: gnd}
       - {ref: m2, type: nmos, d: out,  g: vref,  s: tail, b: gnd}
       - {ref: m3, type: pmos, d: d1,   g: d1,    s: vdd,  b: vdd}
-      - {ref: m4, type: pmos, d: out,  g: d1,    s: vdd,  b: vdd}
+      - {ref: m4, type: pmos, d: out,  g: out,   s: vdd,  b: vdd}
       - {ref: m5, type: nmos, d: tail, g: bias,  s: gnd,  b: gnd}
 
-  - name: dda_cmfb
+  - name: resistive_sense_cmfb_nmos_mirror
     category: cmfb
-    display_name: "Differential-Difference Amplifier CMFB"
-    # Two source-coupled pairs, (in1, vref) and (in2, vref), cross-coupled
-    # into a shared PMOS mirror so out responds to (in1 + in2) - 2*vref.
+    display_name: "Resistive-Sense CMFB (NMOS mirror output)"
+    # Same pair; m4 copies the m1 branch current (mirror of diode m3) into
+    # the diode-connected NMOS m6, which is mirrored into NMOS-gated loads.
+    # The m2 branch only balances the pair (drain on vdd).
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: vref, role: input}
+      - {name: bias, role: input}
+      - {name: out,  role: output}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: r1, type: resistor, t1: in1, t2: sense}
+      - {ref: r2, type: resistor, t1: in2, t2: sense}
+      - {ref: m1, type: nmos, d: d1,   g: sense, s: tail, b: gnd}
+      - {ref: m2, type: nmos, d: vdd,  g: vref,  s: tail, b: gnd}
+      - {ref: m3, type: pmos, d: d1,   g: d1,    s: vdd,  b: vdd}
+      - {ref: m4, type: pmos, d: out,  g: d1,    s: vdd,  b: vdd}
+      - {ref: m5, type: nmos, d: tail, g: bias,  s: gnd,  b: gnd}
+      - {ref: m6, type: nmos, d: out,  g: out,   s: gnd,  b: gnd}
+
+  - name: dda_cmfb_pmos_mirror
+    category: cmfb
+    display_name: "Differential-Difference Amplifier CMFB (PMOS mirror output)"
+    # Two source-coupled pairs, (in1, vref) and (in2, vref); the vref-side
+    # branches (m2, m4) sum into the diode-connected PMOS output m6, mirrored
+    # into PMOS-gated loads.  out responds to (in1 + in2) - 2*vref.
     ports:
       - {name: in1,  role: input}
       - {name: in2,  role: input}
@@ -994,6 +1030,31 @@ modules:
       - {ref: m3, type: nmos, d: da,    g: in2,  s: tail2, b: gnd}
       - {ref: m4, type: nmos, d: out,   g: vref, s: tail2, b: gnd}
       - {ref: m5, type: pmos, d: da,    g: da,   s: vdd,   b: vdd}
+      - {ref: m6, type: pmos, d: out,   g: out,  s: vdd,   b: vdd}
+      - {ref: m7, type: nmos, d: tail1, g: bias, s: gnd,   b: gnd}
+      - {ref: m8, type: nmos, d: tail2, g: bias, s: gnd,   b: gnd}
+
+  - name: dda_cmfb_nmos_mirror
+    category: cmfb
+    display_name: "Differential-Difference Amplifier CMFB (NMOS mirror output)"
+    # Same pairs; m6 copies the summed input-side current (mirror of diode m5)
+    # into the diode-connected NMOS m9, mirrored into NMOS-gated loads.  The
+    # vref-side branches (m2, m4) only balance the pairs (drains on vdd).
+    ports:
+      - {name: in1,  role: input}
+      - {name: in2,  role: input}
+      - {name: vref, role: input}
+      - {name: bias, role: input}
+      - {name: out,  role: output}
+      - {name: vdd,  role: supply}
+      - {name: gnd,  role: supply}
+    devices:
+      - {ref: m1, type: nmos, d: da,    g: in1,  s: tail1, b: gnd}
+      - {ref: m2, type: nmos, d: vdd,   g: vref, s: tail1, b: gnd}
+      - {ref: m3, type: nmos, d: da,    g: in2,  s: tail2, b: gnd}
+      - {ref: m4, type: nmos, d: vdd,   g: vref, s: tail2, b: gnd}
+      - {ref: m5, type: pmos, d: da,    g: da,   s: vdd,   b: vdd}
       - {ref: m6, type: pmos, d: out,   g: da,   s: vdd,   b: vdd}
       - {ref: m7, type: nmos, d: tail1, g: bias, s: gnd,   b: gnd}
       - {ref: m8, type: nmos, d: tail2, g: bias, s: gnd,   b: gnd}
+      - {ref: m9, type: nmos, d: out,   g: out,  s: gnd,   b: gnd}

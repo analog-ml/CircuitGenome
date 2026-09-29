@@ -199,6 +199,19 @@
 
   <p>Condemning on that would reject every low-voltage CMFB variant, including ones that measurably amplify at this very operating point. A genuinely dead FD circuit rails or splits its outputs instead &mdash; which the verdict above already catches &mdash; and the metric benches quantify whatever marginality remains.</p>
 
+  <h3>An equilibrium is not a stable one: <code>_fd_ringing()</code></h3>
+  <p><code>.op</code> solves for a point where every current balances. It does not ask whether the circuit would <em>stay</em> there &mdash; a pencil balanced on its tip is an equilibrium too. For FD circuits that gap mattered. With the original high-gain CMFB, 27 of 28 sampled gf180 designs sat at a perfect 1.665&nbsp;V operating point that passed this very verdict, and oscillated in common mode the moment anything disturbed them. The AC bench could not see it either: it measures the differential signal, and the oscillation was all in the common mode.</p>
+
+  <p>So the FD gate adds one short transient. In the same DC state as the <code>.op</code> (inputs and <code>vcm_ref</code> at Vcm), a current pulse into <code>outp</code> alone nudges it by 5% of Vdd, and the bench watches what happens next:</p>
+
+  <pre class="code"><code>late = t &gt;= <span class="tok-num">0.75</span> * t[-<span class="tok-num">1</span>]             <span class="tok-com"># last quarter of ~40 GBW periods</span>
+cm_p2p = np.ptp((vp + vn) / <span class="tok-num">2</span>)       <span class="tok-com"># common mode still moving?</span>
+dm_p2p = np.ptp(vp - vn)             <span class="tok-com"># differential still moving?</span></code></pre>
+
+  <p>Kicking one output, not both, is deliberate: it excites the common mode <em>and</em> the differential mode. The second one catches a different kind of oscillator: a <em>local</em> loop. An NMC design whose inner Miller cap is too small rings differentially at 25&nbsp;MHz, three times its 7.7&nbsp;MHz crossover, while the open-loop AC bench reports a phase margin of 88&deg; &mdash; because that bench only ever sees the outer loop. Either residual above 1% of Vdd condemns the circuit, and the reason says which mode rang.</p>
+
+  <p>One gap remains, and it hides in the simulator itself. A circuit oscillating rail to rail forces ngspice into tiny timesteps: a sized RNMC design with right-half-plane poles took 374&nbsp;s to finish this transient. Past the 60&nbsp;s timeout the transient returns nothing, and "nothing" is not evidence, so such a circuit <em>passes</em> this gate. A time budget cannot close the gap: on a heavily loaded machine a healthy design's transient took ~500&nbsp;CPU-seconds too. In practice those oscillators are still caught downstream &mdash; the AC bench flags their right-half-plane response and discards the gain &mdash; but not here.</p>
+
 </section>
 
 <section class="part" id="part-4">
@@ -235,7 +248,7 @@
 
   <p>No simulator means no evidence, and no evidence means no conviction. The function can only ever <em>downgrade</em> a verdict that something else already reached; it never upgrades one, and it never guesses.</p>
 
-  <p>The three ways it does condemn, each on positive evidence:</p>
+  <p>The four ways it does condemn, each on positive evidence:</p>
 
   <table>
     <thead><tr><th>Evidence</th><th>Verdict</th></tr></thead>
@@ -243,6 +256,7 @@
       <tr><td>the <code>.op</code> railed (SE: at both polarities; FD: an output at a rail, or split)</td><td>no usable mid-rail bias</td></tr>
       <tr><td>ngspice crashed or never converged</td><td>no operating point to assess</td></tr>
       <tr><td>SE only: devices starved or in triode</td><td>bias not established, with the refs named</td></tr>
+      <tr><td>FD only: the outputs still ring after a kick</td><td>does not settle &mdash; CMFB loop (common mode) or a local loop (differential) unstable</td></tr>
     </tbody>
   </table>
 
@@ -260,8 +274,9 @@
   <ul>
     <li>It checks <strong>one</strong> operating point &mdash; nominal corner, inputs at CM. A circuit that biases here and falls over at <code>ss</code> passes.</li>
     <li>It does not check the bias is <em>good</em>, only that it exists. A device scraping into saturation by a millivolt is "sound" here; the metric benches are what quantify the consequences.</li>
-    <li>FD circuits get an output-state verdict only. Per-device condemnation is switched off for them on purpose, so an FD circuit with genuinely starved internals but healthy outputs passes this gate.</li>
-    <li>Every threshold is a constant: 0.1&nbsp;&micro;A, the 0.1&ndash;0.9&middot;Vdd window, 0.2&middot;Vdd of output split. They are calibrated for the shipped topologies, not derived from anything.</li>
+    <li>FD circuits get an output-state verdict plus the settling kick, but no per-device verdict. Per-device condemnation is switched off for them on purpose, so an FD circuit with genuinely starved internals but healthy, settling outputs passes this gate.</li>
+    <li>The settling kick is one small disturbance at one operating point. It catches an oscillator; it does not measure the common-mode loop's phase margin, so a CMFB loop that settles with heavy ringing still passes.</li>
+    <li>Every threshold is a constant: 0.1&nbsp;&micro;A, the 0.1&ndash;0.9&middot;Vdd window, 0.2&middot;Vdd of output split, a 5%-of-Vdd kick and 1%-of-Vdd residual ringing. They are calibrated for the shipped topologies, not derived from anything.</li>
     <li>Without ngspice it always answers "sound". Silence is not a pass.</li>
   </ul>
 

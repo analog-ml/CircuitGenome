@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from circuitgenome.synthesizer.compatibility import (
     is_cmfb_compatible,
     is_combination_valid,
+    is_half_symmetric,
     is_load_branch_compatible,
     is_output_type_compatible,
     is_stage_interface_compatible,
@@ -142,6 +143,11 @@ def explain_incompatibility(topology: TopologyTemplate, variant_map: dict[str, M
             "the sensing stage's signal device needs a gate level outside the "
             "input pair's output window; the stage-interface DC level is "
             "unreachable (is_stage_interface_compatible)."
+        )
+    if not is_half_symmetric(topology, variant_map):
+        reasons.append(
+            "fully-differential _p/_n stage slots use different variants; the "
+            "two halves sit at different DC levels (is_half_symmetric)."
         )
     if not is_output_type_compatible(topology, variant_map):
         reasons.append(

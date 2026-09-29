@@ -208,6 +208,14 @@ def test_explain_incompatibility(topologies, by_name):
     reasons4 = explain_incompatibility(topo, load_branch_bad)
     assert any("untapped" in r for r in reasons4)
 
+    asymmetric = _variant_map(by_name, {
+        **TWO_STAGE_FD_VALID, "second_stage_n": "common_source_pmos",
+    })
+    reasons5 = explain_incompatibility(
+        topologies["two_stage_opamp_fully_differential"], asymmetric
+    )
+    assert any("is_half_symmetric" in r for r in reasons5)
+
 
 def test_enumerate_circuits_count_unchanged_after_refactor(modules, topologies):
     """Sanity check that build_circuit (shared with enumerate_circuits in

@@ -11,10 +11,12 @@ sizer, as five phases with explicit hand-offs:
    from the spec, per-device design intent from the functional-block registry
    → :class:`~.plan.SizingPlan`.
 4. **Size** — deterministic geometry from the LUT (:mod:`.geometry`), the DC
-   operating-point check and tail repair (:mod:`.bias`), the stage-interface
+   operating-point check and tail repair (:mod:`.bias`), an RNMC inner-loop
+   re-plan on the sized circuit (:mod:`.rnmc_refine`), the stage-interface
    window check and repair (:mod:`.stage_interface`), the non-load
-   resistor network (:mod:`.resistors`), and the constructed-bias level
-   tuning (:mod:`.bias_levels`).
+   resistor network (:mod:`.resistors`), the constructed-bias level
+   tuning (:mod:`.bias_levels`), and the follower output stage's swing check
+   (:func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing`).
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
 
 The model-independent topology math is reused from the
@@ -31,6 +33,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..physics import equations as eq
 from ..physics.circuit_view import adoption_warnings
+from ..physics.stage_chain import check_follower_swing
 from ..models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
@@ -40,7 +43,11 @@ from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent
 from .plan import assign_currents, plan_devices
 from .resistors import size_resistors
+from .rnmc_refine import refine_rnmc_plan
 from .stage_interface import check_stage_interface
+
+#: Re-plan/re-size rounds for an RNMC inner loop (see :mod:`.rnmc_refine`).
+_RNMC_PASSES = 2
 
 
 def size_gmid(
@@ -63,22 +70,45 @@ def size_gmid(
     plan = plan_devices(view, currents, spec, tech, intent)
 
     # Phase 4 — Size: LUT geometry, DC bias check/repair, resistor network.
-    sizing, geom_warnings, geom_feasible = assign_geometry_gmid(
-        plan.model, view.all_transistors, view.slot_transistors,
-        currents.ids_map, plan.tintents, plan.gm_req_map, tech,
-        vod_max_map=plan.vod_max_map)
-    sizing, dc_warnings, bias_feasible = check_dc_operating_point(
-        plan.model, view.blocks, view.slot_transistors, view.all_transistors,
-        currents.ids_map, sizing, spec, tech)
-    sizing, si_warnings, si_feasible = check_stage_interface(
-        plan.model, view.blocks, sizing, plan.gm_req_map, spec, tech)
-    bias_feasible = bias_feasible and si_feasible and geom_feasible
+    def _size(plan):
+        sizing, geom_warnings, geom_feasible = assign_geometry_gmid(
+            plan.model, view.all_transistors, view.slot_transistors,
+            currents.ids_map, plan.tintents, plan.gm_req_map, tech,
+            vod_max_map=plan.vod_max_map)
+        sizing, dc_warnings, bias_feasible = check_dc_operating_point(
+            plan.model, view.blocks, view.slot_transistors, view.all_transistors,
+            currents.ids_map, sizing, spec, tech)
+        sizing, si_warnings, si_feasible = check_stage_interface(
+            plan.model, view.blocks, sizing, plan.gm_req_map, spec, tech)
+        return (sizing, geom_warnings + dc_warnings + si_warnings,
+                bias_feasible and si_feasible and geom_feasible)
+
+    sizing, size_warnings, bias_feasible = _size(plan)
+    # RNMC: re-plan the inner loop on the sized circuit's real gm/parasitics
+    # and re-size against it (a second pass settles what the first moved).  A
+    # gm2 raise that breaks a sound bias (the stage-interface window) is
+    # undone: gm2 is held where the bias works and Cc2/gm3 do the damping.
+    hold_gm2 = False
+    for _ in range(_RNMC_PASSES + 1):
+        refined, changed = refine_rnmc_plan(view, currents, plan, sizing, spec,
+                                            hold_gm2=hold_gm2)
+        if not changed:
+            plan = refined
+            break
+        resized = _size(refined)
+        if bias_feasible and not resized[2] and not hold_gm2:
+            hold_gm2 = True
+            continue
+        plan, (sizing, size_warnings, bias_feasible) = refined, resized
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
         plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf)
     sizing, level_r = tune_bias_levels(
         view.blocks, currents.ids_map, sizing, plan.model, spec, tech)
     extra_r = {**extra_r, **level_r}
+    fol_warnings, fol_feasible = check_follower_swing(
+        view, sizing, plan.model, spec)
+    bias_feasible = bias_feasible and fol_feasible
 
     # Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.
     metrics, margins, eval_notes = evaluate_circuit(
@@ -92,8 +122,11 @@ def size_gmid(
         margins=margins,
         solver_status="GMID",
         cc2_pf=plan.cc2_pf,
-        warnings=(view.warnings + plan.warnings + geom_warnings + dc_warnings
-                  + si_warnings + eval_notes + adoption_warnings(view.adopted)),
+        # The follower swing verdict leads: it is decisive on its own, and the
+        # designer reports a bias rejection by the first warning.
+        warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
+                  + eval_notes
+                  + adoption_warnings(view.adopted)),
         resistors={**currents.load_resistors, **extra_r},
         bias_feasible=bias_feasible,
         transistor_intents=plan.tintents,

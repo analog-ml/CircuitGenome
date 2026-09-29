@@ -183,6 +183,11 @@ linearises in W and L (see `CP-SAT integer linearisation`_).
    * - ``second_stage``
      - :math:`I_{bias} \times \text{ratio}`
      - Set by ``second_stage_current_ratio`` in the spec (default 2.0)
+   * - ``cmfb``
+     - tail :math:`I_{bias}`; pair :math:`I_{bias}/n`; diodes and mirrors by
+       KCL at their drain
+     - The output diode mirrors into the load, so it must be planned at the
+       current it really carries (issue #208)
 
 ----
 
@@ -575,16 +580,40 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - spec − actual
    * - Output swing max
      - :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{PMOS}_2)`
-     - (inline in ``_evaluate_metrics``)
+     - :func:`~circuitgenome.sizer.physics.stage_chain.output_swing_headroom`
      - actual − spec
    * - Output swing min
      - :math:`V_{out,\min} = V_{SS} + V_{DS,sat}(\text{NMOS}_2)`
-     - (inline in ``_evaluate_metrics``)
+     - :func:`~circuitgenome.sizer.physics.stage_chain.output_swing_headroom`
      - spec − actual
 
 A positive margin value means the spec is met with headroom; a negative
 margin means the spec is violated (only possible if the spec was not
 enforced by a CP-SAT constraint, e.g. PSRR, power, swing).
+
+The swing rows above are for an unbuffered output.  A ``*_buffered_*``
+template's source-follower ``output_stage`` level-shifts the output one
+:math:`|V_{GS,f}|` away from the node that drives it, which moves one edge of
+the swing a whole threshold voltage away from its rail:
+
+* PMOS follower (:math:`V_{out} = V_{in} + |V_{GS,f}|`):
+  :math:`V_{out,\min} = V_{SS} + V_{DS,sat}(\text{NMOS}_{drv}) + |V_{GS,f}|`,
+  :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{follower current source})`;
+* NMOS follower (:math:`V_{out} = V_{in} - V_{GS,f}`):
+  :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{PMOS}_{drv}) - V_{GS,f}`,
+  :math:`V_{out,\min} = V_{SS} + V_{DS,sat}(\text{follower current sink})`.
+
+:math:`\text{drv}` is the last gain stage, the device pulling the follower's
+gate toward that rail.  When the follower's bulk is not tied to its source
+(the NMOS follower's bulk sits on :math:`V_{SS}`),
+:math:`V_{GS,f}` also carries the body-effect rise
+:math:`\gamma(\sqrt{2\phi_F + V_{SB}} - \sqrt{2\phi_F})` evaluated at the
+swing edge itself (the tech's ``gamma``/``phi``).  The gm/Id sizer rejects a
+buffered sizing whose level-shifted edge misses the swing spec by more than
+0.2 V (``bias_feasible = False``,
+:func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing`): a
+follower's :math:`|V_{GS}|` cannot drop much below :math:`V_{th}` even in weak
+inversion, so no other sizing choice recovers it.
 
 ----
 
@@ -703,8 +732,9 @@ Three-Stage NMC / RNMC
 The sizer also supports all four three-stage topologies
 (``three_stage_opamp_nmc_single_ended``, ``three_stage_opamp_rnmc_single_ended``,
 ``three_stage_opamp_nmc_fully_differential``,
-``three_stage_opamp_rnmc_fully_differential``).  The same conservative
-equations are applied to both NMC and RNMC.
+``three_stage_opamp_rnmc_fully_differential``).  NMC uses the conservative
+two-separate-poles equations below; RNMC starts from them and then re-plans
+its inner loop (see `RNMC: the inner pole pair`_).
 
 Circuit topology
 ~~~~~~~~~~~~~~~~
@@ -723,8 +753,9 @@ Circuit topology
 output); :math:`C_{c2}` closes the inner loop reversed onto the second stage
 (stage-2 output → stage-1 output), so it never loads the output.  The second
 stage inverts and the third does not.  Both schemes put the dominant pole at
-:math:`C_{c1}` and split the same two non-dominant poles, so the sizer uses the
-same conservative equations for both.
+:math:`C_{c1}`, but only NMC's non-dominant poles are two separate real poles;
+RNMC's are a complex pair with its own stability condition, so it gets its own
+sizing rules and phase-margin model.
 
 Design variables
 ~~~~~~~~~~~~~~~~
@@ -738,13 +769,16 @@ Design variables
    * - :math:`C_{c1}` (outer)
      - :math:`\min(I_{bias}/SR,\; g_{m1}/(2\pi \cdot GBW))`
    * - :math:`C_{c2}` (inner)
-     - :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic)
+     - NMC: inner-pair damping :math:`\zeta \geq 0.3` (see below);
+       RNMC: :math:`C_{c1}/4` (Eschauzier–Huijsing heuristic), which RNMC
+       sizing may raise up to :math:`C_{c1}`
    * - :math:`g_{m1}`
      - CMRR + GBW (same as two-stage)
    * - :math:`g_{m2}`
      - Inner-pole PM condition (see below)
    * - :math:`g_{m3}`
-     - Gain + outer-pole PM condition (see below)
+     - Gain + outer-pole PM condition (see below); NMC also
+       :math:`g_{m3} \geq 3.5\,g_{m2}`
 
 Phase margin derivation
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -790,6 +824,44 @@ at :math:`\approx 3.73 \times \omega_t`.
    so the actual PM will be ≥ :math:`\text{PM}_{\min}` even if one pole is
    at its minimum.
 
+NMC inner-loop damping (gm3 ≫ gm2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The two non-dominant poles are not really separate: for NMC they form the
+pair :math:`1 + s\,C_{c2}(g_{m3}-g_{m2})/(g_{m2}g_{m3}) + s^2 C_L C_{c2}/(g_{m2}g_{m3})`
+(Leung & Mok), whose damping
+
+.. math::
+
+   \zeta = \frac{r-1}{2}\sqrt{\frac{C_{c2}}{r\,C_L}}, \qquad r = g_{m3}/g_{m2}
+
+depends only on the ratio :math:`r` and on :math:`C_{c2}/C_L`.  The
+separate-pole formula above cannot see it, and neither can the open-loop AC
+bench, which only measures the global loop.  With :math:`r \approx 2`
+(equal gm/Id, :math:`I_3 = 2 I_2`) and :math:`C_{c2} = C_{c1}/4`,
+:math:`\zeta \approx 0.09`: gf180 NMC FD designs ring at ~25 MHz after a
+kick while the AC bench reads PM ≈ 88° (issue #208).  For NMC templates
+(``compensation_scheme: nested_miller``) the sizer therefore
+
+* floors :math:`g_{m3} \geq 3.5\,g_{m2}`, with :math:`g_{m2}` the gm the
+  second stage will really deliver (``DeviceModel.realized_gm`` — on the
+  gm/Id path a request below the table's strongest-inversion gm/Id is built
+  at that floor, e.g. gf180 at 50 µA: 300 µS for a ~50 µS ask);
+* sizes :math:`C_{c2}` for :math:`\zeta = 0.3` at that ratio,
+  :math:`C_{c2} = \min\bigl(C_{c1},\; 4\zeta^2 r\,C_L/(r-1)^2\bigr)
+  \approx 0.2\,C_L` (a larger realized :math:`r` only damps it more);
+* keeps the output-swing :math:`V_{dsat}` budget on the third stage only —
+  the second stage never drives the output, and a swing floor there only
+  raises :math:`g_{m2}` and shrinks :math:`r`.
+
+Both levers are needed: in SPICE, :math:`r \approx 2` rings for every
+:math:`C_{c2}` tried (0.3–5.5 pF), and :math:`r \approx 3.8` still rings at
+:math:`\zeta \approx 0.18` when one side carries a nulling resistor in its
+outer loop.  A much larger :math:`C_{c2}` (Butterworth, :math:`\zeta \approx 0.7`)
+pulls the pair down onto the crossover and wrecks the measured PM.  RNMC
+keeps :math:`C_{c2} = C_{c1}/4`: its inner capacitor wraps the second stage,
+not the output stage, so this pair does not apply.
+
 Gain requirement
 ~~~~~~~~~~~~~~~~
 
@@ -806,6 +878,10 @@ The sizer takes :math:`g_{m3,\text{req}} = \max(g_{m3,\text{gain}},\; g_{m3,\tex
 
 Numerical example
 ~~~~~~~~~~~~~~~~~
+
+The steps below are the NMC rules; an RNMC template then re-plans
+:math:`g_{m2}`, :math:`C_{c2}` and :math:`g_{m3}` as described in
+`RNMC: the inner pole pair`_.
 
 Specification: :math:`I_{bias}=10\,\mu\text{A}`,
 :math:`C_L=20\,\text{pF}`, :math:`SR=3.5\,\text{V/µs}`,
@@ -830,6 +906,76 @@ Specification: :math:`I_{bias}=10\,\mu\text{A}`,
    than the two-stage :math:`g_{m2}` at the same spec because the phase budget
    is split — each non-dominant pole must be ~3.7× farther than the single
    pole in the two-stage case.
+
+.. _rnmc-inner-pair:
+
+RNMC: the inner pole pair
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With both caps on the first-stage output, the half-circuit nodal equations
+(second stage inverting, third non-inverting, :math:`C_2` the parasitic on the
+second-stage output — in practice the third stage's input gate) give, for high
+stage gains, the denominator
+
+.. math::
+
+   s\,C_{c1} g_{m2} g_{m3}\,\bigl(1 + a_1 s + a_2 s^2\bigr),\qquad
+   a_1 = \frac{C_{c2}\,\bigl((C_L + C_{c1})\,g_{m2} - C_{c1}\,g_{m3}\bigr)}{C_{c1}\,g_{m2}\,g_{m3}},\qquad
+   a_2 = \frac{C_L\,C_{c2}\,K}{g_{m2}\,g_{m3}}
+
+with :math:`K = 1 + C_2\,(1/C_{c2} + 1/C_{c1} + 1/C_L)`.  The two non-dominant
+poles are the roots of :math:`1 + a_1 s + a_2 s^2`: a pair, damped by
+:math:`\zeta = a_1 / (2\sqrt{a_2})`.  They sit in the left half plane only
+while :math:`a_1 > 0`:
+
+.. math::
+
+   g_{m3} \;<\; g_{m2}\,\bigl(1 + C_L/C_{c1}\bigr)
+   \qquad (g_{m3} < 5\,g_{m2}\ \text{at}\ C_{c1} = C_L/4)
+
+The NMC rules above violate this routinely: they push :math:`g_{m3}` to its
+ceiling for gain and leave :math:`g_{m2}` small, and the two-separate-poles PM
+formula cannot see the problem.  For RNMC the sizer instead
+(:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`):
+
+1. **raises** :math:`g_{m2}` from the damping floor :math:`\zeta \ge 0.7`
+   (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`)
+   until the full model's poles are damped to 0.7
+   (:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`) and the
+   phase-margin spec holds, up to the second stage's weak-inversion ceiling;
+2. then **raises** :math:`C_{c2}` in steps up to :math:`C_{c1}`;
+3. and only as a last resort **caps** :math:`g_{m3}` (on the third stage's
+   input device, so a non-inverting stage's mirror keeps its sizing).
+
+When no choice meets both :math:`\zeta \ge 0.7` and the PM spec, the PM spec
+(which SPICE verifies) comes first, keeping :math:`\zeta \ge 0.5`: the
+best-damped choice that meets it, else the highest-PM one; an advisory is
+emitted either way.  The phase
+margin itself comes from the full transfer function evaluated on a frequency
+sweep (:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`),
+including the stage-output parasitics, the third stage's mirror pole and — on
+the ``*_buffered_*`` templates — the source-follower output buffer, and is the
+**worst over every 0 dB crossing** — a lightly damped pair that lifts
+the gain back above 0 dB after the phase has passed :math:`-180^{\circ}` is a
+negative gain margin and reports a negative PM; an open loop with
+right-half-plane poles reports 0°.
+
+The buffer matters: :math:`C_{c1}` returns to the third stage's output, which
+then drives only the follower's gate, not :math:`C_L`.  With so little
+capacitance there the stability condition tightens to roughly
+:math:`g_{m3} < g_{m2}`, and a follower driving :math:`C_L` presents a
+negative input resistance above :math:`g_{m,f}/C_L` inside that loop.  Buffered
+designs that cannot be damped with :math:`g_{m2}`, :math:`C_{c2}` and
+:math:`g_{m3}` are reported with the RHP margin (0°) and an advisory; the
+follower itself is not re-sized.
+
+The Level-1 sizer applies these rules to its requirement estimates.  The gm/Id
+pipeline applies them after geometry
+(:mod:`~circuitgenome.sizer.gmid.rnmc_refine`): its DC-bias repair can move the
+input pair's :math:`g_{m1}` far above the GBW requirement (a ptm45 FD fixture
+lands at 27×), and only the sized circuit shows the third stage's real gate
+capacitance.  A :math:`g_{m2}` raise that breaks the stage-interface bias window
+is undone, leaving :math:`C_{c2}` and :math:`g_{m3}` as the knobs.
 
 Fully-differential three-stage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

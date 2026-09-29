@@ -53,7 +53,8 @@ def size_level1(
     # Level-1 square-law model; discrete W/L via CP-SAT.
     dev_model = Level1Model(tech)
     gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = compute_requirements(
-        slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
+        slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r,
+        compensation_scheme=view.compensation_scheme,
     )
     all_warnings = (topology_warnings + gm_ceiling_warnings
                     + adoption_warnings(view.adopted))

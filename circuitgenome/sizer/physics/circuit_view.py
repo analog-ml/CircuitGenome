@@ -33,12 +33,17 @@ class CircuitView:
         was attributed by its ref suffix.  Reported rather than folded into
         ``warnings`` so a caller controls where the advisory lands: it is a
         recognition gap, not an explanation for anything downstream.
+    :param compensation_scheme: the template's three-stage compensation
+        (``"nested_miller"`` / ``"reversed_nested_miller"``), ``None`` when
+        the template does not declare one.  Selects the RNMC sizing rules and
+        phase-margin model (PR #249).
     """
     slot_transistors: dict[str, list[Device]] = field(default_factory=dict)
     slot_resistors: dict[str, list[Device]] = field(default_factory=dict)
     all_transistors: dict[str, tuple[Device, str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     adopted: list[tuple[str, str]] = field(default_factory=list)
+    compensation_scheme: str | None = None
 
 
 def _adopt_orphan_mosfets(
@@ -192,4 +197,5 @@ def analyze_circuit(
         all_transistors=_deduplicate_devices(slot_transistors),
         warnings=_check_topology_match(slot_transistors, topology.name),
         adopted=adopted,
+        compensation_scheme=topology.config.get("compensation_scheme"),
     )
