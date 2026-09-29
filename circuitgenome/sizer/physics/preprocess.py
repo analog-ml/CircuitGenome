@@ -202,6 +202,36 @@ def assign_ids(
     return ids_map
 
 
+def _mirror_reference(load_devs: list[Device]) -> tuple[Device, str] | None:
+    """``(reference device, mirror gate net)`` of a current-mirror load, or ``None``.
+
+    The reference device is the one whose gate is closed back onto its own
+    current path, so its gate net sits at ``1/gm`` and every device on that net
+    copies its current.  Two shapes close that loop:
+
+    * **diode-connected** -- the device's gate is its own drain (``g == d``);
+    * **closed through a cascode** -- the device is gated by the *drain* of the
+      cascode stacked on it (the cascode's source is the device's drain).  This
+      is the wide-swing (Sooch) mirror, whose cascodes are gated from a level
+      rail instead of a second diode (issue #241).
+
+    A plain diode wins when both are present, so the loads that already had
+    one keep the device they were always measured from.
+    """
+    mos = [d for d in load_devs if d.type in ("nmos", "pmos")]
+    for d in mos:
+        g = d.terminals.get("g")
+        if g and g == d.terminals.get("d"):
+            return d, g
+    for d in mos:
+        g = d.terminals.get("g")
+        if g and any(c.terminals.get("d") == g
+                     and c.terminals.get("s") == d.terminals.get("d")
+                     for c in mos if c is not d):
+            return d, g
+    return None
+
+
 def _first_stage_gain_factor(slot_transistors: dict[str, list[Device]]) -> float:
     """First-stage transconductance/gain factor ``k_fs``.
 
@@ -210,9 +240,9 @@ def _first_stage_gain_factor(slot_transistors: dict[str, list[Device]]) -> float
     **current-mirror** load combines both branches to recover the full
     ``gm1·Rout1``. So:
 
-    * ``1.0`` — current-mirror load (a ``load`` device is diode-connected,
-      ``g == d``), or a fully-differential output (both branches feed the
-      next stage), and
+    * ``1.0`` — current-mirror load (see :func:`_mirror_reference`, which
+      also recognises a diode closed through a cascode), or a
+      fully-differential output (both branches feed the next stage), and
     * ``0.5`` — single-ended output with a resistor or plain current-source
       (non-mirror) load.
 
@@ -222,8 +252,7 @@ def _first_stage_gain_factor(slot_transistors: dict[str, list[Device]]) -> float
     if any(s in slot_transistors for s in
            ("second_stage_p", "second_stage_n", "third_stage_p", "third_stage_n")):
         return 1.0  # fully-differential: both branches drive the next stage
-    mosfets = [d for d in slot_transistors.get("load", []) if d.type in ("nmos", "pmos")]
-    is_mirror = any(d.terminals.get("g") == d.terminals.get("d") for d in mosfets)
+    is_mirror = _mirror_reference(slot_transistors.get("load", [])) is not None
     return 1.0 if is_mirror else 0.5
 
 

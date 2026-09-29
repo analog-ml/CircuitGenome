@@ -102,7 +102,6 @@
   <a href="#part-3">3 &middot; Injecting the solved sizes</a>
   <a href="#part-4">4 &middot; The PDK rewrite</a>
   <a href="#part-5">5 &middot; Running ngspice</a>
-  <a href="#part-6">6 &middot; Limits, and one sentence</a>
 </nav>
 
 <main>
@@ -111,20 +110,14 @@
 
   <h2>Part 1 &middot; Why this file exists</h2>
 
-  <blockquote><p><strong>The one job:</strong> the sizer produced a netlist with roles and a table of widths. ngspice will not read either. Turn them into one block of SPICE that a simulator will actually run.</p></blockquote>
+  <blockquote><p><strong>TLDR:</strong> <code>deck.py</code> turns a generic sized netlist into one runnable block of SPICE &mdash; choosing the right model idiom for the technology, writing the solved geometry into every device, rewriting MOSFETs as subcircuits when the PDK demands it, and keeping track of where the operating-point probes moved to when it did.</p></blockquote>
 
-  <p class="beat">Three things stand between a sized design and a simulation.</p>
 
-  <p>The netlist the synthesizer emits is <em>generic</em>: it says <code>m1_input_pair &hellip; pmos</code>, with no widths and no idea what a PMOS is made of. Three separate gaps have to be closed before ngspice can do anything with it:</p>
 
-  <ol>
-    <li><strong>What is a transistor?</strong> Depends entirely on the technology &mdash; a synthesised Level-1 card, an included PTM model file, or a foundry corner library.</li>
-    <li><strong>How big is each one?</strong> That is the <code>SizingResult</code>, which has to be written into the device lines.</li>
-    <li><strong>What <em>syntax</em> does this PDK want?</strong> A foundry device is not a <code>.model</code> MOSFET at all; it is a subcircuit, instantiated with <code>x</code> rather than <code>m</code>, sometimes with different unit conventions.</li>
-  </ol>
+  
 
-  <p>Everything in this file closes one of those three gaps, and the result is a single string &mdash; the <strong>DUT block</strong> &mdash; that every testbench in the package re-uses verbatim.</p>
 
+  
   <div class="eq-center"><span class="boxed-eq">generic netlist&nbsp;+&nbsp;sizing&nbsp;+&nbsp;tech&nbsp;&rarr;&nbsp;<strong>one runnable DUT block</strong></span></div>
 
 </section>
@@ -133,7 +126,7 @@
 
   <h2>Part 2 &middot; <code>_emit_model()</code> &mdash; three technologies, three idioms</h2>
 
-  <blockquote><p><strong>The one job:</strong> write the lines that tell ngspice what an <code>nmos</code> is, for whichever kind of technology this is.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> write <code>.include</code>lines</p></blockquote>
 
   <p>CircuitGenome supports three quite different notions of "technology", and they need three different SPICE preambles:</p>
 
@@ -178,7 +171,7 @@
             <span class="tok-kw">if</span> &hellip; <span class="tok-kw">and</span> tok[<span class="tok-num">0</span>] <span class="tok-kw">not in</span> result.transistors]</code></pre>
 
   <h3>Why an unsized device is worse than a crash</h3>
-  <p>If a MOSFET in the netlist has no entry in the sizing result, <code>_inject_sizes</code> leaves its line untouched &mdash; and ngspice happily simulates it at the <strong>simulator's default W/L</strong>. The deck runs, numbers come out, and they describe a circuit nobody designed. That is the worst possible failure mode: silent and plausible.</p>
+  <p>If a MOSFET in the netlist has no entry in the sizing result, <code>_inject_sizes</code> leaves its line untouched &mdash; and ngspice happily simulates it at the <strong>simulator's default W/L</strong>. That is the worst possible failure mode: silent and plausible.</p>
 
   <p>So the two entry points that build decks treat it differently, on purpose:</p>
 
@@ -187,7 +180,6 @@
     <li><code>simulate_metrics()</code> &mdash; used to <strong>measure</strong> &mdash; records a note and continues, because a partial measurement with a warning beats no measurement.</li>
   </ul>
 
-  <p>Both call the same detector; they just disagree about how fatal the answer is. If you ever see that note, the recogniser failed to place a device &mdash; see the warning that <code>circuit_view</code> now emits for exactly this case.</p>
 
 </section>
 
@@ -230,7 +222,7 @@
     <span class="tok-kw">return</span> <span class="tok-str">f"@m.xdut.{_xref(ref)}.{handle}"</span>   <span class="tok-com"># one level deeper</span>
 <span class="tok-kw">return</span> <span class="tok-str">f"@m.xdut.{ref}"</span>                        <span class="tok-com"># flat</span></code></pre>
 
-  <p>GF180's cells use <code>m0</code>; sky130 names its internal device per cell (<code>msky130_fd_pr__nfet_01v8</code>), which is why <code>device_handle</code> is a per-model table rather than a single string. Get this wrong and every <code>.op</code> probe silently reads nothing &mdash; the whole bias-soundness check in <a href="verify-op_explained.html"><code>op.py</code></a> depends on it.</p>
+  <p>GF180's cells use <code>m0</code>; sky130 names its internal device per cell (<code>msky130_fd_pr__nfet_01v8</code>), which is why <code>device_handle</code> is a per-model table rather than a single string. </p>
 
 </section>
 
@@ -253,21 +245,6 @@
 
 </section>
 
-<section class="part" id="part-6">
-
-  <h2>Part 6 &middot; What it honestly does not do</h2>
-
-  <ul>
-    <li>It does not <em>choose</em> anything. Every width, length, capacitance and resistance is read from the <code>SizingResult</code>; this file only transcribes.</li>
-    <li>The Level-1 card it synthesises pins <code>gamma=0</code>: no body effect. Deliberate &mdash; it keeps SPICE aligned with the analytical Level-1 model, which also ignores it.</li>
-    <li>The PDK rewrite is textual and positional. It assumes the <code>ref d g s b model</code> token order, which both the synthesizer and the recogniser guarantee, but a hand-written netlist with a different convention would be silently mistranslated.</li>
-    <li>An unsized MOSFET is <em>detected</em>, not fixed. What happens next is the caller's policy, and the two callers choose differently on purpose.</li>
-  </ul>
-
-  <hr>
-  <p><strong>In one sentence:</strong> <code>deck.py</code> turns a generic sized netlist into one runnable block of SPICE &mdash; choosing the right model idiom for the technology, writing the solved geometry into every device, rewriting MOSFETs as subcircuits when the PDK demands it, and keeping track of where the operating-point probes moved to when it did.</p>
-
-</section>
 
 </main>
 </div>

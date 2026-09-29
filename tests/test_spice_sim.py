@@ -294,6 +294,40 @@ def test_check_bias_soundness_distinguishes_biasing_from_railed():
 
 
 @ngspice
+@pytest.mark.parametrize("follower", ["common_drain_pmos", "common_drain_nmos"])
+def test_bias_gate_rejects_latched_polarity_behind_follower(follower):
+    """Issue #242: the SE .op tries both feedback polarities.  The wrong one
+    is positive feedback and latches, and a source follower level-shifts the
+    latched rail by a Vgs (PMOS: 0 V → ~0.8 V; NMOS: 3.3 V → ~2.3 V), so the
+    output lands inside the 0.1–0.9·Vdd window.  The gate must keep the
+    polarity whose output settles at Vcm, not the first in-window one (which
+    read the latched state as starved/triode devices)."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_buffered_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+            "tail_current": "cascode_current_mirror_tail_pmos",
+            "second_stage": "common_source_nmos",
+            "third_stage": "noninverting_stage_nmos", "output_stage": follower,
+            "comp1": "miller_cap", "comp2": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=60,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      slew_rate_min_vps=3e5, power_max_w=2e-3,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    ok, reason = check_bias_soundness(text, result, tech, spec)
+    assert ok and reason is None, reason
+
+
+@ngspice
 def test_sky130_width_max_device_is_modelable():
     """Regression (#77): a device snapped to sky130's width.max must still land in
     a PDK model bin. The bin wmax=100 µm is an EXCLUSIVE bound, so a device at
@@ -903,6 +937,38 @@ def _active_load_one_stage(tech_name, vdd):
                       gbw_min_hz=1e5, phase_margin_min_deg=45)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     return text, result, tech, spec
+
+
+@ngspice
+@pytest.mark.parametrize("input_pair,load", [
+    ("differential_pair_pmos", "telescopic_cascode_load_wideswing_pmos"),
+    ("differential_pair_nmos", "telescopic_cascode_load_wideswing_nmos"),
+])
+def test_wideswing_one_stage_gbw_and_pm_track_spice(input_pair, load):
+    """Issue #241: a wide-swing mirror closes its diode through a cascode.
+
+    Missed, the sizer took it for a non-mirror load: it reported no phase
+    margin and sized the input pair for twice the gm it needed, so the SPICE
+    GBW came out ~1.9x the analytical one.  Recognised, both track ngspice.
+    """
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if c.variant_map["load"].name == load
+                and c.variant_map["input_pair"].name == input_pair)
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=2e-12, gain_min_db=40)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gbw_hz"] is not None
+    assert 0.75 < sim["gbw_hz"] / result.metrics["gbw_hz"] < 1.33
+    assert sim["phase_margin_deg"] is not None
+    assert result.metrics["phase_margin_deg"] == pytest.approx(
+        sim["phase_margin_deg"], abs=5.0)
 
 
 @ngspice

@@ -112,7 +112,7 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-
+  <p><strong>TLDR:</strong> the block view reads only the terminal-connectivity of a recognised op-amp — <code>g==d</code> for mirrors, one device's source on another's drain for cascodes — to group devices into typed <code>Block</code>s and derive the cascode headroom flags and stage-boundary nets, forming the structural layer the Analyze, bias, and evaluate phases all build on.</p>
   <blockquote><p><strong>The one job:</strong> given the raw pile of transistors the recogniser dropped into named slots, decide <em>which</em> devices form the input pair, the load, the tail — and, crucially, what <em>kind</em> of load and tail they are (mirror? cascode? resistor? plain current source?).</p></blockquote>
 
   <p class="beat">Here is the whole story before a single line of code.</p>
@@ -445,12 +445,12 @@
     src = device.terminals.get(<span class="tok-str">"s"</span>)
     <span class="tok-kw">if</span> src <span class="tok-kw">in</span> RAILS <span class="tok-kw">or</span> src <span class="tok-kw">in</span> stop <span class="tok-kw">or</span> src <span class="tok-kw">is None</span>:
         <span class="tok-kw">return</span> ro                                <span class="tok-com"># bottom of the stack: just ro</span>
-    below = by_drain.get(src)
-    <span class="tok-kw">if</span> below <span class="tok-kw">is not None and</span> below.ref != device.ref <span class="tok-kw">and</span> below.type == device.type:
-        gm = model.<span class="tok-fn">gm</span>(device.type, s.w_um, s.l_um, s.ids_a)
-        r_src = <span class="tok-fn">_looking_in_drain</span>(below, by_drain, model, sizing, stop)   <span class="tok-com"># recurse down</span>
-        <span class="tok-kw">return</span> ro * (<span class="tok-num">1.0</span> + gm * r_src) <span class="tok-kw">if</span> r_src != <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>) <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)
-    <span class="tok-kw">return</span> ro</code></pre>
+    below = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</span> by_drain.get(src, []) <span class="tok-kw">if</span> d.ref != device.ref]
+    <span class="tok-kw">if not</span> below:
+        <span class="tok-kw">return</span> ro                                <span class="tok-com"># nothing below: just ro</span>
+    gm = model.<span class="tok-fn">gm</span>(device.type, s.w_um, s.l_um, s.ids_a)
+    r_src = <span class="tok-fn">_parallel_rout</span>(below, by_drain, model, sizing, stop)   <span class="tok-com"># recurse down</span>
+    <span class="tok-kw">return</span> ro * (<span class="tok-num">1.0</span> + gm * r_src) <span class="tok-kw">if</span> r_src != <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>) <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)</code></pre>
 
   <h3>The intuition, no notation</h3>
   <p>A lone transistor acting as a current source has some output resistance <code>ro</code> — call it "leakiness." Higher <code>ro</code> is better (stiffer current, more gain). A <strong>cascode</strong> stacks a second transistor on top and produces a near-magical improvement: the top device <em>watches</em> its own source node and pushes back against any change, so the stack looks vastly stiffer than either device alone.</p>
@@ -700,7 +700,7 @@
   <h3>The three guards worth naming</h3>
   <ul>
     <li><code>src in stop</code> — <code>stop</code> lists nets to treat as <strong>AC ground</strong> (typically the input-pair tail node). A device sourcing into an AC ground contributes plain <code>ro</code>, not a degenerated cascode. This is how the differential half-circuit is modelled correctly.</li>
-    <li><code>below.type == device.type</code> — the boost only applies between <em>same-type</em> stacked devices. A different-type neighbour isn't a cascode partner; the device falls back to <code>ro</code>.</li>
+    <li><code>by_drain.get(src, [])</code> — <em>every</em> device whose drain is on the source net sits below, in parallel, whatever its type. On a folded cascode that net is the folding node, where the input pair and the current source both drain, so <code>R_src = ro_pair ∥ ro_source</code>. An earlier version kept only the first drain there and required it to match the cascode's type; the first one is the opposite-type pair, so every folded design lost its whole boost (issue #240).</li>
     <li><code>below.ref != device.ref</code> — a device can't be its own cascode below; guards a self-reference.</li>
   </ul>
 
@@ -716,22 +716,22 @@
   <blockquote><p><strong>The one job:</strong> at a given output net, find every transistor whose drain lands there, ask each one its cascode-boosted resistance, and combine them all in parallel into one output resistance.</p></blockquote>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">node_rout</span>(out_net, mosfets, model, sizing, stop=<span class="tok-fn">frozenset</span>()) -> <span class="tok-kw">float</span>:
-    by_drain = {}
-    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets:
-        <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>):
-            by_drain.setdefault(d.terminals.get(<span class="tok-str">"d"</span>), d)
+    by_drain = <span class="tok-fn">_by_drain</span>(mosfets)          <span class="tok-com"># net → every device draining onto it</span>
+    <span class="tok-kw">return</span> <span class="tok-fn">_parallel_rout</span>(by_drain.get(out_net, []), by_drain, model, sizing, stop)
+
+
+<span class="tok-kw">def</span> <span class="tok-fn">_parallel_rout</span>(devices, by_drain, model, sizing, stop) -> <span class="tok-kw">float</span>:
     g = <span class="tok-num">0.0</span>
-    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets:
-        <span class="tok-kw">if</span> d.type <span class="tok-kw">in</span> (<span class="tok-str">"nmos"</span>, <span class="tok-str">"pmos"</span>) <span class="tok-kw">and</span> d.terminals.get(<span class="tok-str">"d"</span>) == out_net:
-            r = <span class="tok-fn">_looking_in_drain</span>(d, by_drain, model, sizing, stop)
-            <span class="tok-kw">if</span> r &gt; <span class="tok-num">0</span>:
-                g += <span class="tok-num">1.0</span> / r
+    <span class="tok-kw">for</span> d <span class="tok-kw">in</span> devices:
+        r = <span class="tok-fn">_looking_in_drain</span>(d, by_drain, model, sizing, stop)
+        <span class="tok-kw">if</span> r &gt; <span class="tok-num">0</span>:
+            g += <span class="tok-num">1.0</span> / r
     <span class="tok-kw">return</span> <span class="tok-num">1.0</span> / g <span class="tok-kw">if</span> g &gt; <span class="tok-num">0</span> <span class="tok-kw">else</span> <span class="tok-fn">float</span>(<span class="tok-str">"inf"</span>)</code></pre>
 
   <h3>Why work in conductances?</h3>
   <p>Resistors <em>in parallel</em> are annoying to add directly, but their <strong>conductances</strong> (<code>g = 1/R</code>) simply <em>sum</em>. So the function converts each branch's resistance to a conductance, adds them into one running total <code>g</code>, and flips back to a resistance at the very end. Same trick you'd use to add three pipes draining one tank — add the flow rates, not the "restrictions."</p>
 
-  <p>The first loop builds <code>by_drain</code> — a map from each net to the device that drives it — so <code>_looking_in_drain</code> can walk the stack. The second loop is the real work: keep only devices whose <em>drain is the output node</em> (those are the ones connected to the node we care about), and sum their conductances.</p>
+  <p><code>by_drain</code> maps each net to <em>every</em> device whose drain lands on it, so one lookup serves both questions: which devices pull on the output node here, and which sit below a cascode in Part&nbsp;4. <code>_parallel_rout</code> is the real work, and Part&nbsp;4 reuses it for the devices below: ask each device its looking-in resistance and sum the conductances.</p>
 
   <h3>Traced with real numbers</h3>
   <p>At <code>out</code>, two branches pull: the NMOS cascode from Part&nbsp;4 (<code>10.1 MΩ</code>) and a PMOS mirror load contributing plain <code>ro = 400 kΩ</code>.</p>
@@ -954,7 +954,7 @@
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li>Only the <code>load</code> slot is classified. Every other block — including the tail — carries <code>load_kind = NONE</code> and relies on the structural <code>is_cascode</code> fallback.</li>
-    <li>The detectors are <em>heuristics</em> on connectivity: <code>_has_cascode</code> fires on <em>any</em> same-type series stack, and the cascode boost in <code>_looking_in_drain</code> only chains <em>same-type</em> neighbours — a mixed or exotic stack degrades gracefully to plain <code>ro</code> rather than modelling it exactly.</li>
+    <li>The detectors are <em>heuristics</em> on connectivity: <code>_has_cascode</code> fires on <em>any</em> same-type series stack. The cascode boost in <code>_looking_in_drain</code> is deliberately not type-restricted: it takes every drain below a source, which is what a folded cascode needs.</li>
     <li><code>first_stage_out_net</code> returns <code>None</code> for a one-stage op-amp — there is no downstream gate to read.</li>
     <li>Nothing is simulated. This is a <em>structural</em> layer; SPICE has the final word downstream.</li>
   </ul>
@@ -963,7 +963,7 @@
   <p>The whole file rides one insight: <strong>you can read an amplifier's electrical behaviour off its wiring graph alone</strong>. Two one-line terminal tests (<code>g==d</code>, <code>s∈drains</code>) plus a shallow recursion recover the gain factor, the headroom demand, and the output resistance — no matrices, no simulation — giving the Analyze phase a fast, cheap, honest structural read of what it's holding.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> the block view reads only the terminal-connectivity of a recognised op-amp — <code>g==d</code> for mirrors, one device's source on another's drain for cascodes — to group devices into typed <code>Block</code>s and derive the cascode headroom flags and stage-boundary nets, forming the structural layer the Analyze, bias, and evaluate phases all build on.</p>
+
 </section>
 
 </main>

@@ -87,6 +87,40 @@ targets** the sizer solves against:
      - V
      - Output voltage swing limits
 
+A metric the model cannot support is **omitted** from
+:attr:`~circuitgenome.sizer.models.SizingResult.metrics` rather than reported as
+zero, so a caller can tell "this design fails the spec" from "this quantity was
+not computed".  One such omission is topology-dependent and worth stating up
+front.
+
+.. _single-stage-phase-margin:
+
+Single-stage phase margin
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A single-stage OTA is *load* compensated: ``CL`` sets the dominant pole, and the
+phase margin is fixed by the first **non-dominant** pole.  The sizer places that
+pole at the current mirror's reference node, ``gm/(2π·ΣCgs)``.  The reference
+device is found in one of two shapes:
+
+* **diode-connected** — its gate is tied to its own drain (``active_load_*``,
+  the plain telescopic and folded cascode loads);
+* **closed through a cascode** — its gate is tied to the drain of the cascode
+  stacked on it.  This is the wide-swing (Sooch) mirror in
+  ``telescopic_cascode_load_wideswing_nmos`` / ``..._wideswing_pmos``, whose
+  cascodes are gated from a level rail instead of a second diode.
+
+The same test decides whether the load combines both halves of the input pair
+into the single-ended output, which sets the first stage's gain and GBW.
+
+``resistor_load_vdd`` / ``resistor_load_gnd`` are the one exception: they have
+no internal node at all.  In this model the stage is genuinely single-pole, so
+the answer would be exactly 90° for every sizing — a statement about the model,
+not about the design — and ``phase_margin_deg`` is deliberately withheld.
+
+The other eight variants report all seven metrics.  Gain, GBW, slew rate, CMRR
+and PSRR are reported for all ten.
+
 Analytical Sizer
 ----------------
 
