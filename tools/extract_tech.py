@@ -41,7 +41,7 @@ from pathlib import Path
 import numpy as np
 
 _HERE = Path(__file__).resolve().parent
-_SHARED = _HERE.parent / "circuitgenome" / "sizer" / "shared"
+_SHARED = _HERE.parent / "circuitgenome" / "sizer"
 _CONFIG = _SHARED / "config"
 _MODELS = _CONFIG / "models"
 _PDK = _SHARED / "pdk"

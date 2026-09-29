@@ -182,7 +182,12 @@ def _fd_ringing(netlist_text: str, result: SizingResult, tech: TechParams,
     DC state (inputs and ``vcm_ref`` at Vcm) a current pulse into ``outp``
     alone moves it by ``_KICK_FRAC``·Vdd, exciting both modes; the residual
     is read over the last quarter of a window of ~40 GBW periods (the CM loop
-    crosses near GBW).  ``None`` when the transient cannot run.
+    crosses near GBW).  ``None`` when the transient cannot run — including a
+    timeout, which a rail-to-rail oscillator can cause by stalling ngspice
+    (a sized RNMC FD with RHP poles took 374 s); ``None`` is no evidence, so
+    such a circuit passes here and is caught by the AC bench's RHP check
+    instead.  A time budget cannot separate the two: under heavy machine
+    load a healthy design's transient took ~500 CPU-seconds too.
     """
     name, ports, body = _parse_subckt(netlist_text)
     topo = _Topo(ports)

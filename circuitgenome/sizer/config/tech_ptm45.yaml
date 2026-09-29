@@ -21,12 +21,16 @@ nmos:
   mu_cox: 3.501367e-04   # A/V²  (effective µn·Cox)
   vth: 0.3740            # V
   lam: 0.1976            # 1/V
+  gamma: 0.4188          # √V   body-effect coefficient γ (issue #106)
+  phi: 0.7700            # V    surface potential 2φF
   cox: 2.762e-14         # F/µm² (toxe = 1.25 nm)
 
 pmos:
   mu_cox: 1.593293e-04   # A/V²  (effective µp·Cox)
   vth: -0.4305           # V
   lam: 0.2577            # 1/V
+  gamma: 0.3646          # √V   body-effect coefficient γ (issue #106)
+  phi: 0.7200            # V    surface potential 2φF
   cox: 2.656e-14         # F/µm² (toxe = 1.30 nm)
 
 width:

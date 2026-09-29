@@ -108,12 +108,12 @@ def evaluate_metrics(
             eq.quiescent_power(spec.vdd, spec.vss, list(chain.supply_currents)),
             spec.power_max_w, is_max=True)
 
-    # --- Output swing from the second stage's saturation overdrive ---
-    vdsat_p, vdsat_n = chain.swing_vdsat
-    if spec.output_swing_max_v is not None and vdsat_p is not None:
-        _record("output_swing_max_v", spec.vdd - vdsat_p, spec.output_swing_max_v)
-    if spec.output_swing_min_v is not None and vdsat_n is not None:
-        _record("output_swing_min_v", spec.vss + vdsat_n,
+    # --- Output swing: each rail minus the output's headroom to it ---
+    head_hi, head_lo = chain.swing_headroom
+    if spec.output_swing_max_v is not None and head_hi is not None:
+        _record("output_swing_max_v", spec.vdd - head_hi, spec.output_swing_max_v)
+    if spec.output_swing_min_v is not None and head_lo is not None:
+        _record("output_swing_min_v", spec.vss + head_lo,
                 spec.output_swing_min_v, is_max=True)
 
     # --- CMRR: the raw pair gm against the tail's finite conductance ---

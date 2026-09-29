@@ -228,6 +228,19 @@ def test_design_impossible_spec_yields_no_solutions(tmp_path):
     assert not (tmp_path / _TOPO).exists()  # no solutions → no netlist folder
 
 
+@pytest.mark.skipif(not ngspice_available(), reason="ngspice not installed")
+@pytest.mark.spice
+def test_design_counts_candidate_exception_as_error(tmp_path, monkeypatch):
+    # A candidate that raises is counted in ``errors``, not a run crash.
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("circuitgenome.designer.designer.size_circuit", boom)
+    report = design(_spec(), tmp_path, templates=[_TOPO], limit=2, workers=1)
+    st = report.stats[_TOPO]
+    assert st.enumerated == 2 and st.errors == 2 and st.accepted == 0
+    assert st.rejection_reasons == {"RuntimeError: boom": 2}
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
