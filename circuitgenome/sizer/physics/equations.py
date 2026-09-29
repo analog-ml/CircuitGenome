@@ -114,6 +114,22 @@ def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
     return math.sqrt(2.0 * abs(ids_a) * l_um / (mu_cox * w_um))
 
 
+def body_vth_shift(gamma: float, two_phi: float, vsb: float) -> float:
+    r"""Threshold-voltage rise from body effect in V.
+
+    ΔVth = γ·(√(2φF + Vsb) − √(2φF))
+
+    :param gamma: Body-effect coefficient γ in √V (``0`` → no shift).
+    :param two_phi: Surface potential 2φF in V.
+    :param vsb: Source-to-bulk reverse bias \|Vsb\| in V; negative values
+        (forward bias) are clamped to ``0``.
+    :returns: Always ≥ 0.
+    """
+    if gamma <= 0.0:
+        return 0.0
+    return gamma * (math.sqrt(two_phi + max(vsb, 0.0)) - math.sqrt(two_phi))
+
+
 # ---------------------------------------------------------------------------
 # Op-amp performance metrics
 # ---------------------------------------------------------------------------

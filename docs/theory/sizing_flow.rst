@@ -580,16 +580,40 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - spec − actual
    * - Output swing max
      - :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{PMOS}_2)`
-     - (inline in ``_evaluate_metrics``)
+     - :func:`~circuitgenome.sizer.physics.stage_chain.output_swing_headroom`
      - actual − spec
    * - Output swing min
      - :math:`V_{out,\min} = V_{SS} + V_{DS,sat}(\text{NMOS}_2)`
-     - (inline in ``_evaluate_metrics``)
+     - :func:`~circuitgenome.sizer.physics.stage_chain.output_swing_headroom`
      - spec − actual
 
 A positive margin value means the spec is met with headroom; a negative
 margin means the spec is violated (only possible if the spec was not
 enforced by a CP-SAT constraint, e.g. PSRR, power, swing).
+
+The swing rows above are for an unbuffered output.  A ``*_buffered_*``
+template's source-follower ``output_stage`` level-shifts the output one
+:math:`|V_{GS,f}|` away from the node that drives it, which moves one edge of
+the swing a whole threshold voltage away from its rail:
+
+* PMOS follower (:math:`V_{out} = V_{in} + |V_{GS,f}|`):
+  :math:`V_{out,\min} = V_{SS} + V_{DS,sat}(\text{NMOS}_{drv}) + |V_{GS,f}|`,
+  :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{follower current source})`;
+* NMOS follower (:math:`V_{out} = V_{in} - V_{GS,f}`):
+  :math:`V_{out,\max} = V_{DD} - V_{DS,sat}(\text{PMOS}_{drv}) - V_{GS,f}`,
+  :math:`V_{out,\min} = V_{SS} + V_{DS,sat}(\text{follower current sink})`.
+
+:math:`\text{drv}` is the last gain stage, the device pulling the follower's
+gate toward that rail.  When the follower's bulk is not tied to its source
+(the NMOS follower's bulk sits on :math:`V_{SS}`),
+:math:`V_{GS,f}` also carries the body-effect rise
+:math:`\gamma(\sqrt{2\phi_F + V_{SB}} - \sqrt{2\phi_F})` evaluated at the
+swing edge itself (the tech's ``gamma``/``phi``).  The gm/Id sizer rejects a
+buffered sizing whose level-shifted edge misses the swing spec by more than
+0.2 V (``bias_feasible = False``,
+:func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing`): a
+follower's :math:`|V_{GS}|` cannot drop much below :math:`V_{th}` even in weak
+inversion, so no other sizing choice recovers it.
 
 ----
 

@@ -70,6 +70,14 @@ class DeviceModel(Protocol):
         """Gate-source voltage in V (signed: +ve NMOS, −ve PMOS)."""
         ...
 
+    def body_vth_shift(self, dtype: str, vsb: float) -> float:
+        """Threshold rise in V at source-bulk reverse bias ``vsb`` (body effect).
+
+        Neither backend's ``vgs`` carries it (the LUT is characterised at
+        ``Vsb = 0``); ``0.0`` when the tech supplies no ``gamma``.
+        """
+        ...
+
     def gm_ceiling(self, dtype: str, ids: float, l_um: float) -> float:
         """Physical upper bound on gm in A/V (weak-inversion limit)."""
         ...
@@ -130,6 +138,11 @@ class Level1Model:
         """Square-law gate-source voltage (:func:`~.equations.vgs_from_ids`)."""
         p = _params(self.tech, dtype)
         return eq.vgs_from_ids(p.mu_cox, w_um, l_um, ids, p.vth)
+
+    def body_vth_shift(self, dtype, vsb):
+        """Body-effect ``ΔVth`` from the tech's ``gamma``/``phi`` (:func:`~.equations.body_vth_shift`)."""
+        p = _params(self.tech, dtype)
+        return eq.body_vth_shift(p.gamma, p.phi, vsb)
 
     def gm_ceiling(self, dtype, ids, l_um):
         """Weak-inversion gm ceiling ``25·|Id|`` (dtype/L-independent)."""
@@ -250,6 +263,11 @@ class GmIdModel:
         """Gate-source voltage from the LUT, signed +ve NMOS / −ve PMOS."""
         mag = self.lut.vgs(dtype, self._gm_id_at(dtype, w_um, l_um, ids), l_um)
         return mag if dtype == "nmos" else -mag
+
+    def body_vth_shift(self, dtype, vsb):
+        """Body-effect ``ΔVth`` from the tech's ``gamma``/``phi`` (:func:`~.equations.body_vth_shift`)."""
+        p = _params(self.tech, dtype)
+        return eq.body_vth_shift(p.gamma, p.phi, vsb)
 
     def gm_ceiling(self, dtype, ids, l_um):
         """Weak-inversion gm ceiling ``max_gm_id·|Id|`` from the table."""
