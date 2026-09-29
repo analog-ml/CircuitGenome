@@ -103,12 +103,17 @@ def plan_devices(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
+    nested_miller: bool = False,
 ) -> SizingPlan:
-    """Derive gm requirements, compensation caps and per-device intent."""
+    """Derive gm requirements, compensation caps and per-device intent.
+
+    ``nested_miller`` flags a three-stage NMC template (see
+    :func:`~circuitgenome.sizer.physics.preprocess.compute_requirements`).
+    """
     model = _model_for(tech, intent)
     gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
         view.slot_transistors, view.all_transistors, currents.ids_map,
-        tech, spec, model, currents.gd_load_r,
+        tech, spec, model, currents.gd_load_r, nested_miller=nested_miller,
     )
     tintents = resolve_transistor_intents(
         view.all_transistors, view.cascode_refs, intent.block_intents)

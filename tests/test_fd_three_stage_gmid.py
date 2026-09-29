@@ -84,3 +84,45 @@ def test_three_stage_se_gmid(topo, load, ss, ts, follower):
     assert r.solver_status == "GMID"
     assert r.transistors and r.cc_pf and r.cc2_pf  # three-stage inner cap set
     assert r.metrics.get("gain_db", 0) > 0
+
+
+def test_nmc_plan_damps_inner_loop():
+    """Issue #208 follow-up: the nested-Miller inner pole pair has damping
+    ζ = (r−1)/2·√(Cc2/(r·CL)), r = gm3/gm2, and gf180 NMC FD designs sized at
+    r ≈ 2, Cc2 = Cc1/4 rang at ~25 MHz.  The plan must (a) floor gm3 at
+    _NMC_GM3_OVER_GM2 × the gm2 the second stage will really deliver (the
+    gm/Id floor, not the tiny PM request), (b) size Cc2 for _NMC_INNER_ZETA at
+    that ratio, and (c) keep the output-swing Vdsat budget off the second
+    stage — only the third stage drives the output, and a swing floor there
+    only inflates gm2."""
+    from circuitgenome.sizer.gmid.analyze import analyze_circuit
+    from circuitgenome.sizer.gmid.intent import DEFAULT_INTENT
+    from circuitgenome.sizer.gmid.plan import assign_currents, plan_devices
+    from circuitgenome.sizer.physics.preprocess import _NMC_GM3_OVER_GM2, _NMC_INNER_ZETA
+
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_fully_differential")
+    want = {"input_pair": "differential_pair_pmos", "load": "current_source_load_nmos",
+            "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting",
+            "comp1_p": "miller_cap", "comp1_n": "miller_cap",
+            "comp2_p": "miller_cap", "comp2_n": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map[k].name == v for k, v in want.items()))
+    parsed = parse(to_flat_spice(circ))
+    view = analyze_circuit(assign_slots(recognize(parsed), topo), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, third_stage_current_ratio=5.0,
+                      gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    plan = plan_devices(view, assign_currents(view, spec, tech, DEFAULT_INTENT),
+                        spec, tech, DEFAULT_INTENT, nested_miller=True)
+    ids2 = spec.ibias * spec.second_stage_current_ratio
+    gm2 = plan.model.realized_gm("nmos", plan.gm_req_map["mn1_second_stage_p"], ids2)
+    r = plan.gm_req_map["mn1_third_stage_p"] / gm2
+    assert r >= _NMC_GM3_OVER_GM2 * (1 - 1e-9)
+    zeta = (r - 1.0) / 2.0 * (plan.cc2_pf * 1e-12 / (r * spec.cl)) ** 0.5
+    assert zeta >= _NMC_INNER_ZETA * (1 - 1e-9)
+    assert plan.cc2_pf <= plan.cc_pf
+    assert not any("second_stage" in ref for ref in plan.vod_max_map)
+    assert "mn1_third_stage_p" in plan.vod_max_map

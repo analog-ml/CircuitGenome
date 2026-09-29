@@ -406,7 +406,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
     <figcaption>Slew rate only <em>upper</em>-bounds Cc; the stability floor <em>lower</em>-bounds it. The chosen Cc sits at the floor so gm1 stays as small as possible.</figcaption>
   </figure>
 
-  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code>. Both are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
+  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code> — except nested-Miller (NMC) templates, where Cc2 is sized so the inner pole pair is damped (ζ = 0.3 at gm3 = 3.5·gm2, about <code>0.2·CL</code>, never above Cc1). Both are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
 </section>
 
 <section class="part" id="part-6">
@@ -424,8 +424,10 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
       <tr><td>GBW</td><td>gm1</td><td><code>2π · GBW · Cc / k_fs</code></td></tr>
       <tr><td>Phase margin</td><td>gm2 (gm2,gm3 in 3-stage)</td><td><code>k_fs·gm1·CL / (Cc·tan(90°−PM))</code></td></tr>
       <tr><td>Gain</td><td>gm2 (or gm3)</td><td><code>A₀ / (k_fs·gm1·Rout1·Rout2)</code></td></tr>
+      <tr><td>Nested-Miller damping (3-stage NMC)</td><td>gm3</td><td><code>3.5 · realized gm2</code></td></tr>
     </tbody>
   </table>
+  <p>The last row is a stability rule, not a spec: in a three-stage NMC amp the two non-dominant poles pair up, and the pair is only damped when gm3 is well above gm2. At gm3 ≈ 2·gm2 the inner loop rings far above GBW — invisible to the AC bench, caught by the FD settling gate. The ratio uses the gm2 the stage will <em>actually</em> deliver (<code>model.realized_gm</code>, which knows the gm/Id table's floor), not the much smaller request.</p>
 
   <h3>Traced with real numbers — the GBW demand</h3>
   <p>With <code>GBW = 10 MHz</code>, <code>Cc = 1 pF</code>, and a mirror load (<code>k_fs = 1.0</code>):</p>
@@ -492,7 +494,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
   <h3>VDS_sat upper bounds from output swing</h3>
   <p>The last block runs the swing spec backwards. If the user wants the output to reach within <code>output_swing_max_v</code> of the top rail, then the load device can only "cost" so much saturation voltage:</p>
   <div class="eq-center"><span class="boxed-eq">VDS_sat,max = Vdd − output_swing_max_v</span></div>
-  <p>That cap is stamped onto load devices (high side) and second/third-stage PMOS (which sit on every output path). The low-side mirror uses <code>output_swing_min_v − Vss</code> for the NMOS. Wherever two constraints hit the same device, <code>min()</code> keeps the tighter one.</p>
+  <p>That cap is stamped onto load devices (high side) and second/third-stage PMOS (which sit on every output path) — except a nested-Miller (NMC) amp's second stage, which never drives the output: a swing cap there would only inflate gm2 and squeeze the gm3/gm2 ratio its inner loop needs. The low-side mirror uses <code>output_swing_min_v − Vss</code> for the NMOS. Wherever two constraints hit the same device, <code>min()</code> keeps the tighter one.</p>
 </section>
 
 <section class="part" id="part-7">
