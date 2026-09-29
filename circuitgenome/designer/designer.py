@@ -110,7 +110,7 @@ class _Outcome:
     """Picklable per-candidate result returned by the worker."""
     index: int
     variants: dict[str, str]
-    stage: str  # "accepted" | "sizing_failed" | "bias_infeasible" | "spec_failed" | "unverified" | "error"
+    stage: str  # "accepted" | "sizing_failed" | "bias_infeasible" | "spec_failed" | "unverified" | "errors"  (rejection stages name their TemplateStats counter)
     metrics: dict[str, float | None] = field(default_factory=dict)
     margins: dict[str, float] = field(default_factory=dict)
     netlist: str = ""  # sized netlist text, only when accepted
@@ -176,7 +176,7 @@ def _evaluate_candidate(
                         margins=margins, notes=notes,
                         netlist=sized_netlist(netlist_text, result))
     except Exception as e:  # count, report, and keep the run going
-        return _Outcome(index, variants, "error",
+        return _Outcome(index, variants, "errors",
                         detail=f"{type(e).__name__}: {e}")
 
 
