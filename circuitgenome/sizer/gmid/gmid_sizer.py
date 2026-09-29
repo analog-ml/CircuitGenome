@@ -14,8 +14,9 @@ sizer, as five phases with explicit hand-offs:
    operating-point check and tail repair (:mod:`.bias`), an RNMC inner-loop
    re-plan on the sized circuit (:mod:`.rnmc_refine`), the stage-interface
    window check and repair (:mod:`.stage_interface`), the non-load
-   resistor network (:mod:`.resistors`), and the constructed-bias level
-   tuning (:mod:`.bias_levels`).
+   resistor network (:mod:`.resistors`), the constructed-bias level
+   tuning (:mod:`.bias_levels`), and the follower output stage's swing check
+   (:func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing`).
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
 
 The model-independent topology math is reused from the
@@ -32,6 +33,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..physics import equations as eq
 from ..physics.circuit_view import adoption_warnings
+from ..physics.stage_chain import check_follower_swing
 from ..models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
@@ -104,6 +106,9 @@ def size_gmid(
     sizing, level_r = tune_bias_levels(
         view.blocks, currents.ids_map, sizing, plan.model, spec, tech)
     extra_r = {**extra_r, **level_r}
+    fol_warnings, fol_feasible = check_follower_swing(
+        view, sizing, plan.model, spec)
+    bias_feasible = bias_feasible and fol_feasible
 
     # Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.
     metrics, margins, eval_notes = evaluate_circuit(
@@ -117,7 +122,10 @@ def size_gmid(
         margins=margins,
         solver_status="GMID",
         cc2_pf=plan.cc2_pf,
-        warnings=(view.warnings + plan.warnings + size_warnings + eval_notes
+        # The follower swing verdict leads: it is decisive on its own, and the
+        # designer reports a bias rejection by the first warning.
+        warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
+                  + eval_notes
                   + adoption_warnings(view.adopted)),
         resistors={**currents.load_resistors, **extra_r},
         bias_feasible=bias_feasible,

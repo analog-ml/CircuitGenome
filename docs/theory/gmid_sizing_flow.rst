@@ -479,6 +479,16 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    that breaks the stage-interface bias is undone).  See
    :ref:`the RNMC section of the analytical flow <rnmc-inner-pair>`.
 
+   On a ``*_buffered_*`` template one more check joins the verdict after the
+   resistor phase: the source-follower output stage shifts one edge of the
+   output swing a whole ``|Vgs|`` away from its rail, and
+   :func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing` sets
+   ``bias_feasible = False`` (warning *"…source-follower output stage cannot
+   meet the swing spec…"*) when that edge misses the swing spec by more than
+   0.2 V.  On gf180 at 3.3 V a PMOS follower cannot pull the output below
+   ≈ 0.85 V and an NMOS follower cannot lift it above ≈ 2.2 V, so a
+   0.3–3.0 V swing spec rules out every buffered candidate before SPICE.
+
 Phase 4c — Size: non-load resistors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -132,8 +132,11 @@ class StageChain:
     :param cc_pf: Miller compensation cap, ``None`` when uncompensated.
     :param cc2_pf: second compensation cap (three-stage), ``None`` otherwise.
     :param supply_currents: per-branch quiescent currents in A (power).
-    :param swing_vdsat: ``(vdsat_pmos, vdsat_nmos)`` of the second stage in V,
-        either entry ``None`` when that polarity is absent (output swing).
+    :param swing_headroom: ``(below_vdd, above_vss)`` in V -- how close the
+        output can get to each rail (output swing), either entry ``None`` when
+        it cannot be placed.  The second stage's ``Vdsat`` per polarity, or,
+        behind a follower ``output_stage``, the follower's level shift on top
+        of its driving stage (:func:`output_swing_headroom`).
     :param gain_measurable: ``False`` when the DC operating point the
         small-signal formulas sit on does not exist, so every gain-derived
         metric is withheld rather than reported optimistically (issue #148).
@@ -158,7 +161,7 @@ class StageChain:
     cc_pf: float | None = None
     cc2_pf: float | None = None
     supply_currents: tuple[float, ...] = ()
-    swing_vdsat: tuple[float | None, float | None] = (None, None)
+    swing_headroom: tuple[float | None, float | None] = (None, None)
     gain_measurable: bool = True
     compensation_scheme: str | None = None
     node_caps_f: tuple[float, ...] = ()
@@ -331,6 +334,129 @@ def _source_degeneration_r(ip_devs: list[Device], ip_resistors: list[Device],
     return out
 
 
+# --------------------------------------------------------------------------- #
+# Output swing
+# --------------------------------------------------------------------------- #
+#: How far (V) the follower's level-shifted swing edge may miss the spec before
+#: :func:`check_follower_swing` rejects the sizing.  The model is conservative
+#: there: the swing bench keeps tracking (loop slope ≥ 0.7) a little past the
+#: point where the driving device leaves saturation -- measured at up to
+#: 0.15 V beyond the modelled edge on gf180 and 0.11 V on ptm45.  Rejecting
+#: only clearer misses leaves a near-miss candidate to SPICE, which remains
+#: the authority for accepts.
+_FOLLOWER_SWING_TOL_V = 0.2
+
+
+def _vdsat_of(devs: list[Device], sizing, dtype: str) -> float | None:
+    """``Vdsat`` in V of the first ``dtype`` device of ``devs`` that is sized."""
+    d = next((d for d in devs if d.type == dtype), None)
+    s = sizing.get(d.ref) if d is not None else None
+    return s.vds_sat_v if s is not None else None
+
+
+def _follower(
+    slot_transistors: dict[str, list[Device]],
+) -> tuple[Device | None, list[Device]]:
+    """``(follower, its bias source(s))`` of the ``output_stage`` buffer.
+
+    The follower is the buffer's signal device (gate on the amplifier node);
+    its partner, gated from a bias net, is the current source biasing it.
+    ``(None, [])`` without a buffer.  FD circuits have one per output leg;
+    the legs are sized identically, so the ``_p`` leg represents both.
+    """
+    devs = _first_present(slot_transistors, (
+        "output_stage", "output_stage_p", "output_stage_n"))
+    fol = next((d for d in devs if is_signal_device(d)), None)
+    return fol, [d for d in devs if d is not fol]
+
+
+def output_swing_headroom(
+    view: CircuitView,
+    sizing: dict[str, TransistorSizing],
+    model: DeviceModel,
+    spec: SizingSpec,
+) -> tuple[float | None, float | None]:
+    """``(below_vdd, above_vss)``: how close to each rail the output can swing.
+
+    Without an output buffer the output node is the second stage's drain, and
+    each rail-side device leaves saturation ``Vdsat`` from its rail.
+
+    Behind a source-follower ``output_stage`` the output sits one ``|Vgs|``
+    away from the node that drives it, so on one side the follower shifts the
+    whole swing away from the rail:
+
+    * PMOS follower (``out = in + |Vgs|``, current source to ``Vdd``): the
+      output cannot fall below ``Vss + Vdsat_n(driver) + |Vgs_f|``, and cannot
+      rise above ``Vdd − Vdsat(current source)``.
+    * NMOS follower (``out = in − Vgs``, current sink to ``Vss``): the output
+      cannot rise above ``Vdd − Vdsat_p(driver) − Vgs_f``, and cannot fall
+      below ``Vss + Vdsat(current sink)``.
+
+    The driver is whatever device pulls the follower's gate net toward that
+    rail -- the last gain stage.  ``Vgs_f`` is the sized follower's own
+    (LUT or square-law, ``Vsb = 0``) value plus the body-effect rise when its
+    bulk is not tied to its source: at the level-shifted edge the source sits
+    ``(Vdd − Vss) − headroom`` from the bulk rail, so the headroom is solved as
+    a fixed point (the shift shrinks as the headroom grows, so it converges in
+    a few steps).  An entry is ``None`` when the device it needs is unsized.
+    """
+    fol, bias_devs = _follower(view.slot_transistors)
+    if fol is None:
+        ss_devs = _first_present(view.slot_transistors, _STAGE_SLOT_GROUPS[0])
+        return (_vdsat_of(ss_devs, sizing, "pmos"),
+                _vdsat_of(ss_devs, sizing, "nmos"))
+
+    s_fol = sizing.get(fol.ref)
+    own = _vdsat_of(bias_devs, sizing, fol.type)
+    gate = fol.terminals.get("g")
+    drivers = [d for d, _slot in view.all_transistors.values()
+               if d.terminals.get("d") == gate]
+    drv = _vdsat_of(drivers, sizing,
+                    "nmos" if fol.type == "pmos" else "pmos")
+    shifted = None
+    if s_fol is not None and drv is not None:
+        base = drv + abs(s_fol.vgs_v)
+        body_tied = fol.terminals.get("b") == fol.terminals.get("s")
+        shifted = base
+        for _ in range(20):
+            vsb = 0.0 if body_tied else (spec.vdd - spec.vss) - shifted
+            shifted = base + model.body_vth_shift(fol.type, vsb)
+    return (own, shifted) if fol.type == "pmos" else (shifted, own)
+
+
+def check_follower_swing(
+    view: CircuitView,
+    sizing: dict[str, TransistorSizing],
+    model: DeviceModel,
+    spec: SizingSpec,
+) -> tuple[list[str], bool]:
+    """``(warnings, feasible)`` for a follower output stage's level shift.
+
+    ``feasible`` is ``False`` when the level-shifted swing edge
+    (:func:`output_swing_headroom`) misses its spec bound by more than
+    :data:`_FOLLOWER_SWING_TOL_V`.  No other sizing knob can recover it: the
+    shift is the follower's ``|Vgs|``, which even weak inversion cannot take
+    below roughly ``Vth``.  Circuits without a follower always pass.
+    """
+    fol, _bias = _follower(view.slot_transistors)
+    if fol is None:
+        return [], True
+    hi, lo = output_swing_headroom(view, sizing, model, spec)
+    if fol.type == "pmos":           # shifts the low edge up
+        side, bound, sign = "low", spec.output_swing_min_v, 1.0
+        reached = None if lo is None else spec.vss + lo
+    else:                            # shifts the high edge down
+        side, bound, sign = "high", spec.output_swing_max_v, -1.0
+        reached = None if hi is None else spec.vdd - hi
+    if (bound is None or reached is None
+            or sign * (reached - bound) <= _FOLLOWER_SWING_TOL_V):
+        return [], True
+    return [f"{fol.ref}: {fol.type} source-follower output stage cannot meet "
+            f"the swing spec — its |Vgs| level shift limits the {side} swing "
+            f"to {reached:.2f} V against the {bound:.2f} V spec; relax the "
+            f"swing spec, raise the supply or use an unbuffered topology."], False
+
+
 def build_stage_chain(
     view: CircuitView,
     sizing: dict[str, TransistorSizing],
@@ -434,14 +560,6 @@ def build_stage_chain(
         r_tail = node_rout(tail_current_net, mosfets, model, sizing, frozenset())
         gd_tail = 1.0 / r_tail if r_tail and r_tail != float("inf") else 0.0
 
-    # --- Output swing: the second stage's Vdsat per polarity ---
-    ss_devs = slot_devs[0] if slot_devs else []
-
-    def _vdsat(dtype: str) -> float | None:
-        d = next((d for d in ss_devs if d.type == dtype), None)
-        s = sizing.get(d.ref) if d is not None else None
-        return s.vds_sat_v if s is not None else None
-
     # --- Power: tail + each gain-stage branch + the bias generator ---
     n_bias = len([d for d in slot_transistors.get("bias_gen", [])
                   if d.type in ("nmos", "pmos")])
@@ -480,7 +598,7 @@ def build_stage_chain(
         cc_pf=cc_pf,
         cc2_pf=cc2_pf,
         supply_currents=tuple(supply),
-        swing_vdsat=(_vdsat("pmos"), _vdsat("nmos")),
+        swing_headroom=output_swing_headroom(view, sizing, model, spec),
         compensation_scheme=view.compensation_scheme,
         node_caps_f=node_caps,
         third_stage_mirror_pole_hz=ts_mirror_pole,
