@@ -792,19 +792,30 @@ def test_size_three_stage_se_basic(three_stage_buffered_se_fbr):
 
 
 def test_three_stage_se_cc2_ratio(three_stage_buffered_se_fbr):
-    """cc2_pf must equal cc_pf / 4 (Cc2 = Cc1/4 heuristic)."""
+    """Cc2 starts at Cc1/4; RNMC sizing may only raise it, and never past Cc1.
+
+    (This fixture is an RNMC template: raising Cc2 is its second knob for
+    damping the inner pole pair, after gm2.)
+    """
     parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     tech = _tech()
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.cc_pf is not None and result.cc2_pf is not None
-    assert result.cc2_pf == pytest.approx(result.cc_pf / 4.0, rel=1e-9)
+    assert result.cc_pf / 4.0 * (1 - 1e-9) <= result.cc2_pf <= result.cc_pf * (1 + 1e-9)
 
 
-def test_three_stage_se_specs_met(three_stage_buffered_se_fbr):
-    """Three-stage NMC SE: gain, GBW, PM, and SR all meet spec."""
-    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
+def test_three_stage_se_specs_met(three_stage_rnmc_se_fbr):
+    """Three-stage SE: gain, GBW, PM, and SR all meet spec.
+
+    Runs on the unbuffered RNMC circuit.  The buffered one used to pass only
+    because its PM model ignored the output follower: at minimum width and
+    10 µA it has a ~0.3 MHz pole into the 20 pF load, and SPICE measures
+    0.52 MHz GBW against the 2.5 MHz spec (see
+    ``test_rnmc_buffered_follower_is_in_the_pm_model``).
+    """
+    parsed, sr_result, fbr_result, topology = three_stage_rnmc_se_fbr
     tech = _tech()
     spec = SizingSpec(**_THREE_STAGE_SPEC)
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -817,6 +828,19 @@ def test_three_stage_se_specs_met(three_stage_buffered_se_fbr):
         assert result.metrics["phase_margin_deg"] >= spec.phase_margin_min_deg - 1.0, "PM not met"
     if "slew_rate_vps" in result.metrics:
         assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
+
+
+def test_rnmc_buffered_follower_is_in_the_pm_model(three_stage_buffered_se_fbr):
+    """The RNMC phase margin sees the output follower, so a buffered design
+    whose weak follower breaks the loop is no longer reported as meeting PM.
+
+    The Level-1 sizer leaves the follower at minimum width (no gm target);
+    the old two-pole formula still reported ~65°."""
+    parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
+    spec = SizingSpec(**_THREE_STAGE_SPEC)
+    result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(), spec)
+    assert result.solver_status in ("OPTIMAL", "FEASIBLE")
+    assert result.metrics["phase_margin_deg"] < spec.phase_margin_min_deg
 
 
 def test_three_stage_se_power(three_stage_buffered_se_fbr):
@@ -843,6 +867,45 @@ def test_size_three_stage_rnmc_se_basic(three_stage_rnmc_se_fbr):
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.cc_pf is not None
     assert result.cc2_pf is not None
+
+
+def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
+    """RNMC re-plans gm2 so the inner pair is damped, not left in the RHP.
+
+    The generic three-stage rules push gm3 to its ceiling on the gain spec and
+    leave gm2 tiny — gm3 far above gm2·(1 + CL/Cc1).  With the scheme
+    threaded, gm2 is raised (the preferred knob) and the pair is stable.
+    """
+    from circuitgenome.sizer.physics import equations as eq
+    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+    from circuitgenome.sizer.physics.device_model import Level1Model
+    from circuitgenome.sizer.physics.preprocess import assign_ids, compute_requirements
+    from circuitgenome.sizer.physics.taxonomy import is_signal_device
+
+    _parsed, _sr, fbr_result, topology = three_stage_rnmc_se_fbr
+    tech, spec = _tech(), SizingSpec(**_THREE_STAGE_SPEC)
+    view = analyze_circuit(fbr_result, topology)
+    assert view.compensation_scheme == "reversed_nested_miller"
+    ids = assign_ids(view.slot_transistors, view.all_transistors, spec)
+
+    def gms(scheme):
+        gm, _v, cc, cc2, _w = compute_requirements(
+            view.slot_transistors, view.all_transistors, ids, tech, spec,
+            Level1Model(tech), compensation_scheme=scheme)
+        sig = {slot: max(gm[d.ref] for d in view.slot_transistors[slot]
+                         if is_signal_device(d))
+               for slot in ("second_stage", "third_stage")}
+        ts_in = next(d for d in view.slot_transistors["third_stage"]
+                     if d.terminals["g"] in {s.terminals["d"] for s in
+                                              view.slot_transistors["second_stage"]})
+        return sig["second_stage"], gm[ts_in.ref], cc * 1e-12, cc2 * 1e-12
+
+    gm2_old, gm3_old, cc1, _ = gms(None)
+    gm2_new, gm3_new, _, cc2_new = gms("reversed_nested_miller")
+    assert not eq.rnmc_stable(gm2_old, gm3_old, cc1, spec.cl)
+    assert gm2_new > gm2_old
+    assert eq.rnmc_stable(gm2_new, gm3_new, cc1, spec.cl)
+    assert eq.rnmc_inner_damping(gm2_new, gm3_new, cc1, cc2_new, spec.cl) > 0.5
 
 
 # --- FD NMC ---

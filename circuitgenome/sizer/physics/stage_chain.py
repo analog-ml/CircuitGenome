@@ -25,7 +25,9 @@ from .circuit_view import CircuitView
 from .device_model import DeviceModel
 from ..models import SizingSpec, TransistorSizing
 from .preprocess import _first_stage_gain_factor
-from .taxonomy import RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device
+from .rnmc import RNMC
+from .taxonomy import (
+    OUTPUT_STAGE_SLOTS, RAILS, SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device)
 
 
 # --------------------------------------------------------------------------- #
@@ -138,6 +140,18 @@ class StageChain:
     :param gain_measurable: ``False`` when the DC operating point the
         small-signal formulas sit on does not exist, so every gain-derived
         metric is withheld rather than reported optimistically (issue #148).
+    :param compensation_scheme: the template's three-stage compensation;
+        ``"reversed_nested_miller"`` selects the full-model RNMC phase margin
+        (:func:`~.equations.phase_margin_rnmc_deg`).
+    :param node_caps_f: gate capacitance in F on each gain stage's output
+        node (every device gated there), input pair first.  Only the RNMC
+        phase margin reads it: the second-stage output's entry is the third
+        stage's wide input gate, comparable to ``Cc2``.
+    :param third_stage_mirror_pole_hz: current-mirror node pole of a
+        non-inverting third stage in Hz, ``None`` when it has no mirror.
+    :param output_buffer: ``(gm, cgs, g_out)`` of a source-follower output
+        buffer (RNMC only): the third stage then drives the follower's gate
+        and ``CL`` sits on the follower's output; ``None`` without one.
     """
     stages: tuple[Stage, ...]
     k_fs: float = 1.0
@@ -149,6 +163,10 @@ class StageChain:
     supply_currents: tuple[float, ...] = ()
     swing_headroom: tuple[float | None, float | None] = (None, None)
     gain_measurable: bool = True
+    compensation_scheme: str | None = None
+    node_caps_f: tuple[float, ...] = ()
+    third_stage_mirror_pole_hz: float | None = None
+    output_buffer: tuple[float, float, float] | None = None
 
     def withheld(self) -> StageChain:
         """Mark the small-signal operating point as non-existent (issue #148)."""
@@ -197,6 +215,8 @@ _STAGE_SLOT_GROUPS = (
 )
 assert set(_STAGE_SLOT_GROUPS[0]) == SECOND_STAGE_SLOTS
 assert set(_STAGE_SLOT_GROUPS[1]) == THIRD_STAGE_SLOTS
+_OUTPUT_STAGE_ORDER = ("output_stage", "output_stage_p", "output_stage_n")
+assert set(_OUTPUT_STAGE_ORDER) == OUTPUT_STAGE_SLOTS
 
 
 def _first_present(slot_transistors: dict[str, list[Device]],
@@ -270,6 +290,26 @@ def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
     if gm <= 0.0 or c_f <= 0.0:
         return None
     return gm / (2.0 * math.pi * c_f)
+
+
+def _output_buffer(slot_transistors: dict[str, list[Device]], model,
+                   sizing) -> tuple[float, float, float] | None:
+    """``(gm, cgs, g_out)`` of a source-follower output buffer, or ``None``.
+
+    ``gm``/``cgs`` are the follower device's (the one gated by the signal);
+    ``g_out`` sums the other conductances on its output node: every
+    output-stage device's ``gds``.
+    """
+    devs = _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
+    fol = next((d for d in devs if is_signal_device(d) and d.ref in sizing), None)
+    if fol is None:
+        return None
+    s = sizing[fol.ref]
+    g_out = sum(model.gds(d.type, sizing[d.ref].w_um, sizing[d.ref].l_um,
+                          sizing[d.ref].ids_a)
+                for d in devs if d.ref in sizing)
+    return (model.gm(fol.type, s.w_um, s.l_um, s.ids_a),
+            model.cgs(fol.type, s.w_um, s.l_um), g_out)
 
 
 def _source_degeneration_r(ip_devs: list[Device], ip_resistors: list[Device],
@@ -532,6 +572,22 @@ def build_stage_chain(
         supply.append(spec.ibias * spec.third_stage_current_ratio * n_ts)
     supply.append(spec.ibias * max(n_bias, 1))
 
+    # --- RNMC only: the parasitics its full-model phase margin needs ---
+    node_caps: tuple[float, ...] = ()
+    ts_mirror_pole = None
+    buffer = None
+    if view.compensation_scheme == RNMC:
+        out_nets = [out1] + [sig.terminals.get("d") if sig else None
+                             for sig in signal_devs]
+        node_caps = tuple(
+            sum(model.cgs(d.type, sizing[d.ref].w_um, sizing[d.ref].l_um)
+                for d in mosfets
+                if net and d.ref in sizing and d.terminals.get("g") == net)
+            for net in out_nets)
+        if len(slot_devs) > 1:
+            ts_mirror_pole = _mirror_pole_hz(slot_devs[1], mosfets, model, sizing)
+        buffer = _output_buffer(slot_transistors, model, sizing)
+
     return StageChain(
         stages=tuple(stages),
         k_fs=_first_stage_gain_factor(slot_transistors),
@@ -543,4 +599,8 @@ def build_stage_chain(
         cc2_pf=cc2_pf,
         supply_currents=tuple(supply),
         swing_headroom=output_swing_headroom(view, sizing, model, spec),
+        compensation_scheme=view.compensation_scheme,
+        node_caps_f=node_caps,
+        third_stage_mirror_pole_hz=ts_mirror_pole,
+        output_buffer=buffer,
     )

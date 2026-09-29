@@ -9,7 +9,23 @@ from __future__ import annotations
 
 from . import equations as eq
 from ..models import SizingSpec
+from .rnmc import RNMC
 from .stage_chain import StageChain
+
+
+def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
+                       cc2_f: float, cl_f: float) -> float | None:
+    """Full-model RNMC phase margin (:func:`~.equations.phase_margin_rnmc_deg`)
+    from the chain's stage gm/rout, node parasitics, third-stage mirror and
+    output buffer."""
+    s = chain.stages
+    caps = chain.node_caps_f or (0.0, 0.0, 0.0)
+    g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s[:3]]
+    return eq.phase_margin_rnmc_deg(
+        gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f,
+        c1_f=caps[0], c2_f=caps[1], g1=g[0], g2=g[1], g3=g[2],
+        mirror_pole_hz=chain.third_stage_mirror_pole_hz,
+        buffer=chain.output_buffer)
 
 
 def evaluate_metrics(
@@ -74,7 +90,10 @@ def evaluate_metrics(
 
             gm2 = stages[1].gm
             pm = None
-            if len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f:
+            if (len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f
+                    and chain.compensation_scheme == RNMC):
+                pm = _rnmc_phase_margin(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+            elif len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f:
                 pm = eq.phase_margin_three_stage_deg(
                     gm1_loop, gm2, stages[2].gm, cc_f, cc2_f, spec.cl)
             elif gm2 > 0:

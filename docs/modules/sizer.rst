@@ -71,7 +71,8 @@ targets** the sizer solves against:
      - Minimum unity-gain bandwidth
    * - ``phase_margin_min_deg``
      - °
-     - Minimum phase margin (dominant-pole model)
+     - Minimum phase margin (dominant-pole model; RNMC three-stage uses the
+       full transfer function, worst over every 0 dB crossing)
    * - ``slew_rate_min_vps``
      - V/s
      - Minimum slew rate (``ibias / Cc``; ``ibias / CL`` on a

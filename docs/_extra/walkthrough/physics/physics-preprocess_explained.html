@@ -406,7 +406,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
     <figcaption>Slew rate only <em>upper</em>-bounds Cc; the stability floor <em>lower</em>-bounds it. The chosen Cc sits at the floor so gm1 stays as small as possible.</figcaption>
   </figure>
 
-  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code> — except nested-Miller (NMC) templates, where Cc2 is sized so the inner pole pair is damped (ζ = 0.3 at gm3 = 3.5·gm2, about <code>0.2·CL</code>, never above Cc1). Both are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
+  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code> — except nested-Miller (NMC) templates, where Cc2 is sized so the inner pole pair is damped (ζ = 0.3 at gm3 = 3.5·gm2, about <code>0.2·CL</code>, never above Cc1). A reversed-nested-Miller template (the Level-1 sizer passes <code>compensation_scheme</code>) instead re-plans <code>gm2</code>, <code>Cc2</code> and <code>gm3</code> with <code>rnmc.design_rnmc</code> so its inner pole pair stays damped — raising <code>gm2</code> first, then <code>Cc2</code> (up to <code>Cc1</code>), and capping <code>gm3</code> only as a last resort. Both caps are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
 </section>
 
 <section class="part" id="part-6">
