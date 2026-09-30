@@ -268,7 +268,7 @@ A two-stage single-ended op-amp sized on the ``generic`` tech::
      mn5_bias_gen                    W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=0.772V  VDS_sat=0.272V
      mp5_bias_gen                    W=2.000µm  L=1.000µm  IDS=10.00µA  VGS=-0.833V  VDS_sat=0.333V
      mn7_bias_gen                    W=1.000µm  L=1.000µm  IDS=10.00µA  VGS=0.772V  VDS_sat=0.272V
-     Cc = 2.9pF
+     c1_compensation                 C=2.90pF
      r1_load                         R=130.00kΩ
      r2_load                         R=130.00kΩ
 

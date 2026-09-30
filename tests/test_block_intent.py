@@ -113,19 +113,6 @@ def test_intent_for_tech_registry_fallback():
         INTENT_BY_TECH.pop("__test_tech__", None)
 
 
-def test_result_carries_transistor_intents(sized):
-    parsed, sr, fbr, topo, tech = sized
-    r = size_gmid(parsed, sr, fbr, topo, tech, _spec())
-    # One intent per sized transistor, each with a rationale.
-    assert set(r.transistor_intents) == set(r.transistors)
-    assert all(ti.rationale for ti in r.transistor_intents.values())
-    # A mixed slot splits by role: the second-stage driver is a gain stage,
-    # its current-source load is not.
-    assert r.transistor_intents["mn1_second_stage"].block == "gain_stage"
-    assert r.transistor_intents["mp1_second_stage"].block == "stage_load"
-    assert r.transistor_intents["m1_input_pair"].role == SIGNAL
-
-
 def test_per_block_override_is_local(sized):
     parsed, sr, fbr, topo, tech = sized
     # A headroom-comfortable supply: at 1.0 V the DC headroom repair re-sizes

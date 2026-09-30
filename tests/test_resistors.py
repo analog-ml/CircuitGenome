@@ -294,7 +294,7 @@ def test_comp_resistor_sized_end_to_end(variant):
     res = _size(compensation=variant)
     comp_r = {k: v for k, v in res.resistors.items() if "comp" in k}
     assert comp_r, f"{variant}: compensation resistor not sized"
-    cc_f = res.cc_pf * 1e-12
+    (cc_f,) = res.capacitors.values()  # the one Miller cap, in farads
     for v in comp_r.values():
         assert v > 0 and v != pytest.approx(1e3, rel=1e-6)
         # zero placement is bounded by the stage gm: R·Cc/(Cc+CL) = 1/gm2

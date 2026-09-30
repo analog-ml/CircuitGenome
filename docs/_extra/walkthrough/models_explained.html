@@ -184,7 +184,7 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
         <text x="532" y="122" text-anchor="middle" font-size="9" fill="var(--fig-muted)">→ TransistorSizing card</text>
         <!-- cc -->
         <rect x="430" y="144" width="99" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
-        <text x="479" y="164" text-anchor="middle" font-size="10">cc_pf · cc2_pf</text>
+        <text x="479" y="164" text-anchor="middle" font-size="10">R · C by ref</text>
         <!-- metrics -->
         <rect x="535" y="144" width="99" height="32" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="1.5"/>
         <text x="584" y="164" text-anchor="middle" font-size="9.5">metrics·margins</text>
@@ -535,19 +535,20 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
   </figure>
 
   <h3><code>SizingResult</code> — the whole answer</h3>
-  <p>The final aggregate gathers the per-device dictionary <em>plus</em> circuit-level results. Its required fields carry the core answer; its <code>field(default_factory=…)</code> fields carry the extras that may legitimately be empty.</p>
+  <p>The final aggregate gathers the per-device dictionaries <em>plus</em> circuit-level results, in four commented groups: sized components (each keyed by device ref), predicted performance, advisory flags, and advisory messages. The required fields carry the core answer; the defaulted ones carry the flags and the warnings.</p>
 
   <table>
     <thead><tr><th>Field</th><th>What it holds</th></tr></thead>
     <tbody>
       <tr><td><code>transistors</code></td><td>The per-device dict above — the heart of the result</td></tr>
-      <tr><td><code>cc_pf</code> / <code>cc2_pf</code></td><td>Compensation cap values, or <code>None</code> for single-stage</td></tr>
-      <tr><td><code>metrics</code></td><td>Computed performance, e.g. <code>{"gain_db": 90.1, "gbw_hz": 3e6}</code></td></tr>
+      <tr><td><code>resistors</code></td><td>Sized resistor values in ohms, keyed by device ref — often empty</td></tr>
+      <tr><td><code>capacitors</code></td><td>Sized compensation caps in farads, keyed by device ref (every cap in a <code>comp2*</code> slot gets the inner cap Cc2, every other <code>comp*</code> cap the Miller cap Cc1) — empty for single-stage</td></tr>
+      <tr><td><code>metrics</code></td><td><strong>Predicted</strong> performance from the device model — never simulated — e.g. <code>{"gain_db": 90.1, "gbw_hz": 3e6}</code></td></tr>
       <tr><td><code>margins</code></td><td>actual/spec per constraint; a value <code>&gt; 1</code> means the spec is met</td></tr>
-      <tr><td><code>solver_status</code></td><td>OR-Tools string: <code>OPTIMAL</code>, <code>FEASIBLE</code>, <code>INFEASIBLE</code>, <code>UNKNOWN</code></td></tr>
+      <tr><td><code>solver_status</code></td><td><code>GMID</code> for the gm/Id path (no solver); otherwise the OR-Tools CP-SAT string: <code>OPTIMAL</code>, <code>FEASIBLE</code>, <code>INFEASIBLE</code>, <code>UNKNOWN</code>, <code>MODEL_INVALID</code> — only the first two carry transistors</td></tr>
       <tr><td><code>bias_feasible</code></td><td>The gm/Id DC verdict — <code>False</code> when the metrics are optimistic</td></tr>
-      <tr><td><code>open_loop_measurable</code></td><td>Advisory flag (parallel to <code>bias_feasible</code>): <code>False</code> when the analytical <code>gain_db</code> exceeds <code>OPEN_LOOP_GAIN_CEILING_DB</code>, so an open-loop AC bench would rail to ~0 dB and the reported gain/GBW/PM are optimistic — deprioritise, don't prune, on it</td></tr>
-      <tr><td><code>warnings</code> / <code>resistors</code> / <code>transistor_intents</code></td><td>Advisory text, sized resistors, per-device design intent — often empty</td></tr>
+      <tr><td><code>open_loop_gain_measurable</code></td><td>Advisory flag (parallel to <code>bias_feasible</code>): <code>False</code> when the predicted <code>gain_db</code> exceeds <code>OPEN_LOOP_GAIN_CEILING_DB</code>, so an open-loop AC bench would rail to ~0 dB and the reported gain/GBW/PM are optimistic — deprioritise, don't prune, on it</td></tr>
+      <tr><td><code>warnings</code></td><td>Advisory text — often empty</td></tr>
     </tbody>
   </table>
 

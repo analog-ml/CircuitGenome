@@ -95,8 +95,8 @@ class BlockIntent:
         gm requirement (all signal blocks).  This is the one free knob a caller
         or optimizer overrides per block.
     :param l_mult: channel length as a multiple of ``length.min``.
-    :param rationale: why this region/length — surfaced in the sizing result so
-        the choice is explainable, not implicit.
+    :param rationale: why this region/length — carried onto each device's
+        :class:`TransistorIntent` so the choice is explainable, not implicit.
     """
     role: str
     gm_id: float | None

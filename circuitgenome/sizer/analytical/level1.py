@@ -24,6 +24,7 @@ from ..physics.circuit_view import adoption_warnings, analyze_circuit
 from ..physics.preprocess import (
     assign_ids,
     compute_requirements,
+    size_compensation_caps,
     size_load_resistors,
 )
 from ..physics.stage_chain import build_stage_chain
@@ -58,6 +59,7 @@ def size_level1(
     )
     all_warnings = (topology_warnings + gm_ceiling_warnings
                     + adoption_warnings(view.adopted))
+    capacitors = size_compensation_caps(view.slot_capacitors, cc_pf, cc2_pf)
 
     cp_mdl, W_vars, L_vars = build_model(
         all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
@@ -70,13 +72,12 @@ def size_level1(
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return SizingResult(
             transistors={},
-            cc_pf=cc_pf,
+            resistors=resistors,
+            capacitors=capacitors,
             metrics={},
             margins={},
             solver_status=status_name,
-            cc2_pf=cc2_pf,
             warnings=all_warnings,
-            resistors=resistors,
         )
 
     # Extract solution: convert integer step-units back to µm.
@@ -100,12 +101,11 @@ def size_level1(
     metrics, margins = evaluate_metrics(chain, spec)
     return SizingResult(
         transistors=transistor_sizing,
-        cc_pf=cc_pf,
+        resistors=resistors,
+        capacitors=capacitors,
         metrics=metrics,
         margins=margins,
         solver_status=status_name,
-        cc2_pf=cc2_pf,
+        open_loop_gain_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
         warnings=all_warnings,
-        resistors=resistors,
-        open_loop_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
     )

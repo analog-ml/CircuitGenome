@@ -448,12 +448,12 @@ status_name = solver.<span class="tok-fn">status_name</span>(status)</code></pre
 
   <pre class="code"><code><span class="tok-kw">if</span> status <span class="tok-kw">not in</span> (cp_model.OPTIMAL, cp_model.FEASIBLE):
     <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
-        transistors={}, cc_pf=cc_pf, metrics={}, margins={},
-        solver_status=status_name, cc2_pf=cc2_pf,
-        warnings=all_warnings, resistors=resistors,
+        transistors={}, resistors=resistors, capacitors=capacitors,
+        metrics={}, margins={}, solver_status=status_name,
+        warnings=all_warnings,
     )</code></pre>
 
-  <p>The fallback is careful: it still returns the resistor values, the compensation caps, and the warnings it already gathered — it just hands back an <em>empty</em> transistor map and the status name (say <code>"INFEASIBLE"</code>). Callers learn exactly why, and nothing pretends to be a valid sizing.</p>
+  <p>The fallback is careful: it still returns the resistor values, the compensation caps (<code>capacitors</code>, already expanded onto the netlist's capacitor refs by <code>size_compensation_caps</code>), and the warnings it already gathered — it just hands back an <em>empty</em> transistor map and the status name (say <code>"INFEASIBLE"</code>). Callers learn exactly why, and nothing pretends to be a valid sizing.</p>
 
   <h3>The happy path — integers back to micrometres</h3>
   <p>Remember the solver worked in grid <em>steps</em>. To make a real answer we multiply each step-count by its step size.</p>
@@ -482,12 +482,13 @@ l_um = 3  &#183; 0.05 = <span class="tok-num">0.15</span> µm</code></pre>
     cc2_pf=cc2_pf, gd_load_r=gd_load_r,
 )
 <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
-    transistors=transistor_sizing, cc_pf=cc_pf, metrics=metrics,
-    margins=margins, solver_status=status_name, cc2_pf=cc2_pf,
-    warnings=all_warnings, resistors=resistors,
+    transistors=transistor_sizing, resistors=resistors, capacitors=capacitors,
+    metrics=metrics, margins=margins, solver_status=status_name,
+    open_loop_gain_measurable=eq.open_loop_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    warnings=all_warnings,
 )</code></pre>
 
-  <p><code>_evaluate_metrics</code> is — once again — shared code. It takes the finished geometries and computes the amplifier's actual gain, bandwidth, and their margins against spec. The function then returns one <code>SizingResult</code> bundling geometries, metrics, margins, warnings, resistors, and the solver status. That object <em>is</em> the file's product.</p>
+  <p><code>_evaluate_metrics</code> is — once again — shared code. It takes the finished geometries and computes the amplifier's <em>predicted</em> gain, bandwidth, and their margins against spec — model-based, not simulated. The function then returns one <code>SizingResult</code> bundling geometries, metrics, margins, warnings, resistors, and the solver status. That object <em>is</em> the file's product.</p>
 </section>
 
 <!-- ================= PART 6 ================= -->
