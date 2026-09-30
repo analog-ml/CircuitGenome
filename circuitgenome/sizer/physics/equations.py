@@ -156,7 +156,7 @@ def open_loop_gain_db(stage_gains: list[float]) -> float:
 OPEN_LOOP_GAIN_CEILING_DB = 150.0
 
 
-def open_loop_measurable(
+def open_loop_gain_measurable(
     gain_db: float | None, ceiling_db: float = OPEN_LOOP_GAIN_CEILING_DB
 ) -> bool:
     """Whether the analytical open-loop gain is measurable on an open-loop bench.

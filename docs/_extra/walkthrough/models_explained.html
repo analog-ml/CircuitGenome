@@ -544,7 +544,7 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
       <tr><td><code>resistors</code></td><td>Sized resistor values in ohms, keyed by device ref — often empty</td></tr>
       <tr><td><code>capacitors</code></td><td>Sized compensation caps in farads, keyed by device ref (every cap in a <code>comp2*</code> slot gets the inner cap Cc2, every other <code>comp*</code> cap the Miller cap Cc1) — empty for single-stage</td></tr>
       <tr><td><code>metrics</code></td><td><strong>Predicted</strong> performance from the device model — never simulated — e.g. <code>{"gain_db": 90.1, "gbw_hz": 3e6}</code></td></tr>
-      <tr><td><code>margins</code></td><td>actual/spec per constraint; a value <code>&gt; 1</code> means the spec is met</td></tr>
+      <tr><td><code>margins</code></td><td>predicted − limit (min specs) or limit − predicted (max specs), in the metric's own unit; a value <code>&gt;= 0</code> means the spec is met</td></tr>
       <tr><td><code>solver_status</code></td><td><code>GMID</code> for the gm/Id path (no solver); otherwise the OR-Tools CP-SAT string: <code>OPTIMAL</code>, <code>FEASIBLE</code>, <code>INFEASIBLE</code>, <code>UNKNOWN</code>, <code>MODEL_INVALID</code> — only the first two carry transistors</td></tr>
       <tr><td><code>bias_feasible</code></td><td>The gm/Id DC verdict — <code>False</code> when the metrics are optimistic</td></tr>
       <tr><td><code>open_loop_gain_measurable</code></td><td>Advisory flag (parallel to <code>bias_feasible</code>): <code>False</code> when the predicted <code>gain_db</code> exceeds <code>OPEN_LOOP_GAIN_CEILING_DB</code>, so an open-loop AC bench would rail to ~0 dB and the reported gain/GBW/PM are optimistic — deprioritise, don't prune, on it</td></tr>
@@ -552,7 +552,7 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
     </tbody>
   </table>
 
-  <p>Note <code>margins</code>: because it stores <em>actual/spec</em>, reading the result never requires re-checking the spec — a single number tells you both "did it pass?" (<code>&gt; 1</code>) and "by how much?" This is the same "let the data answer the question" spirit as <code>SizingSpec</code>'s <code>None</code>.</p>
+  <p>Note <code>margins</code>: because it stores the <em>signed distance</em> to each limit, reading the result never requires re-checking the spec — a single number tells you both "did it pass?" (<code>&gt;= 0</code>) and "by how much?" (in dB, Hz, degrees…) This is the same "let the data answer the question" spirit as <code>SizingSpec</code>'s <code>None</code>.</p>
 
   <h3><code>UnsupportedTechError</code> — the one non-record</h3>
   <p>The file's only class that <em>isn't</em> a dataclass is a small exception:</p>

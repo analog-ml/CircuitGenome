@@ -233,8 +233,11 @@ class SizingResult:
         — so it over-estimates multi-stage DC gain and is not open-loop-measurable
         above the ceiling flagged by ``open_loop_gain_measurable`` (see
         :data:`~circuitgenome.sizer.physics.equations.OPEN_LOOP_GAIN_CEILING_DB`).
-    :param margins: Safety margin for each constrained spec (actual/spec for
-        min specs, spec/actual for max specs). Values > 1 mean spec is met.
+    :param margins: Safety margin for each constrained spec, keyed like
+        ``metrics`` and in the metric's own unit: ``predicted − limit`` for a
+        minimum spec, ``limit − predicted`` for a maximum spec (e.g. a 65° phase
+        margin against a 60° floor gives ``5.0``). Values ``>= 0`` mean the spec
+        is met; unconstrained specs have no entry.
     :param solver_status: How the sizing was obtained, and whether it succeeded:
 
         * ``"GMID"`` — gm/Id path; sized procedurally from the LUT, no solver
@@ -252,10 +255,10 @@ class SizingResult:
         exceeds the open-loop-bench ceiling
         (:data:`~circuitgenome.sizer.physics.equations.OPEN_LOOP_GAIN_CEILING_DB`)
         — the design rails to ~0 dB in an open-loop AC measurement even though
-        the DC bias is sound, so the reported gain/GBW/PM are optimistic. This is an **advisory**
-        signal (parallel to ``bias_feasible``): the metrics are still reported
-        and SPICE remains the authority — consumers should deprioritise, not
-        prune, on it.
+        the DC bias is sound, so the reported gain/GBW/PM are optimistic. This
+        is an **advisory** signal (parallel to ``bias_feasible``): the metrics
+        are still reported and SPICE remains the authority — consumers should
+        deprioritise, not prune, on it.
     :param warnings: Advisory messages, e.g. a likely ``--topology``/netlist
         mismatch. Empty when the netlist cleanly matches the topology.
     """

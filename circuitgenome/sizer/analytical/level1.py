@@ -106,6 +106,7 @@ def size_level1(
         metrics=metrics,
         margins=margins,
         solver_status=status_name,
-        open_loop_gain_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
+        open_loop_gain_measurable=eq.open_loop_gain_measurable(
+            metrics.get("gain_db")),
         warnings=all_warnings,
     )

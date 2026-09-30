@@ -337,7 +337,7 @@
       <tr><td><code>Av = gm · rout</code></td><td>the bridge — computed by callers</td><td>—</td></tr>
       <tr><th colspan="3">Op-amp metrics — topology only, from gm, gd, C</th></tr>
       <tr><td><code>A0(dB) = 20·log10(∏ Av,i)</code></td><td>stage gains cascade by multiplication</td><td><code>open_loop_gain_db</code></td></tr>
-      <tr><td><code>A0 ≤ 150 dB</code></td><td>open-loop-bench measurability ceiling</td><td><code>open_loop_measurable</code></td></tr>
+      <tr><td><code>A0 ≤ 150 dB</code></td><td>open-loop-bench measurability ceiling</td><td><code>open_loop_gain_measurable</code></td></tr>
       <tr><td><code>GBW = gm1 / (2π·Cc)</code></td><td>push ÷ inertia at the dominant pole</td><td><code>unity_gain_bw</code></td></tr>
       <tr><td><code>SR = Ibias / Cc</code></td><td>the capacitor law dV/dt = I/C</td><td><code>slew_rate_vps</code></td></tr>
       <tr><td><code>PM = 90° − atan(gm1·CL / (gm2·Cc))</code></td><td>ideal 90° minus one non-dominant-pole lag</td><td><code>phase_margin_two_stage_deg</code></td></tr>
@@ -417,7 +417,7 @@
     product = math.<span class="tok-fn">prod</span>(stage_gains)
     <span class="tok-kw">return</span> <span class="tok-num">20.0</span> * math.<span class="tok-fn">log10</span>(<span class="tok-fn">abs</span>(product)) <span class="tok-kw">if</span> product != <span class="tok-num">0.0</span> <span class="tok-kw">else</span> -math.inf</code></pre>
 
-  <p>One caveat about what this number means: it is a <strong>best case, not a prediction</strong>. It multiplies together each stage's ideal <code>gm·rout</code> and subtracts nothing for the losses a real amplifier pays — one stage loading the next, limited bias headroom, device mismatch. Read it as a ceiling the design cannot beat, not as the gain you would measure on the bench. Its companion <code>open_loop_measurable()</code> flags any result above the ~150 dB open-loop-bench ceiling (<code>OPEN_LOOP_GAIN_CEILING_DB</code>), where the output can no longer be held at mid-rail and the measured open-loop gain rails toward 0 dB.</p>
+  <p>One caveat about what this number means: it is a <strong>best case, not a prediction</strong>. It multiplies together each stage's ideal <code>gm·rout</code> and subtracts nothing for the losses a real amplifier pays — one stage loading the next, limited bias headroom, device mismatch. Read it as a ceiling the design cannot beat, not as the gain you would measure on the bench. Its companion <code>open_loop_gain_measurable()</code> flags any result above the ~150 dB open-loop-bench ceiling (<code>OPEN_LOOP_GAIN_CEILING_DB</code>), where the output can no longer be held at mid-rail and the measured open-loop gain rails toward 0 dB.</p>
 
   <h3><code>unity_gain_bw</code> — how fast before the gain runs out</h3>
   <p>The input pair pushes current <code>gm1</code> into the compensation capacitor <code>Cc</code>; a bigger cap is a heavier flywheel that responds more slowly. Speed = push ÷ inertia.</p>

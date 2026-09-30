@@ -525,7 +525,7 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
     metrics=metrics, margins=margins,
     solver_status=<span class="tok-str">"GMID"</span>,
     bias_feasible=bias_feasible,
-    open_loop_gain_measurable=eq.open_loop_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    open_loop_gain_measurable=eq.open_loop_gain_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
     warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
               + eval_notes + adoption_warnings(view.adopted)))</code></pre>
 

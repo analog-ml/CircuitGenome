@@ -125,7 +125,8 @@ def size_gmid(
         margins=margins,
         solver_status="GMID",
         bias_feasible=bias_feasible,
-        open_loop_gain_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
+        open_loop_gain_measurable=eq.open_loop_gain_measurable(
+            metrics.get("gain_db")),
         # The follower swing verdict leads: it is decisive on its own, and the
         # designer reports a bias rejection by the first warning.
         warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings

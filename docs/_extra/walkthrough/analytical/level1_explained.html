@@ -169,8 +169,8 @@
       <!-- n5 metrics -->
       <g class="node" data-group="eval">
         <rect x="710" y="110" width="180" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="800" y="132" text-anchor="middle" font-weight="600" font-size="12.5">_evaluate_metrics()</text>
-        <text x="800" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">physics.metrics</text>
+        <text x="800" y="132" text-anchor="middle" font-weight="600" font-size="12.5">evaluate_metrics()</text>
+        <text x="800" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">physics.stage_chain + metrics</text>
       </g>
     </svg>
     <figcaption>One orchestrator, five helpers. Four are shared with the gm/Id sizer; only the teal box — <code>build_model()</code> — is special to Level-1.</figcaption>
@@ -296,8 +296,11 @@
 
   <p>None of this code is Level-1-specific. The structure comes from <code>sizer.physics.circuit_view</code> and the requirements from <code>sizer.physics.preprocess</code> — both shared with the gm/Id sizer. Here is the whole prep block.</p>
 
-  <pre class="code"><code>view      = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)   <span class="tok-com"># slots, dedup, warnings</span>
-ids_map   = <span class="tok-fn">assign_ids</span>(view.slot_transistors, view.all_transistors, spec)
+  <pre class="code"><code>view = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)   <span class="tok-com"># slots, dedup, warnings</span>
+slot_transistors = view.slot_transistors
+all_transistors = view.all_transistors
+topology_warnings = view.warnings
+ids_map = <span class="tok-fn">assign_ids</span>(slot_transistors, all_transistors, spec)
 
 <span class="tok-com"># Size resistor loads (deterministic) and fold them into first-stage Rout.</span>
 resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors, spec, tech)
@@ -305,20 +308,23 @@ gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(
 
 dev_model = <span class="tok-fn">Level1Model</span>(tech)
 gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = <span class="tok-fn">compute_requirements</span>(
-    slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r
+    slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r,
+    compensation_scheme=view.compensation_scheme,
 )
-all_warnings = topology_warnings + gm_ceiling_warnings</code></pre>
+all_warnings = (topology_warnings + gm_ceiling_warnings
+                + <span class="tok-fn">adoption_warnings</span>(view.adopted))
+capacitors = <span class="tok-fn">size_compensation_caps</span>(view.slot_capacitors, cc_pf, cc2_pf)</code></pre>
 
   <p>Read it as five short moves, each a station on the line:</p>
 
   <table>
     <thead><tr><th>Call</th><th>What it produces</th><th>Why it exists</th></tr></thead>
     <tbody>
-      <tr><td><code>extract_slot_transistors</code></td><td>devices grouped by role (input_pair, tail, load…)</td><td>the solver reasons about roles, not raw refs</td></tr>
-      <tr><td><code>deduplicate_devices</code></td><td>one entry per <em>distinct</em> device to size</td><td>matched twins share one geometry, not two</td></tr>
+      <tr><td><code>analyze_circuit</code></td><td>devices grouped by slot (input_pair, tail, load…), one entry per <em>distinct</em> device, topology-mismatch warnings</td><td>the solver reasons about roles, not raw refs — and matched twins share one geometry, not two</td></tr>
       <tr><td><code>assign_ids</code></td><td><code>ids_map</code>: ref &#8594; drain current</td><td>current is fixed by Kirchhoff <em>before</em> sizing</td></tr>
       <tr><td><code>size_load_resistors</code></td><td>resistor values + a load conductance <code>gd_load_r</code></td><td>resistor loads are deterministic; solve them directly</td></tr>
-      <tr><td><code>compute_requirements</code></td><td><code>gm_req_map</code>, <code>vod_max_map</code>, comp caps</td><td>translate the spec into a per-device target</td></tr>
+      <tr><td><code>compute_requirements</code></td><td><code>gm_req_map</code>, <code>vod_max_map</code>, comp caps <code>cc_pf</code>/<code>cc2_pf</code></td><td>translate the spec into a per-device target (the compensation scheme picks the RNMC rules)</td></tr>
+      <tr><td><code>size_compensation_caps</code></td><td><code>capacitors</code>: ref &#8594; farads</td><td>put Cc1/Cc2 onto the netlist's capacitors by recognised <code>comp*</code>/<code>comp2*</code> slot</td></tr>
     </tbody>
   </table>
 
@@ -477,18 +483,19 @@ l_um = 3  &#183; 0.05 = <span class="tok-num">0.15</span> µm</code></pre>
   <p>Then it re-derives <code>vgs</code> and <code>vds_sat</code> through the <em>same</em> <code>Level1Model</code> and stores a tidy <code>TransistorSizing</code> record per device. The integer world stays inside the solver; the outside world only ever sees micrometres and volts.</p>
 
   <h3>Score, then package</h3>
-  <pre class="code"><code>metrics, margins = <span class="tok-fn">_evaluate_metrics</span>(
-    transistor_sizing, slot_transistors, cc_pf, tech, spec, dev_model,
-    cc2_pf=cc2_pf, gd_load_r=gd_load_r,
+  <pre class="code"><code>chain = <span class="tok-fn">build_stage_chain</span>(
+    view, transistor_sizing, dev_model, spec,
+    cc_pf=cc_pf, cc2_pf=cc2_pf, gd_load_r=gd_load_r,
 )
+metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
 <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
     transistors=transistor_sizing, resistors=resistors, capacitors=capacitors,
     metrics=metrics, margins=margins, solver_status=status_name,
-    open_loop_gain_measurable=eq.open_loop_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    open_loop_gain_measurable=eq.open_loop_gain_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
     warnings=all_warnings,
 )</code></pre>
 
-  <p><code>_evaluate_metrics</code> is — once again — shared code. It takes the finished geometries and computes the amplifier's <em>predicted</em> gain, bandwidth, and their margins against spec — model-based, not simulated. The function then returns one <code>SizingResult</code> bundling geometries, metrics, margins, warnings, resistors, and the solver status. That object <em>is</em> the file's product.</p>
+  <p>Scoring is two shared steps. <code>build_stage_chain</code> turns the finished geometries into the amplifier's signal chain — each stage's gm and output resistance, plus the compensation caps — and <code>evaluate_metrics</code> reads that chain to compute the amplifier's <em>predicted</em> gain, bandwidth, and their margins against spec — model-based, not simulated. The function then returns one <code>SizingResult</code> bundling geometries, metrics, margins, warnings, resistors, and the solver status. That object <em>is</em> the file's product.</p>
 </section>
 
 <!-- ================= PART 6 ================= -->
