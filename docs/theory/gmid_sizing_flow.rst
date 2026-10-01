@@ -110,9 +110,8 @@ reads top-down (:mod:`circuitgenome.sizer.gmid.intent`):
 Level 1 is :class:`~circuitgenome.sizer.models.SizingSpec`; Level 2 is the
 :data:`~circuitgenome.sizer.gmid.intent.DEFAULT_BLOCK_INTENTS` registry of
 :class:`~circuitgenome.sizer.gmid.intent.BlockIntent`; Level 3 is the per-device
-:class:`~circuitgenome.sizer.gmid.intent.TransistorIntent`, surfaced on
-:attr:`SizingResult.transistor_intents <circuitgenome.sizer.models.SizingResult>`
-for explainability.
+:class:`~circuitgenome.sizer.gmid.intent.TransistorIntent`, carried on the
+sizing plan (:class:`~circuitgenome.sizer.gmid.plan.SizingPlan` ``tintents``).
 
 Roles vs functional building blocks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -553,9 +552,9 @@ Putting it together
 :func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid` runs exactly the five
 phases above and packages a
 :class:`~circuitgenome.sizer.models.SizingResult` with
-``solver_status="GMID"``, the transistor sizings, resistors, compensation caps,
-metrics, the ``bias_feasible`` verdict, the resolved ``transistor_intents``, and
-the accumulated warnings (topology + ceiling + geometry + DC).  In practice you
+``solver_status="GMID"``, the transistor sizings, resistors, compensation caps
+(keyed by device ref), predicted metrics, the ``bias_feasible`` and
+``open_loop_gain_measurable`` verdicts, and the accumulated warnings (topology + ceiling + geometry + DC).  In practice you
 never assemble it by hand — the whole pipeline is one call:
 
 .. code-block:: python

@@ -295,12 +295,14 @@ W/L values for every transistor.
    print(result.solver_status)                # e.g. "OPTIMAL" / "FEASIBLE" / "GMID"
    for ref, s in result.transistors.items():
        print(f"  {ref:30s}  W={s.w_um:.2f} µm  L={s.l_um:.2f} µm  IDS={s.ids_a*1e6:.1f} µA")
-   if result.cc_pf is not None:
-       print(f"  Cc = {result.cc_pf:.2f} pF")
+   for ref, farads in result.capacitors.items():  # empty when uncompensated
+       print(f"  {ref:30s}  C={farads*1e12:.2f} pF")
    print(result.metrics, result.bias_feasible)
 
-``result.metrics`` is an **analytical** estimate; for PTM the ``circuitgenome
-size`` CLI measures performance in ngspice instead (see :doc:`cli`).  Pass
+``result.metrics`` holds **predicted** metrics — computed from the device model,
+never simulated.  SPICE-measured metrics come from ``simulate_metrics`` as a
+separate dict; for PTM the ``circuitgenome size`` CLI shows those instead (see
+:doc:`cli`).  Pass
 ``--tech ptm45`` to exercise the gm/Id path.
 
 The spec YAML file (used by the CLI) mirrors ``SizingSpec`` field names
@@ -341,7 +343,7 @@ analytically.
    print("bias_feasible:", result.bias_feasible)
 
    # Measure performance in ngspice (requires ngspice on PATH). `result.metrics`
-   # is only the analytical estimate; simulate_metrics gives the measured numbers.
+   # holds only predicted metrics; simulate_metrics gives the measured ones.
    if ngspice_available():
        nominal = tech.spice_lib.corner                       # "typical"
        at_typ = simulate_metrics(netlist_text, result, tech, spec, corner=nominal)

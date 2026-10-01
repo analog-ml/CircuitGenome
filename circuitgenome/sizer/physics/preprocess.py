@@ -83,6 +83,31 @@ def size_load_resistors(
     return out
 
 
+def size_compensation_caps(
+    slot_capacitors: dict[str, list[Device]],
+    cc_pf: float | None,
+    cc2_pf: float | None,
+) -> dict[str, float]:
+    """Assign the planned compensation caps to the netlist's capacitor devices.
+
+    Every capacitor in a ``comp2*`` slot (the inner loop of a three-stage
+    amplifier) gets ``cc2_pf``, falling back to ``cc_pf`` when no inner cap was
+    planned; every capacitor in any other ``comp*`` slot gets ``cc_pf``.
+    Returns ``{ref: farads}`` — empty when ``cc_pf`` is ``None``
+    (uncompensated).
+    """
+    if cc_pf is None:
+        return {}
+    out: dict[str, float] = {}
+    for slot, caps in slot_capacitors.items():
+        if not slot.startswith("comp"):
+            continue
+        pf = cc2_pf if slot.startswith("comp2") and cc2_pf is not None else cc_pf
+        for c in caps:
+            out[c.ref] = pf * 1e-12
+    return out
+
+
 def _cascode_load_current_plan(
     slot_transistors: dict[str, list[Device]], spec: SizingSpec,
 ) -> dict[str, float]:

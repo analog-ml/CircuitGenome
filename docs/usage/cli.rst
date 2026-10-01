@@ -273,7 +273,7 @@ Sample output (``generic`` tech — Level-1 analytical path):
      m1_input_pair      W=9.000µm   L=1.000µm  IDS=5.00µA   VGS=-0.611V  VDS_sat=0.111V
      ...
      mp1_second_stage   W=5.000µm   L=1.000µm  IDS=25.00µA  VGS=-0.833V  VDS_sat=0.333V
-     Cc = 2.9pF
+     c1_compensation    C=2.90pF
      r1_load            R=130.00kΩ
 
    Feasibility: MARGINAL — biases, but does not meet spec (see ⚠ above)

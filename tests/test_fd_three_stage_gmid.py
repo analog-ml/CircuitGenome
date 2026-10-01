@@ -48,7 +48,8 @@ _FD_BASE = {"input_pair": "differential_pair_pmos", "load": _FD_LOAD,
 def test_fd_two_stage_gmid(cmfb):
     r = _size("two_stage_opamp_fully_differential", {**_FD_BASE, "cmfb": cmfb}, _FD_SPEC)
     assert r.solver_status == "GMID"
-    assert r.transistors and r.cc_pf
+    assert r.transistors
+    assert set(r.capacitors) == {"c1_comp_p", "c1_comp_n"}
     assert "gain_db" in r.metrics and r.metrics["gain_db"] > 0
     if cmfb == "resistive_sense_cmfb_pmos_mirror_inverting":
         # CMFB sense resistors are sized large (not the 1 kΩ placeholder).
@@ -82,7 +83,8 @@ def test_three_stage_se_gmid(topo, load, ss, ts, follower):
         want["output_stage"] = follower
     r = _size(topo, want, _TS_SPEC)
     assert r.solver_status == "GMID"
-    assert r.transistors and r.cc_pf and r.cc2_pf  # three-stage inner cap set
+    assert r.transistors
+    assert set(r.capacitors) == {"c1_comp1", "c1_comp2"}  # three-stage inner cap set
     assert r.metrics.get("gain_db", 0) > 0
 
 
