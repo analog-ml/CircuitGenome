@@ -958,7 +958,8 @@ the ``*_buffered_*`` templates — the source-follower output buffer, and is the
 **worst over every 0 dB crossing** — a lightly damped pair that lifts
 the gain back above 0 dB after the phase has passed :math:`-180^{\circ}` is a
 negative gain margin and reports a negative PM; an open loop with
-right-half-plane poles reports 0°.
+right-half-plane poles reports 0°.  :doc:`rnmc_full_model` walks through that
+model step by step, with the background on pole pairs and damping.
 
 The buffer matters: :math:`C_{c1}` returns to the third stage's output, which
 then drives only the follower's gate, not :math:`C_L`.  With so little

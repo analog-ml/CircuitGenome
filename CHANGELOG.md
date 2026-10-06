@@ -37,6 +37,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 - 📝 `SizingResult.margins` is documented correctly (distance to the limit, `>= 0` means met — not a ratio), and the Level-1 walkthrough matches the code again ([#251](https://github.com/analog-ml/CircuitGenome/pull/251)).
 - 📝 Walkthroughs for `sizer/verify/` — six figure-rich pages covering the ngspice bench: building a runnable deck from a generic sized netlist (three model idioms, the PDK subcircuit rewrite and the operating-point handle that moves with it), the shared rig and its bias-current-direction heuristic, the six metric testbenches, the DC bias-soundness verdict, and the orchestrator's failure discipline. The verification path was the only sizer package with no walkthrough ([#218](https://github.com/analog-ml/CircuitGenome/pull/218)).
+- 📝 New theory page, *RNMC Full Model* — pole pairs, damping ζ, why phase margin alone misses a ringing pair, and the reversed-nested-Miller model step by step on a real fixture; every `sizer/physics/equations.py` docstring now names its parameters and special return values.
 
 ### Changed
 
@@ -44,6 +45,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 - ♻️ Fold `gmid/blocks.py` into `gmid/analyze.py` — the block decomposition had no consumer outside the gm/Id pipeline, and `analyze.py` existed only to glue it onto the shared `CircuitView`, so the two are now one module and the seam that mattered (gm/Id vocabulary stays out of `physics/`) is unchanged. Four accessors went with it, none of which had a production caller: `OpAmpBlocks.n_stages`, `tail_net()`, `has_cascode_tail()` (callers read `blocks.tail.is_cascode` directly), and `first_stage_gain_factor()` — a second, divergent copy of `physics/preprocess._first_stage_gain_factor` that counted a diode-less cascode load as `1.0` where the live one says `0.5`. Import sites move from `.blocks` to `.analyze`; no behavior changes. `OpAmpBlocks` also gains field defaults, so the `field(default_factory=OpAmpBlocks)` that `GmIdCircuitView.blocks` has always declared can actually run instead of raising `TypeError` ([#230](https://github.com/analog-ml/CircuitGenome/pull/230)).
 - ♻️ Split `sizer/shared/` by concept — `physics/` holds what both sizers stand on (circuit view, taxonomy, device model, equations, gm/Id LUT, requirement derivation, stage chain, metrics); `verify/` holds the ngspice rig, which consumes a `SizingResult` rather than helping produce one and is imported by neither sizer; `models.py`, `loader.py`, `config/` and `pdk/` move up to `sizer/` since every package uses them. `shared/` named a coupling relationship, not a concept, so 40% of it was used by neither sizer. Public imports are unchanged — `circuitgenome.sizer` still exports everything it did — and sizing output is byte-identical ([#215](https://github.com/analog-ml/CircuitGenome/pull/215)).
 - ♻️ **Breaking:** simpler `SizingResult`. `cc_pf`/`cc2_pf` become a `capacitors` dict (device ref → farads, like `resistors`); `open_loop_measurable` is renamed `open_loop_gain_measurable`; the unused `transistor_intents` is removed ([#251](https://github.com/analog-ml/CircuitGenome/pull/251)).
+- ♻️ The reversed-nested-Miller full model is now written the way a circuit simulator works — the half circuit's nodal equations `(G + s·C)·v = b`, built one part at a time and solved with numpy — instead of hand-expanded polynomial determinants. Damping and phase margin are unchanged (pinned by a new test).
 
 ### Added
 
@@ -59,6 +61,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 - 🔥 Drop `build_device_model()` — it had no production callers: `size_circuit` already routes on `tech.gmid_lut` and each pipeline constructs the model it needs. Fixes two docs that described the factory as the model selector ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
 - 🔥 **Breaking**: drop `circuitgenome.sizer.shared.spice_sim`, the re-export shim over `sizer/shared/spice/` — `from circuitgenome.sizer.shared.spice_sim import ...` no longer resolves; import the same names from `circuitgenome.sizer` instead ([#214](https://github.com/analog-ml/CircuitGenome/pull/214)).
+- 🔥 **Breaking**: drop `equations.rnmc_stable` and `equations.rnmc_inner_damping` — they had no production callers; `rnmc_pole_damping` gives the same answer (negative when unstable) and also sees the mirror, buffer and parasitics.
 
 ## [0.3.0] – 2026-08-24
 

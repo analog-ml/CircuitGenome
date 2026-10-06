@@ -1,6 +1,11 @@
 """
 Level-1 MOSFET equations (Shichman-Hodges) and op-amp performance formulas.
 
+Most functions are closed-form textbook formulas.  The exception is the
+reversed-nested-Miller (RNMC) three-stage loop, whose phase margin and pole
+damping come from a small nodal model solved numerically — see
+:doc:`/theory/rnmc_full_model`.
+
 All functions operate on SI units unless the name suffix states otherwise.
 Consistent units: currents in A, voltages in V, transconductances in A/V (S),
 dimensions (W, L) in µm (dimensionless ratio W/L is used where needed),
@@ -20,6 +25,9 @@ def gm(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
 
     gm = √(2·µCox·(W/L)·\|IDS\|)
 
+    Square law only: it ignores the weak-inversion ceiling, see
+    :func:`gm_ceiling`.
+
     :param mu_cox: Process transconductance µCox in A/V².
     :param w_um: Gate width in µm.
     :param l_um: Gate length in µm.
@@ -37,7 +45,15 @@ _GM_OVER_ID_MAX = 25.0
 
 
 def gm_ceiling(ids_a: float) -> float:
-    """Physical upper bound on gm in A/V (weak-inversion limit)."""
+    """Physical upper bound on gm in A/V (weak-inversion limit).
+
+    gm_max = 25 /V · \\|IDS\\|
+
+    The square-law :func:`gm` keeps growing with W/L; a real device cannot
+    exceed gm/IDS = 1/(n·φt) ≈ 25 /V, reached in weak inversion.
+
+    :param ids_a: Drain-source current in A (sign ignored).
+    """
     return _GM_OVER_ID_MAX * abs(ids_a)
 
 
@@ -47,7 +63,7 @@ def gd(lam: float, ids_a: float) -> float:
     gd = λ·\|IDS\|
 
     :param lam: Channel-length modulation coefficient λ in 1/V (positive).
-    :param ids_a: Drain-source current in A.
+    :param ids_a: Drain-source current in A (sign ignored).
     """
     return lam * abs(ids_a)
 
@@ -59,6 +75,7 @@ def rout(gd_top: float, gd_bot: float) -> float:
 
     :param gd_top: Output conductance of the upper (load) transistor in A/V.
     :param gd_bot: Output conductance of the lower (drive) transistor in A/V.
+    :returns: ``inf`` when both conductances are zero (an ideal stage).
     """
     total = gd_top + gd_bot
     return 1.0 / total if total > 0.0 else float("inf")
@@ -69,10 +86,16 @@ def vgs_from_ids(
 ) -> float:
     """Gate-source voltage in V (saturation, λ=0 approximation).
 
-    Solves IDS = (µCox/2)·(W/L)·(VGS−Vth)² for VGS.
-    Returns a signed value: positive for NMOS, negative for PMOS.
+    VGS = Vth ± √(2·\\|IDS\\|·L / (µCox·W))
 
+    Solves IDS = (µCox/2)·(W/L)·(VGS−Vth)² for VGS.
+
+    :param mu_cox: Process transconductance µCox in A/V².
+    :param w_um: Gate width in µm.
+    :param l_um: Gate length in µm.
+    :param ids_a: Drain-source current in A (sign ignored).
     :param vth: Threshold voltage in V (negative for PMOS).
+    :returns: Signed like ``vth``: positive for NMOS, negative for PMOS.
     """
     overdrive = math.sqrt(2.0 * abs(ids_a) * l_um / (mu_cox * w_um))
     return math.copysign(abs(vth) + overdrive, vth)
@@ -95,6 +118,8 @@ def cgs(cox_f_per_um2: float | None, w_um: float, l_um: float) -> float:
     capacitance on the mirror node. Overlap and fringe capacitance are ignored,
     so this under-estimates Cgs at short L.
 
+    :param w_um: Gate width in µm.
+    :param l_um: Gate length in µm.
     :param cox_f_per_um2: Gate-oxide capacitance per unit area in F/µm², or
         ``None`` for a tech that does not supply one — which returns ``0.0``,
         the caller's signal that no pole can be placed.
@@ -109,6 +134,10 @@ def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
 
     VDS_sat = VGS − Vth = √(2·\|IDS\|·L / (µCox·W))
 
+    :param mu_cox: Process transconductance µCox in A/V².
+    :param w_um: Gate width in µm.
+    :param l_um: Gate length in µm.
+    :param ids_a: Drain-source current in A (sign ignored).
     :returns: Always positive.
     """
     return math.sqrt(2.0 * abs(ids_a) * l_um / (mu_cox * w_um))
@@ -137,9 +166,11 @@ def body_vth_shift(gamma: float, two_phi: float, vsb: float) -> float:
 def open_loop_gain_db(stage_gains: list[float]) -> float:
     """Total open-loop DC gain in dB.
 
-    A0 = Π(gm_j · Rout_j), converted to dB.
+    A0 = 20·log10(\\|Π A_j\\|)
 
-    :param stage_gains: List of per-stage voltage gains (dimensionless).
+    :param stage_gains: Per-stage voltage gains A_j = gm_j·Rout_j
+        (dimensionless, sign ignored).
+    :returns: ``-inf`` when any stage gain is zero.
     """
     product = math.prod(stage_gains)
     return 20.0 * math.log10(abs(product)) if product != 0.0 else -math.inf
@@ -215,12 +246,14 @@ def phase_margin_single_stage_deg(gbw_hz: float, mirror_pole_hz: float) -> float
 def phase_margin_two_stage_deg(
     gm1: float, gm2: float, cc_f: float, cl_f: float
 ) -> float:
-    """Phase margin in degrees (dominant-pole approximation).
+    """Phase margin in degrees for a two-stage Miller op-amp.
 
     PM ≈ 90° − arctan(gm1·CL / (gm2·Cc))
 
     Valid when the dominant pole is at 1/(Rout1·Cc) and the non-dominant
-    pole is at gm2/CL (internal mirror pole neglected).
+    pole is at gm2/CL (internal mirror pole neglected).  The Miller cap
+    splits the two poles far apart, so the non-dominant one is real and a
+    single lag term is the whole story — there is no pole pair to ring.
 
     :param gm1: Input-pair gm in A/V.
     :param gm2: Second-stage signal transistor gm in A/V.
@@ -234,22 +267,23 @@ def phase_margin_three_stage_deg(
     gm1: float, gm2: float, gm3: float,
     cc1_f: float, cc2_f: float, cl_f: float,
 ) -> float:
-    """Phase margin in degrees for three-stage NMC (two non-dominant poles).
+    """Phase margin in degrees for a nested-Miller (NMC) three-stage op-amp.
 
     PM ≈ 90° − arctan(ωt·Cc2/gm2) − arctan(ωt·CL/gm3)
     where ωt = gm1/Cc1.
 
-    Reversed nested Miller does not fit this model — its non-dominant poles
-    are a complex pair that can sit in the right half plane — and uses
-    :func:`phase_margin_rnmc_deg` instead.
+    Treats the two non-dominant poles as separate real poles at gm2/Cc2 and
+    gm3/CL.  They are really a pole pair, which can ring however healthy
+    this margin looks; NMC sizing guards that with a damping rule instead
+    (:func:`~.preprocess.compute_requirements`).  Reversed nested Miller,
+    whose pair can also sit in the right half plane, uses
+    :func:`phase_margin_rnmc_deg`.
 
     :param gm1: Input-pair transconductance in A/V.
     :param gm2: Second-stage signal transistor gm in A/V.
     :param gm3: Third-stage signal transistor gm in A/V.
-    :param cc1_f: Outer (primary) compensation capacitor in F.
-    :param cc2_f: Inner compensation capacitor in F (Cc1/4 for RNMC; sized
-        for the inner pole-pair damping for NMC — see
-        :func:`~.preprocess.compute_requirements`).
+    :param cc1_f: Outer compensation capacitor in F.
+    :param cc2_f: Inner compensation capacitor in F.
     :param cl_f: Output load capacitance in F.
     """
     wt = gm1 / cc1_f
@@ -262,59 +296,47 @@ def phase_margin_three_stage_deg(
 # Reversed nested Miller (RNMC) three-stage compensation (PR #249)
 # ---------------------------------------------------------------------------
 # RNMC puts both caps on the first-stage output: Cc1 to the output (around
-# gm2·gm3) and Cc2 to the second-stage output (around gm2 only).  With stage 2
-# inverting and stage 3 non-inverting, the half-circuit nodal equations are
-#
-#   V1: (g1 + s(C1+Cc1+Cc2))·V1 − s·Cc2·V2 − s·Cc1·Vo = −gm1·Vin
-#   V2: (gm2 − s·Cc2)·V1 + (g2 + s(C2+Cc2))·V2        = 0
-#   Vo: −s·Cc1·V1 − gm3·V2 + (g3 + s(CL+Cc1))·Vo      = 0
-#
-# and, for high stage gains, the denominator is
+# gm2·gm3) and Cc2 to the second-stage output (around gm2 only).  That couples
+# the two non-dominant poles into a pole pair, which can ring or sit in the
+# right half plane — a two-real-poles formula like
+# phase_margin_three_stage_deg cannot see either.  The full model below solves
+# the half circuit's nodal equations instead; docs/theory/rnmc_full_model.rst
+# walks through it.  For high stage gains its denominator reduces to
 #
 #   s·Cc1·gm2·gm3 · [1 + s·a1 + s²·a2]
 #   a1 = Cc2·((CL+Cc1)·gm2 − Cc1·gm3) / (Cc1·gm2·gm3)
 #   a2 = CL·Cc2·K / (gm2·gm3),   K = 1 + C2·(1/Cc2 + 1/Cc1 + 1/CL)
 #
-# C2 is the parasitic on the second-stage output — in practice the third
-# stage's input gate, which is wide because gm3 is large.  a1 > 0 is the
-# stability condition gm3 < gm2·(1 + CL/Cc1): past it the non-dominant pair
-# sits in the right half plane.  ζ = a1/(2·√a2) is its damping.
-
-
-def rnmc_stable(gm2: float, gm3: float, cc1_f: float, cl_f: float) -> bool:
-    """``True`` when the RNMC non-dominant pole pair is in the left half plane.
-
-    Condition: ``gm3 < gm2·(1 + CL/Cc1)``.  With the default ``Cc1 = CL/4``
-    that is ``gm3 < 5·gm2`` — a third stage much stronger than the second
-    pushes the inner pole pair into the right half plane.
-    """
-    return gm3 < gm2 * (1.0 + cl_f / cc1_f)
-
-
-def rnmc_inner_damping(gm2: float, gm3: float, cc1_f: float, cc2_f: float,
-                       cl_f: float, c2_f: float = 0.0) -> float:
-    """Damping factor ζ of the RNMC non-dominant pole pair.
-
-    ``ζ = a1 / (2·√a2)`` with ``a1``/``a2`` from the module comment above
-    (``c2_f`` is the parasitic on the second-stage output).  Negative when the
-    pair is in the right half plane (:func:`rnmc_stable` is ``False``); ``0.7``
-    is the usual "fast, barely any peaking" target.
-    """
-    k = 1.0 + c2_f * (1.0 / cc2_f + 1.0 / cc1_f + 1.0 / cl_f)
-    a1 = cc2_f * ((cl_f + cc1_f) * gm2 - cc1_f * gm3) / (cc1_f * gm2 * gm3)
-    a2 = cl_f * cc2_f * k / (gm2 * gm3)
-    return a1 / (2.0 * math.sqrt(a2))
+# with C2 the parasitic on the second-stage output (in practice the third
+# stage's wide input gate).  Matching 1 + a1·s + a2·s² to the standard form
+# 1 + (2ζ/ωn)·s + s²/ωn² gives the pair's damping ζ = a1/(2·√a2): it is
+# positive — the pair stable — only while gm3 < gm2·(1 + CL/Cc1).
 
 
 def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
                  c2_f: float = 0.0, zeta: float = 0.7) -> float:
-    """Smallest ``gm2`` (A/V) that damps the RNMC inner pole pair to ``zeta``.
+    """Smallest ``gm2`` in A/V that damps the RNMC pole pair to ``zeta``.
 
-    Solves ``ζ(gm2) = zeta`` from :func:`rnmc_inner_damping` in closed form.
-    With ``v = √gm2`` the condition ``a1² ≥ 4ζ²·a2`` is the quadratic
-    ``(CL+Cc1)·v² − b·v − Cc1·gm3 ≥ 0`` with ``b = 2ζ·Cc1·√(CL·K·gm3/Cc2)``,
+    Closed form, from the simplified pole-pair quadratic
+    ``1 + a1·s + a2·s²`` (defined in the RNMC section comment of this module
+    and in :doc:`/theory/rnmc_full_model`), whose damping is
+    ``ζ = a1/(2·√a2)``.  It ignores the stage output conductances, the
+    first-stage parasitic, a third-stage mirror and an output buffer, which
+    :func:`rnmc_pole_damping` includes.  With ``v = √gm2`` the condition
+    ``a1² ≥ 4ζ²·a2`` is the quadratic::
+
+        (CL+Cc1)·v² − b·v − Cc1·gm3 ≥ 0,   b = 2ζ·Cc1·√(CL·K·gm3/Cc2)
+
     whose positive root is the floor.  It always exceeds the bare stability
-    floor ``gm3·Cc1/(CL+Cc1)``.
+    floor ``gm3·Cc1/(CL+Cc1)``.  ``zeta = 0.7`` is the Butterworth placement
+    (no resonance peak).
+
+    :param gm3: Third-stage gm in A/V.
+    :param cc1_f: Outer cap, first-stage output → output, in F.
+    :param cc2_f: Inner cap, first-stage output → second-stage output, in F.
+    :param cl_f: Load capacitance in F.
+    :param c2_f: Parasitic on the second-stage output in F.
+    :param zeta: Target damping of the pole pair.
     """
     k = 1.0 + c2_f * (1.0 / cc2_f + 1.0 / cc1_f + 1.0 / cl_f)
     b = 2.0 * zeta * cc1_f * math.sqrt(cl_f * k * gm3 / cc2_f)
@@ -323,79 +345,90 @@ def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
     return v * v
 
 
-def _poly_det(m):
-    """Determinant of a square matrix of polynomials (Laplace expansion)."""
-    from numpy.polynomial import polynomial as P
+def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
+                  mirror_pole_hz, buffer):
+    """Nodal equations ``(G + s·C)·v = b`` of the RNMC half circuit (Vin = 1).
 
-    if len(m) == 1:
-        return m[0][0]
-    total = [0.0]
-    for j, entry in enumerate(m[0]):
-        minor = [row[:j] + row[j + 1:] for row in m[1:]]
-        term = P.polymul(entry, _poly_det(minor))
-        total = P.polyadd(total, term) if j % 2 == 0 else P.polysub(total, term)
-    return total
+    ``v`` holds the node voltages: ``v[0..2]`` the first-, second- and
+    third-stage outputs, then the third-stage mirror node and the buffer's
+    output when present.  Returns ``(G, C, b, out)``, ``out`` being the index
+    of the node that drives ``CL``.
 
-
-def _rnmc_polys(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
-                mirror_pole_hz, w_ref, buffer=None):
-    """``(num, den)`` coefficient arrays (low → high) of the RNMC open loop.
-
-    Frequency is normalised, ``s = w_ref·x``, so the coefficients stay well
-    conditioned.  A third-stage current mirror is a pole on gm3 alone:
-    ``gm3/(1 + s/ωm)``; the third-stage row is multiplied through by
-    ``(1 + s/ωm)`` to keep every entry polynomial.
-
-    ``buffer = (gm_f, cgs_f, g_f)`` adds a source-follower output buffer: the
-    third stage then drives only the follower's gate (``cgs_f`` to the
-    output), and ``cl_f`` sits on the follower's output, whose conductance is
-    ``gm_f + g_f``.  A follower driving a capacitor shows a *negative* input
-    resistance above ``gm_f/CL``, which is inside the Cc1 loop.
+    A zero output conductance would make the DC gain infinite; flooring it at
+    ``1e-9·gm`` keeps the DC gain finite without moving anything near
+    crossover.
     """
-    from numpy.polynomial import polynomial as P
-
-    def lin(c0, c1):
-        return [c0, c1 * w_ref]
-
-    def mul(a, b):
-        return list(P.polymul(a, b))
-
-    m = [1.0, w_ref / (2.0 * math.pi * mirror_pole_hz)] if mirror_pole_hz else [1.0]
-    c3 = 0.0 if buffer else cl_f
-    rows = [
-        [lin(g1, c1_f + cc1_f + cc2_f), lin(0.0, -cc2_f), lin(0.0, -cc1_f)],
-        [lin(gm2, -cc2_f), lin(g2, c2_f + cc2_f), [0.0]],
-        [mul(lin(0.0, -cc1_f), m), [-gm3], mul(lin(g3, c3 + cc1_f), m)],
-    ]
-    b = [[-gm1], [0.0], [0.0]]
-    if buffer:
-        gm_f, cgs_f, g_f = buffer
-        rows[0].append([0.0])
-        rows[1].append([0.0])
-        rows[2][2] = list(P.polyadd(rows[2][2], mul(lin(0.0, cgs_f), m)))
-        rows[2].append(mul(lin(0.0, -cgs_f), m))
-        rows.append([[0.0], [0.0], lin(-gm_f, -cgs_f), lin(gm_f + g_f, cgs_f + cl_f)])
-        b.append([0.0])
-    den = _poly_det(rows)
-    out = len(rows) - 1
-    num = _poly_det([row[:out] + [b[i]] for i, row in enumerate(rows)])
-    return num, den
-
-
-def _rnmc_loop(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
-               mirror_pole_hz, buffer):
-    """``(num, den, poles)`` of the RNMC open loop in normalised frequency.
-
-    A zero conductance makes the DC gain infinite; a negligible one keeps
-    the response anchored at a finite, real DC gain without moving anything
-    that matters near crossover.
-    """
-    from numpy.polynomial import polynomial as P
+    import numpy as np
 
     g1, g2, g3 = (max(g, 1e-9 * gm) for g, gm in ((g1, gm1), (g2, gm2), (g3, gm3)))
-    num, den = _rnmc_polys(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
-                           g1, g2, g3, mirror_pole_hz, gm1 / cc1_f, buffer)
-    return num, den, P.polyroots(den)
+    V1, V2, V3 = 0, 1, 2
+    n = 3 + bool(mirror_pole_hz) + bool(buffer)
+    G, C, b = np.zeros((n, n)), np.zeros((n, n)), np.zeros(n)
+
+    def cap(i, j, c):
+        """Capacitor ``c`` between nodes ``i`` and ``j`` (``j=None``: ground)."""
+        C[i, i] += c
+        if j is not None:
+            C[j, j] += c
+            C[i, j] -= c
+            C[j, i] -= c
+
+    def vccs(i, ctrl, gm):
+        """Current ``gm·v[ctrl]`` drawn out of node ``i``."""
+        G[i, ctrl] += gm
+
+    # Stage 1 (inverting): gm1·Vin out of V1.  Both Miller caps hang off V1.
+    b[V1] = -gm1
+    G[V1, V1] += g1
+    cap(V1, None, c1_f)
+    cap(V1, V3, cc1_f)
+    cap(V1, V2, cc2_f)
+
+    # Stage 2 (inverting): gm2·V1 out of V2.
+    vccs(V2, V1, gm2)
+    G[V2, V2] += g2
+    cap(V2, None, c2_f)
+
+    # Stage 3 (non-inverting): gm3·V2 into V3 — through a current mirror when
+    # there is one, an extra node with v_m·(1 + s/ωm) = V2.
+    drive = V2
+    if mirror_pole_hz:
+        m = 3
+        vccs(m, V2, -1.0)
+        G[m, m] += 1.0
+        cap(m, None, 1.0 / (2.0 * math.pi * mirror_pole_hz))
+        drive = m
+    vccs(V3, drive, -gm3)
+    G[V3, V3] += g3
+
+    # Load: CL on V3, or on a source-follower buffer's output, which the
+    # follower charges with gm_f·(V3 − v_out).
+    if buffer is None:
+        cap(V3, None, cl_f)
+        return G, C, b, V3
+    gm_f, cgs_f, g_f = buffer
+    out = n - 1
+    cap(V3, out, cgs_f)
+    vccs(out, V3, -gm_f)
+    G[out, out] += gm_f + g_f
+    cap(out, None, cl_f)
+    return G, C, b, out
+
+
+def _poles(G, C):
+    """Roots of ``det(G + s·C) = 0`` in rad/s: the eigenvalues of ``−C⁻¹G``."""
+    import numpy as np
+
+    return np.linalg.eigvals(-np.linalg.solve(C, G))
+
+
+def _open_loop_gain(G, C, b, out, w):
+    """``A(jω) = v[out]`` at each angular frequency ``w``, signed so ``A(0) > 0``."""
+    import numpy as np
+
+    rhs = np.broadcast_to(b[:, None], (len(w), len(b), 1))
+    v = np.linalg.solve(G + 1j * w[:, None, None] * C, rhs)
+    return v[:, out, 0] * np.sign(np.linalg.solve(G, b)[out])
 
 
 def rnmc_pole_damping(
@@ -406,18 +439,24 @@ def rnmc_pole_damping(
     mirror_pole_hz: float | None = None,
     buffer: tuple[float, float, float] | None = None,
 ) -> float:
-    """Worst damping ``ζ = −Re(p)/|p|`` over the RNMC non-dominant poles.
+    """Worst damping ``ζ`` over the RNMC loop's non-dominant poles.
 
-    The numerical counterpart of :func:`rnmc_inner_damping`, from the roots
-    of the full open loop (same arguments as :func:`phase_margin_rnmc_deg`),
-    so it also sees the parasitics, the third-stage mirror and an output
-    buffer.  The dominant (lowest-frequency) pole is excluded; a real LHP
-    pole counts as ``1``, and any RHP pole makes the result negative.
+    ζ = −Re(p) / \\|p\\|
+
+    — the cosine of a pole's angle from the negative real axis.  Read off
+    the poles of the full model (arguments as for
+    :func:`phase_margin_rnmc_deg`), so it sees the parasitics, the
+    third-stage mirror and an output buffer.  The dominant (smallest) pole is
+    skipped; a real pole counts as ``1``.  The sizer aims for ``0.7``, the
+    Butterworth placement (no resonance peak).
+
+    :returns: Negative when any non-dominant pole is in the right half plane.
     """
-    _num, _den, poles = _rnmc_loop(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
-                                   g1, g2, g3, mirror_pole_hz, buffer)
-    rest = sorted(poles, key=abs)[1:]
-    return float(min((-p.real / abs(p) for p in rest if abs(p) > 0), default=1.0))
+    G, C, _, _ = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
+                               g1, g2, g3, mirror_pole_hz, buffer)
+    non_dominant = sorted(_poles(G, C), key=abs)[1:]
+    return float(min((-p.real / abs(p) for p in non_dominant if abs(p) > 0),
+                     default=1.0))
 
 
 def phase_margin_rnmc_deg(
@@ -430,21 +469,14 @@ def phase_margin_rnmc_deg(
 ) -> float | None:
     """Phase margin in degrees of a reversed-nested-Miller three-stage amp.
 
-    Evaluates the full open-loop transfer function of the half circuit (see
-    the RNMC comment above: both caps from the first-stage output, parasitic
-    ``c1_f``/``c2_f`` on the first/second-stage outputs, stage output
-    conductances ``g1..g3``, an optional third-stage mirror pole and an
-    optional source-follower output ``buffer``) on a frequency sweep,
-    instead of the two-real-poles formula of
-    :func:`phase_margin_three_stage_deg` — which cannot see the complex inner
-    pole pair RNMC creates and is optimistic by tens of degrees.
+    PM = min over every 0 dB crossing of (180° + ∠A(jω))
 
-    The margin is the **worst** over every 0 dB crossing, not just the first:
-    a lightly damped inner pair can lift the gain back above 0 dB after the
-    phase has passed −180°, which is a negative gain margin and is reported as
-    a negative phase margin here.  An open loop with right-half-plane poles
-    (:func:`rnmc_stable` false) reports ``0.0``: there is no margin to speak
-    of.  ``None`` when the gain never reaches 0 dB.
+    ``A(jω)`` is the open loop of the full model — the half circuit's nodal
+    equations solved on a frequency sweep — not the two-real-poles formula of
+    :func:`phase_margin_three_stage_deg`, which cannot see the RNMC pole pair
+    and is optimistic by tens of degrees.  The **worst** crossing counts: a
+    lightly damped pair can lift the gain back above 0 dB after the phase has
+    passed −180°, which is reported as a negative margin.
 
     :param gm1: Input-pair transconductance seen by the loop, in A/V.
     :param gm2: Second-stage (inverting) signal gm in A/V.
@@ -453,32 +485,38 @@ def phase_margin_rnmc_deg(
     :param cc2_f: Inner cap, first-stage output → second-stage output, in F.
     :param cl_f: Load capacitance in F — on the third-stage output, or on the
         buffer's output when ``buffer`` is given.
+    :param c1_f: Parasitic on the first-stage output in F.
+    :param c2_f: Parasitic on the second-stage output in F.
+    :param g1: First-stage output conductance in A/V.
+    :param g2: Second-stage output conductance in A/V.
+    :param g3: Third-stage output conductance in A/V.
+    :param mirror_pole_hz: Pole of a current mirror inside the third stage, in
+        Hz, or ``None`` when there is none.
     :param buffer: ``(gm_f, cgs_f, g_f)`` of a source-follower output buffer
-        (its gm, gate-source capacitance and output-node conductance besides
-        its own gm), or ``None``.
+        between the third stage and ``CL`` — its gm, its gate-source
+        capacitance, and its output-node conductance besides its own gm — or
+        ``None``.
+    :returns: ``0.0`` when the open loop has a right-half-plane pole (no
+        margin to speak of); ``None`` when the gain never reaches 0 dB.
     """
     import numpy as np
-    from numpy.polynomial import polynomial as P
 
-    num, den, poles = _rnmc_loop(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
+    G, C, b, out = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
                                  g1, g2, g3, mirror_pole_hz, buffer)
+    poles = _poles(G, C)
     if any(p.real > 1e-9 * abs(p) for p in poles):
         return 0.0
-    # Sweep band: every root, plus the dominant pole ``den0/den1`` (lost to
-    # round-off in ``polyroots`` when the DC gain is huge) and ``x = 1``,
-    # the nominal crossover ωt = gm1/Cc1.
-    mags = [abs(r) for r in np.concatenate([poles, P.polyroots(num)]) if abs(r) > 0]
-    mags += [1.0] + ([den[0] / den[1]] if den[1] and den[0] / den[1] > 0 else [])
-    x = np.logspace(math.log10(min(mags)) - 2, math.log10(max(mags)) + 2, 4000)
-    a = P.polyval(1j * x, num) / P.polyval(1j * x, den)
-    a = a * np.sign((num[0] / den[0]).real)
+    # Sweep two decades past every pole and the nominal crossover gm1/Cc1.
+    corners = [abs(p) for p in poles if abs(p) > 0] + [gm1 / cc1_f]
+    w = np.logspace(math.log10(min(corners)) - 2, math.log10(max(corners)) + 2, 4000)
+    a = _open_loop_gain(G, C, b, out, w)
     mag_db = 20.0 * np.log10(np.abs(a))
     phase = np.degrees(np.unwrap(np.angle(a)))
-    idx = np.nonzero(np.diff(np.sign(mag_db)))[0]
-    if len(idx) == 0:
+    crossings = np.nonzero(np.diff(np.sign(mag_db)))[0]
+    if len(crossings) == 0:
         return None
     pms = []
-    for i in idx:
+    for i in crossings:   # interpolate linearly to the exact 0 dB point
         t = mag_db[i] / (mag_db[i] - mag_db[i + 1])
         pms.append(180.0 + phase[i] + t * (phase[i + 1] - phase[i]))
     return float(min(pms))
@@ -500,8 +538,10 @@ def quiescent_power(vdd: float, vss: float, supply_currents_a: list[float]) -> f
 
     P = (VDD − VSS) · Σ|IDS_supply|
 
-    :param supply_currents_a: Currents drawn from the positive supply
-        (before summing, absolute values are taken).
+    :param vdd: Positive supply in V.
+    :param vss: Negative supply in V.
+    :param supply_currents_a: Currents drawn from the positive supply in A
+        (sign ignored).
     """
     return (vdd - vss) * sum(abs(i) for i in supply_currents_a)
 
@@ -513,6 +553,7 @@ def cmrr_db(gm1: float, gd_tail: float) -> float:
 
     :param gm1: Input-pair transconductance in A/V.
     :param gd_tail: Output conductance of the tail current source in A/V.
+    :returns: ``inf`` for an ideal tail (``gd_tail == 0``).
     """
     if gd_tail == 0.0:
         return math.inf
@@ -529,6 +570,7 @@ def psrr_db_approx(gm2: float, gd_bias: float) -> float:
 
     :param gm2: Second-stage signal transistor gm in A/V.
     :param gd_bias: Output conductance of the second-stage bias transistor in A/V.
+    :returns: ``inf`` for an ideal bias device (``gd_bias == 0``).
     """
     if gd_bias == 0.0:
         return math.inf
