@@ -994,38 +994,25 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
 # Polarity-agnostic metrics & topology-mismatch guard
 # ---------------------------------------------------------------------------
 
-def _fbr_pmos_cs_second_stage(topology_name: str):
-    """Return the FBR tuple for the first variant whose second-stage signal
-    transistor is a PMOS (a PMOS-common-source stage)."""
-    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
-    from circuitgenome.sizer.physics.taxonomy import is_signal_device
-
-    modules = load_modules()
-    topology = next(t for t in load_topologies() if t.name == topology_name)
-    for circuit in enumerate_circuits(topology, modules):
-        parsed = parse(to_flat_spice(circuit))
-        sr_result = recognize(parsed)
-        fbr_result = assign_slots(sr_result, topology)
-        slot_t = analyze_circuit(fbr_result, topology).slot_transistors
-        ss = slot_t.get("second_stage", [])
-        signal = next((d for d in ss if is_signal_device(d)), None)
-        # Require an active (transistor) load so the high three-stage gain target
-        # is achievable — resistor-load variants are intentionally gain-limited.
-        if signal is not None and signal.type == "pmos" and slot_t.get("load"):
-            return parsed, sr_result, fbr_result, topology
-    raise AssertionError(f"no PMOS-CS second-stage variant found for {topology_name}")
-
-
-@pytest.mark.slow
 def test_three_stage_pmos_cs_metrics_present():
     """PMOS-common-source stages must still report gain, PM, and PSRR+.
 
     Regression: metrics were previously read only from the NMOS device, so a
     PMOS-CS stage yielded gm2=gm3=0 and silently dropped these three metrics.
+
+    The circuit is pinned rather than searched for: scanning the enumeration for
+    the first PMOS-CS variant with a transistor load recognized ~325 circuits
+    and took over half an hour; the variant it found is this one.
     """
-    parsed, sr_result, fbr_result, topology = _fbr_pmos_cs_second_stage(
-        "three_stage_opamp_rnmc_single_ended"
-    )
+    parsed, sr_result, fbr_result, topology = _fbr("three_stage_opamp_rnmc_single_ended", {
+        "input_pair":   "differential_pair_nmos",
+        "load":         "active_load_pmos",
+        "tail_current": "current_mirror_tail_nmos",
+        "second_stage": "common_source_pmos",
+        "third_stage":  "noninverting_stage_nmos",
+        "comp1":        "miller_cap",
+        "comp2":        "miller_cap",
+    })
     result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(),
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
