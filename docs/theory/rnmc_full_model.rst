@@ -259,6 +259,7 @@ pair sits higher, and a lightly damped pair adds a resonance bump there:
 
 If the bump climbs back above 0 dB the loop crosses 0 dB a second time with the
 phase already past −180°, and the amplifier oscillates at :math:`\omega_n`.
+`A minimal example`_ below works this out with pencil and paper.
 
 The fixture shows it.  With its third-stage mirror pole (840 MHz) in place and
 only :math:`g_{m2}` varied:
@@ -304,6 +305,162 @@ and 10 mS while the real safety goes from 1.3 dB to 17 dB; :math:`\zeta`
 tracks it.  The same failure hit nested Miller first: gf180 NMC designs rang at
 ~25 MHz while the open-loop bench read PM ≈ 88° (#247), and NMC sizing has
 used a :math:`\zeta` rule since.
+
+A minimal example
+~~~~~~~~~~~~~~~~~
+
+The same effect in a loop small enough to work by hand.
+
+**The loop.**  The **open-loop gain** :math:`A(s)` describes what happens to a
+signal going once around the amplifier's feedback loop.  Phase margin and the
+oscillation check are both read from it.  Take two pieces, one after the other
+(which, for transfer functions, means multiplied):
+
+.. math::
+
+   A(s) = \frac{1}{s} \times H(s), \qquad
+   H(s) = \frac{\omega_n^2}{s^2 + 2\zeta\omega_n s + \omega_n^2}, \qquad
+   \omega_n = 10
+
+- :math:`1/s` is the **dominant pole**, idealised to sit at zero.  Its gain
+  :math:`1/\omega` falls tenfold per decade and equals 1 (0 dB) at
+  :math:`\omega = 1`, where the loop crosses 0 dB; its phase is −90° at every
+  frequency.
+- :math:`H(s)` is the **pole pair** in standard form (the
+  :math:`1 + (2\zeta/\omega_n)s + s^2/\omega_n^2` of `Damping ratio ζ`_,
+  multiplied through by :math:`\omega_n^2`).  Well below :math:`\omega_n` it
+  passes the signal unchanged (:math:`H \approx 1`, ≈ 0°); at
+  :math:`\omega_n` it is the bump; well above it shuts the signal off.
+  :math:`\omega_n = 10` places the pair ten times above the 0 dB crossing.
+
+This is the RNMC loop itself, simplified.  With the numerator
+:math:`g_{m1} g_{m2} g_{m3}` over the simplified denominator of
+`Why the denominator is a cubic`_, the :math:`g_{m2} g_{m3}` cancels:
+
+.. math::
+
+   A(s) \approx \frac{g_{m1}/C_{c1}}{s} \times \frac{1}{1 + a_1 s + a_2 s^2}
+
+— a :math:`1/s` crossing 0 dB at :math:`\omega_t = g_{m1}/C_{c1}`, times a pole
+pair with :math:`\omega_n = 1/\sqrt{a_2}` and :math:`\zeta = a_1/(2\sqrt{a_2})`.
+The toy measures frequency in units of :math:`\omega_t` (so the crossing sits
+at 1) and puts the pair at :math:`10\,\omega_t`; in the fixture of Step 4 the
+pair sits about 5.6 × above the crossing.
+
+**Evaluating at a frequency: s = jω.**  :math:`s` is the frequency variable of
+a transfer function.  To ask what happens to a sine wave at frequency
+:math:`\omega`, substitute :math:`s = j\omega`: for a sine wave, taking a time
+derivative is the same as multiplying by :math:`j\omega` (a capacitor's current
+:math:`C\,dv/dt` becomes :math:`j\omega C v`), and every :math:`s` stands for
+that derivative.  The result is one complex number: its **size** is the gain,
+its **angle** the phase.  The :math:`j` produces the phase — multiplying by
+:math:`j` rotates a complex number by 90°, which is why :math:`1/(j\omega)` has
+an angle of −90°.
+
+**The danger point: ω = 10.**  The loop is at risk where its total phase
+reaches −180°.  :math:`1/s` always contributes −90°, and the pair contributes
+exactly −90° at its own natural frequency, so that point is
+:math:`\omega = \omega_n = 10`, i.e. :math:`s = j\cdot 10`.  With
+:math:`s^2 = (j\cdot 10)^2 = j^2 \cdot 100 = -100` (since :math:`j^2 = -1`) and
+:math:`\omega_n^2 = 100`, the pair's denominator is
+
+.. math::
+
+   s^2 + 2\zeta\omega_n s + \omega_n^2
+   = -100 + 2\zeta\cdot 10\cdot(j\cdot 10) + 100
+   = j\cdot 200\zeta
+
+— the −100 and +100 cancel, which happens exactly at :math:`s = j\omega_n`.  So
+
+.. math::
+
+   H(j\cdot 10) = \frac{100}{j\cdot 200\zeta} = \frac{1}{j\cdot 2\zeta}
+   \quad\Rightarrow\quad |H| = \frac{1}{2\zeta},\ \angle H = -90°
+
+— the bump, taller as :math:`\zeta` shrinks.  Times the :math:`1/s` part,
+:math:`1/(j\cdot 10)` (size 1/10, angle −90°):
+
+.. math::
+
+   |A(j\cdot 10)| = \frac{1}{10}\cdot\frac{1}{2\zeta} = \frac{1}{20\zeta},
+   \qquad \angle A(j\cdot 10) = -180°
+
+The loop oscillates when its gain at −180° is at least 1:
+
+.. math::
+
+   \frac{1}{20\zeta} > 1 \iff \zeta < \frac{1}{20} = 0.05
+
+The 20 is the 10 (the pair is ten times above the crossing) times the 2 of the
+bump height :math:`1/(2\zeta)`.
+
+**The phase margin: ω ≈ 1.**  Phase margin is :math:`180° + \angle A` where the
+gain is exactly 1.  At :math:`\omega = 1` the :math:`1/s` part has gain 1 and
+the pair, ten times higher, still passes the signal almost unchanged
+(:math:`|H(j\cdot 1)| = 100/\sqrt{99^2 + (20\zeta)^2} \approx 1.005`), so the
+gain crosses 1 at :math:`\omega \approx 1`, i.e. :math:`s = j\cdot 1`.  There
+
+.. math::
+
+   H(j\omega) = \frac{\omega_n^2}{(\omega_n^2 - \omega^2) + j\,2\zeta\omega_n\omega}
+   \quad\Rightarrow\quad
+   \angle H(j\cdot 1) = -\arctan\frac{2\zeta\cdot 10\cdot 1}{100 - 1}
+   = -\arctan\frac{20\zeta}{99}
+
+and the margin is what is left of 180° after the −90° of :math:`1/s` and that
+small lag:
+
+.. math::
+
+   \text{PM} = 180° - 90° - \arctan\frac{20\zeta}{99}
+   = 90° - \arctan\frac{20\zeta}{99}
+
+**The numbers.**  The phase margin from this formula, the gain at −180° from
+:math:`1/(20\zeta)`; a numerical sweep of :math:`A(j\omega)` agrees with both:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 18 22 50
+
+   * - :math:`\zeta`
+     - Phase margin
+     - Gain at −180°
+     - Verdict
+   * - 0.5
+     - 84.2°
+     - −20 dB
+     - solid
+   * - 0.2
+     - 87.7°
+     - −12 dB
+     - fine
+   * - 0.1
+     - 88.8°
+     - −6 dB
+     - getting close
+   * - 0.06
+     - **89.3°**
+     - **−1.6 dB**
+     - on the edge
+   * - 0.04
+     - **89.5°** at the first crossing
+     - **+1.9 dB**
+     - oscillates — the bump lifts the gain back above 0 dB, adding two more
+       crossings around :math:`\omega = 10`; the one just past it has a
+       margin of −33° (from the sweep), and
+       :func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`,
+       which reports the worst crossing, would report that
+
+Two things to notice:
+
+- **Phase margin gets better as the design gets worse** — 84° → 88° → 89° →
+  89.5°.  The pair's lag at the crossing, :math:`\arctan(20\zeta/99)`, shrinks
+  with :math:`\zeta`: a low-:math:`\zeta` pair packs its phase change tightly
+  around its own frequency.  Steering by phase margin alone would walk the
+  design straight into oscillation.
+- **The gain at −180° tells the truth**, and it is exactly
+  :math:`1/(20\zeta)` — :math:`\zeta` is the knob that controls it.  That is
+  why the sizer steers by :math:`\zeta`.
 
 Why the denominator is a cubic
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
