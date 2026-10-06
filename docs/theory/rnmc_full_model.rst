@@ -109,27 +109,56 @@ fast) and the **damping ratio** :math:`\zeta` (how bouncy).  On the complex
 plane :math:`\omega_n` is the poles' distance from the origin and
 :math:`\zeta` is the cosine of their angle from the negative real axis:
 
-.. code-block:: text
+.. figure:: /images/rnmc_pole_plane.svg
+   :alt: A pole pair p = −σ ± jω on the complex plane, with the ray from the
+         origin to the upper pole (length ωn), the angle θ it makes with the
+         negative real axis, and the decay rate σ and ringing frequency ω as
+         its projections onto the axes.
+   :align: center
+   :width: 600px
 
-                imag (jω)
-                   ↑
-          ×        |              × = pole
-            ╲      |
-             ╲ θ   |      |p| = ωn
-              ╲    |      ζ = cos θ = σ / |p|
-   ────────────╲───┼──────────────→ real (σ)
-              ╱    |
-             ╱     |
-          ×        |
-     left half     |  right half
-     (stable)      |  (unstable)
+   A pole pair.  Its distance from the origin is :math:`\omega_n`; its angle
+   :math:`\theta` from the negative real axis sets :math:`\zeta = \cos\theta`.
+   Moving along the dotted circle keeps :math:`\omega_n` and changes only
+   :math:`\zeta`: toward the imaginary axis :math:`\zeta \to 0` (rings
+   forever), toward the real axis :math:`\zeta \to 1` (no ringing), and past
+   the imaginary axis :math:`\zeta < 0` (unstable).
 
 .. math::
 
-   \zeta = \cos\theta = \frac{\sigma}{|p|} = \frac{-\mathrm{Re}(p)}{|p|}
+   \zeta = \cos\theta = \frac{\sigma}{\omega_n} = \frac{-\mathrm{Re}(p)}{|p|}
 
-That last expression is the line ``-p.real / abs(p)`` in the code.  Two
-textbook formulas tie :math:`\zeta` to what you would see on a scope or a Bode
+:math:`\sigma/\omega_n` is the textbook form; :math:`-\mathrm{Re}(p)/|p|` is
+the same thing written from the pole itself.  Reading the parts off
+:math:`p = -\zeta\omega_n \pm j\,\omega_n\sqrt{1-\zeta^2}`: the real part
+gives :math:`-\mathrm{Re}(p) = \zeta\omega_n = \sigma`, and the distance from
+the origin is
+
+.. math::
+
+   |p| = \sqrt{(\zeta\omega_n)^2 + \omega_n^2(1-\zeta^2)}
+       = \sqrt{\omega_n^2(\zeta^2 + 1 - \zeta^2)} = \omega_n
+
+so :math:`-\mathrm{Re}(p)/|p| = \zeta\omega_n/\omega_n = \zeta`.  The code uses
+the second form because a numerical solver returns each pole as one complex
+number, not as :math:`\sigma` and :math:`\omega_n` separately:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Textbook symbol
+     - From the complex pole ``p``
+   * - :math:`\sigma` (decay rate)
+     - ``-p.real``
+   * - :math:`\omega` (ringing frequency)
+     - ``abs(p.imag)``
+   * - :math:`\omega_n` (natural frequency)
+     - ``abs(p)``
+   * - :math:`\zeta`
+     - ``-p.real / abs(p)``
+
+Two textbook formulas tie :math:`\zeta` to what you would see on a scope or a Bode
 plot:
 
 .. math::
@@ -420,10 +449,22 @@ rest; a real pole counts as :math:`\zeta = 1`:
    non_dominant = sorted(poles, key=abs)[1:]
    zeta = min(-p.real / abs(p) for p in non_dominant)
 
-For the example :math:`\zeta = 91.7 / 313.8 = 0.29`: stable (positive) but
-ringing (below 0.7), so the sizer would keep raising :math:`g_{m2}`.  With the
-mirror or buffer there may be more than one pair; taking the worst covers them
-all.
+For the example :math:`-\mathrm{Re}(p) = 91.7` MHz and
+:math:`|p| = \sqrt{91.7^2 + 300^2} = 313.8` MHz, so
+:math:`\zeta = 91.7 / 313.8 = 0.29`: stable (positive) but ringing (below
+0.7), so the sizer would keep raising :math:`g_{m2}`.  With the mirror or
+buffer there may be more than one pair; taking the worst covers them all.
+
+Two properties of the ``-p.real / abs(p)`` form matter here:
+
+- **The sign comes for free.**  A right-half-plane pole has a positive real
+  part, so it gives :math:`\zeta < 0` — that is how
+  :func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping` reports an
+  unstable pair, with no separate check.
+- **Real poles read as 1.**  A real pole gives :math:`-p/|p| = 1`, so an
+  *overdamped* pair (true :math:`\zeta > 1`, two real roots) reads 1, not its
+  true :math:`\zeta`.  That is harmless: the code takes the worst value and
+  only compares it with 0.5 and 0.7, so anything at 1 counts as well damped.
 
 Step 6 — Sweep the frequency for the phase margin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
