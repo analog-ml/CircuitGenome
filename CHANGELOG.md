@@ -35,6 +35,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Docs
 
+- 📝 New "Predicted vs. measured metrics" page: how far the gm/Id sizer's predictions land from ngspice on GF180MCU, for 100 random circuits from every template (1,254 in all). Per-metric tables and box plots, plus an interactive scatter where hovering a point shows which circuit it is. Headline gaps: slew rate measures 65 % below prediction (buffered designs are limited by the follower's current, which the model ignores), and about half of the single-ended three-stage RNMC designs draw 4–40× their predicted power. Regenerate with `tools/gen_prediction_error.py` ([#256](https://github.com/analog-ml/CircuitGenome/pull/256)).
 - 📝 Walkthroughs for `sizer/verify/` — six figure-rich pages covering the ngspice bench: building a runnable deck from a generic sized netlist (three model idioms, the PDK subcircuit rewrite and the operating-point handle that moves with it), the shared rig and its bias-current-direction heuristic, the six metric testbenches, the DC bias-soundness verdict, and the orchestrator's failure discipline. The verification path was the only sizer package with no walkthrough ([#218](https://github.com/analog-ml/CircuitGenome/pull/218)).
 
 ### Changed
