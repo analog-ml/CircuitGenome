@@ -45,3 +45,26 @@ Whichever stage's output is wired to the external output net — `second_stage` 
 topology. A **positional** property, deliberately kept distinct from "output stage":
 in an unbuffered amp the load-driving stage is a *gain stage*, not an output stage.
 _Avoid_: Output stage (see above), final gain stage.
+
+## Sizing metrics
+
+**Predicted metrics**:
+Performance figures (gain, GBW, phase margin, slew rate, …) computed by the
+sizer's device model — the Level-1 square-law or the gm/Id lookup table — with no
+circuit simulation. Always what a sizing result carries, for every technology.
+_Avoid_: Analytical metrics (collides with the Level-1 *analytical* sizer, yet gm/Id
+results are predicted too), estimated metrics.
+
+**Measured metrics**:
+The same performance figures read back from a SPICE (ngspice) simulation of the
+sized circuit, at one process corner. The authority whenever it disagrees with the
+predicted metrics.
+_Avoid_: Simulated metrics, SPICE metrics.
+
+**Prediction error**:
+How far a predicted metric lands from its measured counterpart on the same sized
+circuit, always signed **measured − predicted** — so a positive error means the
+model under-predicted. Kept in the metric's own unit where that unit is already a
+log or linear scale (dB, degrees, volts), and as a percentage of the predicted
+value for figures that span decades (GBW, slew rate, power).
+_Avoid_: Approximation error, model gap, delta.

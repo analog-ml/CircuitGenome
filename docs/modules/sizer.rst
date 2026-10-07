@@ -240,6 +240,10 @@ on-chip CMFB operating point) and any non-converging measurement are reported as
 *settle*: the DC bias check kicks one output and rejects a design whose common
 mode or differential output keeps ringing (issue #208).
 
+How far the gm/Id sizer's predicted metrics land from these measurements, for a
+random sample of every template on GF180MCU, is tabulated and plotted on
+:doc:`../prediction_error`.
+
 Example output
 --------------
 
@@ -297,6 +301,7 @@ Further reading
    :maxdepth: 2
 
    ../api/sizer/theory
+   ../prediction_error
    ../api/sizer/sizer
    ../api/sizer/models
    ../api/sizer/loader
