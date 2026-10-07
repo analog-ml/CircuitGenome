@@ -1,0 +1,9 @@
+{
+  "tech": "gf180mcu",
+  "spec": "docs/prediction_error/spec.yaml",
+  "n_per_template": 100,
+  "seed": 0,
+  "commit": "5ee0e4f",
+  "ngspice": "ngspice-44.2",
+  "date": "2026-10-07"
+}

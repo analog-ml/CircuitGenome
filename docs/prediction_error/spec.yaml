@@ -1,0 +1,23 @@
+# Sizing spec for the predicted-vs-measured page (tools/gen_prediction_error.py).
+#
+# examples/gf180_difficulty_specs/spec_01_easy.yaml with only the output-swing
+# targets relaxed, from 0.25 V / 3.05 V to 1.1 V / 2.0 V.  A buffered op-amp's
+# source-follower output sits one |Vgs| from the node driving it, so on gf180 it
+# reaches only ~0.86-1.05 V / ~2.09-2.24 V, and the sizer rejects every buffered
+# circuit against the easy targets (as it does some RNMC third stages).  The
+# swing *prediction* does not depend on the target -- the target only decides
+# pass/fail -- so relaxing it lets every template size without changing what is
+# compared.
+
+vdd: 3.3            # V
+vss: 0.0            # V
+ibias: 20.0e-6      # A
+cl: 5.0e-12         # F
+
+gain_min_db: 50
+gbw_min_hz: 1.0e+6
+phase_margin_min_deg: 55
+slew_rate_min_vps: 2.0e+5
+power_max_w: 2.5e-3
+output_swing_max_v: 2.0   # V -- relaxed from 3.05 (see above)
+output_swing_min_v: 1.1   # V -- relaxed from 0.25 (see above)
