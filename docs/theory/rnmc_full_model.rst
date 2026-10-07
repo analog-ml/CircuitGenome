@@ -234,9 +234,21 @@ At :math:`s = 0`, :math:`H = 1`: the pair passes low frequencies unchanged, and
 ζ on the complex plane
 ~~~~~~~~~~~~~~~~~~~~~~
 
-The naming pays off in the roots.  Solving
-:math:`1 + (2\zeta/\omega_n)s + s^2/\omega_n^2 = 0` with the quadratic formula
-gives, for :math:`\zeta < 1`,
+The naming pays off in the roots.  The poles are the values of :math:`s` that
+make the denominator zero; call such a value :math:`p` (for *pole*).
+Multiplying :math:`1 + (2\zeta/\omega_n)s + s^2/\omega_n^2 = 0` through by
+:math:`\omega_n^2` and applying the quadratic formula:
+
+.. math::
+
+   s^2 + 2\zeta\omega_n\, s + \omega_n^2 = 0
+   \quad\Rightarrow\quad
+   s = -\zeta\omega_n \pm \omega_n\sqrt{\zeta^2 - 1}
+
+For :math:`\zeta < 1` the square root is of a negative number,
+:math:`\sqrt{\zeta^2 - 1} = j\sqrt{1 - \zeta^2}`, so the two poles are a
+complex pair — the :math:`-\sigma \pm j\omega` of
+`Intuition: pole pairs and ringing`_, with :math:`\sigma = \zeta\omega_n`:
 
 .. math::
 
