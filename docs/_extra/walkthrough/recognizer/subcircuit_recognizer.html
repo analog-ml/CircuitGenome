@@ -235,23 +235,24 @@
       <p>A differential pair isn't just "two nmos transistors." It's two nmos transistors <em>whose sources share a net</em> (the tail). That "share a net" requirement is a <code>same_net</code> group:</p>
       <pre class="code"><code>same_net = [[<span class="tok-str">"m1.s"</span>, <span class="tok-str">"m2.s"</span>]]  <span class="tok-com"># m1's source == m2's source</span></code></pre>
 
-      <p><code>_check_same_net()</code> verifies it. The subtle, clever part is that it accepts <strong>partial</strong> assignments:</p>
+      <p><code>_check_same_net()</code> verifies it. The subtle part is that it accepts <strong>partial</strong> assignments:</p>
 
       <pre class="code"><code><span class="tok-kw">for</span> group <span class="tok-kw">in</span> pattern.same_net:
-    nets = <span class="tok-fn">set</span>()
+    net = <span class="tok-kw">None</span>
     <span class="tok-kw">for</span> ref_term <span class="tok-kw">in</span> group:
         ref, term = ref_term.split(<span class="tok-str">"."</span>)
         dev = assignment.get(ref)
         <span class="tok-kw">if</span> dev <span class="tok-kw">is</span> <span class="tok-kw">None</span>:
-            <span class="tok-kw">break</span>            <span class="tok-com"># ref not bound yet → skip this group</span>
-        nets.add(dev.terminals[term])
-    <span class="tok-kw">else</span>:
-        <span class="tok-kw">if</span> <span class="tok-fn">len</span>(nets) != <span class="tok-num">1</span>:   <span class="tok-com"># all bound, but ≠1 distinct net → fail</span>
-            <span class="tok-kw">return</span> <span class="tok-kw">False</span>
+            <span class="tok-kw">continue</span>         <span class="tok-com"># ref not bound yet → nothing to compare</span>
+        <span class="tok-kw">if</span> net <span class="tok-kw">is</span> <span class="tok-kw">None</span>:
+            net = dev.terminals[term]
+        <span class="tok-kw">elif</span> dev.terminals[term] != net:
+            <span class="tok-kw">return</span> <span class="tok-kw">False</span>     <span class="tok-com"># two bound refs already disagree → fail</span>
 <span class="tok-kw">return</span> <span class="tok-kw">True</span></code></pre>
 
-      <p class="beat">The <code>for…else</code> is the trick.</p>
-      <p>The <code>else</code> runs only if the loop <em>didn't</em> <code>break</code> — i.e. only when every ref in the group is already bound. A group that's half-assigned is neither passed nor failed; it's simply skipped. That lets the search call this check after <em>every</em> single binding and prune bad branches the instant they become provably bad.</p>
+      <p class="beat">Compare what's bound; ignore what isn't.</p>
+      <p>Unbound refs are skipped, so the check can run after <em>every</em> single binding. But the moment two refs that <em>are</em> bound sit on different nets, the group can never be satisfied: a bound device's terminals don't move as the rest of the template fills in. So the branch is pruned right there, without waiting for the whole group to be bound.</p>
+      <p>That early exit is what keeps the large patterns fast. In <code>dda_cmfb_nmos_mirror</code> (9 devices), nearly every group includes a device bound late (<code>m5</code>–<code>m9</code>). An earlier version only judged a group once all its refs were bound, so the search tried every combination of the first five transistors before rejecting anything. That took over a minute on a 58-device fully-differential netlist; checking the bound refs as they arrive takes a fraction of a second, with exactly the same matches.</p>
     </section>
 
     <section class="part" id="part-5">
@@ -338,7 +339,7 @@
       <h3>Why the <code>frozenset</code> de-dup?</h3>
       <p>Swapping <code>m1</code>↔<code>m2</code> gives the same physical pair. Keying <code>seen</code> by the <em>frozenset of device refs</em> means <code>{mA,mB}</code> and <code>{mB,mA}</code> collapse to one match — no duplicate structures for symmetric templates.</p>
 
-      <blockquote><p>The docstring is honest about scale: "Patterns are 1–4 devices, so plain backtracking (no graph library) is sufficient." A hand-rolled DFS is exactly right here — reaching for a subgraph-isomorphism library would be over-engineering.</p></blockquote>
+      <blockquote><p>The docstring is honest about scale: patterns are 1–9 devices, and with every <code>same_net</code> group pruning as soon as two bound refs disagree, plain backtracking (no graph library) is sufficient. A hand-rolled DFS is exactly right here — reaching for a subgraph-isomorphism library would be over-engineering.</p></blockquote>
     </section>
 
     <section class="part" id="part-6">
@@ -419,8 +420,8 @@ unrecognized = [d <span class="tok-kw">for</span> d <span class="tok-kw">in</spa
 
       <p>That's the classic sub-graph isomorphism problem — NP-hard in general — but tamed here by three facts the code exploits:</p>
       <ul>
-        <li>patterns are tiny (1–4 devices), so the search tree is shallow;</li>
-        <li><code>_check_same_net</code> prunes branches the instant a constraint is violable;</li>
+        <li>patterns are small (1–9 devices), so the search tree is shallow;</li>
+        <li><code>_check_same_net</code> prunes a branch the instant two bound terminals of a group disagree, even before the group is fully bound;</li>
         <li>type-matching filters most candidates before any constraint check.</li>
       </ul>
 
