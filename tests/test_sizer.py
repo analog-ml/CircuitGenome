@@ -568,7 +568,6 @@ def two_stage_fd_fbr():
     })
 
 
-@pytest.mark.slow
 def test_size_fd_basic(two_stage_fd_fbr):
     """FD two-stage: solver returns OPTIMAL/FEASIBLE with Cc and valid W/L."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -596,7 +595,6 @@ def test_size_fd_basic(two_stage_fd_fbr):
         assert s.vds_sat_v > 0
 
 
-@pytest.mark.slow
 def test_fd_specs_met(two_stage_fd_fbr):
     """FD: gain, GBW, PM, and SR all meet the spec."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -622,7 +620,6 @@ def test_fd_specs_met(two_stage_fd_fbr):
         assert result.metrics["slew_rate_vps"] >= spec.slew_rate_min_vps, "SR not met"
 
 
-@pytest.mark.slow
 def test_fd_second_stage_symmetry(two_stage_fd_fbr):
     """second_stage_p and second_stage_n must have equal W and L per transistor type."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -650,7 +647,6 @@ def test_fd_second_stage_symmetry(two_stage_fd_fbr):
         assert p_bases[base].l_um == n_bases[base].l_um, f"{base}: L mismatch p vs n"
 
 
-@pytest.mark.slow
 def test_fd_power_two_second_stages(two_stage_fd_fbr):
     """FD power should include current from both second-stage paths."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -668,7 +664,6 @@ def test_fd_power_two_second_stages(two_stage_fd_fbr):
     assert result.metrics["power_w"] >= min_expected_power * 0.9
 
 
-@pytest.mark.slow
 def test_fd_cc_from_sr(two_stage_fd_fbr):
     """FD: Cc should satisfy the slew-rate constraint (Cc ≤ ibias / SR)."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
@@ -978,7 +973,6 @@ def test_three_stage_fd_power(three_stage_buffered_fd_fbr):
 
 # --- FD RNMC ---
 
-@pytest.mark.slow
 def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
     """Three-stage RNMC FD: OPTIMAL/FEASIBLE; both caps present."""
     parsed, sr_result, fbr_result, topology = three_stage_rnmc_fd_fbr
@@ -1538,7 +1532,6 @@ def test_ptm45_example_two_stage_se_met(two_stage_fbr):
     _assert_example_ptm45_met(two_stage_fbr, "two_stage_se_specs")
 
 
-@pytest.mark.slow
 def test_ptm45_example_two_stage_fd_met(two_stage_fd_fbr):
     _assert_example_ptm45_met(two_stage_fd_fbr, "two_stage_fd_specs")
 
@@ -1547,7 +1540,6 @@ def test_ptm45_example_three_stage_se_met(three_stage_rnmc_se_fbr):
     _assert_example_ptm45_met(three_stage_rnmc_se_fbr, "three_stage_se_specs")
 
 
-@pytest.mark.slow
 def test_ptm45_example_three_stage_fd_met(three_stage_rnmc_fd_fbr):
     _assert_example_ptm45_met(three_stage_rnmc_fd_fbr, "three_stage_fd_specs")
 

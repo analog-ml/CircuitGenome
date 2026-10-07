@@ -1649,6 +1649,7 @@ def test_enumerate_three_stage_buffered_single_ended_count():
         assert len(circuits) == count, name
 
 
+@pytest.mark.slow
 def test_enumerate_three_stage_buffered_fully_differential_nonempty():
     """Buffered FD RNMC yields a valid first circuit (the full set is huge, so
     only next() is checked); buffered FD NMC is now also non-empty -- the

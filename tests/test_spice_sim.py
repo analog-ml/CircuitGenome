@@ -424,7 +424,6 @@ def _gf180_fd_nmos_mirror():
 
 
 @ngspice
-@pytest.mark.slow
 def test_fd_cm_gate_condemns_high_gain_cmfb():
     """Issue #208: the pre-#208 high-gain CMFB (the amp's mirror output drives
     the load gates as a voltage) puts the CM-loop crossover far above GBW, so
@@ -454,7 +453,6 @@ def test_fd_cm_gate_condemns_high_gain_cmfb():
 
 
 @ngspice
-@pytest.mark.slow
 @pytest.mark.parametrize("comp2,gm3_scale,settles", [
     ("miller_cap", 1.0, True),
     ("miller_cap_with_nulling_resistor", 1.0, True),
@@ -503,7 +501,6 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
 
 
 @ngspice
-@pytest.mark.slow
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the
     sizer's definition), not left None — a None on a constrained spec left
@@ -530,7 +527,6 @@ def test_fd_swing_and_slew_measured():
 @ngspice
 @pytest.mark.parametrize("cmfb", ["resistive_sense_cmfb_pmos_mirror_inverting",
                                   "dda_cmfb_pmos_mirror_inverting"])
-@pytest.mark.slow
 def test_fd_two_stage_ac_metrics_are_real(cmfb):
     """A feasible two-stage FD folded-cascode op-amp reports measured
     gain/GBW/PM, not n/a (issue #61)."""
@@ -628,7 +624,6 @@ c1_comp2_n net_loadout1 net_mid2_n 1p
 
 
 @ngspice
-@pytest.mark.slow
 def test_fd_three_stage_ac_metrics_are_real():
     """#61's three-stage FD acceptance criterion: a feasible three-stage FD
     op-amp reports real (positive) gain/GBW/PM, not n/a.  With the #167 CMFB
@@ -657,7 +652,6 @@ def test_fd_three_stage_ac_metrics_are_real():
 
 
 @ngspice
-@pytest.mark.slow
 def test_fd_cmrr_psrr_measured():
     """#184 acceptance: an FD topology with a clean differential AC gain reports
     SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
@@ -876,7 +870,6 @@ def test_slew_swing_measured_on_real_device_techs(tech, vdd):
 # --- follower output-stage swing (PR #239 follow-up) ------------------------
 
 @ngspice
-@pytest.mark.slow
 @pytest.mark.parametrize("template", ["two_stage_opamp_buffered_single_ended",
                                       "two_stage_opamp_buffered_fully_differential"])
 @pytest.mark.parametrize("follower", ["common_drain_pmos", "common_drain_nmos"])
@@ -1027,7 +1020,6 @@ def test_cmrr_psrr_none_without_clean_gain():
 
 
 @ngspice
-@pytest.mark.slow
 def test_fd_large_signal_metrics_measured_ptm45():
     """Swing and slew are measured on a fully-differential circuit too
     (issue #208 — they used to stay None and left FD designs "unverified"),

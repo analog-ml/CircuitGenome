@@ -43,9 +43,9 @@ With pip 25.1 or later:
 Tests that simulate with ngspice are marked ``spice`` and are skipped when
 ``ngspice`` is not on your ``PATH``.
 
-The full suite takes about four minutes, a little over half of it in the
-tests marked ``slow``.  Leave those out for a quick check (about a minute and
-a half) while you work, and run everything before opening a PR:
+The full suite takes about three minutes.  The six tests marked ``slow`` take
+over a minute of that; leave them out for a quick check (under two minutes)
+while you work, and run everything before opening a PR:
 
 .. code-block:: bash
 
