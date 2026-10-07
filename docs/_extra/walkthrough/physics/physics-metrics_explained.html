@@ -168,7 +168,7 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
 
   <p>One honest edge case: the whole block is guarded by <code>all(g &gt; 0)</code>. If any stage gain is zero or negative (a device that never got sized, an <code>inf</code> resistance producing a degenerate product), the gain is simply <em>not reported</em> rather than reporting a garbage number. Silence beats a lie.</p>
 
-  <p>Even when it <em>is</em> reported, <code>gain_db</code> is an un-derated cascade product — a single-point upper bound. Above the open-loop ceiling callers receive an advisory <code>open_loop_measurable = False</code> flag (#155), because a bench that can't hold mid-rail will measure ~0 dB no matter how healthy the DC bias looks.</p>
+  <p>Even when it <em>is</em> reported, <code>gain_db</code> is an un-derated cascade product — a single-point upper bound. Above the open-loop ceiling callers receive an advisory <code>open_loop_gain_measurable = False</code> flag (#155), because a bench that can't hold mid-rail will measure ~0 dB no matter how healthy the DC bias looks.</p>
 </section>
 
 <section class="part" id="part-3">
@@ -306,7 +306,7 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
     <li>Every formula here is <strong>analytical</strong> — a dominant-pole, first-order model. It is fast enough to guide a search over thousands of candidate sizings, but it is not the truth.</li>
     <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
     <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
-    <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
+    <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_gain_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
   </ul>
 
   <h3>Why it's elegant</h3>

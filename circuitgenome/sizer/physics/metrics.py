@@ -73,7 +73,7 @@ def evaluate_metrics(
     # An un-derated single-point upper bound: the naive per-stage cascade
     # product with no efficiency derate (#155).  It over-estimates multi-stage
     # DC gain and is not open-loop-measurable above eq.OPEN_LOOP_GAIN_CEILING_DB;
-    # callers surface that via SizingResult.open_loop_measurable.
+    # callers surface that via SizingResult.open_loop_gain_measurable.
     if chain.gain_measurable and usable:
         stage_gains = [s.gm * s.rout for s in stages[:usable]]
         stage_gains[0] *= k_fs

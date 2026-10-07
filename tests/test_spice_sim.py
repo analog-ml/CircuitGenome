@@ -490,7 +490,10 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
         tr = {ref: (replace(s, w_um=s.w_um * gm3_scale)
                     if ref.startswith("mn1_third_stage") else s)
               for ref, s in result.transistors.items()}
-        result = replace(result, transistors=tr, cc2_pf=result.cc_pf / 4.0)
+        cc1 = next(c for ref, c in result.capacitors.items() if "comp1" in ref)
+        caps = {ref: (cc1 / 4.0 if "comp2" in ref else c)
+                for ref, c in result.capacitors.items()}
+        result = replace(result, transistors=tr, capacitors=caps)
     from circuitgenome.sizer.verify import op
     if op._fd_ringing(text, result, tech, spec) is None:
         # A timed-out transient is "no evidence" and the gate passes; the
@@ -812,7 +815,8 @@ def test_fd_instability_reported_not_discarded():
     discarded as an "extraction artifact" — the SE guard is unchanged (see
     test_implausible_pm_extraction_is_discarded)."""
     from circuitgenome.sizer.models import SizingResult
-    result = SizingResult(transistors={}, cc_pf=None, metrics={}, margins={},
+    result = SizingResult(transistors={}, resistors={}, capacitors={},
+                          metrics={}, margins={},
                           solver_status="behavioural")
     spec = SizingSpec(vdd=1.8, vss=0.0, ibias=10e-6, cl=10e-12)
     sim = simulate_metrics(_FD_UNSTABLE_BEHAVIOURAL, result,
@@ -846,7 +850,8 @@ def test_new_metrics_measured_on_generic_two_stage():
     # the analytical internal limit ibias/Cc.
     sr = sim["slew_rate_vps"]
     assert sr is not None and sr > 0
-    sr_analytic = spec.ibias / (result.cc_pf * 1e-12)
+    (cc_f,) = result.capacitors.values()
+    sr_analytic = spec.ibias / cc_f
     assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
 
 
@@ -869,7 +874,8 @@ def test_slew_swing_measured_on_real_device_techs(tech, vdd):
 
     sr = sim["slew_rate_vps"]
     assert sr is not None and sr > 0
-    sr_analytic = spec.ibias / (result.cc_pf * 1e-12)
+    (cc_f,) = result.capacitors.values()
+    sr_analytic = spec.ibias / cc_f
     assert 0.1 * sr_analytic < sr < 10.0 * sr_analytic
 
 

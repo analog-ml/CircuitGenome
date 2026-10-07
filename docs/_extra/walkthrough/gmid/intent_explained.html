@@ -169,7 +169,7 @@
       <text x="415" y="72" text-anchor="middle" font-size="10.5" font-family="monospace">BlockIntent(CS, 10, 4, "high rout…")</text>
       <text x="308" y="108" font-size="11.5" fill="var(--fig-good)">✓ rationale travels with the number</text>
       <text x="308" y="130" font-size="11.5" fill="var(--fig-good)">✓ override one block, rest fall back</text>
-      <text x="308" y="152" font-size="11.5" fill="var(--fig-good)">✓ surfaced in the sizing result</text>
+      <text x="308" y="152" font-size="11.5" fill="var(--fig-good)">✓ resolved onto every device</text>
       <text x="308" y="174" font-size="11.5" fill="var(--fig-good)">✓ one source of truth</text>
     </svg>
     <figcaption>Same numbers, opposite maintainability. The file's real product isn't the values — it's making the values <em>named, reasoned, and reachable</em>.</figcaption>
@@ -364,7 +364,7 @@ _L_FOLLOWER = <span class="tok-num">1.0</span>       <span class="tok-com"># fol
     role: <span class="tok-kw">str</span>            <span class="tok-com"># SIGNAL / CURRENT_SOURCE / CASCODE</span>
     gm_id: <span class="tok-kw">float</span> | <span class="tok-kw">None</span>  <span class="tok-com"># target gm/Id, or None when it is *solved*</span>
     l_mult: <span class="tok-kw">float</span>        <span class="tok-com"># channel length as a multiple of length.min</span>
-    rationale: <span class="tok-kw">str</span>       <span class="tok-com"># why this region/length — surfaced in the result</span></code></pre>
+    rationale: <span class="tok-kw">str</span>       <span class="tok-com"># why this region/length — carried onto each device's TransistorIntent</span></code></pre>
 
   <p>It's <code>frozen=True</code> — once built, it can't be mutated. That's on purpose: a default intent should be a <strong>constant</strong> you copy-and-modify, never something a caller accidentally edits in place. Think of each <code>BlockIntent</code> as a printed <strong>spec card</strong>.</p>
 
@@ -740,7 +740,7 @@ INTENT_BY_TECH: <span class="tok-kw">dict</span>[<span class="tok-kw">str</span>
   </ul>
 
   <h3>Why it's elegant</h3>
-  <p>The whole design rides one move: <strong>turn a fuzzy design decision into an immutable, named, copyable data record, and attach its reason to it.</strong> That single move buys explainability (the rationale rides into the result), tunability (copy-one-key overrides), and safety (frozen defaults, fresh-copy factories) — all without a line of control flow. The three-level hierarchy is just this record applied at three altitudes.</p>
+  <p>The whole design rides one move: <strong>turn a fuzzy design decision into an immutable, named, copyable data record, and attach its reason to it.</strong> That single move buys explainability (the rationale rides onto every device's <code>TransistorIntent</code> in the sizing plan), tunability (copy-one-key overrides), and safety (frozen defaults, fresh-copy factories) — all without a line of control flow. The three-level hierarchy is just this record applied at three altitudes.</p>
 
   <hr>
 

@@ -215,48 +215,63 @@ class SizingResult:
     """Output of :func:`~circuitgenome.sizer.sizer.size_circuit`.
 
     :param transistors: Per-transistor sizing keyed by device reference.
-    :param cc_pf: Compensation capacitor value in pF, or ``None`` for single-stage.
-    :param metrics: Computed performance metrics, e.g.
-        ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}``. Analytical (model-based,
-        ngspice-free) estimate; for PTM the CLI measures and displays ngspice
-        values (``sizer.simulate_metrics``) instead.  Note ``gain_db`` is an
-        **un-derated single-point upper bound** — the naive per-stage cascade
-        product with no efficiency derate — so it over-estimates multi-stage DC
-        gain and is not open-loop-measurable above the ceiling flagged by
-        ``open_loop_measurable`` (see :data:`~.equations.OPEN_LOOP_GAIN_CEILING_DB`).
-    :param margins: Safety margin for each constrained spec (actual/spec for
-        min specs, spec/actual for max specs). Values > 1 mean spec is met.
-    :param solver_status: OR-Tools CP-SAT status string:
-        ``"OPTIMAL"``, ``"FEASIBLE"``, ``"INFEASIBLE"``, or ``"UNKNOWN"``.
-    :param warnings: Advisory messages, e.g. a likely ``--topology``/netlist
-        mismatch. Empty when the netlist cleanly matches the topology.
-    :param resistors: Sized load-resistor values in ohms, keyed by device
+    :param resistors: Sized resistor values in ohms, keyed by device
         reference (e.g. ``{"r1_load": 1.06e5}``). Empty when there are no
         sized resistors.
+    :param capacitors: Sized compensation-capacitor values in farads, keyed by
+        device reference (e.g. ``{"c1_comp1_p": 2.1e-12, "c1_comp2_p": 8e-13}``).
+        Every capacitor in a recognised ``comp2*`` slot gets the inner-loop cap
+        Cc2 (Cc1 when none was planned); every other ``comp*`` capacitor gets the
+        outer Miller cap Cc1. Empty for an uncompensated (single-stage) circuit.
+    :param metrics: **Predicted** performance metrics, e.g.
+        ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}`` — computed from the device
+        model (Level-1 square law or gm/Id LUT), never from a circuit
+        simulation. SPICE-measured metrics come from
+        :func:`~circuitgenome.sizer.verify.simulate.simulate_metrics` as a
+        separate dict.  Note ``gain_db`` is an **un-derated single-point upper
+        bound** — the naive per-stage cascade product with no efficiency derate
+        — so it over-estimates multi-stage DC gain and is not open-loop-measurable
+        above the ceiling flagged by ``open_loop_gain_measurable`` (see
+        :data:`~circuitgenome.sizer.physics.equations.OPEN_LOOP_GAIN_CEILING_DB`).
+    :param margins: Safety margin for each constrained spec, keyed like
+        ``metrics`` and in the metric's own unit: ``predicted − limit`` for a
+        minimum spec, ``limit − predicted`` for a maximum spec (e.g. a 65° phase
+        margin against a 60° floor gives ``5.0``). Values ``>= 0`` mean the spec
+        is met; unconstrained specs have no entry.
+    :param solver_status: How the sizing was obtained, and whether it succeeded:
+
+        * ``"GMID"`` — gm/Id path; sized procedurally from the LUT, no solver
+          involved. Always a success.
+        * ``"OPTIMAL"`` / ``"FEASIBLE"`` — Level-1 path; OR-Tools CP-SAT found
+          the best / a valid grid assignment.
+        * ``"INFEASIBLE"`` / ``"UNKNOWN"`` / ``"MODEL_INVALID"`` — Level-1 path;
+          CP-SAT found no assignment (proven impossible / time limit hit / model
+          malformed). ``transistors`` is then empty.
     :param bias_feasible: ``False`` when the gm/Id DC operating-point check finds
         a current source that cannot stay saturated (e.g. a cascode tail with no
         headroom) — the assumed bias current won't flow, so the frequency-domain
         metrics are optimistic. Always ``True`` for the Level-1 path.
-    :param transistor_intents: gm/Id path only — the resolved per-device design
-        intent keyed by device reference (``gmid.intent.TransistorIntent``: the
-        functional block, role, gm/Id region, L multiple and rationale). Empty
-        for the Level-1 path.
-    :param open_loop_measurable: ``False`` when the analytical ``gain_db``
-        exceeds the open-loop-bench ceiling (:data:`~.equations.OPEN_LOOP_GAIN_CEILING_DB`)
+    :param open_loop_gain_measurable: ``False`` when the predicted ``gain_db``
+        exceeds the open-loop-bench ceiling
+        (:data:`~circuitgenome.sizer.physics.equations.OPEN_LOOP_GAIN_CEILING_DB`)
         — the design rails to ~0 dB in an open-loop AC measurement even though
         the DC bias is sound, so the reported gain/GBW/PM are optimistic. This
         is an **advisory** signal (parallel to ``bias_feasible``): the metrics
         are still reported and SPICE remains the authority — consumers should
         deprioritise, not prune, on it.
+    :param warnings: Advisory messages, e.g. a likely ``--topology``/netlist
+        mismatch. Empty when the netlist cleanly matches the topology.
     """
+    # sized components: device ref -> value
     transistors: dict[str, TransistorSizing]
-    cc_pf: float | None
+    resistors: dict[str, float]
+    capacitors: dict[str, float]
+    # predicted performance
     metrics: dict[str, float]
     margins: dict[str, float]
     solver_status: str
-    cc2_pf: float | None = None
-    warnings: list[str] = field(default_factory=list)
-    resistors: dict[str, float] = field(default_factory=dict)
-    transistor_intents: dict = field(default_factory=dict)
+    # advisory flags (False => predicted metrics are optimistic)
     bias_feasible: bool = True
-    open_loop_measurable: bool = True
+    open_loop_gain_measurable: bool = True
+    # advisory messages
+    warnings: list[str] = field(default_factory=list)
