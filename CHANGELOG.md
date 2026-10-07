@@ -39,7 +39,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Changed
 
-- 🧪 Only the 6 tests that are still slow (over 15 seconds, or sharing a 27-second setup step) are marked `slow`, down from 69, so the quick `-m "not slow"` check now runs nearly every test in under two minutes ([#255](https://github.com/analog-ml/CircuitGenome/pull/255)).
+- 🧪 Only 6 tests are marked `slow` now (was 69), so `-m "not slow"` runs nearly every test in under two minutes ([#255](https://github.com/analog-ml/CircuitGenome/pull/255)).
 - 🧪 `test_three_stage_pmos_cs_metrics_present` drops from 33 minutes to 2 seconds. It spent the time searching through circuit variants for one to test; it now builds that circuit directly and is no longer marked `slow` ([#253](https://github.com/analog-ml/CircuitGenome/pull/253)).
 - ⚡ Circuit recognition is up to 1,000× faster on large netlists, with identical results: the pattern search now rejects impossible matches early. The full test suite drops from 87 to about 4 minutes ([#254](https://github.com/analog-ml/CircuitGenome/pull/254)).
 - 🔧 The tests now run on a fresh checkout — pytest was never listed as a dependency, so it only worked where it was already installed. Run `uv run pytest tests/`, or add `-m "not slow"` for a 2-minute check instead of the full 50 ([#235](https://github.com/analog-ml/CircuitGenome/pull/235)).
