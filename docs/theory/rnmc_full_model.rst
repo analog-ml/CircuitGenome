@@ -400,6 +400,61 @@ substituted, so all the arithmetic that follows is plain numbers.  At low
 frequency (small :math:`s`) the denominator is ≈ 1, so the pair passes the
 signal unchanged; it only acts near and above :math:`\omega = 10`.
 
+**Is H(s) the amplifier's V_out/V_in?**  Not on its own: :math:`A(s)` is the
+amplifier's :math:`V_{out}/V_{in}`, and :math:`H(s)` is one *factor* of it —
+the factor that holds the pole pair.
+
+- *Every transfer function is a ratio of two polynomials.*  Solving the node
+  equations (Cramer's rule, `Why the denominator is a cubic`_) gives
+
+  .. math::
+
+     \frac{V_{out}}{V_{in}} = \frac{N(s)}{D(s)}
+
+  where the roots of the numerator :math:`N(s)` are the **zeros** and the
+  roots of the denominator :math:`D(s)` the **poles**.
+- *The RNMC ratio splits into two factors.*  With the textbook
+  simplifications the numerator is about :math:`g_{m1} g_{m2} g_{m3}` (zeros
+  ignored) and the denominator is
+  :math:`s\,C_{c1} g_{m2} g_{m3}\,(1 + a_1 s + a_2 s^2)`; the
+  :math:`g_{m2} g_{m3}` cancels:
+
+  .. math::
+
+     \frac{V_{out}}{V_{in}}
+     = \frac{g_{m1} g_{m2} g_{m3}}{s\,C_{c1} g_{m2} g_{m3}\,(1 + a_1 s + a_2 s^2)}
+     = \underbrace{\frac{g_{m1}/C_{c1}}{s}}_{1/s\ \text{part}}
+       \times \underbrace{\frac{1}{1 + a_1 s + a_2 s^2}}_{H(s)}
+
+  So :math:`A(s) = (1/s)\times H(s)` *is* :math:`V_{out}/V_{in}`, written as
+  a product: the :math:`1/s` part carries the dominant pole **and all the
+  gain**, :math:`H(s)` carries the pole pair.
+- *Why the numerator of H is 1.*  The constant could go in either factor.
+  Keeping all of it in the :math:`1/s` part leaves :math:`H(0) = 1` — the pair
+  passes low frequencies unchanged, and :math:`H` describes only where the
+  pair sits (:math:`\omega_n`) and how it bounces (:math:`\zeta`).  That is the
+  convention behind the standard form; a block with its own DC gain :math:`K`
+  is written :math:`K/(1 + \dots)`.
+- *A circuit where H(s) is the whole V_out/V_in.*  A series R–L–C with the
+  output across the capacitor is a voltage divider:
+
+  .. math::
+
+     \frac{V_{out}}{V_{in}} = \frac{1/(sC)}{R + sL + 1/(sC)}
+     = \frac{1}{1 + sRC + s^2 LC}
+     \qquad\Rightarrow\qquad
+     \omega_n = \frac{1}{\sqrt{LC}},\quad \zeta = \frac{R}{2}\sqrt{\frac{C}{L}}
+
+  (multiply top and bottom by :math:`sC`; :math:`a_1 = RC`,
+  :math:`a_2 = LC`).  Here the pole pair is the entire circuit, so :math:`H`
+  is literally :math:`V_{out}/V_{in}`, and its numerator is exactly 1: at DC
+  the capacitor is open and passes the input straight through.
+- *What the simple form leaves out.*  A general numerator also contains
+  :math:`s` — **zeros**.  The real RNMC loop has them (signal leaks forward
+  through the Miller caps); the textbook factorisation and this toy ignore
+  them.  The full model does not: it solves :math:`V_{out}` directly from
+  :math:`(G + sC)\,v = b`, zeros included.
+
 **Evaluating at a frequency: s = jω.**  :math:`s` is the frequency variable of
 a transfer function.  To ask what happens to a sine wave at frequency
 :math:`\omega`, substitute :math:`s = j\omega`: for a sine wave, taking a time
@@ -521,16 +576,10 @@ Two things to notice:
   why the sizer steers by :math:`\zeta`.
 
 **How the toy maps onto the real amplifier.**  It is the RNMC loop itself,
-simplified.  With the numerator :math:`g_{m1} g_{m2} g_{m3}` over the
-simplified denominator of `Why the denominator is a cubic`_, the
-:math:`g_{m2} g_{m3}` cancels:
-
-.. math::
-
-   A(s) \approx \frac{g_{m1}/C_{c1}}{s} \times \frac{1}{1 + a_1 s + a_2 s^2}
-
-— a :math:`1/s` part crossing 0 dB at :math:`\omega_t = g_{m1}/C_{c1}`, times
-a pole pair with :math:`a_1 = 2\zeta/\omega_n` and :math:`a_2 = 1/\omega_n^2`.
+simplified: the factorisation above,
+:math:`A(s) \approx (g_{m1}/C_{c1})/s \times 1/(1 + a_1 s + a_2 s^2)`, is a
+:math:`1/s` part crossing 0 dB at :math:`\omega_t = g_{m1}/C_{c1}`, times a
+pole pair with :math:`a_1 = 2\zeta/\omega_n` and :math:`a_2 = 1/\omega_n^2`.
 The toy measures frequency in units of :math:`\omega_t` (so the crossing sits
 at 1) and sets :math:`a_1 = 0.2\zeta`, :math:`a_2 = 0.01` (the pair at
 :math:`10\,\omega_t`).  In the fixture of Step 4 the pair sits about 5.6 ×
