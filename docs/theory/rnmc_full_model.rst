@@ -1,113 +1,250 @@
 RNMC Full Model: Poles, Damping and Phase Margin
 ================================================
 
-*How the sizer judges a reversed-nested-Miller (RNMC) three-stage loop — and
-the background needed to read that code.*
+*How the sizer decides whether a reversed-nested-Miller (RNMC) three-stage
+amplifier is stable and well-behaved — and the background needed to read that
+code.*
 
-This page explains what
-:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping` and
-:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg` compute,
-why the sizer needs *both*, and how the code gets them from a small nodal
-model of the amplifier.  The sizing strategy that uses them
+A three-stage amplifier can pass the usual phase-margin check and still ring,
+or even oscillate.  For every RNMC design it sizes, the sizer therefore
+computes two numbers — the **phase margin** and the **damping** :math:`\zeta`
+of a *pole pair* — with
+:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg` and
+:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`.  The sizing
+strategy that uses them
 (:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`) is described in
 :ref:`rnmc-inner-pair`.
 
-The running example is the frozen ptm45 FD fixture from ``tests/test_rnmc.py``
-with the second stage raised to :math:`g_{m2} = 1.5` mS, and no third-stage
-mirror or output buffer:
+The page builds up in order:
 
-.. code-block:: text
-
-   gm1 = 169 µS   gm2 = 1.5 mS   gm3 = 1.73 mS
-   g1  = 0.5 µS   g2  = 15 µS    g3  = 37 µS        (stage output conductances)
-   c1  = 1 fF     c2  = 160 fF                      (stage-output parasitics)
-   Cc1 = 500 fF   Cc2 = 125 fF   CL  = 2 pF
+1. **Background** — transfer functions, poles, and what phase margin measures.
+2. **Intuition** — why two coupled poles can ring.
+3. **Definition** — the damping ratio :math:`\zeta` that measures it.
+4. **Why phase margin alone is not enough** — a pencil-and-paper example, then
+   the real amplifier.
+5. **From theory to code** — how the sizer computes both numbers, step by step.
 
 ----
 
-Goal
-----
+Background: transfer functions, poles and phase margin
+------------------------------------------------------
 
-For every candidate :math:`(g_{m2}, C_{c2}, g_{m3})` the sizer needs two
-numbers:
+Transfer functions and s = jω
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table::
-   :header-rows: 1
-   :widths: 20 40 40
+Feed a sine wave into a linear circuit and a sine wave of the same frequency
+comes out — larger or smaller, and delayed.  The **transfer function**
+:math:`V_{out}/V_{in}` captures both effects at every frequency at once.  It is
+written in the frequency variable :math:`s`, and solving the circuit's node
+equations always gives a ratio of two polynomials in :math:`s`:
 
-   * - Number
-     - Answers
-     - Why it is needed
-   * - **Damping** :math:`\zeta`
-     - Will the non-dominant **pole pair** ring, or go unstable?
-     - The pair can resonate *above* the 0 dB crossing, where the phase
-       margin does not look.
-   * - **Phase margin**
-     - How safe is the loop at the 0 dB crossing?
-     - It is the spec, and SPICE verifies it.
+.. math::
 
-Both come from one model of the circuit, solved numerically.
+   \frac{V_{out}}{V_{in}} = \frac{N(s)}{D(s)}
 
-----
+To ask what happens to a sine wave at frequency :math:`\omega`, substitute
+:math:`s = j\omega`.  The reason: for a sine wave, taking a time derivative is
+the same as multiplying by :math:`j\omega` — a capacitor's current
+:math:`C\,dv/dt` becomes :math:`j\omega C v` — and every :math:`s` in the
+formula stands for that derivative.  The result is one complex number:
 
-Background
-----------
+- its **size** is the gain (how much the wave grows or shrinks);
+- its **angle** is the phase (how much the wave is delayed).
+
+The :math:`j` is what produces the phase: multiplying by :math:`j` rotates a
+complex number by 90°, which is why :math:`1/(j\omega)` has an angle of −90°.
+The only rule the arithmetic below needs is :math:`j^2 = -1`.
 
 Poles
 ~~~~~
 
-Every node that carries a capacitor contributes roughly one **pole** — a
-frequency past which that capacitor starts to short the signal out.  Past each
-pole the gain falls another 20 dB/decade and the phase lags up to another 90°.
+The **poles** are the roots of the denominator :math:`D(s)`; the roots of the
+numerator :math:`N(s)` are the **zeros**.  Near a pole the response is large,
+because the denominator is close to zero.  Each pole bends the gain plot down
+by another 20 dB/decade and adds up to another 90° of phase lag.
 
-Poles are the roots of the transfer function's denominator.  A circuit with
-:math:`N` capacitive nodes has a denominator of degree :math:`N` (see
-`Why the denominator is a cubic`_), so :math:`N` poles.  The lowest one is the
-**dominant pole**; it sets the bandwidth.  The rest are **non-dominant**.
+Every node that carries a capacitor contributes roughly one pole.  Each node
+equation is first order in :math:`s` (every capacitor current is :math:`sCV`);
+solving :math:`N` coupled node equations divides by the determinant of the
+:math:`N \times N` system (Cramer's rule), and each term of a determinant takes
+one entry from each row — at most :math:`s^N`.  So the rule of thumb is
+**number of poles = number of nodes with capacitance**: a three-stage amplifier
+(three stage outputs) has a cubic denominator and three poles.
 
-Pole pairs
-~~~~~~~~~~
+The lowest pole is the **dominant pole**: it sets the bandwidth.  The rest are
+**non-dominant** poles.
+
+Feedback, oscillation and phase margin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An op-amp is used inside a **feedback loop**: part of the output is fed back
+and subtracted from the input.  The **open-loop gain** :math:`A(s)` describes
+what happens to a signal going once around that loop.
+
+The feedback *subtracts*.  If, at some frequency, the loop also delays the
+signal by half a cycle (−180°), the subtraction turns into an addition: the
+signal comes back reinforcing itself.  If it also comes back at least as large
+as it left (:math:`|A| \ge 1`, i.e. 0 dB), it keeps itself going with no input
+at all — the amplifier **oscillates**, like a microphone squealing next to its
+speaker.
+
+Two standard checks measure how far a loop is from that condition:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 45 35
+
+   * - Check
+     - Question it answers
+     - Where it is read
+   * - **Phase margin**
+     - When the signal comes back the same size, how far is its delay from
+       the dangerous −180°?  :math:`\text{PM} = 180° + \angle A`.
+     - where :math:`|A|` crosses 0 dB
+   * - **Gain margin**
+     - When the delay reaches −180°, how much smaller than 1 is the signal?
+     - where :math:`\angle A = -180°`
+
+For most amplifiers the phase margin alone is enough: the gain falls through
+0 dB once and keeps falling, so by the time the delay reaches −180° the signal
+is far too small to matter.  The rest of this page is about the case where that
+reasoning breaks.
+
+----
+
+Intuition: pole pairs and ringing
+---------------------------------
 
 A single pole is the root of a *linear* factor :math:`1 + s/\omega_p`, which is
-always real.  It bends the gain down smoothly and cannot ring.
+always a real number.  It bends the gain down smoothly and cannot ring.
 
 Two poles that are coupled — because capacitors link their nodes — come out
-together as the two roots of one *quadratic*:
+*together*, as the two roots of one quadratic:
 
 .. math::
 
    1 + a_1 s + a_2 s^2 = 0
 
-Its roots are either two real numbers (two ordinary poles, no ringing), or a
-**complex-conjugate pair**
+A quadratic's roots are either two real numbers (two ordinary poles, no
+ringing), or a **complex-conjugate pair**
 
 .. math::
 
    s = -\sigma \pm j\omega
 
-which rings at :math:`\omega`.  That is a **pole pair**.  Complex roots of a
-real polynomial always come in such pairs, so a denominator of any degree
-factors into single real poles and pole pairs.
+which rings at the frequency :math:`\omega`.  That is a **pole pair**.
+Complex roots of a polynomial with real coefficients always come in such
+pairs, so a denominator of any degree factors into single real poles and pole
+pairs.
 
-Physically: one water tank draining can only empty smoothly; two tanks joined
+Physically, one water tank draining can only empty smoothly; two tanks joined
 by a pipe can slosh back and forth.  Ringing needs two energy stores trading
-energy.
+energy — a pole pair is two of them, coupled.
 
-Damping ratio ζ
-~~~~~~~~~~~~~~~
-
-Any pole pair can be written in the standard form
+**The textbook pole pair: a series R–L–C.**  With the output taken across the
+capacitor, the circuit is a voltage divider:
 
 .. math::
 
-   1 + \frac{2\zeta}{\omega_n}\,s + \frac{s^2}{\omega_n^2},
-   \qquad
-   s = -\zeta\omega_n \pm j\,\omega_n\sqrt{1-\zeta^2}
+   \frac{V_{out}}{V_{in}} = \frac{1/(sC)}{R + sL + 1/(sC)}
+   = \frac{1}{1 + sRC + s^2 LC}
 
-with two independent knobs: the **natural frequency** :math:`\omega_n` (how
-fast) and the **damping ratio** :math:`\zeta` (how bouncy).  On the complex
-plane :math:`\omega_n` is the poles' distance from the origin and
-:math:`\zeta` is the cosine of their angle from the negative real axis:
+(multiply top and bottom by :math:`sC`).  The whole transfer function is one
+over a quadratic, with :math:`a_1 = RC` and :math:`a_2 = LC`; its numerator is
+exactly 1 because at DC the capacitor is open and passes the input straight
+through.  Small :math:`R` gives a pair that rings; large :math:`R` gives two
+real poles.
+
+**Which amplifiers have a pole pair.**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 25 25 25
+
+   * - Amplifier
+     - Poles after the dominant one
+     - Can they ring?
+     - Phase margin enough?
+   * - Single-stage OTA
+     - 1 (mirror node)
+     - no — a single pole is real
+     - yes
+   * - Two-stage Miller
+     - 1 (output, :math:`\approx g_{m2}/C_L`)
+     - no
+     - yes
+   * - Three-stage NMC / RNMC
+     - 2, coupled through :math:`C_{c1}`, :math:`C_{c2}`
+     - **yes — a pair**
+     - **no**: also needs :math:`\zeta`
+
+In a two-stage amplifier the two poles also come from one quadratic, but the
+Miller capacitor *splits* them so far apart that they stay real.  In a
+three-stage amplifier :math:`C_{c1}` splits off the dominant pole, and nothing
+forces the remaining two apart.
+
+----
+
+Definition: the damping ratio ζ
+-------------------------------
+
+The standard form
+~~~~~~~~~~~~~~~~~
+
+As the R–L–C shows, a pole pair's quadratic sits in the denominator, so the
+pair's transfer function is one over it:
+
+.. math::
+
+   H(s) = \frac{1}{1 + a_1 s + a_2 s^2}
+
+:math:`a_1` and :math:`a_2` are just numbers.  Engineers rewrite them with two
+knobs that have a physical meaning:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 40 30
+
+   * - Knob
+     - Meaning
+     - Relation to the coefficients
+   * - :math:`\omega_n`, **natural frequency**
+     - *how fast*: the frequency where the pair acts
+     - :math:`a_2 = 1/\omega_n^2`
+   * - :math:`\zeta`, **damping ratio**
+     - *how bouncy*: how much it rings
+     - :math:`a_1 = 2\zeta/\omega_n`
+
+Substituting gives the **standard form** of a pole pair:
+
+.. math::
+
+   H(s) = \frac{1}{1 + (2\zeta/\omega_n)\,s + s^2/\omega_n^2}
+
+It is the same quadratic, written with :math:`\omega_n` and :math:`\zeta`
+instead of :math:`a_1` and :math:`a_2`; going back the other way,
+
+.. math::
+
+   \omega_n = \frac{1}{\sqrt{a_2}}, \qquad \zeta = \frac{a_1}{2\sqrt{a_2}}
+
+At :math:`s = 0`, :math:`H = 1`: the pair passes low frequencies unchanged, and
+:math:`H` describes only where it acts and how it bounces.
+
+ζ on the complex plane
+~~~~~~~~~~~~~~~~~~~~~~
+
+The naming pays off in the roots.  Solving
+:math:`1 + (2\zeta/\omega_n)s + s^2/\omega_n^2 = 0` with the quadratic formula
+gives, for :math:`\zeta < 1`,
+
+.. math::
+
+   p = -\zeta\omega_n \pm j\,\omega_n\sqrt{1-\zeta^2}
+
+On the complex plane, every pole is at distance :math:`\omega_n` from the
+origin, and :math:`\zeta` is the cosine of the poles' angle from the negative
+real axis:
 
 .. figure:: /images/rnmc_pole_plane.svg
    :alt: A pole pair p = −σ ± jω on the complex plane, with the ray from the
@@ -129,10 +266,9 @@ plane :math:`\omega_n` is the poles' distance from the origin and
    \zeta = \cos\theta = \frac{\sigma}{\omega_n} = \frac{-\mathrm{Re}(p)}{|p|}
 
 :math:`\sigma/\omega_n` is the textbook form; :math:`-\mathrm{Re}(p)/|p|` is
-the same thing written from the pole itself.  Reading the parts off
-:math:`p = -\zeta\omega_n \pm j\,\omega_n\sqrt{1-\zeta^2}`: the real part
-gives :math:`-\mathrm{Re}(p) = \zeta\omega_n = \sigma`, and the distance from
-the origin is
+the same thing written from the pole itself.  The real part gives
+:math:`-\mathrm{Re}(p) = \zeta\omega_n = \sigma`, and the distance from the
+origin is
 
 .. math::
 
@@ -158,14 +294,19 @@ number, not as :math:`\sigma` and :math:`\omega_n` separately:
    * - :math:`\zeta`
      - ``-p.real / abs(p)``
 
-Two textbook formulas tie :math:`\zeta` to what you would see on a scope or a Bode
-plot:
+What ζ means in practice
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two textbook formulas tie :math:`\zeta` to what you would see on a scope or a
+Bode plot:
 
 .. math::
 
    \text{step overshoot} = e^{-\pi\zeta/\sqrt{1-\zeta^2}},
    \qquad
    \text{gain peak} = \frac{1}{2\zeta\sqrt{1-\zeta^2}}\quad(\zeta < 0.707)
+
+At exactly :math:`\omega = \omega_n` the pair's gain is :math:`1/(2\zeta)`.
 
 .. list-table::
    :header-rows: 1
@@ -209,40 +350,17 @@ non-dominant pair of a three-stage amplifier: Leung & Mok size nested-Miller
 compensation for a third-order Butterworth response, which places the pair
 exactly there.
 
-Which amplifiers have a pole pair
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. list-table::
-   :header-rows: 1
-   :widths: 25 25 25 25
-
-   * - Amplifier
-     - Poles after the dominant one
-     - Can they ring?
-     - Phase margin enough?
-   * - Single-stage OTA
-     - 1 (mirror node)
-     - no — a single pole is real
-     - yes
-   * - Two-stage Miller
-     - 1 (output, :math:`\approx g_{m2}/C_L`)
-     - no
-     - yes
-   * - Three-stage NMC / RNMC
-     - 2, coupled through :math:`C_{c1}`, :math:`C_{c2}`
-     - **yes — a pair**
-     - **no**: also needs :math:`\zeta`
-
-In a two-stage amplifier the two poles also come from one quadratic, but the
-Miller capacitor *splits* them so far apart that they stay real.  In a
-three-stage amplifier :math:`C_{c1}` splits off the dominant pole, and nothing
-forces the remaining two apart.
+----
 
 Why phase margin alone is not enough
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------------
+
+The bump
+~~~~~~~~
 
 Phase margin is read at one frequency: where the gain falls through 0 dB.  The
-pair sits higher, and a lightly damped pair adds a resonance bump there:
+pole pair sits higher, and a lightly damped pair adds a resonance bump there —
+right where its own phase lag pushes the loop to −180°:
 
 .. code-block:: text
 
@@ -257,213 +375,38 @@ pair sits higher, and a lightly damped pair adds a resonance bump there:
         PM read    ωn of the pair
         here       (the danger is here)
 
-If the bump climbs back above 0 dB the loop crosses 0 dB a second time with the
-phase already past −180°, and the amplifier oscillates at :math:`\omega_n`.
-`A minimal example`_ below works this out with pencil and paper.
-
-The fixture shows it.  With its third-stage mirror pole (840 MHz) in place and
-only :math:`g_{m2}` varied:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 15 15 20 25 25
-
-   * - :math:`g_{m2}`
-     - :math:`\zeta`
-     - Phase margin
-     - Gain where phase = −180°
-     - Verdict
-   * - 0.23 mS
-     - −0.08
-     - 0°
-     - —
-     - unstable (as SPICE found)
-   * - 1.0 mS
-     - 0.08
-     - −69°
-     - +4.5 dB
-     - oscillates
-   * - **1.5 mS**
-     - **0.13**
-     - **82°**
-     - **−1.3 dB**
-     - looks excellent, is on the edge
-   * - 5.0 mS
-     - 0.32
-     - 83°
-     - −12.9 dB
-     - fine
-   * - 10 mS
-     - 0.46
-     - 83°
-     - −17.3 dB
-     - solid
-
-At 1.5 mS the phase margin reads 82°, yet a ~10 % drop in :math:`g_{m2}` (one
-process corner) makes it oscillate.  The phase margin barely moves between 1.5
-and 10 mS while the real safety goes from 1.3 dB to 17 dB; :math:`\zeta`
-tracks it.  The same failure hit nested Miller first: gf180 NMC designs rang at
-~25 MHz while the open-loop bench read PM ≈ 88° (#247), and NMC sizing has
-used a :math:`\zeta` rule since.
+If the bump climbs back above 0 dB, the loop crosses 0 dB a second time with
+the phase already past −180°, and the amplifier oscillates at
+:math:`\omega_n`.  The phase margin, measured at the first crossing, never sees
+it; the gain margin and :math:`\zeta` do.
 
 A minimal example
 ~~~~~~~~~~~~~~~~~
 
 The same effect in a loop small enough to work by hand.
 
-**The loop.**  The **open-loop gain** :math:`A(s)` describes what happens to a
-signal going once around the amplifier's feedback loop; phase margin and the
-oscillation check are both read from it.  The toy loop has just the two parts
-from the sketch above, one after the other — which, for transfer functions,
-means multiplied:
+**The loop.**  Just the two parts of the sketch, one after the other — which,
+for transfer functions, means multiplied:
 
 .. math::
 
    A(s) = \underbrace{\frac{1}{s}}_{\text{dominant pole}}
           \times \underbrace{H(s)}_{\text{pole pair}}
 
-**The dominant pole, 1/s.**  Its gain falls tenfold for every tenfold rise in
-frequency and equals 1 (0 dB) at :math:`\omega = 1` — that is where this loop
-crosses 0 dB.  Its phase is −90° at every frequency.
-
-**The pole pair, H(s): the standard form, recapped.**
-
-1. *A pole pair is a quadratic.*  Two coupled poles are the two roots of one
-   quadratic in :math:`s`, the frequency variable:
-
-   .. math::
-
-      1 + a_1 s + a_2 s^2
-
-   The poles are the values of :math:`s` that make this zero.  So the
-   quadratic sits in the **denominator** of the transfer function — the
-   response blows up where the denominator is zero — and the pair's transfer
-   function is one over it:
-
-   .. math::
-
-      H(s) = \frac{1}{1 + a_1 s + a_2 s^2}
-
-2. *Rename the two coefficients so they mean something.*  :math:`a_1` and
-   :math:`a_2` are just numbers; engineers rewrite them with two knobs that
-   have a physical meaning:
-
-   .. list-table::
-      :header-rows: 1
-      :widths: 30 45 25
-
-      * - Knob
-        - Meaning
-        - Relation to the coefficients
-      * - :math:`\omega_n`, natural frequency
-        - *how fast*: the frequency where the pair acts
-        - :math:`a_2 = 1/\omega_n^2`
-      * - :math:`\zeta`, damping ratio
-        - *how bouncy*: how much it rings
-        - :math:`a_1 = 2\zeta/\omega_n`
-
-   Substituting those gives the **standard form** of `Damping ratio ζ`_:
-
-   .. math::
-
-      H(s) = \frac{1}{1 + (2\zeta/\omega_n)\,s + s^2/\omega_n^2}
-
-   It is the same quadratic, written with :math:`\omega_n` and :math:`\zeta`
-   instead of :math:`a_1` and :math:`a_2`.
-
-3. *Why this naming is the useful one.*  The roots of the quadratic come out
-   as
-
-   .. math::
-
-      s = -\zeta\omega_n \pm j\,\omega_n\sqrt{1-\zeta^2}
-
-   so every pole is at distance :math:`\omega_n` from the origin
-   (:math:`|p| = \omega_n`), and :math:`\zeta` is the cosine of the poles'
-   angle from the negative real axis (:math:`\zeta = \cos\theta` — the angle
-   in the figure).  From there :math:`\zeta` alone sets the overshoot and the
-   bump height; at :math:`\omega = \omega_n` the bump's gain is
-   :math:`1/(2\zeta)`.
-
-*In this example* the pair is placed ten times above the 0 dB crossing,
-:math:`\omega_n = 10`:
-
-.. math::
-
-   \frac{2\zeta}{\omega_n} = \frac{2\zeta}{10} = 0.2\zeta, \qquad
-   \frac{1}{\omega_n^2} = \frac{1}{100} = 0.01
-   \qquad\Rightarrow\qquad
-   H(s) = \frac{1}{1 + 0.2\zeta\, s + 0.01\, s^2}
-
-Nothing new is introduced — it is the standard form with one number
-substituted, so all the arithmetic that follows is plain numbers.  At low
-frequency (small :math:`s`) the denominator is ≈ 1, so the pair passes the
-signal unchanged; it only acts near and above :math:`\omega = 10`.
-
-**Is H(s) the amplifier's V_out/V_in?**  Not on its own: :math:`A(s)` is the
-amplifier's :math:`V_{out}/V_{in}`, and :math:`H(s)` is one *factor* of it —
-the factor that holds the pole pair.
-
-- *Every transfer function is a ratio of two polynomials.*  Solving the node
-  equations (Cramer's rule, `Why the denominator is a cubic`_) gives
+- :math:`1/s` is the dominant pole, idealised to sit at zero.  Its gain
+  :math:`1/\omega` falls tenfold per decade and equals 1 (0 dB) at
+  :math:`\omega = 1` — where this loop crosses 0 dB.  Its phase is −90° at
+  every frequency.
+- :math:`H(s)` is the pole pair in standard form, placed ten times above the
+  crossing: :math:`\omega_n = 10`, so :math:`2\zeta/\omega_n = 0.2\zeta` and
+  :math:`1/\omega_n^2 = 0.01`:
 
   .. math::
 
-     \frac{V_{out}}{V_{in}} = \frac{N(s)}{D(s)}
+     H(s) = \frac{1}{1 + 0.2\zeta\, s + 0.01\, s^2}
 
-  where the roots of the numerator :math:`N(s)` are the **zeros** and the
-  roots of the denominator :math:`D(s)` the **poles**.
-- *The RNMC ratio splits into two factors.*  With the textbook
-  simplifications the numerator is about :math:`g_{m1} g_{m2} g_{m3}` (zeros
-  ignored) and the denominator is
-  :math:`s\,C_{c1} g_{m2} g_{m3}\,(1 + a_1 s + a_2 s^2)`; the
-  :math:`g_{m2} g_{m3}` cancels:
-
-  .. math::
-
-     \frac{V_{out}}{V_{in}}
-     = \frac{g_{m1} g_{m2} g_{m3}}{s\,C_{c1} g_{m2} g_{m3}\,(1 + a_1 s + a_2 s^2)}
-     = \underbrace{\frac{g_{m1}/C_{c1}}{s}}_{1/s\ \text{part}}
-       \times \underbrace{\frac{1}{1 + a_1 s + a_2 s^2}}_{H(s)}
-
-  So :math:`A(s) = (1/s)\times H(s)` *is* :math:`V_{out}/V_{in}`, written as
-  a product: the :math:`1/s` part carries the dominant pole **and all the
-  gain**, :math:`H(s)` carries the pole pair.
-- *Why the numerator of H is 1.*  The constant could go in either factor.
-  Keeping all of it in the :math:`1/s` part leaves :math:`H(0) = 1` — the pair
-  passes low frequencies unchanged, and :math:`H` describes only where the
-  pair sits (:math:`\omega_n`) and how it bounces (:math:`\zeta`).  That is the
-  convention behind the standard form; a block with its own DC gain :math:`K`
-  is written :math:`K/(1 + \dots)`.
-- *A circuit where H(s) is the whole V_out/V_in.*  A series R–L–C with the
-  output across the capacitor is a voltage divider:
-
-  .. math::
-
-     \frac{V_{out}}{V_{in}} = \frac{1/(sC)}{R + sL + 1/(sC)}
-     = \frac{1}{1 + sRC + s^2 LC}
-     \qquad\Rightarrow\qquad
-     \omega_n = \frac{1}{\sqrt{LC}},\quad \zeta = \frac{R}{2}\sqrt{\frac{C}{L}}
-
-  (multiply top and bottom by :math:`sC`; :math:`a_1 = RC`,
-  :math:`a_2 = LC`).  Here the pole pair is the entire circuit, so :math:`H`
-  is literally :math:`V_{out}/V_{in}`, and its numerator is exactly 1: at DC
-  the capacitor is open and passes the input straight through.
-- *What the simple form leaves out.*  A general numerator also contains
-  :math:`s` — **zeros**.  The real RNMC loop has them (signal leaks forward
-  through the Miller caps); the textbook factorisation and this toy ignore
-  them.  The full model does not: it solves :math:`V_{out}` directly from
-  :math:`(G + sC)\,v = b`, zeros included.
-
-**Evaluating at a frequency: s = jω.**  :math:`s` is the frequency variable of
-a transfer function.  To ask what happens to a sine wave at frequency
-:math:`\omega`, substitute :math:`s = j\omega`: for a sine wave, taking a time
-derivative is the same as multiplying by :math:`j\omega` (a capacitor's current
-:math:`C\,dv/dt` becomes :math:`j\omega C v`), and every :math:`s` stands for
-that derivative.  The result is one complex number: its **size** is the gain,
-its **angle** the phase.  The :math:`j` produces the phase — multiplying by
-:math:`j` rotates a complex number by 90°, which is why :math:`1/(j\omega)` has
-an angle of −90°.  The only rule needed below is :math:`j^2 = -1`.
+  Nothing new — the standard form with one number substituted, so all the
+  arithmetic that follows is plain numbers.
 
 **The danger point: ω = 10.**  The loop is at risk where its total phase
 reaches −180°.  :math:`1/s` always contributes −90°, and the pair contributes
@@ -575,41 +518,127 @@ Two things to notice:
   :math:`1/(20\zeta)` — :math:`\zeta` is the knob that controls it.  That is
   why the sizer steers by :math:`\zeta`.
 
-**How the toy maps onto the real amplifier.**  It is the RNMC loop itself,
-simplified: the factorisation above,
-:math:`A(s) \approx (g_{m1}/C_{c1})/s \times 1/(1 + a_1 s + a_2 s^2)`, is a
-:math:`1/s` part crossing 0 dB at :math:`\omega_t = g_{m1}/C_{c1}`, times a
-pole pair with :math:`a_1 = 2\zeta/\omega_n` and :math:`a_2 = 1/\omega_n^2`.
-The toy measures frequency in units of :math:`\omega_t` (so the crossing sits
-at 1) and sets :math:`a_1 = 0.2\zeta`, :math:`a_2 = 0.01` (the pair at
-:math:`10\,\omega_t`).  In the fixture of Step 4 the pair sits about 5.6 ×
-above the crossing, and the mirror and parasitics add detail; the mechanism is
-the same.
+The real RNMC amplifier
+~~~~~~~~~~~~~~~~~~~~~~~
 
-Why the denominator is a cubic
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Each node equation is first order in :math:`s`, because every capacitor current
-is :math:`sCV`.  Solving :math:`N` coupled node equations divides by the
-determinant of the :math:`N \times N` system (Cramer's rule), and each term of
-a determinant takes one entry from each row — at most :math:`s^N`.  Three
-nodes (:math:`V_1, V_2, V_3`) give a cubic; the third-stage mirror and the
-output buffer add one node each (degree 4 or 5).  Rule of thumb: **number of
-poles = number of nodes with capacitance**.
-
-The textbook RNMC result (:ref:`rnmc-inner-pair`) simplifies that cubic.  Its
-constant term is a product of the tiny output conductances
-:math:`g_1 g_2 g_3`; setting it to zero ("high stage gains") factors out
+**The toy is the RNMC loop, simplified.**  A three-stage amplifier has a cubic
+denominator (`Poles`_).  The textbook RNMC result (:ref:`rnmc-inner-pair`)
+simplifies it: its constant term is a product of the tiny output conductances
+:math:`g_1 g_2 g_3`, and setting that to zero ("high stage gains") factors out
 :math:`s`:
 
 .. math::
 
-   s\,C_{c1} g_{m2} g_{m3}\,\bigl(1 + a_1 s + a_2 s^2\bigr)
+   D(s) \approx s\,C_{c1} g_{m2} g_{m3}\,\bigl(1 + a_1 s + a_2 s^2\bigr)
 
-— the dominant pole pushed to :math:`s \approx 0`, and the pair as the
-remaining quadratic.  In the fixture the dominant pole sits at 34 Hz and the
-pair at 314 MHz, seven decades apart, so the simplification is fair for the
-textbook formula; the full model below keeps the exact polynomial anyway.
+— the dominant pole pushed to :math:`s \approx 0`, and the pole pair as the
+remaining quadratic.  With the numerator about :math:`g_{m1} g_{m2} g_{m3}`,
+the :math:`g_{m2} g_{m3}` cancels:
+
+.. math::
+
+   \frac{V_{out}}{V_{in}}
+   = \frac{g_{m1} g_{m2} g_{m3}}{s\,C_{c1} g_{m2} g_{m3}\,(1 + a_1 s + a_2 s^2)}
+   = \underbrace{\frac{g_{m1}/C_{c1}}{s}}_{1/s\ \text{part}}
+     \times \underbrace{\frac{1}{1 + a_1 s + a_2 s^2}}_{H(s)}
+
+So :math:`A(s) = (1/s)\times H(s)` *is* the amplifier's
+:math:`V_{out}/V_{in}`, written as a product: the :math:`1/s` part carries the
+dominant pole **and all the gain** (it crosses 0 dB at
+:math:`\omega_t = g_{m1}/C_{c1}`), and :math:`H(s)` carries the pole pair.
+The constant could go in either factor; keeping it all in the :math:`1/s` part
+is what leaves :math:`H` in standard form, :math:`H(0) = 1`.  The toy measures
+frequency in units of :math:`\omega_t` (so the crossing sits at 1) and places
+the pair at :math:`10\,\omega_t`; in the fixture of
+`From theory to code`_ the pair sits about 5.6 × above the crossing.
+
+The simplification drops two things the real loop has: the dominant pole is
+not exactly at zero (in the fixture it sits at 34 Hz, seven decades below the
+pair at 314 MHz, so that is fair), and the numerator also contains :math:`s`
+— **zeros**, from signal leaking forward through the Miller caps.  The full
+model keeps both: it solves :math:`V_{out}` directly from the node equations.
+
+**The fixture shows the same thing.**  The frozen ptm45 FD design from
+``tests/test_rnmc.py``, with its third-stage mirror pole (840 MHz) in place and
+only :math:`g_{m2}` varied:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 15 20 25 25
+
+   * - :math:`g_{m2}`
+     - :math:`\zeta`
+     - Phase margin
+     - Gain where phase = −180°
+     - Verdict
+   * - 0.23 mS
+     - −0.08
+     - 0°
+     - —
+     - unstable (as SPICE found)
+   * - 1.0 mS
+     - 0.08
+     - −69°
+     - +4.5 dB
+     - oscillates
+   * - **1.5 mS**
+     - **0.13**
+     - **82°**
+     - **−1.3 dB**
+     - looks excellent, is on the edge
+   * - 5.0 mS
+     - 0.32
+     - 83°
+     - −12.9 dB
+     - fine
+   * - 10 mS
+     - 0.46
+     - 83°
+     - −17.3 dB
+     - solid
+
+At 1.5 mS the phase margin reads 82°, yet a ~10 % drop in :math:`g_{m2}` (one
+process corner) makes it oscillate: at 1.40 mS the margin still reads 82.2°,
+at 1.35 mS it is −20°.  The phase margin gives no warning, and barely moves
+between 1.5 and 10 mS while the real safety goes from 1.3 dB to 17 dB;
+:math:`\zeta` slides smoothly and tracks it.  The same failure hit nested
+Miller first: gf180 NMC designs rang at ~25 MHz while the open-loop bench read
+PM ≈ 88° (#247), and NMC sizing has used a :math:`\zeta` rule since.
+
+----
+
+From theory to code
+-------------------
+
+For every candidate :math:`(g_{m2}, C_{c2}, g_{m3})` the sizer needs two
+numbers:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 40 40
+
+   * - Number
+     - Answers
+     - Why it is needed
+   * - **Damping** :math:`\zeta`
+     - Will the non-dominant **pole pair** ring, or go unstable?
+     - The pair can resonate *above* the 0 dB crossing, where the phase
+       margin does not look.
+   * - **Phase margin**
+     - How safe is the loop at the 0 dB crossing?
+     - It is the spec, and SPICE verifies it.
+
+Both come from one model of the circuit — the *full model* — solved
+numerically.  The steps below run it on the frozen ptm45 FD fixture from
+``tests/test_rnmc.py``, with the second stage raised to
+:math:`g_{m2} = 1.5` mS and no third-stage mirror or output buffer:
+
+.. code-block:: text
+
+   gm1 = 169 µS   gm2 = 1.5 mS   gm3 = 1.73 mS
+   g1  = 0.5 µS   g2  = 15 µS    g3  = 37 µS        (stage output conductances)
+   c1  = 1 fF     c2  = 160 fF                      (stage-output parasitics)
+   Cc1 = 500 fF   Cc2 = 125 fF   CL  = 2 pF
 
 ----
 
@@ -793,8 +822,8 @@ Closed forms and the full model
 -------------------------------
 
 The textbook closed forms come from the simplified quadratic
-:math:`1 + a_1 s + a_2 s^2` (:ref:`rnmc-inner-pair`).  Matching it to the
-standard form gives the pair's damping and natural frequency,
+:math:`1 + a_1 s + a_2 s^2` (:ref:`rnmc-inner-pair`).  As in
+`The standard form`_, its damping and natural frequency are
 
 .. math::
 
