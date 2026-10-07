@@ -3,8 +3,12 @@ import pytest
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
+from circuitgenome.synthesizer.models import Device
 from circuitgenome.recognizer.netlist_parser import parse
-from circuitgenome.recognizer.subcircuit_recognizer import recognize
+from circuitgenome.recognizer import subcircuit_recognizer
+from circuitgenome.recognizer.models import PatternDef, PatternDevice
+from circuitgenome.recognizer.subcircuit_recognizer import (
+    _check_same_net, _find_assignments, load_patterns, recognize)
 from circuitgenome.recognizer.functional_block_recognizer import assign_slots
 
 # For inverter_based_input, enumerate_circuits accepts only the canonical tail
@@ -605,3 +609,63 @@ def test_round_trip_three_stage_fd(
     config = _INCLUDE_UNSUPPORTED if ss == "differential_ota_second_stage" else {}
     _run_three_stage_fd(modules, topology, input_pair, load, tail_current, cmfb,
                         ss, ts, follower, c1, c2, config)
+
+
+# ── same_net pruning keeps the pattern search small ──────────────────────────
+#
+# _find_assignments binds template devices one at a time and calls
+# _check_same_net after each binding. A same_net group must be rejected as soon
+# as two of its *bound* refs disagree: a group usually includes a device bound
+# late, and waiting for the whole group made the 9-device CMFB patterns try
+# every combination of the earlier devices first (minutes per FD netlist).
+
+def _nmos(ref, source):
+    return Device(ref=ref, type="nmos", terminals={"d": f"{ref}_d", "g": "g", "s": source, "b": "gnd!"})
+
+
+def test_same_net_rejects_a_group_whose_bound_refs_already_disagree():
+    pattern = PatternDef(
+        name="pair_with_tail", category=None, circuit_block=None,
+        devices=[PatternDevice("m1", "nmos"), PatternDevice("m2", "nmos"), PatternDevice("m3", "nmos")],
+        same_net=[["m1.s", "m2.s", "m3.d"]], pins={})
+    a, same, other = _nmos("ma", "tail"), _nmos("mb", "tail"), _nmos("mc", "elsewhere")
+    assert not _check_same_net(pattern, {"m1": a, "m2": other})   # m3 unbound, already unsatisfiable
+    assert _check_same_net(pattern, {"m1": a, "m2": same})        # consistent so far
+    assert _check_same_net(pattern, {"m1": a})                    # one bound ref: nothing to compare
+
+
+def test_large_cmfb_pattern_search_stays_small(monkeypatch):
+    """The 9-device DDA CMFB pattern on a 74-device three-stage FD netlist finds
+    its one match in ~24k same_net checks; checking only fully-bound groups took
+    ~49 million (about 110 s for this one pattern)."""
+    modules = load_modules()
+    topology = next(t for t in load_topologies()
+                    if t.name == "three_stage_opamp_rnmc_buffered_fully_differential")
+    pick = {"input_pair": "differential_pair_nmos",
+            "load": "folded_cascode_load_nmos_input_differential_output",
+            "tail_current": "cascode_current_mirror_tail_nmos",
+            "cmfb": "dda_cmfb_nmos_mirror",
+            "output_stage": "common_drain_nmos"}
+    pool = {cat: [v for v in modules[cat] if v.name == name] for cat, name in pick.items()}
+    pool["amplification_stage"] = [v for v in modules["amplification_stage"]
+                                   if v.name in ("common_source_pmos", "noninverting_stage_nmos")]
+    pool["compensation"] = [v for v in modules["compensation"]
+                            if v.name == "miller_cap_with_nulling_resistor"]
+    netlist = parse(to_flat_spice(next(enumerate_circuits(topology, pool))))
+    # The chain is net-inverting, so the synthesizer emits the inverting CMFB.
+    pattern = next(p for p in load_patterns() if p.name == "dda_cmfb_nmos_mirror_inverting")
+
+    calls = 0
+    real_check = subcircuit_recognizer._check_same_net
+
+    def counting_check(pattern, assignment):
+        nonlocal calls
+        calls += 1
+        return real_check(pattern, assignment)
+
+    monkeypatch.setattr(subcircuit_recognizer, "_check_same_net", counting_check)
+    matches = list(_find_assignments(pattern, netlist.devices))
+
+    assert [sorted(d.ref for d in m.values()) for m in matches] == [
+        [f"m{i}_cmfb" for i in range(1, 10)]]
+    assert calls < 100_000, f"{calls} same_net checks: the search is no longer pruning early"
