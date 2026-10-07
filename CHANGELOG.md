@@ -37,7 +37,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 - 📝 `SizingResult.margins` is documented correctly (distance to the limit, `>= 0` means met — not a ratio), and the Level-1 walkthrough matches the code again ([#251](https://github.com/analog-ml/CircuitGenome/pull/251)).
 - 📝 Walkthroughs for `sizer/verify/` — six figure-rich pages covering the ngspice bench: building a runnable deck from a generic sized netlist (three model idioms, the PDK subcircuit rewrite and the operating-point handle that moves with it), the shared rig and its bias-current-direction heuristic, the six metric testbenches, the DC bias-soundness verdict, and the orchestrator's failure discipline. The verification path was the only sizer package with no walkthrough ([#218](https://github.com/analog-ml/CircuitGenome/pull/218)).
-- 📝 New theory page, *RNMC Full Model* — pole pairs, damping ζ, why phase margin alone misses a ringing pair, and the reversed-nested-Miller model step by step on a real fixture; every `sizer/physics/equations.py` docstring now names its parameters and special return values ([#252](https://github.com/analog-ml/CircuitGenome/pull/252)).
+- 📝 New theory page, *RNMC Stability: Phase Margin and Damping* — pole pairs, damping ζ, why phase margin alone misses a ringing pair, and the reversed-nested-Miller model step by step on a real fixture; every `sizer/physics/equations.py` docstring now names its parameters and special return values ([#252](https://github.com/analog-ml/CircuitGenome/pull/252)).
 
 ### Changed
 

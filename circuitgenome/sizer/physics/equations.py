@@ -4,7 +4,7 @@ Level-1 MOSFET equations (Shichman-Hodges) and op-amp performance formulas.
 Most functions are closed-form textbook formulas.  The exception is the
 reversed-nested-Miller (RNMC) three-stage loop, whose phase margin and pole
 damping come from a small nodal model solved numerically — see
-:doc:`/theory/rnmc_full_model`.
+:doc:`/theory/rnmc_stability`.
 
 All functions operate on SI units unless the name suffix states otherwise.
 Consistent units: currents in A, voltages in V, transconductances in A/V (S),
@@ -300,7 +300,7 @@ def phase_margin_three_stage_deg(
 # the two non-dominant poles into a pole pair, which can ring or sit in the
 # right half plane — a two-real-poles formula like
 # phase_margin_three_stage_deg cannot see either.  The full model below solves
-# the half circuit's nodal equations instead; docs/theory/rnmc_full_model.rst
+# the half circuit's nodal equations instead; docs/theory/rnmc_stability.rst
 # walks through it.  For high stage gains its denominator reduces to
 #
 #   s·Cc1·gm2·gm3 · [1 + s·a1 + s²·a2]
@@ -319,7 +319,7 @@ def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
 
     Closed form, from the simplified pole-pair quadratic
     ``1 + a1·s + a2·s²`` (defined in the RNMC section comment of this module
-    and in :doc:`/theory/rnmc_full_model`), whose damping is
+    and in :doc:`/theory/rnmc_stability`), whose damping is
     ``ζ = a1/(2·√a2)``.  It ignores the stage output conductances, the
     first-stage parasitic, a third-stage mirror and an output buffer, which
     :func:`rnmc_pole_damping` includes.  With ``v = √gm2`` the condition

@@ -1,9 +1,8 @@
-RNMC Full Model: Poles, Damping and Phase Margin
-================================================
+RNMC Stability: Phase Margin and Damping
+========================================
 
-*How the sizer decides whether a reversed-nested-Miller (RNMC) three-stage
-amplifier is stable and well-behaved — and the background needed to read that
-code.*
+*Why a reversed-nested-Miller (RNMC) three-stage loop can pass the
+phase-margin check and still ring, and how the sizer computes both numbers.*
 
 A three-stage amplifier can pass the usual phase-margin check and still ring,
 or even oscillate.  For every RNMC design it sizes, the sizer therefore
