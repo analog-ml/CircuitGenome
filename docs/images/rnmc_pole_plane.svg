@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 380" width="600" height="380" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <title>A pole pair on the complex plane: distance from the origin is the natural frequency, the angle from the negative real axis sets the damping</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <!-- background: readable in light and dark themes -->
+  <rect x="0" y="0" width="600" height="380" rx="8" fill="#ffffff"/>
+
+  <!-- stable / unstable half planes -->
+  <rect x="0" y="0" width="380" height="380" rx="8" fill="#eaf5ec"/>
+  <rect x="380" y="0" width="220" height="380" fill="#fbeceb"/>
+  <rect x="592" y="0" width="8" height="380" rx="8" fill="#fbeceb"/>
+  <text x="20" y="362" fill="#2e6b3a">left half plane: stable (σ &gt; 0, ζ &gt; 0)</text>
+  <text x="586" y="362" fill="#9b2c25" text-anchor="end">right half: unstable (ζ &lt; 0)</text>
+
+  <!-- circle of constant natural frequency -->
+  <circle cx="380" cy="190" r="150" fill="none" stroke="#999" stroke-width="1.2" stroke-dasharray="2 4"/>
+  <text x="586" y="346" fill="#777" text-anchor="end">circle: same ωn, other ζ</text>
+
+  <!-- axes -->
+  <line x1="20" y1="190" x2="580" y2="190" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="380" y1="370" x2="380" y2="12" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="576" y="180" text-anchor="end">Re</text>
+  <text x="390" y="24">Im (jω)</text>
+  <text x="386" y="208" fill="#555">0</text>
+
+  <!-- projections of the upper pole -->
+  <line x1="305" y1="60" x2="305" y2="190" stroke="#888" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <line x1="305" y1="60" x2="380" y2="60" stroke="#888" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="388" y="64" fill="#444">ω = Im(p) <tspan font-size="12">(ringing frequency)</tspan></text>
+
+  <!-- sigma bracket under the real axis -->
+  <line x1="305" y1="222" x2="380" y2="222" stroke="#2e6b3a" stroke-width="1.5"/>
+  <line x1="305" y1="215" x2="305" y2="229" stroke="#2e6b3a" stroke-width="1.5"/>
+  <line x1="380" y1="215" x2="380" y2="229" stroke="#2e6b3a" stroke-width="1.5"/>
+  <text x="342" y="246" fill="#2e6b3a" text-anchor="middle">σ = −Re(p)</text>
+  <text x="342" y="262" fill="#2e6b3a" text-anchor="middle" font-size="12">(decay rate)</text>
+
+  <!-- ray from origin to the upper pole: |p| = wn -->
+  <line x1="380" y1="190" x2="305" y2="60" stroke="#1f4e9c" stroke-width="2.5"/>
+  <text transform="translate(358,115) rotate(60)" fill="#1f4e9c" text-anchor="middle" font-weight="bold">|p| = ωn</text>
+
+  <!-- ray to the conjugate pole (lighter) -->
+  <line x1="380" y1="190" x2="305" y2="320" stroke="#1f4e9c" stroke-width="1.5" stroke-opacity="0.45"/>
+
+  <!-- angle theta from the negative real axis -->
+  <path d="M 340 190 A 40 40 0 0 1 360 155.36" fill="none" stroke="#c0392b" stroke-width="2"/>
+  <text x="328" y="166" fill="#c0392b" font-weight="bold" font-size="16">θ</text>
+
+  <!-- poles -->
+  <g stroke="#1f4e9c" stroke-width="3" stroke-linecap="round">
+    <line x1="297" y1="52" x2="313" y2="68"/><line x1="313" y1="52" x2="297" y2="68"/>
+    <line x1="297" y1="312" x2="313" y2="328"/><line x1="313" y1="312" x2="297" y2="328"/>
+  </g>
+  <text x="292" y="46" fill="#1f4e9c" text-anchor="end">p = −σ + jω</text>
+  <text x="292" y="342" fill="#1f4e9c" text-anchor="end" fill-opacity="0.8">p* = −σ − jω</text>
+
+  <!-- the result -->
+  <rect x="20" y="20" width="200" height="54" rx="6" fill="#ffffff" stroke="#c0392b" stroke-width="1.2"/>
+  <text x="120" y="43" text-anchor="middle" font-weight="bold" fill="#c0392b">ζ = cos θ = σ / ωn</text>
+  <text x="120" y="63" text-anchor="middle" fill="#333" font-size="13">code: -p.real / abs(p)</text>
+</svg>
