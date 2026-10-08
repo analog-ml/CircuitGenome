@@ -31,10 +31,11 @@ Background: transfer functions, poles and phase margin
 Transfer functions and s = jω
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Feed a sine wave into a linear circuit and a sine wave of the same frequency
-comes out — larger or smaller, and delayed.  The **transfer function**
-:math:`V_{out}/V_{in}` captures both effects at every frequency at once.  It is
-written in the frequency variable :math:`s`, and solving the circuit's node
+The **transfer function**
+:math:`V_{out}/V_{in}` captures (1) how mucch the input signal grows or shrinks
+and (2) how much it is delayed at every frequency at once.  It is
+written in the frequency variable :math:`s`. The transfer function is often obtained by
+solving the circuit's node
 equations always gives a ratio of two polynomials in :math:`s`:
 
 .. math::
@@ -42,34 +43,17 @@ equations always gives a ratio of two polynomials in :math:`s`:
    \frac{V_{out}}{V_{in}} = \frac{N(s)}{D(s)}
 
 To ask what happens to a sine wave at frequency :math:`\omega`, substitute
-:math:`s = j\omega`.  The reason: for a sine wave, taking a time derivative is
-the same as multiplying by :math:`j\omega` — a capacitor's current
-:math:`C\,dv/dt` becomes :math:`j\omega C v` — and every :math:`s` in the
-formula stands for that derivative.  The result is one complex number:
-
-- its **size** is the gain (how much the wave grows or shrinks);
-- its **angle** is the phase (how much the wave is delayed).
-
-The :math:`j` is what produces the phase: multiplying by :math:`j` rotates a
-complex number by 90°, which is why :math:`1/(j\omega)` has an angle of −90°.
-The only rule the arithmetic below needs is :math:`j^2 = -1`.
+:math:`s = j\omega`.  
 
 Poles
 ~~~~~
 
 The **poles** are the roots of the denominator :math:`D(s)`; the roots of the
-numerator :math:`N(s)` are the **zeros**.  Near a pole the response is large,
-because the denominator is close to zero.  Each pole bends the gain plot down
-by another 20 dB/decade and adds up to another 90° of phase lag.
+numerator :math:`N(s)` are the **zeros**.  Each pole contributes a 20 dB/decade drop in gain and adds up to another 90° of phase lag.
 
-Every node that carries a capacitor contributes roughly one pole.  Each node
-equation is first order in :math:`s` (every capacitor current is :math:`sCV`);
-solving :math:`N` coupled node equations divides by the determinant of the
-:math:`N \times N` system (Cramer's rule), and each term of a determinant takes
-one entry from each row — at most :math:`s^N`.  So the rule of thumb is
+Every node that carries a capacitor contributes roughly one pole.  The rule of thumb is
 **number of poles = number of nodes with capacitance**: a three-stage amplifier
 (three stage outputs) has a cubic denominator and three poles.
-
 The lowest pole is the **dominant pole**: it sets the bandwidth.  The rest are
 **non-dominant** poles.
 
@@ -115,10 +99,9 @@ Intuition: pole pairs and ringing
 ---------------------------------
 
 A single pole is the root of a *linear* factor :math:`1 + s/\omega_p`, which is
-always a real number.  It bends the gain down smoothly and cannot ring.
-
-Two poles that are coupled — because capacitors link their nodes — come out
-*together*, as the two roots of one quadratic:
+always a real number.  It contributes a 20 dB/decade drop in gain and a 90° phase lag, but it does not ring.
+Following the same reasoning, a second-order factor is a *quadratic*:
+  
 
 .. math::
 
@@ -135,52 +118,6 @@ which rings at the frequency :math:`\omega`.  That is a **pole pair**.
 Complex roots of a polynomial with real coefficients always come in such
 pairs, so a denominator of any degree factors into single real poles and pole
 pairs.
-
-Physically, one water tank draining can only empty smoothly; two tanks joined
-by a pipe can slosh back and forth.  Ringing needs two energy stores trading
-energy — a pole pair is two of them, coupled.
-
-**The textbook pole pair: a series R–L–C.**  With the output taken across the
-capacitor, the circuit is a voltage divider:
-
-.. math::
-
-   \frac{V_{out}}{V_{in}} = \frac{1/(sC)}{R + sL + 1/(sC)}
-   = \frac{1}{1 + sRC + s^2 LC}
-
-(multiply top and bottom by :math:`sC`).  The whole transfer function is one
-over a quadratic, with :math:`a_1 = RC` and :math:`a_2 = LC`; its numerator is
-exactly 1 because at DC the capacitor is open and passes the input straight
-through.  Small :math:`R` gives a pair that rings; large :math:`R` gives two
-real poles.
-
-**Which amplifiers have a pole pair.**
-
-.. list-table::
-   :header-rows: 1
-   :widths: 25 25 25 25
-
-   * - Amplifier
-     - Poles after the dominant one
-     - Can they ring?
-     - Phase margin enough?
-   * - Single-stage OTA
-     - 1 (mirror node)
-     - no — a single pole is real
-     - yes
-   * - Two-stage Miller
-     - 1 (output, :math:`\approx g_{m2}/C_L`)
-     - no
-     - yes
-   * - Three-stage NMC / RNMC
-     - 2, coupled through :math:`C_{c1}`, :math:`C_{c2}`
-     - **yes — a pair**
-     - **no**: also needs :math:`\zeta`
-
-In a two-stage amplifier the two poles also come from one quadratic, but the
-Miller capacitor *splits* them so far apart that they stay real.  In a
-three-stage amplifier :math:`C_{c1}` splits off the dominant pole, and nothing
-forces the remaining two apart.
 
 ----
 
@@ -230,13 +167,6 @@ instead of :math:`a_1` and :math:`a_2`; going back the other way,
 At :math:`s = 0`, :math:`H = 1`: the pair passes low frequencies unchanged, and
 :math:`H` describes only where it acts and how it bounces.
 
-ζ on the complex plane
-~~~~~~~~~~~~~~~~~~~~~~
-
-The naming pays off in the roots.  The poles are the values of :math:`s` that
-make the denominator zero; call such a value :math:`p` (for *pole*).
-Multiplying :math:`1 + (2\zeta/\omega_n)s + s^2/\omega_n^2 = 0` through by
-:math:`\omega_n^2` and applying the quadratic formula:
 
 .. math::
 
@@ -272,23 +202,20 @@ real axis:
    forever), toward the real axis :math:`\zeta \to 1` (no ringing), and past
    the imaginary axis :math:`\zeta < 0` (unstable).
 
+we can write the damping ratio directly from the pole itself:
+
 .. math::
 
    \zeta = \cos\theta = \frac{\sigma}{\omega_n} = \frac{-\mathrm{Re}(p)}{|p|}
 
-:math:`\sigma/\omega_n` is the textbook form; :math:`-\mathrm{Re}(p)/|p|` is
-the same thing written from the pole itself.  The real part gives
-:math:`-\mathrm{Re}(p) = \zeta\omega_n = \sigma`, and the distance from the
-origin is
+and because 
 
 .. math::
 
    |p| = \sqrt{(\zeta\omega_n)^2 + \omega_n^2(1-\zeta^2)}
        = \sqrt{\omega_n^2(\zeta^2 + 1 - \zeta^2)} = \omega_n
 
-so :math:`-\mathrm{Re}(p)/|p| = \zeta\omega_n/\omega_n = \zeta`.  The code uses
-the second form because a numerical solver returns each pole as one complex
-number, not as :math:`\sigma` and :math:`\omega_n` separately:
+so :math:`-\mathrm{Re}(p)/|p| = \zeta\omega_n/\omega_n = \zeta`.  So when we use numpy to find the poles of a transfer function, we can read :math:`\zeta` straight from the complex pole :math:`p`:
 
 .. list-table::
    :header-rows: 1
@@ -307,227 +234,9 @@ number, not as :math:`\sigma` and :math:`\omega_n` separately:
 
 What ζ means in practice
 ~~~~~~~~~~~~~~~~~~~~~~~~
-
-Two textbook formulas tie :math:`\zeta` to what you would see on a scope or a
-Bode plot:
-
-.. math::
-
-   \text{step overshoot} = e^{-\pi\zeta/\sqrt{1-\zeta^2}},
-   \qquad
-   \text{gain peak} = \frac{1}{2\zeta\sqrt{1-\zeta^2}}\quad(\zeta < 0.707)
-
-At exactly :math:`\omega = \omega_n` the pair's gain is :math:`1/(2\zeta)`.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 15 20 20 45
-
-   * - :math:`\zeta`
-     - Step overshoot
-     - Gain peak
-     - Meaning
-   * - ≥ 1
-     - 0 %
-     - none
-     - two real poles; no ringing
-   * - **0.707**
-     - 4 %
-     - **none**
-     - Butterworth — the fastest response with no peak (``ZETA_TARGET``)
-   * - 0.5
-     - 16 %
-     - +1.2 dB
-     - ``ZETA_FLOOR``
-   * - 0.25
-     - 44 %
-     - +6.3 dB
-     -
-   * - 0.125
-     - 67 %
-     - +12 dB
-     -
-   * - 0
-     - —
-     - —
-     - poles on the imaginary axis: rings forever (an oscillator)
-   * - < 0
-     - —
-     - —
-     - poles in the right half plane: ringing grows (unstable)
-
-:math:`\zeta = 1/\sqrt{2} \approx 0.707` is the standard target for the
-non-dominant pair of a three-stage amplifier: Leung & Mok size nested-Miller
-compensation for a third-order Butterworth response, which places the pair
-exactly there.
+ζ tells us how bouncy the pole pair is.  A low-ζ pair rings a lot, and a high-ζ pair does not. 
 
 ----
-
-Why phase margin alone is not enough
-------------------------------------
-
-The bump
-~~~~~~~~
-
-Phase margin is read at one frequency: where the gain falls through 0 dB.  The
-pole pair sits higher, and a lightly damped pair adds a resonance bump there —
-right where its own phase lag pushes the loop to −180°:
-
-.. code-block:: text
-
-   gain (dB)
-      │╲
-      │  ╲                      ← dominant pole: gain falls steadily
-    0 ┼────╲─────────────────── 0 dB
-      │      ╲      ▲
-      │        ╲   ╱ ╲          ← the pair's resonance (height set by ζ)
-      │          ╲╱    ╲
-      └─────┬───────┬──────────→ frequency
-        PM read    ωn of the pair
-        here       (the danger is here)
-
-If the bump climbs back above 0 dB, the loop crosses 0 dB a second time with
-the phase already past −180°, and the amplifier oscillates at
-:math:`\omega_n`.  The phase margin, measured at the first crossing, never sees
-it; the gain margin and :math:`\zeta` do.
-
-A minimal example
-~~~~~~~~~~~~~~~~~
-
-The same effect in a loop small enough to work by hand.
-
-**The loop.**  Just the two parts of the sketch, one after the other — which,
-for transfer functions, means multiplied:
-
-.. math::
-
-   A(s) = \underbrace{\frac{1}{s}}_{\text{dominant pole}}
-          \times \underbrace{H(s)}_{\text{pole pair}}
-
-- :math:`1/s` is the dominant pole, idealised to sit at zero.  Its gain
-  :math:`1/\omega` falls tenfold per decade and equals 1 (0 dB) at
-  :math:`\omega = 1` — where this loop crosses 0 dB.  Its phase is −90° at
-  every frequency.
-- :math:`H(s)` is the pole pair in standard form, placed ten times above the
-  crossing: :math:`\omega_n = 10`, so :math:`2\zeta/\omega_n = 0.2\zeta` and
-  :math:`1/\omega_n^2 = 0.01`:
-
-  .. math::
-
-     H(s) = \frac{1}{1 + 0.2\zeta\, s + 0.01\, s^2}
-
-  Nothing new — the standard form with one number substituted, so all the
-  arithmetic that follows is plain numbers.
-
-**The danger point: ω = 10.**  The loop is at risk where its total phase
-reaches −180°.  :math:`1/s` always contributes −90°, and the pair contributes
-exactly −90° at its own frequency, :math:`\omega = 10` — so evaluate there,
-:math:`s = j\cdot 10`.  The pair's denominator, term by term:
-
-.. math::
-
-   \begin{aligned}
-   0.01\, s^2 &= 0.01\,(j\cdot 10)^2 = 0.01\cdot(-100) = -1\\
-   0.2\zeta\, s &= 0.2\zeta\cdot j\cdot 10 = j\cdot 2\zeta\\
-   1 + 0.2\zeta\, s + 0.01\, s^2 &= 1 + j\cdot 2\zeta - 1 = j\cdot 2\zeta
-   \end{aligned}
-
-The 1 and the −1 cancel — that happens exactly at the pair's own frequency.
-What is left is
-
-.. math::
-
-   H(j\cdot 10) = \frac{1}{j\cdot 2\zeta}
-   \quad\Rightarrow\quad |H| = \frac{1}{2\zeta},\ \angle H = -90°
-
-— the bump, taller as :math:`\zeta` shrinks (ζ = 0.1 gives a gain of 5).
-Times the :math:`1/s` part, :math:`1/(j\cdot 10)` (size 1/10, angle −90°):
-
-.. math::
-
-   |A(j\cdot 10)| = \frac{1}{10}\cdot\frac{1}{2\zeta} = \frac{1}{20\zeta},
-   \qquad \angle A(j\cdot 10) = -180°
-
-The loop oscillates when its gain at −180° is at least 1:
-
-.. math::
-
-   \frac{1}{20\zeta} > 1 \iff \zeta < \frac{1}{20} = 0.05
-
-The 20 is the 10 (the pair is ten times above the crossing) times the 2 of the
-bump height :math:`1/(2\zeta)`.
-
-**The phase margin: ω = 1.**  Phase margin is :math:`180° + \angle A` where the
-gain is 1, which is at :math:`\omega \approx 1`, so evaluate at
-:math:`s = j\cdot 1`:
-
-.. math::
-
-   \begin{aligned}
-   0.01\, s^2 &= 0.01\cdot(-1) = -0.01\\
-   0.2\zeta\, s &= j\cdot 0.2\zeta\\
-   1 + 0.2\zeta\, s + 0.01\, s^2 &= 0.99 + j\cdot 0.2\zeta
-   \end{aligned}
-
-Nearly 1 — the pair barely touches the signal here
-(:math:`|H(j\cdot 1)| = 1/\sqrt{0.99^2 + (0.2\zeta)^2} \approx 1.01`, which is
-why the gain still crosses 1 at :math:`\omega \approx 1`).  Its small angle is
-all the pair costs at the crossing.  A complex number :math:`x + jy` has angle
-:math:`\arctan(y/x)`, and dividing by it gives minus that angle:
-
-.. math::
-
-   \angle H(j\cdot 1) = -\arctan\frac{0.2\zeta}{0.99}
-   \qquad\Rightarrow\qquad
-   \text{PM} = 180° - 90° - \arctan\frac{0.2\zeta}{0.99}
-   = 90° - \arctan\frac{0.2\zeta}{0.99}
-
-**The numbers.**  The phase margin from this formula, the gain at −180° from
-:math:`1/(20\zeta)`; a numerical sweep of :math:`A(j\omega)` agrees with both:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 10 18 22 50
-
-   * - :math:`\zeta`
-     - Phase margin
-     - Gain at −180°
-     - Verdict
-   * - 0.5
-     - 84.2°
-     - −20 dB
-     - solid
-   * - 0.2
-     - 87.7°
-     - −12 dB
-     - fine
-   * - 0.1
-     - 88.8°
-     - −6 dB
-     - getting close
-   * - 0.06
-     - **89.3°**
-     - **−1.6 dB**
-     - on the edge
-   * - 0.04
-     - **89.5°** at the first crossing
-     - **+1.9 dB**
-     - oscillates — the bump lifts the gain back above 0 dB, adding two more
-       crossings around :math:`\omega = 10`; the one just past it has a
-       margin of −33° (from the sweep), and
-       :func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`,
-       which reports the worst crossing, would report that
-
-Two things to notice:
-
-- **Phase margin gets better as the design gets worse** — 84° → 88° → 89° →
-  89.5°.  The pair's lag at the crossing, :math:`\arctan(0.2\zeta/0.99)`,
-  shrinks with :math:`\zeta`: a low-:math:`\zeta` pair packs its phase change
-  tightly around its own frequency.  Steering by phase margin alone would walk
-  the design straight into oscillation.
-- **The gain at −180° tells the truth**, and it is exactly
-  :math:`1/(20\zeta)` — :math:`\zeta` is the knob that controls it.  That is
-  why the sizer steers by :math:`\zeta`.
 
 The real RNMC amplifier
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -557,104 +266,12 @@ So :math:`A(s) = (1/s)\times H(s)` *is* the amplifier's
 :math:`V_{out}/V_{in}`, written as a product: the :math:`1/s` part carries the
 dominant pole **and all the gain** (it crosses 0 dB at
 :math:`\omega_t = g_{m1}/C_{c1}`), and :math:`H(s)` carries the pole pair.
-The constant could go in either factor; keeping it all in the :math:`1/s` part
-is what leaves :math:`H` in standard form, :math:`H(0) = 1`.  The toy measures
-frequency in units of :math:`\omega_t` (so the crossing sits at 1) and places
-the pair at :math:`10\,\omega_t`; in the fixture of
-`From theory to code`_ the pair sits about 5.6 × above the crossing.
 
-The simplification drops two things the real loop has: the dominant pole is
-not exactly at zero (in the fixture it sits at 34 Hz, seven decades below the
-pair at 314 MHz, so that is fair), and the numerator also contains :math:`s`
-— **zeros**, from signal leaking forward through the Miller caps.  The full
-model keeps both: it solves :math:`V_{out}` directly from the node equations.
-
-**The fixture shows the same thing.**  The frozen ptm45 FD design from
-``tests/test_rnmc.py``, with its third-stage mirror pole (840 MHz) in place and
-only :math:`g_{m2}` varied:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 15 15 20 25 25
-
-   * - :math:`g_{m2}`
-     - :math:`\zeta`
-     - Phase margin
-     - Gain where phase = −180°
-     - Verdict
-   * - 0.23 mS
-     - −0.08
-     - 0°
-     - —
-     - unstable (as SPICE found)
-   * - 1.0 mS
-     - 0.08
-     - −69°
-     - +4.5 dB
-     - oscillates
-   * - **1.5 mS**
-     - **0.13**
-     - **82°**
-     - **−1.3 dB**
-     - looks excellent, is on the edge
-   * - 5.0 mS
-     - 0.32
-     - 83°
-     - −12.9 dB
-     - fine
-   * - 10 mS
-     - 0.46
-     - 83°
-     - −17.3 dB
-     - solid
-
-At 1.5 mS the phase margin reads 82°, yet a ~10 % drop in :math:`g_{m2}` (one
-process corner) makes it oscillate: at 1.40 mS the margin still reads 82.2°,
-at 1.35 mS it is −20°.  The phase margin gives no warning, and barely moves
-between 1.5 and 10 mS while the real safety goes from 1.3 dB to 17 dB;
-:math:`\zeta` slides smoothly and tracks it.  The same failure hit nested
-Miller first: gf180 NMC designs rang at ~25 MHz while the open-loop bench read
-PM ≈ 88° (#247), and NMC sizing has used a :math:`\zeta` rule since.
 
 ----
 
-From theory to code
--------------------
-
-For every candidate :math:`(g_{m2}, C_{c2}, g_{m3})` the sizer needs two
-numbers:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 40 40
-
-   * - Number
-     - Answers
-     - Why it is needed
-   * - **Damping** :math:`\zeta`
-     - Will the non-dominant **pole pair** ring, or go unstable?
-     - The pair can resonate *above* the 0 dB crossing, where the phase
-       margin does not look.
-   * - **Phase margin**
-     - How safe is the loop at the 0 dB crossing?
-     - It is the spec, and SPICE verifies it.
-
-Both come from one model of the circuit — the *full model* — solved
-numerically.  The steps below run it on the frozen ptm45 FD fixture from
-``tests/test_rnmc.py``, with the second stage raised to
-:math:`g_{m2} = 1.5` mS and no third-stage mirror or output buffer:
-
-.. code-block:: text
-
-   gm1 = 169 µS   gm2 = 1.5 mS   gm3 = 1.73 mS
-   g1  = 0.5 µS   g2  = 15 µS    g3  = 37 µS        (stage output conductances)
-   c1  = 1 fF     c2  = 160 fF                      (stage-output parasitics)
-   Cc1 = 500 fF   Cc2 = 125 fF   CL  = 2 pF
-
-----
-
-The full model, step by step
-----------------------------
+Step-by-step: how the sizer computes :math:`\zeta` and phase margin
+-------------------------------------------------------------------
 
 Step 1 — Shrink the amplifier to a small-signal model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
