@@ -121,9 +121,14 @@ class Stage:
 
     :param gm: signal-device transconductance in A/V, gm-ceiling clamped.
     :param rout: output resistance in Ω at the stage's output node.
+    :param ids: the stage's quiescent current in A -- the input pair's tail
+        current for the first stage, the signal device's drain current for a
+        gain stage.  It is the most current the stage can push into its output
+        node's capacitance, so it sets the stage's slew limit.
     """
     gm: float
     rout: float
+    ids: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -172,6 +177,13 @@ class StageChain:
     :param output_buffer: ``(gm, cgs, g_out)`` of a source-follower output
         buffer (RNMC only): the third stage then drives the follower's gate
         and ``CL`` sits on the follower's output; ``None`` without one.
+    :param k_slew: fraction of the tail current the first stage can steer into
+        its output node -- ``1.0`` when a current-mirror load collects both
+        halves of a single-ended pair, ``0.5`` without a mirror or per side of
+        a fully-differential pair (the side swings from half the tail to all
+        or none of it).
+    :param buffer_ids: bias current in A of a source-follower output stage,
+        which alone charges ``CL`` behind it; ``None`` without one.
     """
     stages: tuple[Stage, ...]
     k_fs: float = 1.0
@@ -187,6 +199,8 @@ class StageChain:
     node_caps_f: tuple[float, ...] = ()
     third_stage_mirror_pole_hz: float | None = None
     output_buffer: tuple[float, float, float] | None = None
+    k_slew: float = 1.0
+    buffer_ids: float | None = None
 
     def withheld(self) -> StageChain:
         """Mark the small-signal operating point as non-existent (issue #148)."""
@@ -574,6 +588,10 @@ def build_stage_chain(
         return min(model.gm(d.type, s.w_um, s.l_um, s.ids_a),
                    model.gm_ceiling(d.type, s.ids_a, s.l_um))
 
+    def _ids(d: Device | None) -> float:
+        s = sizing.get(d.ref) if d is not None else None
+        return abs(s.ids_a) if s is not None else 0.0
+
     def _rout(net: str | None, extra_gd: float = 0.0) -> float:
         if not net:
             return float("inf")
@@ -604,13 +622,16 @@ def build_stage_chain(
         out1 = (_single_ended_output_net(slot_transistors.get("load", []),
                                          signal_nets, mosfets)
                 or ip_devs[0].terminals.get("d"))
+    # The pair's two drain currents add up to the tail current.
     stages = [Stage(gm=_gm(ip_devs[0]) if ip_devs else 0.0,
-                    rout=_rout(out1, gd_load_r))]
+                    rout=_rout(out1, gd_load_r),
+                    ids=sum(_ids(d) for d in ip_devs if is_signal_device(d)))]
 
     # --- Stages 2 and 3: each numbered gain slot's signal device ---
     for sig in signal_devs:
         stages.append(Stage(gm=_gm(sig) if sig is not None else 0.0,
-                            rout=_rout(sig.terminals.get("d") if sig else None)))
+                            rout=_rout(sig.terminals.get("d") if sig else None),
+                            ids=_ids(sig)))
 
     # --- Output-stage load conductance (PSRR) ---
     # Multi-stage: the second stage's current-source load, whose gds is the
@@ -687,9 +708,15 @@ def build_stage_chain(
             ts_mirror_pole = _mirror_pole_hz(slot_devs[1], mosfets, model, sizing)
         buffer = _output_buffer(slot_transistors, model, sizing)
 
+    k_fs = _first_stage_gain_factor(slot_transistors)
+    fully_differential = any(s in slot_transistors
+                             for s in ("second_stage_p", "second_stage_n"))
+    follower = next((d for d in _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
+                     if is_signal_device(d)), None)
+
     return StageChain(
         stages=tuple(stages),
-        k_fs=_first_stage_gain_factor(slot_transistors),
+        k_fs=k_fs,
         gd_tail=gd_tail,
         gd_output_load=gd_output_load,
         mirror_pole_hz=_mirror_pole_hz(
@@ -702,4 +729,6 @@ def build_stage_chain(
         node_caps_f=node_caps,
         third_stage_mirror_pole_hz=ts_mirror_pole,
         output_buffer=buffer,
+        k_slew=0.5 if fully_differential else k_fs,
+        buffer_ids=_ids(follower) if follower is not None else None,
     )

@@ -258,11 +258,13 @@ def _fd_inverting_fb(vcm, drive: str) -> str:
 
 
 _SR_SPAN = 0.2   # fraction of the total edge swing the slew window spans
+_SR_RANGE = (0.1, 0.9)   # the part of the swing a slew window must lie within
 
 
 def _edge_slew(t, vo, vdd) -> float | None:
     """Peak slew rate of one output transition (V/s): the steepest secant
-    across any window spanning ``_SR_SPAN`` of the total swing.
+    across any window spanning ``_SR_SPAN`` of the total swing, inside the
+    usual 10 %–90 % measurement range (``_SR_RANGE``).
 
     Slew rate is the *current-limited* rate the output can move — the fast,
     roughly constant ramp early in a large step. The previous 20%-80% average
@@ -276,7 +278,16 @@ def _edge_slew(t, vo, vdd) -> float | None:
     the edge's direction (via the running extreme, so end-ringing can't cut a
     window short), and keeps the steepest such secant. The span is wide enough
     to skip the sub-sample feedback-cap feedthrough spike, short enough not to
-    average in the settling tail."""
+    average in the settling tail.
+
+    Slewing is the current-limited middle of the edge, so a window must start
+    no earlier than the first sample past 10 % of the swing and end by the
+    first one past 90 %.  Both ends of an edge can outrun its ramp: the step
+    couples straight through the Miller caps into the output at the start
+    (three-stage edges read ~8 % high off that jump), and near the target the
+    input stage leaves saturation and the loop pulls the output in -- as do
+    the overshoot and ringing past it (a two-stage edge ramping at ~6 V/µs
+    read 10 V/µs off its undershoot)."""
     if len(t) < 4:
         return None
     swing = vo[-1] - vo[0]
@@ -289,8 +300,12 @@ def _edge_slew(t, vo, vdd) -> float | None:
         j = np.searchsorted(np.maximum.accumulate(vo), vo + span)
     else:
         j = np.searchsorted(-np.minimum.accumulate(vo), span - vo)
+    # First samples past 10 % and 90 % of the swing bound the windows.
+    toward = vo if swing > 0 else -vo
+    lo, hi = (toward[0] + f * abs(swing) for f in _SR_RANGE)
+    start, end = int(np.argmax(toward >= lo)), int(np.argmax(toward >= hi))
     i = np.arange(len(t))
-    reached = j < len(t)
+    reached = (i >= start) & (j <= end)
     if not reached.any():
         return None
     i, j = i[reached], j[reached]
@@ -299,6 +314,19 @@ def _edge_slew(t, vo, vdd) -> float | None:
     if not good.any():
         return None
     return float(np.max(np.abs(vo[j] - vo[i])[good] / dt[good]))
+
+
+def _follows_pulse(v_rise, v_fall, step) -> bool:
+    """Whether a unity buffer's output followed the pulse: up by at least half
+    the step on its rising half, and back down by as much on its falling half.
+
+    The wrong feedback polarity is positive feedback: the output starts at the
+    CM (the ``.op`` sits on the unstable equilibrium) and then latches to a rail
+    instead, and that collapse would otherwise be read as a fast edge."""
+    if len(v_rise) == 0 or len(v_fall) == 0:
+        return False
+    return (v_rise.max() - v_rise[0] >= 0.5 * step
+            and v_fall[0] - v_fall.min() >= 0.5 * step)
 
 
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
@@ -310,6 +338,15 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
     zero-state start would measure the power-up transient instead of the step
     response), and the pulse width is scaled so a design slewing at ≥ 1/3 of
     the spec target (``sr_hint``) completes its transition inside the window.
+
+    The step is centred on Vcm (``Vcm ± 0.15·Vdd``): a unity buffer's input
+    common mode rides with the output, and a step from Vcm up to
+    Vcm + 0.3·Vdd moved it a whole step away from the quiescent point the
+    amplifier was sized at -- starving a resistor tail on a PMOS pair, or the
+    headroom of a PMOS tail, and pushing an NMOS pair under a telescopic
+    cascode out of saturation (rising edges read 30-85 % slow).  Centring
+    halves that excursion, so the edges measure slewing rather than the
+    input common-mode range.
     """
     if topo.fd:
         return _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
@@ -321,9 +358,11 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
     t0 = 0.02 * t_edge                     # settle margin before the step
     for inp, inn in _pols(polarity):
         netmap = _fb_netmap(topo, inp, inn)
-        # unity buffer: out -> inverting input (direct), pulse the non-inverting input
+        # unity buffer: out -> inverting input (direct), pulse the non-inverting
+        # input across a step centred on Vcm
+        lo, hi = vcm - step / 2, vcm + step / 2
         fb = (f"Rfb out inn 1\n"
-              f"Vstep inp 0 pulse({vcm} {vcm + step} {t0} 10p 10p {t_edge} 1)\n")
+              f"Vstep inp 0 pulse({lo} {hi} {t0} 10p 10p {t_edge} 1)\n")
         deck = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap,
                      f"tran {(t0 + 2 * t_edge) / 2000} {t0 + 2 * t_edge}\n"
                      "wrdata __OUT__ v(out)")
@@ -331,9 +370,11 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
         if a is None or a.shape[0] < 10:
             continue
         t, vo = a[:, 0], a[:, 1]
-        if abs(vo[0] - vcm) > 0.4 * vdd:   # unity buffer must start near CM
+        if abs(vo[0] - lo) > 0.4 * vdd:    # unity buffer must start near the low step
             continue
         rising = t < t0 + t_edge           # pulse falls back at t0 + t_edge
+        if not _follows_pulse(vo[rising], vo[~rising], step):
+            continue
         edges = [s for s in (_edge_slew(t[rising], vo[rising], vdd),
                              _edge_slew(t[~rising], vo[~rising], vdd))
                  if s is not None]

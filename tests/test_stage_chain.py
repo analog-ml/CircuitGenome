@@ -13,6 +13,7 @@ from circuitgenome.sizer.models import TransistorSizing
 from circuitgenome.sizer.physics import equations as eq
 from circuitgenome.sizer.physics.circuit_view import CircuitView
 from circuitgenome.sizer.physics.metrics import evaluate_metrics
+from circuitgenome.sizer.physics.rnmc import RNMC
 from circuitgenome.synthesizer.models import Device
 from circuitgenome.sizer.physics.stage_chain import (
     Stage,
@@ -34,7 +35,8 @@ def _spec(**kw):
 
 
 def _chain(*stages, **kw):
-    return StageChain(stages=tuple(Stage(gm, rout) for gm, rout in stages), **kw)
+    """Each stage is ``(gm, rout)`` or ``(gm, rout, ids)``."""
+    return StageChain(stages=tuple(Stage(*s) for s in stages), **kw)
 
 
 # --------------------------------------------------------------------------- #
@@ -80,9 +82,73 @@ def test_gbw_and_slew_need_the_miller_cap():
     bare = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5)), _spec())[0]
     assert "gbw_hz" not in bare and "slew_rate_vps" not in bare
 
-    comp = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), cc_pf=2.0), _spec())[0]
+    comp = evaluate_metrics(_chain((1e-3, 1e6, 10e-6), (2e-3, 5e5, 1e-3),
+                                   cc_pf=2.0), _spec())[0]
     assert comp["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12))
     assert comp["slew_rate_vps"] == pytest.approx(eq.slew_rate_vps(10e-6, 2e-12))
+
+
+# --------------------------------------------------------------------------- #
+# Slew rate: the slowest current-limited node
+# --------------------------------------------------------------------------- #
+_CL = 5e-12
+
+
+def _slew(chain):
+    return evaluate_metrics(chain, _spec(cl=_CL))[0]["slew_rate_vps"]
+
+
+def test_two_stage_slew_is_limited_by_the_second_stage_driving_cl_and_cc():
+    """The second stage's quiescent current charges CL plus the Miller cap."""
+    chain = _chain((1e-3, 1e6, 20e-6), (2e-3, 5e5, 40e-6), cc_pf=1.25)
+    # input stage 20 µA / 1.25 pF = 16 V/µs; second stage 40 µA / 6.25 pF = 6.4
+    assert _slew(chain) == pytest.approx(40e-6 / (1.25e-12 + _CL))
+
+
+def test_two_stage_slew_is_limited_by_the_input_stage_charging_cc():
+    chain = _chain((1e-3, 1e6, 20e-6), (2e-3, 5e5, 1e-3), cc_pf=1.25)
+    assert _slew(chain) == pytest.approx(20e-6 / 1.25e-12)
+
+
+def test_k_slew_scales_the_input_stage_limit():
+    """Without a mirror (or per side of an FD pair) only half the tail swings."""
+    chain = _chain((1e-3, 1e6, 20e-6), (2e-3, 5e5, 1e-3), cc_pf=1.25, k_slew=0.5)
+    assert _slew(chain) == pytest.approx(10e-6 / 1.25e-12)
+
+
+def test_buffered_slew_is_limited_by_the_follower_driving_cl():
+    """Behind a follower, CL is the follower's to charge, not the gain stage's."""
+    chain = _chain((1e-3, 1e6, 20e-6), (2e-3, 5e5, 40e-6), cc_pf=1.25,
+                   buffer_ids=20e-6)
+    # input 16 V/µs, second stage 40 µA / 1.25 pF = 32, follower 20 µA / 5 pF = 4
+    assert _slew(chain) == pytest.approx(20e-6 / _CL)
+
+
+def test_buffered_gain_stage_drives_only_the_miller_cap():
+    chain = _chain((1e-3, 1e6, 1e-3), (2e-3, 5e5, 10e-6), cc_pf=1.25,
+                   buffer_ids=1e-3)
+    assert _slew(chain) == pytest.approx(10e-6 / 1.25e-12)
+
+
+def test_nmc_slew_includes_the_inner_miller_loop():
+    """Nested Miller: the second stage alone charges the inner cap Cc2."""
+    chain = _chain((1e-3, 1e6, 1e-3), (2e-3, 5e5, 10e-6), (3e-3, 2e5, 1e-3),
+                   cc_pf=1.25, cc2_pf=1.0)
+    assert _slew(chain) == pytest.approx(10e-6 / 1.0e-12)
+
+
+def test_nmc_output_node_carries_both_miller_caps():
+    chain = _chain((1e-3, 1e6, 1e-3), (2e-3, 5e5, 1e-3), (3e-3, 2e5, 40e-6),
+                   cc_pf=1.25, cc2_pf=1.0)
+    assert _slew(chain) == pytest.approx(40e-6 / (_CL + 1.25e-12 + 1.0e-12))
+
+
+def test_rnmc_output_node_carries_only_the_outer_cap():
+    """Reversed nested Miller hangs Cc2 between stages 1 and 2, off the output,
+    and the second stage then drives no Miller cap of its own."""
+    chain = _chain((1e-3, 1e6, 1e-3), (2e-3, 5e5, 10e-6), (3e-3, 2e5, 40e-6),
+                   cc_pf=1.25, cc2_pf=1.0, compensation_scheme=RNMC)
+    assert _slew(chain) == pytest.approx(40e-6 / (_CL + 1.25e-12))
 
 
 def test_k_fs_scales_gbw_but_not_cmrr():
@@ -140,8 +206,9 @@ def _one_stage(**kw):
     """A single-stage chain with a placeable mirror pole well past the GBW."""
     base = dict(mirror_pole_hz=1e9, gd_output_load=1e-7, gd_tail=1e-7,
                 supply_currents=(10e-6,))
+    ids = kw.pop("ids", 10e-6)
     base.update(kw)
-    return _chain((1e-3, 1e6), **base)
+    return _chain((1e-3, 1e6, ids), **base)
 
 
 def test_single_stage_reports_every_performance_metric():
@@ -166,9 +233,14 @@ def test_single_stage_gbw_and_slew_scale_inversely_with_cl():
 
 
 def test_single_stage_slew_scales_with_the_tail_current():
-    lo = evaluate_metrics(_one_stage(), _spec(ibias=10e-6))[0]
-    hi = evaluate_metrics(_one_stage(), _spec(ibias=20e-6))[0]
+    lo = evaluate_metrics(_one_stage(ids=10e-6), _spec())[0]
+    hi = evaluate_metrics(_one_stage(ids=20e-6), _spec())[0]
     assert hi["slew_rate_vps"] == pytest.approx(2.0 * lo["slew_rate_vps"])
+
+
+def test_single_stage_k_slew_halves_the_tail_current_into_cl():
+    m = evaluate_metrics(_one_stage(k_slew=0.5), _spec(cl=20e-12))[0]
+    assert m["slew_rate_vps"] == pytest.approx(eq.slew_rate_vps(5e-6, 20e-12))
 
 
 def test_single_stage_phase_margin_comes_from_the_mirror_pole():
@@ -253,7 +325,7 @@ def test_degeneration_ignores_resistors_off_the_pair_sources():
 def test_withheld_drops_gain_derived_metrics_only():
     kw = dict(cc_pf=2.0, gd_tail=1e-7, gd_output_load=1e-7,
               supply_currents=(10e-6, 25e-6))
-    chain = _chain((1e-3, 1e6), (2e-3, 5e5), **kw)
+    chain = _chain((1e-3, 1e6, 10e-6), (2e-3, 5e5, 25e-6), **kw)
     live, _ = evaluate_metrics(chain, _spec())
     dead, _ = evaluate_metrics(chain.withheld(), _spec())
 

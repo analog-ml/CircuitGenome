@@ -1054,3 +1054,80 @@ def test_fd_large_signal_metrics_measured_ptm45():
     hi, lo = sim["output_swing_max_v"], sim["output_swing_min_v"]
     assert hi is not None and lo is not None
     assert 0.0 <= lo < 0.3 * spec.vdd < 0.7 * spec.vdd < hi <= spec.vdd
+
+
+def test_slew_bench_rejects_an_output_that_does_not_follow_the_pulse():
+    """A wrong-polarity unity buffer latches to a rail; its collapse is not a
+    slew rate, so that polarity must be rejected (the bench then tries the
+    other one) rather than reported as a fast edge."""
+    import numpy as np
+    step = 1.5
+    ramp_up = np.linspace(2.5, 4.0, 50)
+    ramp_down = np.linspace(4.0, 2.5, 50)
+    latched = np.linspace(2.5, 0.0, 50)
+    assert measure._follows_pulse(ramp_up, ramp_down, step)
+    assert not measure._follows_pulse(latched, np.zeros(50), step)
+    # Rising, but stuck high instead of returning on the falling half.
+    assert not measure._follows_pulse(ramp_up, np.full(50, 4.0), step)
+
+
+def test_edge_slew_ignores_overshoot_past_the_final_level():
+    """An edge that ramps at 5 V/µs, then rings through its final level much
+    faster, slews at the ramp's rate: ringing past the target is not slew."""
+    import numpy as np
+    t = np.arange(0, 400) * 1e-9
+    ramp = np.clip(1.0 + 5e6 * t, None, 2.0)          # 1 V → 2 V at 5 V/µs
+    ring = np.where(t > 200e-9, 0.6 * np.sin((t - 200e-9) * 2e8)
+                    * np.exp(-(t - 200e-9) / 60e-9), 0.0)
+    vo = ramp + ring
+    vo[-1] = 2.0
+    assert measure._edge_slew(t, vo, 3.3) == pytest.approx(5e6, rel=0.05)
+
+
+def _piecewise_edge(points, dt=1e-9):
+    """Sampled edge through ``[(t, v), ...]`` breakpoints, linear between."""
+    import numpy as np
+    t = np.arange(0.0, points[-1][0] + dt / 2, dt)
+    return t, np.interp(t, [p[0] for p in points], [p[1] for p in points])
+
+
+def test_edge_slew_ignores_a_jump_in_the_first_tenth_of_the_swing():
+    """The step couples straight through the Miller caps into the output: a
+    near-instant jump at the start of the edge is feed-through, not slew."""
+    # 0.15 V jump in 1 ns, then 5 V/µs up to the 1 V final level.
+    t, vo = _piecewise_edge([(0, 1.0), (1e-9, 1.15), (171e-9, 2.0), (300e-9, 2.0)])
+    assert measure._edge_slew(t, vo, 3.3) == pytest.approx(5e6, rel=0.05)
+
+
+def test_edge_slew_ignores_the_pull_in_above_ninety_percent():
+    """Near the target the input stage leaves saturation and the loop pulls the
+    output in -- often faster than the current-limited ramp before it."""
+    # 5 V/µs to 90 % of the swing, then 20 V/µs for the rest.
+    t, vo = _piecewise_edge([(0, 1.0), (180e-9, 1.9), (185e-9, 2.0), (300e-9, 2.0)])
+    assert measure._edge_slew(t, vo, 3.3) == pytest.approx(5e6, rel=0.05)
+
+
+@ngspice
+def test_se_slew_is_not_limited_by_the_input_common_mode():
+    """The unity-gain slew step drags the input common mode with it.  Stepping
+    from Vcm up to Vcm + 0.3·Vdd pushed an NMOS pair under a wide-swing
+    telescopic cascode out of saturation, and its rising edge crawled at
+    ~0.5 V/µs (-87 %); a step centred on Vcm keeps the pair in its
+    common-mode range, so the edge slews at the tail current's I/CL."""
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    want = {"input_pair": "differential_pair_nmos",
+            "load": "telescopic_cascode_load_wideswing_nmos",
+            "tail_current": "current_mirror_tail_nmos"}
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+    measured = simulate_metrics(text, result, tech, spec)["slew_rate_vps"]
+    assert measured == pytest.approx(result.metrics["slew_rate_vps"], rel=0.15)
