@@ -31,10 +31,16 @@ def read_op_operating_point(
     (issue #162): both inputs and ``vcm_ref`` sit at Vcm with no feedback loop
     — the CMFB / loads own the output CM, which is exactly the DC state the
     metric benches run at.  Either way each MOSFET's actual operating point is
-    read through ``@m.xdut.<ref>[...]``; returns ``None`` when ngspice is
+    read through ``@m.xdut.<ref>[...]`` (``id`` is the whole device's current,
+    every parallel finger included); returns ``None`` when ngspice is
     unavailable or the bias doesn't settle.
     """
     op, _fail = _read_op(netlist_text, result, tech, spec)
+    # The probe reads the first finger of a multi-finger device: report the
+    # whole device's current.
+    for ref, s in result.transistors.items():
+        if op and s.fingers > 1 and "id" in op.get(ref, {}):
+            op[ref]["id"] *= s.fingers
     return op
 
 
