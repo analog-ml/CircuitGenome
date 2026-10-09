@@ -437,7 +437,7 @@ def test_fd_cm_gate_condemns_high_gain_cmfb():
     limit = op._SETTLED_FRAC * spec.vdd
     ring = op._fd_ringing(text, result, tech, spec)
     if ring is None:
-        pytest.skip("settling transient timed out (heavily loaded machine)")
+        pytest.skip("settling transient hit the ngspice CPU limit")
     assert max(ring) <= limit
 
     high_gain = re.sub(r"^m2_cmfb vdd!", "m2_cmfb net_cmfb_out", text, flags=re.M)
@@ -445,7 +445,7 @@ def test_fd_cm_gate_condemns_high_gain_cmfb():
     assert high_gain != text
     ring = op._fd_ringing(high_gain, result, tech, spec)
     if ring is None:
-        pytest.skip("settling transient timed out (heavily loaded machine)")
+        pytest.skip("settling transient hit the ngspice CPU limit")
     cm, _dm = ring
     assert cm > limit
     ok, reason = check_bias_soundness(high_gain, result, tech, spec)
@@ -493,7 +493,7 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
     if op._fd_ringing(text, result, tech, spec) is None:
         # A timed-out transient is "no evidence" and the gate passes; the
         # verdict this test pins cannot be observed then.
-        pytest.skip("settling transient timed out (heavily loaded machine)")
+        pytest.skip("settling transient hit the ngspice CPU limit")
     ok, reason = check_bias_soundness(text, result, tech, spec)
     assert ok is settles, reason
     if not settles:
@@ -1054,3 +1054,38 @@ def test_fd_large_signal_metrics_measured_ptm45():
     hi, lo = sim["output_swing_max_v"], sim["output_swing_min_v"]
     assert hi is not None and lo is not None
     assert 0.0 <= lo < 0.3 * spec.vdd < 0.7 * spec.vdd < hi <= spec.vdd
+
+
+_TINY_DECK = """* rc
+v1 in 0 pulse(0 1 0 1n 1n 1u 2u)
+r1 in out 1k
+c1 out 0 1n
+.control
+tran {step} {stop}
+wrdata __OUT__ v(out)
+.endc
+.end
+"""
+
+
+@ngspice
+def test_ngspice_runs_single_threaded_in_its_own_directory(tmp_path):
+    """The bench runs ngspice with ``num_threads=1``: the system spinit may ask
+    for one OpenMP thread per core, and parallel benches then oversubscribe
+    the machine until healthy simulations time out."""
+    a = deck._run(_TINY_DECK.format(step="10n", stop="4u"), ["v(out)"])
+    assert a is not None and a.shape[0] > 10
+    out = deck._run_capture("* echo\n.control\necho threads=$num_threads\n.endc\n.end\n")
+    assert "threads=1" in out
+
+
+@ngspice
+def test_ngspice_cpu_limit_stops_a_runaway_simulation(monkeypatch):
+    """A simulation is stopped by CPU time, not wall-clock time, so a busy
+    machine cannot turn a healthy run into a missing measurement."""
+    import time
+    monkeypatch.setattr(deck, "_CPU_LIMIT_S", 1)
+    t0 = time.monotonic()
+    a = deck._run(_TINY_DECK.format(step="1f", stop="1"), ["v(out)"])
+    assert a is None
+    assert time.monotonic() - t0 < 30

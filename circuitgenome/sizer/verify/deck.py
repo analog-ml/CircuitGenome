@@ -19,6 +19,18 @@ from ..models import SizingResult, TechParams
 
 _MOS_MODELS = ("nmos", "pmos")
 
+#: CPU seconds one ngspice run may use.  Bounded by CPU rather than wall-clock
+#: time, so a busy machine slows a healthy run down instead of turning it into
+#: a missing measurement; the slowest healthy bench measured (a sized RNMC FD
+#: settling transient) uses ~3 s.
+_CPU_LIMIT_S = 60
+#: Wall-clock backstop for a run that stalls without using CPU.
+_WALL_LIMIT_S = 600
+#: Read by ngspice from its working directory after the system ``spinit``,
+#: which may ask for one OpenMP thread per core: parallel benches then
+#: oversubscribe the machine, and 8 threads burned ~4x the CPU of one.
+_SPICEINIT = "set num_threads=1\n"
+
 
 def ngspice_available() -> bool:
     """True if the ``ngspice`` binary is on PATH."""
@@ -217,6 +229,26 @@ def _dut(tech: TechParams, name: str, body: list[str],
             + "\n".join(_emit_body(tech, body)) + "\n.ends\n")
 
 
+def _limit_cpu() -> None:
+    """Child-process hook: cap the run's CPU time (POSIX ``RLIMIT_CPU``)."""
+    import resource
+    resource.setrlimit(resource.RLIMIT_CPU, (_CPU_LIMIT_S, _CPU_LIMIT_S))
+
+
+def _ngspice(sp: Path) -> subprocess.CompletedProcess | None:
+    """Run deck file ``sp`` in ngspice -b from its own directory --
+    single-threaded and CPU-time limited; ``None`` when it does not finish."""
+    (sp.parent / ".spiceinit").write_text(_SPICEINIT)
+    try:
+        p = subprocess.run(
+            ["ngspice", "-b", sp.name], cwd=sp.parent, capture_output=True,
+            text=True, timeout=_WALL_LIMIT_S,
+            preexec_fn=_limit_cpu if os.name == "posix" else None)
+    except Exception:
+        return None
+    return None if p.returncode < 0 else p   # < 0: killed (e.g. the CPU limit)
+
+
 def _run(deck: str, vectors: list[str]) -> np.ndarray | None:
     """Run ``deck`` in ngspice -b; return the wrdata table (or None on failure).
 
@@ -227,12 +259,7 @@ def _run(deck: str, vectors: list[str]) -> np.ndarray | None:
         out = Path(d) / "o.dat"
         sp = Path(d) / "deck.sp"
         sp.write_text(deck.replace("__OUT__", str(out)))
-        try:
-            subprocess.run(["ngspice", "-b", str(sp)], capture_output=True,
-                           text=True, timeout=60)
-        except Exception:
-            return None
-        if not out.exists():
+        if _ngspice(sp) is None or not out.exists():
             return None
         try:
             data = np.loadtxt(out)
@@ -246,9 +273,5 @@ def _run_capture(deck: str) -> str | None:
     with tempfile.TemporaryDirectory() as d:
         sp = Path(d) / "deck.sp"
         sp.write_text(deck)
-        try:
-            p = subprocess.run(["ngspice", "-b", str(sp)], capture_output=True,
-                               text=True, timeout=60)
-        except Exception:
-            return None
-        return p.stdout
+        p = _ngspice(sp)
+        return p.stdout if p is not None else None
