@@ -563,7 +563,9 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - :func:`~circuitgenome.sizer.physics.equations.phase_margin_two_stage_deg`
      - actual − spec
    * - Slew rate
-     - :math:`SR = I_{bias}\,/\,C_c`
+     - :math:`SR = \min\big(k\,I_{tail}/C_c,\; I_2/(C_L + C_c)\big)` --
+       the slowest current-limited node (``k`` = 1 with a mirror load, ½
+       without); three-stage and buffered chains add their own nodes
      - :func:`~circuitgenome.sizer.physics.equations.slew_rate_vps`
      - actual − spec
    * - CMRR

@@ -484,15 +484,20 @@ def phase_margin_rnmc_deg(
     return float(min(pms))
 
 
-def slew_rate_vps(ibias_a: float, cc_f: float) -> float:
-    """Slew rate in V/s.
+def slew_rate_vps(current_a: float, cap_f: float) -> float:
+    """Slew rate in V/s of one current-limited node.
 
-    SR = IBias / Cc  (limited by tail-current charging/discharging Cc)
+    SR = I / C  (a fixed current charging/discharging the node's capacitance)
 
-    :param ibias_a: Tail bias current in A.
-    :param cc_f: Compensation capacitor in F.
+    An amplifier slews at the *slowest* of its nodes -- e.g. the tail current
+    into the Miller cap, or the last stage's bias current into ``CL`` plus the
+    Miller cap -- which the metric evaluation takes as the minimum of this over
+    every node.
+
+    :param current_a: The current available to the node in A (e.g. the tail current).
+    :param cap_f: The capacitance it charges in F (e.g. the compensation capacitor).
     """
-    return ibias_a / cc_f
+    return current_a / cap_f
 
 
 def quiescent_power(vdd: float, vss: float, supply_currents_a: list[float]) -> float:
