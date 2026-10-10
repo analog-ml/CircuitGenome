@@ -163,6 +163,8 @@
 
   <p><code>_inject_sizes()</code> walks the subcircuit body and rewrites each device line from the <code>SizingResult</code>: MOSFETs get <code>W=</code>/<code>L=</code>, compensation capacitors get <code>Cc</code>, sized load resistors get their resistance.</p>
 
+  <p>A MOSFET whose total width is wider than one PDK device has <code>fingers &gt; 1</code> and becomes that many identical lines in parallel &mdash; <code>&lt;ref&gt;</code>, then <code>&lt;ref&gt;__f2</code>, &hellip; &mdash; each <code>w_um / fingers</code> wide. (The GF180 device subcircuit ignores an <code>m=</code> multiplier, so the copies are written out.) The first copy keeps the original name, so operating-point probes still find it; <code>read_op_operating_point</code> multiplies its current back up to the whole device's.</p>
+
   <p>The neighbouring function is the one worth knowing about:</p>
 
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">unsized_mos_refs</span>(body, result) -> <span class="tok-kw">list</span>[<span class="tok-kw">str</span>]:

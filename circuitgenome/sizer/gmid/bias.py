@@ -164,7 +164,7 @@ def _repair_tail_headroom(model, ip, tc_dev, all_transistors, sizing, spec,
             idw = model.lut.id_per_w(dev.type, gm_id, s.l_um) if s else 0.0
             if not s or idw <= 0:
                 continue
-            w_new = tech.width.snap(abs(s.ids_a) / idw)
+            w_new = tech.width.snap_total(abs(s.ids_a) / idw)
             out[dev.ref] = TransistorSizing(
                 ref=dev.ref, w_um=w_new, l_um=s.l_um, ids_a=s.ids_a,
                 vgs_v=model.vgs(dev.type, w_new, s.l_um, s.ids_a),

@@ -24,6 +24,9 @@ The model-independent topology math is reused from the
 """
 from __future__ import annotations
 
+import math
+from dataclasses import replace
+
 from circuitgenome.recognizer.models import (
     FunctionalBlockRecognitionResult,
     ParsedNetlist,
@@ -34,7 +37,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 from ..physics import equations as eq
 from ..physics.circuit_view import adoption_warnings
 from ..physics.stage_chain import check_follower_swing
-from ..models import SizingResult, SizingSpec, TechParams
+from ..models import SizingResult, SizingSpec, TechParams, TransistorSizing
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
 from .bias_levels import tune_bias_levels
@@ -116,7 +119,7 @@ def size_gmid(
         resistor_ohms=extra_r)
 
     return SizingResult(
-        transistors=sizing,
+        transistors=_with_fingers(sizing, tech.width.max),
         cc_pf=plan.cc_pf,
         metrics=metrics,
         margins=margins,
@@ -132,3 +135,12 @@ def size_gmid(
         transistor_intents=plan.tintents,
         open_loop_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
     )
+
+
+def _with_fingers(sizing: dict[str, TransistorSizing],
+                  w_max: float) -> dict[str, TransistorSizing]:
+    """Split every device wider than the PDK's widest single device into the
+    fewest parallel fingers that each fit; its total ``w_um`` is unchanged."""
+    return {ref: (replace(s, fingers=math.ceil(s.w_um / w_max - 1e-9))
+                  if s.w_um > w_max else s)
+            for ref, s in sizing.items()}

@@ -276,7 +276,7 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
         <span class="tok-kw">return</span> <span class="tok-fn">float</span>(<span class="tok-fn">min</span>(<span class="tok-fn">max</span>(v, self.min), self.max))</code></pre>
 
 
-  <p>The same three-number record is reused for <em>three</em> different quantities in <code>TechParams</code>: transistor <code>width</code>, transistor <code>length</code>, and compensation <code>cap</code>. One tiny class, three jobs — that's the payoff of a well-chosen atom. Because <code>snap</code> is a method rather than a loose helper, all three rulers snap by the same rule, and a caller writes <code>tech.width.snap(w)</code> or <code>tech.length.snap(l)</code> without ever restating the arithmetic.</p>
+  <p>The same three-number record is reused for <em>three</em> different quantities in <code>TechParams</code>: transistor <code>width</code>, transistor <code>length</code>, and compensation <code>cap</code>. One tiny class, three jobs — that's the payoff of a well-chosen atom. The width ruler adds one twist: <code>snap_total</code> snaps without the upper clamp, for a total width the netlist splits into parallel fingers of at most <code>max</code> each. Because <code>snap</code> is a method rather than a loose helper, all three rulers snap by the same rule, and a caller writes <code>tech.width.snap(w)</code> or <code>tech.length.snap(l)</code> without ever restating the arithmetic.</p>
 
 </section>
 
@@ -497,7 +497,10 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
     l_um: <span class="tok-kw">float</span>      <span class="tok-com"># gate length in µm</span>
     ids_a: <span class="tok-kw">float</span>     <span class="tok-com"># quiescent drain current in A</span>
     vgs_v: <span class="tok-kw">float</span>     <span class="tok-com"># quiescent gate-source voltage</span>
-    vds_sat_v: <span class="tok-kw">float</span> <span class="tok-com"># minimum |Vds| for saturation</span></code></pre>
+    vds_sat_v: <span class="tok-kw">float</span> <span class="tok-com"># minimum |Vds| for saturation</span>
+    fingers: <span class="tok-kw">int</span> = <span class="tok-num">1</span>   <span class="tok-com"># parallel devices w_um is split into</span></code></pre>
+
+  <p><code>w_um</code> is the device's <em>total</em> width. A PDK models devices only up to a maximum width (<code>tech.width.max</code>, 100&nbsp;µm on GF180), so a wider device &mdash; typically a current source carrying several times the bias current &mdash; is built from <code>fingers</code> parallel copies of <code>w_um / fingers</code>. Before this existed, such a device was clamped to one 100&nbsp;µm copy and carried about half its planned current.</p>
 
   <p>That atom described a <em>device type</em> in the abstract; this one describes a <em>specific, sized transistor</em> in the final circuit — its geometry and its DC operating point. And a whole amplifier has many of them, so <code>SizingResult</code> keeps a dictionary keyed by <code>ref</code>.</p>
 
