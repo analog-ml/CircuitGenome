@@ -926,10 +926,11 @@ def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
 
     gm2_old, gm3_old, cc1, _ = gms(None)
     gm2_new, gm3_new, _, cc2_new = gms("reversed_nested_miller")
-    assert not eq.rnmc_stable(gm2_old, gm3_old, cc1, spec.cl)
+    assert gm3_old > gm2_old * (1 + spec.cl / cc1)       # pole pair in the RHP
     assert gm2_new > gm2_old
-    assert eq.rnmc_stable(gm2_new, gm3_new, cc1, spec.cl)
-    assert eq.rnmc_inner_damping(gm2_new, gm3_new, cc1, cc2_new, spec.cl) > 0.5
+    assert gm3_new < gm2_new * (1 + spec.cl / cc1)       # pole pair stable
+    # ...and damped past ζ = 0.5 (the closed form's gm2 floor for it).
+    assert gm2_new > eq.rnmc_min_gm2(gm3_new, cc1, cc2_new, spec.cl, zeta=0.5)
 
 
 # --- FD NMC ---
