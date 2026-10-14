@@ -4,6 +4,7 @@ import math
 import pytest
 
 from circuitgenome.sizer import load_tech, size_circuit, SizingSpec, TechParams
+from circuitgenome.sizer.loader import _BUILTIN_DIR
 from circuitgenome.sizer.physics.equations import (
     cgs,
     cmrr_db,
@@ -81,6 +82,15 @@ def test_load_tech_defaults():
     assert tech.width.max == pytest.approx(600.0)
     assert tech.length.step == pytest.approx(1.0)
     assert tech.cap.min == pytest.approx(0.1)
+
+
+def test_load_tech_resolves_relative_tech_path_to_absolute_models(tmp_path, monkeypatch):
+    """A tech file given by a relative path still yields absolute model paths:
+    ngspice runs from its own temporary directory, not the caller's."""
+    (tmp_path / "tech.yaml").write_text((_BUILTIN_DIR / "tech_ptm45.yaml").read_text())
+    monkeypatch.chdir(tmp_path)
+    tech = load_tech("tech.yaml")
+    assert tech.spice_model == str(tmp_path / "models" / "ptm_45nm_HP.pm")
 
 
 # ---------------------------------------------------------------------------
