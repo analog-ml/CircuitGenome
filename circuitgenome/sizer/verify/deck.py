@@ -112,8 +112,8 @@ def sized_netlist(netlist_text: str, result: SizingResult) -> str:
     """Return ``netlist_text`` with the sized values from ``result`` injected.
 
     Each MOSFET in the single ``.subckt`` block gets its ``W=``/``L=``, sized
-    load resistors get their ohm value and the compensation cap(s) get
-    ``cc_pf``/``cc2_pf`` — the same injection the verification decks use.  Any
+    load resistors get their ohm value and the compensation caps get their
+    ``capacitors`` value — the same injection the verification decks use.  Any
     lines before the ``.subckt`` (title/comments) are preserved, so the output
     is a standalone flat netlist ready for SPICE.
 
@@ -179,26 +179,20 @@ def unsized_mos_refs(body: list[str], result: SizingResult) -> list[str]:
 
 
 def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
-    """Set sized W/L (MOSFETs), Cc (comp caps) and R (sized load resistors)."""
-    cc1 = result.cc_pf
-    cc2 = result.cc2_pf if result.cc2_pf is not None else cc1
+    """Set sized W/L (MOSFETs), C (comp caps) and R (sized load resistors)."""
     out = []
     for line in body:
         tok = line.split()
         ref = tok[0]
-        low = ref.lower()
         if len(tok) >= 6 and tok[5].lower() in _MOS_MODELS and ref in result.transistors:
             s = result.transistors[ref]
             out.append(f"{line.rstrip()} W={s.w_um:.5f}u L={s.l_um:.5f}u")
         elif ref in result.resistors and len(tok) >= 4:
             # sized load resistor: replace the placeholder value with R (ohms)
             out.append(f"{tok[0]} {tok[1]} {tok[2]} {result.resistors[ref]:.4f}")
-        elif low.startswith("c") and "comp" in low and len(tok) >= 4:
-            val = cc2 if "comp2" in low else cc1
-            if val:
-                out.append(f"{tok[0]} {tok[1]} {tok[2]} {val:.4f}p")
-            else:
-                out.append(line.rstrip())
+        elif ref in result.capacitors and len(tok) >= 4:
+            # sized comp cap: replace the placeholder value with C (in pF)
+            out.append(f"{tok[0]} {tok[1]} {tok[2]} {result.capacitors[ref] * 1e12:.4f}p")
         else:
             out.append(line.rstrip())
     return out
