@@ -339,7 +339,7 @@
       <tr><td><code>A0(dB) = 20·log10(∏ Av,i)</code></td><td>stage gains cascade by multiplication</td><td><code>open_loop_gain_db</code></td></tr>
       <tr><td><code>A0 ≤ 150 dB</code></td><td>open-loop-bench measurability ceiling</td><td><code>open_loop_measurable</code></td></tr>
       <tr><td><code>GBW = gm1 / (2π·Cc)</code></td><td>push ÷ inertia at the dominant pole</td><td><code>unity_gain_bw</code></td></tr>
-      <tr><td><code>SR = Ibias / Cc</code></td><td>the capacitor law dV/dt = I/C</td><td><code>slew_rate_vps</code></td></tr>
+      <tr><td><code>SR = I / C</code> (per node)</td><td>the capacitor law dV/dt = I/C</td><td><code>slew_rate_vps</code></td></tr>
       <tr><td><code>PM = 90° − atan(gm1·CL / (gm2·Cc))</code></td><td>ideal 90° minus one non-dominant-pole lag</td><td><code>phase_margin_two_stage_deg</code></td></tr>
       <tr><td><code>PM = 90° − atan(ωt·Cc2/gm2) − atan(ωt·CL/gm3)</code>, <code>ωt = gm1/Cc1</code></td><td>same, minus two lags (NMC)</td><td><code>phase_margin_three_stage_deg</code></td></tr>
       <tr><td><code>gm3 &lt; gm2·(1 + CL/Cc1)</code></td><td>RNMC inner pole pair stays in the left half plane</td><td><code>rnmc_stable</code></td></tr>
@@ -427,10 +427,10 @@
 
   <h3><code>slew_rate_vps</code> — the large-signal speed limit</h3>
 
-  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">slew_rate_vps</span>(ibias_a, cc_f) -> <span class="tok-kw">float</span>:
-    <span class="tok-kw">return</span> ibias_a / cc_f</code></pre>
+  <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">slew_rate_vps</span>(current_a, cap_f) -> <span class="tok-kw">float</span>:
+    <span class="tok-kw">return</span> current_a / cap_f</code></pre>
 
-  <p>When the input step is big, the input pair fully steers the tail current <code>IBias</code> into <code>Cc</code>, and the output climbs no faster than that fixed current allows — a bucket brigade at a fixed pour rate. Notice the family resemblance: GBW and SR share the <em>same</em> <code>Cc</code>. Small-signal speed divides <code>gm1</code> by it; large-signal speed divides the tail current by it. One capacitor sets both limits.</p>
+  <p>When the input step is big, a fixed current charges a fixed capacitance and the node climbs no faster than that allows — a bucket brigade at a fixed pour rate. The function is that one-node law, <code>I / C</code>: the input pair steering its tail current into <code>Cc</code> is one such node, the last stage's bias current into <code>CL + Cc</code> another. The amplifier slews at the slowest of them, which <code>metrics.py</code> takes as the minimum over every node. Notice the family resemblance: GBW and the input-stage limit share the <em>same</em> <code>Cc</code> — small-signal speed divides <code>gm1</code> by it, large-signal speed divides the tail current by it.</p>
 
   <h3><code>phase_margin_two_stage_deg</code> — will it ring or settle?</h3>
   <p>Feedback is a promise to correct errors, but every stage adds delay, and delay is phase lag. If the signal comes back a full <code>180°</code> out of step <em>while the loop still has gain</em>, the correction becomes reinforcement and the circuit rings. Phase margin is how far from that cliff you are at the unity-gain frequency.</p>

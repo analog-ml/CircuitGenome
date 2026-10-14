@@ -282,13 +282,13 @@ Sample output (``generic`` tech — Level-1 analytical path):
      Open-loop gain     63.94 dB   [spec ≥ 80.00 dB]    margin -16.06 dB   ✗
      GBW                2.51 MHz   [spec ≥ 2.50 MHz]    margin +0.01 MHz   ✓
      Phase margin       63.25 °    [spec ≥ 60.00 °]     margin +3.25 °     ✓
-     Slew rate          3.50 V/µs  [spec ≥ 3.50 V/µs]   margin +0.00 V/µs  ✓
+     Slew rate          1.09 V/µs  [spec ≥ 3.50 V/µs]   margin -2.41 V/µs  ✗
      Quiescent power    0.43 mW    [spec ≤ 1.00 mW]     margin +0.57 mW    ✓
      CMRR               39.08 dB
      PSRR+              53.98 dB
 
 The verdict line is **FEASIBLE**, **MARGINAL** (biases but misses a spec — failing
-rows are marked ``✗``, as the gain row is here), or **INFEASIBLE** (bias point
+rows are marked ``✗``, as the gain and slew rows are here), or **INFEASIBLE** (bias point
 cannot be established — the metrics table is suppressed).  For the ``generic`` tech
 the metrics are the Level-1 analytical estimates.
 
