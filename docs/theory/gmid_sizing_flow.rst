@@ -345,9 +345,14 @@ Phase 4a — Size: assign geometry (LUT → W/L, symmetry, mirror ratios)
 forward pass, driven by each device's ``TransistorIntent``: (a) the LUT gives
 per-device (W, L) from ``Id`` + the block's gm/Id region and L (signal devices
 solve gm/Id from ``gm_req``); (b) snap W to grid via
-:meth:`~circuitgenome.sizer.models.GridSpec.snap`; (c) *symmetry* — matched pairs
+:meth:`~circuitgenome.sizer.models.GridSpec.snap`, capped at the widest single
+PDK device; (c) *symmetry* — matched pairs
 share the anchor's geometry; (d) *mirror ratios* — each output W = exact current
-ratio × the diode reference's W.  Returns
+ratio × the diode reference's W, *not* capped
+(:meth:`~circuitgenome.sizer.models.GridSpec.snap_total`): a mirror output's
+current is its width ratio, so one wider than a single PDK device is built from
+parallel fingers (``TransistorSizing.fingers``) rather than clamped to carry
+less than planned.  Returns
 :class:`~circuitgenome.sizer.models.TransistorSizing` (W, L, Vgs, Vdsat).
 
 .. code-block:: python

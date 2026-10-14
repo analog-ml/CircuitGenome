@@ -164,7 +164,10 @@ def _apply_mirror_ratios(
 
     MOSFETs are grouped by (gate-net, type); a diode-connected member (g == d)
     is the reference.  Output W is the current ratio times the reference's W at
-    matched L (no ``Fraction`` rounding).
+    matched L (no ``Fraction`` rounding).  ``snap`` must not cap the result: a
+    mirror output's current *is* its width ratio, so one clamped to the widest
+    single device carries less than planned -- a total width is built from
+    parallel fingers instead (:meth:`~..models.GridSpec.snap_total`).
     """
     groups: dict[tuple, list[str]] = {}
     for ref, (device, _slot) in all_transistors.items():
@@ -292,10 +295,10 @@ def assign_geometry_gmid(
     _apply_symmetry(W, L, slot_transistors, ids_map)
 
     # --- 4: current-mirror ratios (exact, no Fraction approximation) ---
-    _apply_mirror_ratios(W, L, all_transistors, ids_map, tech.width.snap)
+    _apply_mirror_ratios(W, L, all_transistors, ids_map, tech.width.snap_total)
 
     # --- 5: deliberate margin for a knife-edge current-source load ---
-    _apply_load_current_margin(W, slot_transistors, tech.width.snap)
+    _apply_load_current_margin(W, slot_transistors, tech.width.snap_total)
 
     # --- 6: build TransistorSizing with final geometry ---
     sizing: dict[str, TransistorSizing] = {}

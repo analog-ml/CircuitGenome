@@ -122,3 +122,41 @@ def test_gf180_sizes_via_gmid_path():
     assert r.transistors
     # Lengths land on the GF180 grid (Lmin 0.28 µm).
     assert all(s.l_um >= 0.28 - 1e-9 for s in r.transistors.values())
+
+
+# --------------------------------------------------------------------------- #
+# Devices wider than one PDK device: parallel fingers
+# --------------------------------------------------------------------------- #
+def test_width_grid_total_snap_has_no_upper_bound():
+    """A total width snaps to the step and floors at min, but is not capped:
+    the netlist splits it into devices of at most ``max`` each."""
+    w = load_tech("gf180mcu").width
+    assert w.snap_total(3.0 * w.max) == pytest.approx(3.0 * w.max)
+    assert w.snap_total(0.0) == pytest.approx(w.min)
+    assert w.snap(3.0 * w.max) == pytest.approx(w.max)   # snap still clamps
+
+
+def test_wide_device_is_emitted_as_parallel_fingers():
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    s = TransistorSizing(ref="mp1_third_stage", w_um=200.0, l_um=1.12,
+                         ids_a=1e-4, vgs_v=-1.0, vds_sat_v=0.2, fingers=2)
+    result = SizingResult(transistors={"mp1_third_stage": s}, cc_pf=None,
+                          metrics={}, margins={}, solver_status="GMID")
+    body = ["mp1_third_stage out bias vdd vdd pmos"]
+    lines = deck._inject_sizes(body, result)
+    assert lines == [
+        "mp1_third_stage out bias vdd vdd pmos W=100.00000u L=1.12000u",
+        "mp1_third_stage__f2 out bias vdd vdd pmos W=100.00000u L=1.12000u",
+    ]
+
+
+def test_gf180_sizing_marks_devices_wider_than_one_pdk_device():
+    """Every device keeps its total width; one past ``width.max`` is split
+    into the fewest fingers that each fit."""
+    r = _first_feasible_size()
+    if r is None:
+        pytest.skip("gf180 active-load fixtures not present")
+    w_max = load_tech("gf180mcu").width.max
+    for s in r.transistors.values():
+        assert s.w_um / s.fingers <= w_max + 1e-9
+        assert s.fingers == 1 or s.w_um / (s.fingers - 1) > w_max
