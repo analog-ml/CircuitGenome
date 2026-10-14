@@ -1069,7 +1069,7 @@ wrdata __OUT__ v(out)
 
 
 @ngspice
-def test_ngspice_runs_single_threaded_in_its_own_directory(tmp_path):
+def test_ngspice_runs_single_threaded():
     """The bench runs ngspice with ``num_threads=1``: the system spinit may ask
     for one OpenMP thread per core, and parallel benches then oversubscribe
     the machine until healthy simulations time out."""
