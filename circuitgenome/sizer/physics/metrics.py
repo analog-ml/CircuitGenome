@@ -28,6 +28,41 @@ def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
         buffer=chain.output_buffer)
 
 
+def _slew_rate(chain: StageChain, cc_f: float, cc2_f: float | None,
+               cl_f: float) -> float | None:
+    """Slew rate: the slowest node, each charged by the one current that feeds it.
+
+    A large step drives every stage into its current limit at once, and the
+    output can move no faster than the slowest of these (``I / C``,
+    :func:`~.equations.slew_rate_vps`):
+
+    * the first stage steering ``k_slew`` of its tail current into the outer
+      Miller cap;
+    * the last gain stage's quiescent current into every cap on its output
+      node -- the Miller caps whose far end is there, plus ``CL`` unless a
+      follower sits behind it;
+    * nested Miller only: the second stage into the inner cap ``Cc2``, which
+      also ends on the output (reversed nested Miller hangs ``Cc2`` between
+      the first two stages, off the output, so it adds no limit);
+    * a follower output stage's bias current into ``CL``.
+
+    A limit whose stage current is unknown (``0``) is skipped; ``None`` when
+    none is known.
+    """
+    s = chain.stages
+    nested = len(s) > 2 and bool(cc2_f) and chain.compensation_scheme != RNMC
+    c_out = cc_f + (cc2_f if nested else 0.0)
+    if chain.buffer_ids is None:
+        c_out += cl_f
+    limits = [(chain.k_slew * s[0].ids, cc_f), (s[-1].ids, c_out)]
+    if nested:
+        limits.append((s[1].ids, cc2_f))
+    if chain.buffer_ids is not None:
+        limits.append((chain.buffer_ids, cl_f))
+    rates = [eq.slew_rate_vps(i, c) for i, c in limits if i > 0]
+    return min(rates) if rates else None
+
+
 def evaluate_metrics(
     chain: StageChain, spec: SizingSpec
 ) -> tuple[dict[str, float], dict[str, float]]:
@@ -106,10 +141,12 @@ def evaluate_metrics(
             if pm is not None:
                 _record("phase_margin_deg", pm, spec.phase_margin_min_deg)
 
-        # Slew is set by ibias/Cc alone, so a railed small-signal operating
-        # point does not invalidate it (#148 gates only gain-derived metrics).
-        _record("slew_rate_vps", eq.slew_rate_vps(spec.ibias, cc_f),
-                spec.slew_rate_min_vps)
+        # Slew is set by bias currents and caps alone, so a railed small-signal
+        # operating point does not invalidate it (#148 gates only gain-derived
+        # metrics).
+        slew = _slew_rate(chain, cc_f, cc2_f, spec.cl)
+        if slew is not None:
+            _record("slew_rate_vps", slew, spec.slew_rate_min_vps)
     elif len(stages) == 1 and gm1 > 0 and spec.cl > 0:
         # Load-compensated: every equation above still applies with CL in the
         # place of Cc, because CL is what the tail current drives and what sets
@@ -124,8 +161,10 @@ def evaluate_metrics(
                             gbw, chain.mirror_pole_hz),
                         spec.phase_margin_min_deg)
 
-        _record("slew_rate_vps", eq.slew_rate_vps(spec.ibias, spec.cl),
-                spec.slew_rate_min_vps)
+        if stages[0].ids > 0:
+            _record("slew_rate_vps",
+                    eq.slew_rate_vps(chain.k_slew * stages[0].ids, spec.cl),
+                    spec.slew_rate_min_vps)
 
     # --- Power (always available; a railed output still burns current) ---
     _record("power_w",
