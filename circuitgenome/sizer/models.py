@@ -84,11 +84,17 @@ class SpiceLib:
     :param design: Optional resolved path to a global settings file to ``.include``
         before the corner ``.lib`` (``design.ngspice``).
     :param corners: Corners to re-measure for the CLI verification table.
+    :param mismatch_switch: Name of the library ``.param`` that turns on its
+        per-device mismatch models (GF180 ``sw_stat_mismatch``, sky130
+        ``mc_mm_switch``); ``None`` when the PDK ships none.  The
+        fully-differential CMRR/PSRR benches need it: a matched FD circuit
+        rejects common mode and supply exactly.
     """
     file: str
     corner: str = "typical"
     design: str | None = None
     corners: list[str] = field(default_factory=list)
+    mismatch_switch: str | None = None
 
 
 @dataclass

@@ -641,7 +641,9 @@ grounds its report in ngspice instead:
   GBW, phase margin, slew rate (min of the rising and falling edges), quiescent
   power, CMRR, PSRR+, and output swing.  A metric ngspice cannot extract is shown
   as ``n/a`` (no analytical fallback), and ngspice is **required** — the command
-  errors if it is not installed.
+  errors if it is not installed.  Fully-differential CMRR/PSRR+ are the worst
+  case over seeded PDK mismatch draws (GF180MCU, sky130), and ``n/a`` on a tech
+  without mismatch models.
 
 * **Corner sweep (foundry PDKs).**  A PDK tech (``spice_lib``, e.g. GF180MCU) is
   sized at its nominal corner, then the sized design is re-measured across the
@@ -690,7 +692,9 @@ Assumptions and where they break down
 
    **No device mismatch.**  The solver assumes perfectly matched differential
    pairs.  Offset voltage and CMRR degradation from mismatch must be estimated
-   separately (e.g. Pelgrom's model).
+   separately (e.g. Pelgrom's model).  The SPICE check measures it only for
+   fully-differential CMRR/PSRR+, which mismatch alone sets, using the PDK's
+   own mismatch models.
 
 ----
 

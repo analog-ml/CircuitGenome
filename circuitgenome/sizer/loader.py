@@ -119,6 +119,7 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             corner=str(lib_d.get("corner", "typical")),
             design=_resolve(lib_d.get("design")),
             corners=[str(c) for c in lib_d.get("corners", [])],
+            mismatch_switch=lib_d.get("mismatch_switch"),
         )
     device_map = data.get("device_map")
     if device_map is not None:

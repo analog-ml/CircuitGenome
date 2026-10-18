@@ -25,6 +25,7 @@ def test_sky130_tech_loads_lib_and_maps():
     assert tech.device_handle == {"nmos": "msky130_fd_pr__nfet_01v8",
                                   "pmos": "msky130_fd_pr__pfet_01v8"}
     assert tech.wl_units == "um"
+    assert tech.spice_lib.mismatch_switch == "mc_mm_switch"
     # 1.8 V core grids: sky130 bins cover W>=0.42 (both polarities), L>=0.15.
     assert tech.width.min == 0.42 and tech.length.min == 0.15
     # width.max must stay < 100 µm: the PDK model bin wmax=100 µm is an EXCLUSIVE
@@ -44,6 +45,15 @@ def test_sky130_emit_model_selects_corner():
     assert nominal.rstrip().endswith("tt")
     assert ".include" not in nominal  # no separate design file
     assert deck._emit_model(tech, "ss").rstrip().endswith("ss")
+
+
+def test_sky130_emit_model_mismatch_seed():
+    """The switch is set inside each corner section, so the override must
+    follow the ``.lib`` line."""
+    lines = deck._emit_model(load_tech("sky130"), "ff",
+                             mismatch_seed=5).strip().splitlines()
+    assert lines[0].startswith(".lib") and lines[0].endswith("ff")
+    assert lines[1:] == [".param mc_mm_switch=1", ".option seed=5"]
 
 
 def test_sky130_device_translation_um_units():

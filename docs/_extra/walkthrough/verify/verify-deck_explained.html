@@ -153,6 +153,8 @@
 
   <p>The <code>corner</code> argument only bites on the PDK branch: it overrides the tech's nominal corner so a caller can re-measure the same sized design at <code>ss</code>, <code>ff</code>, <code>sf</code> and <code>fs</code> without re-sizing it.</p>
 
+  <p>So does <code>mismatch_seed</code>: after the <code>.lib</code> line it appends <code>.param &lt;mismatch_switch&gt;=1</code> (GF180 <code>sw_stat_mismatch</code>, sky130 <code>mc_mm_switch</code>) and <code>.option seed=&lt;seed&gt;</code>. Every device then gets its own random, repeatable mismatch draw, which the fully-differential CMRR/PSRR benches need. A tech without a <code>mismatch_switch</code> raises <code>ValueError</code>, because it has no mismatch model to turn on.</p>
+
 </section>
 
 <section class="part" id="part-3">

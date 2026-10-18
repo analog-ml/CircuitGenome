@@ -28,6 +28,7 @@ def test_gf180_tech_loads_lib_and_device_map():
     assert tech.spice_lib.corner == "typical"
     assert set(tech.spice_lib.corners) == {"typical", "ss", "ff", "sf", "fs"}
     assert tech.device_map == {"nmos": "nmos_3p3", "pmos": "pmos_3p3"}
+    assert tech.spice_lib.mismatch_switch == "sw_stat_mismatch"
     # A LUT is what routes a tech to the gm/Id pipeline (see size_circuit).
     assert tech.gmid_lut is not None
 
@@ -41,6 +42,19 @@ def test_gf180_emit_model_selects_corner():
     assert deck._emit_model(tech, "ff").rstrip().endswith("ff")
     # PTM stays a flat .include (no .lib).
     assert ".lib" not in deck._emit_model(load_tech("ptm45"))
+    assert "sw_stat_mismatch" not in nominal   # matched by default
+
+
+def test_gf180_emit_model_mismatch_seed():
+    """A mismatch seed turns the PDK's per-device mismatch on — after the
+    design file that sets it to 0 — and fixes ngspice's seed (repeatable
+    draws).  PTM has no mismatch model to turn on."""
+    lines = deck._emit_model(load_tech("gf180mcu"),
+                             mismatch_seed=3).strip().splitlines()
+    assert lines[-2:] == [".param sw_stat_mismatch=1", ".option seed=3"]
+    assert "design.ngspice" in lines[0] and lines[1].startswith(".lib")
+    with pytest.raises(ValueError, match="no mismatch model"):
+        deck._emit_model(load_tech("ptm45"), mismatch_seed=3)
 
 
 def test_gf180_device_translation_m_to_x():
