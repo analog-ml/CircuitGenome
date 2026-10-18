@@ -103,10 +103,11 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             return None
         p = Path(rel)
         if not p.is_absolute():
-            p = Path(path).parent / p
+            p = Path(path).resolve().parent / p
         return str(p)
 
-    # Resolve relative to the config file's directory.
+    # Resolve relative to the config file's directory, as absolute paths:
+    # ngspice runs from its own temporary directory (verify.deck._ngspice).
     spice_model = _resolve(data.get("spice_model"))
     gmid_lut = _resolve(data.get("gmid_lut"))
 

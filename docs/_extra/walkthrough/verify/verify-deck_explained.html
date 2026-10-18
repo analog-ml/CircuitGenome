@@ -239,7 +239,9 @@
     <li><code>_run_capture(deck)</code> &mdash; returns ngspice's raw stdout as text, for decks that <code>print</code> operating-point values that then get parsed with a regex. This is what <a href="verify-op_explained.html"><code>op.py</code></a> uses.</li>
   </ul>
 
-  <p>Both return <code>None</code> rather than raising when the simulator fails, exits non-zero, or writes nothing parseable. That is the package's central convention and it starts here: <strong>the absence of a measurement is data, not an error.</strong></p>
+  <p>Both go through <code>_ngspice()</code>, which runs the binary from the deck's own temporary directory with two guards. A one-line <code>.spiceinit</code> there sets <code>num_threads=1</code>: the system <code>spinit</code> may ask for one OpenMP thread per core, and a dozen parallel benches then oversubscribe the machine (8 threads burned ~4&times; the CPU of one for the same answer). And the run is capped at <code>_CPU_LIMIT_S</code> of <em>CPU</em> time (POSIX <code>RLIMIT_CPU</code>) rather than wall-clock time, so a busy machine only slows a healthy simulation down &mdash; it can no longer turn it into a missing measurement. A generous wall-clock backstop remains for a run that stalls without using CPU.</p>
+
+  <p>Both return <code>None</code> rather than raising when the simulator fails, is killed by the CPU limit, or writes nothing parseable. That is the package's central convention and it starts here: <strong>the absence of a measurement is data, not an error.</strong></p>
 
   <p>And before any of it, <code>ngspice_available()</code> &mdash; a one-line <code>shutil.which</code> check &mdash; lets callers skip the whole path cleanly when the binary is not installed, which is why the test suite degrades to "skipped" rather than "failed" on a machine without ngspice.</p>
 
