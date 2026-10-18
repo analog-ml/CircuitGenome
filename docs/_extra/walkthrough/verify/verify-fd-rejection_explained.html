@@ -778,11 +778,28 @@ PSRR+ = 66.16 − 28.91 = <span class="tok-num">37.25 dB</span>      (PMOS pair:
     <tr><td>No PSRR&minus; (every spec uses <code>vss = 0</code>)</td><td>negative-supply rejection not covered</td></tr>
     <tr><td>PTM / generic have no mismatch models</td><td>FD CMRR/PSRR are <code>n/a</code>; constraining specs leave designs unverified</td></tr>
     <tr><td>SE benches stay matched</td><td>SE CMRR is a little optimistic for real silicon</td></tr>
-    <tr><td>sky130 folded cascode reads 13&ndash;15&nbsp;dB</td><td>see below</td></tr>
+    <tr><td>sky130 folded cascode reads 13&ndash;15&nbsp;dB</td><td>real for the circuit as sized: its cascode tail is in triode (see the case study below)</td></tr>
   </tbody>
 </table>
-<h3>Open question: the sky130 folded cascode</h3>
-<p>Folded-cascode designs on sky130 read only 13&ndash;15&nbsp;dB of CMRR against 87.6&nbsp;dB of gain and a 78.7&nbsp;dB analytical estimate. The result repeats across draws, the gain under mismatch stays within 1&ndash;2&nbsp;dB of nominal, and the offset is nulled. The working hypothesis: the CMFB corrects both load currents by the same amount, mismatched load devices take it unequally, and the folded cascode's enormous output resistance turns that small current difference into a large differential output. If so, it is real physics (high-impedance FD outputs are known to be sensitive to CMFB mismatch), but it has not yet been checked by enabling mismatch in the CMFB devices alone.</p>
+<h3>Case study: why the sky130 folded cascode reads 13&ndash;15&nbsp;dB</h3>
+<p>Folded-cascode designs on sky130 read only 13&ndash;15&nbsp;dB of CMRR against 87.6&nbsp;dB of gain and a 78.7&nbsp;dB analytical estimate. To find out which devices are responsible, the bench was re-run with mismatch on in one block at a time; every other device was wired to a copy of the PDK model with its mismatch term zeroed.</p>
+<table>
+  <thead><tr><th>Mismatch on only in</th><th class="num">Worst CMRR</th><th class="num">Median</th></tr></thead>
+  <tbody>
+    <tr><td>all devices (the bench)</td><td class="num">15.3&nbsp;dB</td><td class="num">19.3&nbsp;dB</td></tr>
+    <tr><td>none (sanity check)</td><td class="num">300&nbsp;dB floor</td><td class="num">300&nbsp;dB</td></tr>
+    <tr><td>CMFB amplifier <code>m1&ndash;m5_cmfb</code></td><td class="num">&asymp;266&nbsp;dB floor</td><td class="num">275&nbsp;dB</td></tr>
+    <tr><td><strong>CMFB-driven load sources <code>mp1/mp2_load</code></strong></td><td class="num"><strong>16.2&nbsp;dB</strong></td><td class="num"><strong>21.1&nbsp;dB</strong></td></tr>
+    <tr><td>fold sinks <code>mn3/mn4_load</code></td><td class="num">25.9&nbsp;dB</td><td class="num">34.0&nbsp;dB</td></tr>
+    <tr><td>cascodes</td><td class="num">37.7&nbsp;dB</td><td class="num">48.5&nbsp;dB</td></tr>
+    <tr><td>input pair</td><td class="num">61.9&nbsp;dB</td><td class="num">69.9&nbsp;dB</td></tr>
+    <tr><td>second stage</td><td class="num">84.5&nbsp;dB</td><td class="num">88.4&nbsp;dB</td></tr>
+    <tr><td>tail + bias generator</td><td class="num">&asymp;260&nbsp;dB floor</td><td class="num">275&nbsp;dB</td></tr>
+  </tbody>
+</table>
+<p><strong>Mismatch in the CMFB amplifier itself does nothing.</strong> It has a single output net that feeds both halves equally, so its mismatch only shifts the common mode. The tail and bias generator, also shared by both halves, behave the same way. What converts common mode into a differential signal is the mismatch between the <em>paired</em> current sources in the folded branches, above all the two PMOS sources <code>mp1/mp2_load</code> that carry the CMFB's correction current. Mismatch in those two devices alone reproduces nearly the whole effect. The input pair, which the textbook formula focuses on, gives 62&nbsp;dB on its own.</p>
+<p>That mechanism also needs a large common-mode current entering the branches, which a cascode tail should block. The operating point shows why it doesn't here: at 1.8&nbsp;V the pair's common source sits at 1.71&nbsp;V, leaving 90&nbsp;mV for two stacked tail transistors, so both are in triode (<code>mp3_tail_current</code>: V<sub>ds</sub> 0.04&nbsp;V against V<sub>dsat</sub> 0.29&nbsp;V, g<sub>m</sub>/g<sub>ds</sub> = 0.2). The &ldquo;current source&rdquo; is effectively a small resistor. On gf180 the same circuit keeps both tail devices saturated (+0.10 and +0.14&nbsp;V of margin) and reads 82.7&nbsp;dB.</p>
+<p>So the 13&ndash;15&nbsp;dB is real physics for the circuit as sized, and the bench is right to report it. The defect is upstream: the sizer's 78.7&nbsp;dB estimate assumes a saturated tail, and the SPICE bias gate passes this operating point.</p>
 
 <table>
   <thead><tr><th>Part</th><th>One line</th></tr></thead>
