@@ -140,8 +140,9 @@ def test_wide_device_is_emitted_as_parallel_fingers():
     from circuitgenome.sizer.models import SizingResult, TransistorSizing
     s = TransistorSizing(ref="mp1_third_stage", w_um=200.0, l_um=1.12,
                          ids_a=1e-4, vgs_v=-1.0, vds_sat_v=0.2, fingers=2)
-    result = SizingResult(transistors={"mp1_third_stage": s}, cc_pf=None,
-                          metrics={}, margins={}, solver_status="GMID")
+    result = SizingResult(transistors={"mp1_third_stage": s}, resistors={},
+                          capacitors={}, metrics={}, margins={},
+                          solver_status="GMID")
     body = ["mp1_third_stage out bias vdd vdd pmos"]
     lines = deck._inject_sizes(body, result)
     assert lines == [

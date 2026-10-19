@@ -177,6 +177,7 @@ def analyze_circuit(
     return GmIdCircuitView(
         slot_transistors=view.slot_transistors,
         slot_resistors=view.slot_resistors,
+        slot_capacitors=view.slot_capacitors,
         all_transistors=view.all_transistors,
         warnings=view.warnings,
         adopted=view.adopted,
