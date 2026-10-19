@@ -90,9 +90,11 @@ def size_compensation_caps(
 ) -> dict[str, float]:
     """Assign the planned compensation caps to the netlist's capacitor devices.
 
-    Every capacitor in a ``comp2*`` slot (the inner loop of a three-stage
-    amplifier) gets ``cc2_pf``, falling back to ``cc_pf`` when no inner cap was
-    planned; every capacitor in any other ``comp*`` slot gets ``cc_pf``.
+    In a three-stage amplifier, every capacitor in a ``comp2*`` slot (i.e. one
+    whose name starts with ``comp2``) gets ``cc2_pf``; when ``cc2_pf`` is not
+    provided, ``cc_pf`` is used as a fallback.  Every capacitor in any other
+    ``comp*`` slot gets ``cc_pf``.
+
     Returns ``{ref: farads}`` — empty when ``cc_pf`` is ``None``
     (uncompensated).
     """
