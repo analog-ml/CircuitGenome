@@ -145,18 +145,18 @@ def open_loop_gain_db(stage_gains: list[float]) -> float:
     return 20.0 * math.log10(abs(product)) if product != 0.0 else -math.inf
 
 
-# Empirical open-loop DC-gain ceiling for the ngspice open-loop AC bench (dB).
-# The analytical ``gain_db`` is an un-derated cascade product; above this ceiling
-# the open-loop DC operating point cannot hold the output at mid-rail without
-# feedback, so the measured open-loop AC gain rails to ~0 dB even when the
-# per-device DC bias is sound.  Calibrated to observed GF180 behaviour (#155):
-# measurable two-stage designs top out ~133 dB, whereas three-stage cascades at
-# ≥175 dB rail on every PVT corner.  150 dB sits safely between the two bands to
-# minimise false positives.
+#: Empirical open-loop DC-gain ceiling for the ngspice open-loop AC bench (dB).
+#: The analytical ``gain_db`` is an un-derated cascade product; above this ceiling
+#: the open-loop DC operating point cannot hold the output at mid-rail without
+#: feedback, so the measured open-loop AC gain rails to ~0 dB even when the
+#: per-device DC bias is sound.  Calibrated to observed GF180 behaviour (#155):
+#: measurable two-stage designs top out ~133 dB, whereas three-stage cascades at
+#: ≥175 dB rail on every PVT corner.  150 dB sits safely between the two bands to
+#: minimise false positives.
 OPEN_LOOP_GAIN_CEILING_DB = 150.0
 
 
-def open_loop_measurable(
+def open_loop_gain_measurable(
     gain_db: float | None, ceiling_db: float = OPEN_LOOP_GAIN_CEILING_DB
 ) -> bool:
     """Whether the analytical open-loop gain is measurable on an open-loop bench.
@@ -484,15 +484,20 @@ def phase_margin_rnmc_deg(
     return float(min(pms))
 
 
-def slew_rate_vps(ibias_a: float, cc_f: float) -> float:
-    """Slew rate in V/s.
+def slew_rate_vps(current_a: float, cap_f: float) -> float:
+    """Slew rate in V/s of one current-limited node.
 
-    SR = IBias / Cc  (limited by tail-current charging/discharging Cc)
+    SR = I / C  (a fixed current charging/discharging the node's capacitance)
 
-    :param ibias_a: Tail bias current in A.
-    :param cc_f: Compensation capacitor in F.
+    An amplifier slews at the *slowest* of its nodes -- e.g. the tail current
+    into the Miller cap, or the last stage's bias current into ``CL`` plus the
+    Miller cap -- which the metric evaluation takes as the minimum of this over
+    every node.
+
+    :param current_a: The current available to the node in A (e.g. the tail current).
+    :param cap_f: The capacitance it charges in F (e.g. the compensation capacitor).
     """
-    return ibias_a / cc_f
+    return current_a / cap_f
 
 
 def quiescent_power(vdd: float, vss: float, supply_currents_a: list[float]) -> float:

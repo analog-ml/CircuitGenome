@@ -19,6 +19,18 @@ from ..models import SizingResult, TechParams
 
 _MOS_MODELS = ("nmos", "pmos")
 
+#: CPU seconds one ngspice run may use.  Bounded by CPU rather than wall-clock
+#: time, so a busy machine slows a healthy run down instead of turning it into
+#: a missing measurement; the slowest healthy bench measured (a sized RNMC FD
+#: settling transient) uses ~3 s.
+_CPU_LIMIT_S = 60
+#: Wall-clock backstop for a run that stalls without using CPU.
+_WALL_LIMIT_S = 600
+#: Read by ngspice from its working directory after the system ``spinit``,
+#: which may ask for one OpenMP thread per core: parallel benches then
+#: oversubscribe the machine, and 8 threads burned ~4x the CPU of one.
+_SPICEINIT = "set num_threads=1\n"
+
 
 def ngspice_available() -> bool:
     """True if the ``ngspice`` binary is on PATH."""
@@ -112,8 +124,8 @@ def sized_netlist(netlist_text: str, result: SizingResult) -> str:
     """Return ``netlist_text`` with the sized values from ``result`` injected.
 
     Each MOSFET in the single ``.subckt`` block gets its ``W=``/``L=``, sized
-    load resistors get their ohm value and the compensation cap(s) get
-    ``cc_pf``/``cc2_pf`` — the same injection the verification decks use.  Any
+    load resistors get their ohm value and the compensation caps get their
+    ``capacitors`` value — the same injection the verification decks use.  Any
     lines before the ``.subckt`` (title/comments) are preserved, so the output
     is a standalone flat netlist ready for SPICE.
 
@@ -179,26 +191,20 @@ def unsized_mos_refs(body: list[str], result: SizingResult) -> list[str]:
 
 
 def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
-    """Set sized W/L (MOSFETs), Cc (comp caps) and R (sized load resistors)."""
-    cc1 = result.cc_pf
-    cc2 = result.cc2_pf if result.cc2_pf is not None else cc1
+    """Set sized W/L (MOSFETs), C (comp caps) and R (sized load resistors)."""
     out = []
     for line in body:
         tok = line.split()
         ref = tok[0]
-        low = ref.lower()
         if len(tok) >= 6 and tok[5].lower() in _MOS_MODELS and ref in result.transistors:
             s = result.transistors[ref]
             out.append(f"{line.rstrip()} W={s.w_um:.5f}u L={s.l_um:.5f}u")
         elif ref in result.resistors and len(tok) >= 4:
             # sized load resistor: replace the placeholder value with R (ohms)
             out.append(f"{tok[0]} {tok[1]} {tok[2]} {result.resistors[ref]:.4f}")
-        elif low.startswith("c") and "comp" in low and len(tok) >= 4:
-            val = cc2 if "comp2" in low else cc1
-            if val:
-                out.append(f"{tok[0]} {tok[1]} {tok[2]} {val:.4f}p")
-            else:
-                out.append(line.rstrip())
+        elif ref in result.capacitors and len(tok) >= 4:
+            # sized comp cap: replace the placeholder value with C (in pF)
+            out.append(f"{tok[0]} {tok[1]} {tok[2]} {result.capacitors[ref] * 1e12:.4f}p")
         else:
             out.append(line.rstrip())
     return out
@@ -217,6 +223,26 @@ def _dut(tech: TechParams, name: str, body: list[str],
             + "\n".join(_emit_body(tech, body)) + "\n.ends\n")
 
 
+def _limit_cpu() -> None:
+    """Child-process hook: cap the run's CPU time (POSIX ``RLIMIT_CPU``)."""
+    import resource
+    resource.setrlimit(resource.RLIMIT_CPU, (_CPU_LIMIT_S, _CPU_LIMIT_S))
+
+
+def _ngspice(sp: Path) -> subprocess.CompletedProcess | None:
+    """Run deck file ``sp`` in ngspice -b from its own directory --
+    single-threaded and CPU-time limited; ``None`` when it does not finish."""
+    (sp.parent / ".spiceinit").write_text(_SPICEINIT)
+    try:
+        p = subprocess.run(
+            ["ngspice", "-b", sp.name], cwd=sp.parent, capture_output=True,
+            text=True, timeout=_WALL_LIMIT_S,
+            preexec_fn=_limit_cpu if os.name == "posix" else None)
+    except Exception:
+        return None
+    return None if p.returncode < 0 else p   # < 0: killed (e.g. the CPU limit)
+
+
 def _run(deck: str, vectors: list[str]) -> np.ndarray | None:
     """Run ``deck`` in ngspice -b; return the wrdata table (or None on failure).
 
@@ -227,12 +253,7 @@ def _run(deck: str, vectors: list[str]) -> np.ndarray | None:
         out = Path(d) / "o.dat"
         sp = Path(d) / "deck.sp"
         sp.write_text(deck.replace("__OUT__", str(out)))
-        try:
-            subprocess.run(["ngspice", "-b", str(sp)], capture_output=True,
-                           text=True, timeout=60)
-        except Exception:
-            return None
-        if not out.exists():
+        if _ngspice(sp) is None or not out.exists():
             return None
         try:
             data = np.loadtxt(out)
@@ -246,9 +267,5 @@ def _run_capture(deck: str) -> str | None:
     with tempfile.TemporaryDirectory() as d:
         sp = Path(d) / "deck.sp"
         sp.write_text(deck)
-        try:
-            p = subprocess.run(["ngspice", "-b", str(sp)], capture_output=True,
-                               text=True, timeout=60)
-        except Exception:
-            return None
-        return p.stdout
+        p = _ngspice(sp)
+        return p.stdout if p is not None else None
