@@ -33,6 +33,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..physics import equations as eq
 from ..physics.circuit_view import adoption_warnings
+from ..physics.preprocess import size_compensation_caps
 from ..physics.stage_chain import check_follower_swing
 from ..models import SizingResult, SizingSpec, TechParams
 from .analyze import analyze_circuit
@@ -117,18 +118,18 @@ def size_gmid(
 
     return SizingResult(
         transistors=sizing,
-        cc_pf=plan.cc_pf,
+        resistors={**currents.load_resistors, **extra_r},
+        capacitors=size_compensation_caps(
+            view.slot_capacitors, plan.cc_pf, plan.cc2_pf),
         metrics=metrics,
         margins=margins,
         solver_status="GMID",
-        cc2_pf=plan.cc2_pf,
+        bias_feasible=bias_feasible,
+        open_loop_gain_measurable=eq.open_loop_gain_measurable(
+            metrics.get("gain_db")),
         # The follower swing verdict leads: it is decisive on its own, and the
         # designer reports a bias rejection by the first warning.
         warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
                   + eval_notes
                   + adoption_warnings(view.adopted)),
-        resistors={**currents.load_resistors, **extra_r},
-        bias_feasible=bias_feasible,
-        transistor_intents=plan.tintents,
-        open_loop_measurable=eq.open_loop_measurable(metrics.get("gain_db")),
     )
