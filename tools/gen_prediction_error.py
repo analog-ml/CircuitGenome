@@ -119,7 +119,7 @@ def _evaluate(template, index, netlist_text, variants, topology, tech, spec):
             row.update(outcome="sizing_failed", detail=result.solver_status)
         else:
             row.update({f"pred_{k}": result.metrics.get(k) for k in METRICS})
-            row["open_loop_measurable"] = result.open_loop_measurable
+            row["open_loop_measurable"] = result.open_loop_gain_measurable
             if not result.bias_feasible:
                 row.update(outcome="bias_infeasible_sizer",
                            detail=next(iter(result.warnings), ""))

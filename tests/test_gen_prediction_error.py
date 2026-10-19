@@ -26,6 +26,24 @@ def _row(template="one_stage_opamp", index=1, outcome="simulated",
     return row
 
 
+def test_evaluate_reads_the_sizing_result_without_error(monkeypatch):
+    """``_evaluate`` records any exception as an ``error`` row, so a renamed
+    ``SizingResult`` field would silently empty the whole sample."""
+    import circuitgenome.sizer as sizer
+    from circuitgenome.synthesizer import enumerate_circuits, to_flat_spice
+    from circuitgenome.synthesizer.loader import load_modules, load_topologies
+
+    monkeypatch.setattr(sizer, "check_bias_soundness", lambda *a: (True, None))
+    monkeypatch.setattr(sizer, "simulate_metrics", lambda *a: {})
+    topology = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    circuit = next(enumerate_circuits(topology, load_modules()))
+    row = pe._evaluate(topology.name, 1, to_flat_spice(circuit, name="c1"), {},
+                       topology, sizer.load_tech(pe.TECH),
+                       sizer.load_spec(pe.ROOT / pe.SPEC))
+    assert row["outcome"] == "simulated", row["detail"]
+    assert row["open_loop_measurable"] in (True, False)
+
+
 def test_sample_is_deterministic_sorted_and_per_template():
     a = pe.sample_indices(1000, 10, seed=0, template="t1")
     assert a == pe.sample_indices(1000, 10, seed=0, template="t1")
