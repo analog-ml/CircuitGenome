@@ -182,8 +182,9 @@ templates the synthesizer produces -- 43 patterns across eight categories:
 
 :func:`~circuitgenome.recognizer.subcircuit_recognizer.recognize` matches
 every pattern against the netlist's devices via a small backtracking search
-(patterns are 1-4 devices, so no graph library is needed), filtering
-candidates by device type and checking ``same_net``. A pattern's optional
+(patterns are 1-9 devices, so no graph library is needed), filtering
+candidates by device type and checking ``same_net`` after every binding, so a
+branch is dropped as soon as two bound terminals that must share a net don't. A pattern's optional
 ``hook`` can further constrain or extend each match — see `Hooks`_ below.
 
 Hooks

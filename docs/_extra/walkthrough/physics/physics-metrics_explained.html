@@ -220,10 +220,18 @@ PM    = 90° − arctan(0.5) = 90° − 26.57° = 63.4°</code></pre>
   <p>The code chooses between a two- and three-stage phase-margin formula (three-stage adds a second <code>arctan</code> lag term for the extra pole), and only computes it when the relevant <code>gm</code> values are positive — otherwise <code>pm = None</code> and it is not reported.  A <em>reversed</em>-nested-Miller chain (<code>chain.compensation_scheme == "reversed_nested_miller"</code>) is the exception: its two extra poles are a linked pair that the two-<code>arctan</code> formula cannot see going unstable, so it gets <code>phase_margin_rnmc_deg</code> — the full transfer function swept in frequency, using the gate capacitance on each stage output (<code>chain.node_caps_f</code>), the third stage's mirror pole and any output follower (<code>chain.output_buffer</code>), and reporting the worst margin over every 0 dB crossing.</p>
 
   <h3>Slew rate — the large-signal speed limit</h3>
-  <p>GBW is the <em>small-signal</em> speed. When a big step arrives, the tail current <code>Ibias</code> can only charge <code>Cc</code> so fast:</p>
-  <div class="eq-center"><span class="boxed-eq">SR&nbsp;=&nbsp;I<sub>bias</sub>&nbsp;/&nbsp;C<sub>c</sub></span></div>
-  <pre class="code"><code>SR = 20e-6 / 1e-12 = 2e7 V/s = 20 V/µs</code></pre>
-  <p>Same <code>Cc</code> that stabilizes the loop also caps the slew rate — one component, three metrics, all traced back to it.</p>
+  <p>GBW is the <em>small-signal</em> speed. When a big step arrives, every stage runs into its current limit at once, and each node can only move as fast as the one current feeding it charges the capacitance on it (<code>dV/dt = I/C</code>). The output is only as fast as the <strong>slowest</strong> of those nodes, so <code>_slew_rate</code> takes the minimum:</p>
+  <div class="eq-center"><span class="boxed-eq">SR&nbsp;=&nbsp;min(&nbsp;k<sub>slew</sub>·I<sub>tail</sub>/C<sub>c</sub>,&nbsp;&nbsp;I<sub>last</sub>/(C<sub>L</sub>+C<sub>c</sub>),&nbsp;…&nbsp;)</span></div>
+  <ul>
+    <li><strong>Input stage into <code>Cc</code></strong> &mdash; <code>k_slew</code> is 1 when a current mirror collects both halves of a single-ended pair, ½ without one (or per side of a fully-differential pair).</li>
+    <li><strong>Last gain stage into its output node</strong> &mdash; its quiescent current (<code>Stage.ids</code>) charges <code>CL</code> plus every Miller cap whose far end is the output; behind a follower it charges only the Miller caps.</li>
+    <li><strong>Nested Miller only:</strong> the second stage into the inner cap <code>Cc2</code>.</li>
+    <li><strong>A follower output stage</strong> &mdash; its bias current (<code>chain.buffer_ids</code>) into <code>CL</code>.</li>
+  </ul>
+  <pre class="code"><code>two-stage, 20 µA tail, 40 µA second stage, Cc = 1.25 pF, CL = 5 pF
+input stage  : 20e-6 / 1.25e-12          = 16  V/µs
+second stage : 40e-6 / (5e-12 + 1.25e-12) = 6.4 V/µs   ← slowest, so SR = 6.4 V/µs</code></pre>
+  <p>The same <code>Cc</code> that stabilizes the loop still appears in every limit &mdash; but it is usually the stage driving the load, not the tail current, that sets the slew rate.</p>
 </section>
 
 <section class="part" id="part-4">

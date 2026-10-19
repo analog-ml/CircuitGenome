@@ -127,14 +127,17 @@ def _resolve_hook(path: str) -> HookFn:
 
 
 def _check_same_net(pattern: PatternDef, assignment: dict[str, Device]) -> bool:
-    """Check that ``assignment`` satisfies every fully-assigned ``same_net`` constraint.
+    """Check that ``assignment`` violates no ``same_net`` constraint so far.
 
     ``assignment`` may be partial (built up incrementally by
-    :func:`_find_assignments`'s backtracking search): a group whose
-    ``template_ref``\\s aren't all in ``assignment`` yet is skipped (neither
-    passes nor fails). This lets :func:`_find_assignments` call this function
-    after *every* tentative binding to prune invalid branches as early as
-    possible, rather than only once a complete assignment is built.
+    :func:`_find_assignments`'s backtracking search), so each group is checked
+    over the refs already bound: if any two of them resolve to different nets
+    the group can never be satisfied -- a bound device's nets don't change as
+    the rest of the template is filled in -- and the branch is rejected. Refs
+    not yet bound are ignored. Checking partially bound groups matters: a group
+    usually includes a template device that is bound late, and waiting for the
+    whole group let the search try every combination of the earlier devices
+    first (minutes per netlist for the 8-9 device CMFB patterns).
 
     :param pattern: The pattern whose
                      :attr:`~circuitgenome.recognizer.models.PatternDef.same_net`
@@ -142,21 +145,20 @@ def _check_same_net(pattern: PatternDef, assignment: dict[str, Device]) -> bool:
                      ``"template_ref.terminal"`` strings that must all resolve
                      to the same net under ``assignment``.
     :param assignment: A (possibly partial) ``template_ref -> Device`` mapping.
-    :returns: ``False`` if any group whose refs are all present in
-              ``assignment`` resolves to more than one distinct net;
-              ``True`` otherwise (including groups of size 0 or 1, and groups
-              not yet fully assigned).
+    :returns: ``False`` if any group's bound refs resolve to more than one
+              distinct net; ``True`` otherwise (including groups with fewer
+              than two refs bound).
     """
     for group in pattern.same_net:
-        nets = set()
+        net = None
         for ref_term in group:
             ref, term = ref_term.split(".")
             dev = assignment.get(ref)
             if dev is None:
-                break
-            nets.add(dev.terminals[term])
-        else:
-            if len(nets) != 1:
+                continue
+            if net is None:
+                net = dev.terminals[term]
+            elif dev.terminals[term] != net:
                 return False
     return True
 
@@ -190,17 +192,19 @@ def _find_assignments(pattern: PatternDef, devices: list[Device]) -> Iterator[di
     each binding, :func:`_check_same_net` is called on the (possibly partial)
     assignment so far -- any
     :attr:`~circuitgenome.recognizer.models.PatternDef.same_net` group whose
-    refs are all bound is checked immediately, pruning that branch before
-    recursing further if it fails. By the time a complete assignment is
-    reached, every group has therefore already been checked.
+    bound refs already disagree on a net prunes that branch before recursing
+    further. By the time a complete assignment is reached, every group has
+    therefore already been checked in full.
 
     Assignments covering the same set of devices as a previously-yielded one
     are skipped, so symmetric templates (e.g. ``differential_pair_nmos``,
     where swapping ``m1``/``m2`` yields the same pair) don't produce duplicate
     matches.
 
-    :param pattern: The pattern to match. Patterns are 1-4 devices, so plain
-                     backtracking (no graph library) is sufficient.
+    :param pattern: The pattern to match. Patterns are 1-9 devices; with
+                     every ``same_net`` group pruning as soon as two bound
+                     refs disagree, plain backtracking (no graph library) is
+                     sufficient.
     :param devices: Candidate netlist devices, typically
                      :attr:`~circuitgenome.recognizer.models.ParsedNetlist.devices`.
     :yields: Each distinct ``template_ref -> Device`` assignment (keyed by

@@ -75,8 +75,12 @@ targets** the sizer solves against:
        full transfer function, worst over every 0 dB crossing)
    * - ``slew_rate_min_vps``
      - V/s
-     - Minimum slew rate (``ibias / Cc``; ``ibias / CL`` on a
-       load-compensated single stage)
+     - Minimum slew rate — predicted as the slowest current-limited node:
+       the tail current into ``Cc``, the last gain stage's current into ``CL``
+       plus the Miller caps on its output, (nested Miller) the second stage
+       into ``Cc2``, and a follower's current into ``CL``; the tail current
+       into ``CL`` on a load-compensated single stage.  The sizer itself only
+       bounds ``Cc ≤ ibias / SR``
    * - ``cmrr_min_db``
      - dB
      - Minimum common-mode rejection ratio
@@ -228,7 +232,8 @@ from ``mu_cox``/``vth``/``lam`` for ``generic``:
 
 Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loop
 AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
-unity-gain pulse (the min of the rising and falling edges); output swing from an
+unity-gain pulse centred on Vcm (the min of the rising and falling edges, each read
+within 10–90 % of its swing); output swing from an
 inverting −1 DC sweep (fully-differential designs: a differential-only −1 rig,
 both per output); CMRR and PSRR+ from the same feedback loop with the AC
 stimulus riding on the input common mode / the positive supply.  Every bench
@@ -278,7 +283,7 @@ A two-stage single-ended op-amp sized on the ``generic`` tech::
      Open-loop gain         63.94 dB          [spec ≥ 80.00 dB]               margin -16.06 dB  ✗
      GBW                    2.51 MHz          [spec ≥ 2.50 MHz]               margin +0.01 MHz  ✓
      Phase margin           63.25 °           [spec ≥ 60.00 °]                margin +3.25 °  ✓
-     Slew rate              3.50 V/µs         [spec ≥ 3.50 V/µs]              margin +0.00 V/µs  ✓
+     Slew rate              1.09 V/µs         [spec ≥ 3.50 V/µs]              margin -2.41 V/µs  ✗
      Quiescent power        0.43 mW           [spec ≤ 1.00 mW]                margin +0.57 mW  ✓
      Output swing max       4.67 V            [spec ≥ 4.60 V]                 margin +0.07 V  ✓
      Output swing min       0.08 V            [spec ≤ 0.40 V]                 margin +0.32 V  ✓
@@ -288,7 +293,8 @@ A two-stage single-ended op-amp sized on the ``generic`` tech::
 The verdict and per-metric margin columns make the trade-off explicit: this
 device biases and meets every spec except open-loop gain, which the second stage
 cannot reach without a higher ``second_stage_current_ratio`` — exactly what the
-weak-inversion warning flags.
+weak-inversion warning flags — and slew rate: its 25 µA second stage charges the
+20 pF load at only 1.09 V/µs, while the sizer only bounds ``Cc`` for slew.
 
 Further reading
 ---------------

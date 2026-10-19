@@ -72,7 +72,6 @@ def test_spice_model_without_lut_raises_unsupported():
         size_circuit(parsed, recognize(parsed), fbr, topo, tech, _spec())
 
 
-@pytest.mark.slow
 def test_level1_path_bias_feasible_default_true():
     """The Level-1 (generic) path never runs the DC-op check → bias_feasible=True."""
     mods = load_modules()
