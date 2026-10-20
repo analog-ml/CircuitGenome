@@ -482,10 +482,13 @@ bias_feasible = <span class="tok-kw">not any</span>(<span class="tok-str">"headr
 
   <h3>The cascode catch</h3>
   <p>A single-device check misses a <strong>stacked</strong> tail. Two cascoded devices each need their own Vdsat, so the real requirement is the <em>sum</em>:</p>
-  <pre class="code"><code>chain = <span class="tok-fn">_tail_stack_to_rail</span>(tail.mosfets, net_tail)
+  <pre class="code"><code>net_tail = _tail_current_net(ip_dev.terminals.get(<span class="tok-str">"s"</span>), ip.resistors)
+chain = <span class="tok-fn">_tail_stack_to_rail</span>(tail.mosfets, net_tail)
 stacked_vdsat = <span class="tok-fn">sum</span>(model.<span class="tok-fn">vds_sat</span>(d.type, ...) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> chain <span class="tok-kw">if</span> d.ref <span class="tok-kw">in</span> sizing)
 <span class="tok-kw">if</span> stacked_vdsat &gt; headroom <span class="tok-kw">and not any</span>(<span class="tok-str">"cascode"</span> <span class="tok-kw">in</span> w <span class="tok-kw">for</span> w <span class="tok-kw">in</span> warnings):
     warnings.<span class="tok-fn">append</span>(...); bias_feasible = <span class="tok-kw">False</span></code></pre>
+
+  <p>The walk must start where the tail's drain actually is. On a plain pair that is the pair's own source net. A <strong>source-degenerated</strong> pair puts a resistor between each device's source and the shared tail node, so the device's source is one hop short: no tail drain sits there, the walk used to find an empty chain, and a 0&nbsp;mV &ldquo;stack&rdquo; always fit. On sky130 at 1.8&nbsp;V that passed a degenerated folded-cascode design whose cascode tail SPICE shows in triode, sourcing 12.5 of its 20&nbsp;&micro;A. <code>_tail_current_net</code>, the hop issue #224 added for CMRR, resolves the right node.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 160" role="img" aria-label="Stacked cascode Vdsat versus available headroom">
