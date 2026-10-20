@@ -375,6 +375,16 @@ For the example (in Hz, :math:`p/2\pi`):
    −34 Hz                     ← dominant pole (real)
    −91.7 MHz ± j·300 MHz      ← the pole pair, |p| = 314 MHz
 
+One limit of the numerics: every pole comes back with an absolute error of
+about :math:`\epsilon \cdot \max|p|` (:math:`\epsilon \approx 2 \times 10^{-16}`).
+A pole far below the fastest one is lost in that error, and its sign is
+round-off.  This happens when the output conductances are left at zero: the
+model floors them at :math:`10^{-9} g_m`, the DC gain reaches ~1e27, and the
+dominant pole (~4e-20 rad/s) comes back as ±1e-17 rad/s.  So the
+right-half-plane check that sets a 0° margin
+(:func:`~circuitgenome.sizer.physics.equations._has_rhp_pole`) ignores poles
+below :math:`10^{-12}` of the fastest one.
+
 Step 5 — Read ζ off the poles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

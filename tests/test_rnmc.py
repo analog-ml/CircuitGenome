@@ -67,6 +67,22 @@ def test_rhp_inner_pair_reports_zero_margin():
                                     **PARASITICS) == 0.0
 
 
+def test_round_off_on_the_dominant_pole_is_not_a_rhp_pole():
+    """With no output conductances the loop's DC gain is ~1e27, so its
+    dominant pole (~4e-20 rad/s) sits 27 decades below the fastest one, far
+    below what the eigensolver resolves beside it: it comes back as ±1e-17
+    rad/s with a sign set by round-off (+6e-17 at gm2 = 10 mS on one
+    LAPACK build), which used to read as an RHP pole and a 0° margin.  A
+    real RHP pole, or a complex pair, still counts."""
+    noise = [complex(6e-17, 0), complex(-1.76e9, 0), complex(-2.27e10, 0)]
+    assert not eq._has_rhp_pole(noise)
+    assert eq._has_rhp_pole([complex(1e3, 0), complex(-1e9, 0)])
+    assert eq._has_rhp_pole([complex(-1e3, 0), complex(2e8, 9e8),
+                             complex(2e8, -9e8)])
+    for gm2 in (10e-3, 11.5e-3, 13.225e-3):
+        assert eq.phase_margin_rnmc_deg(20e-6, gm2, 1e-3, CC1, CC2, CL) > 85
+
+
 def test_second_zero_db_crossing_is_a_negative_margin():
     """A lightly damped pair lifts the gain back above 0 dB past −180°."""
     assert eq.rnmc_pole_damping(GM1, 0.72e-3, GM3, CC1, CC2, CL, **PARASITICS) > 0
