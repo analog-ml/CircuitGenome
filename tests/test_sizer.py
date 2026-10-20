@@ -13,7 +13,7 @@ from circuitgenome.sizer.physics.equations import (
     gm_ceiling,
     OPEN_LOOP_GAIN_CEILING_DB,
     open_loop_gain_db,
-    open_loop_measurable,
+    open_loop_gain_measurable,
     phase_margin_single_stage_deg,
     phase_margin_two_stage_deg,
     rout,
@@ -22,6 +22,7 @@ from circuitgenome.sizer.physics.equations import (
     vds_sat,
     vgs_from_ids,
 )
+from circuitgenome.sizer.physics.preprocess import size_compensation_caps
 from circuitgenome.synthesizer.loader import load_modules, load_topologies
 from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 from circuitgenome.synthesizer.netlist import to_flat_spice
@@ -172,14 +173,39 @@ def test_open_loop_gain_two_stage():
     assert gain > 60  # should be substantial (>60 dB)
 
 
-def test_open_loop_measurable_flag():
+def test_open_loop_gain_measurable_flag():
     # Below the ceiling: a realistic two-stage gain is measurable.
-    assert open_loop_measurable(90.0) is True
-    assert open_loop_measurable(OPEN_LOOP_GAIN_CEILING_DB) is True
+    assert open_loop_gain_measurable(90.0) is True
+    assert open_loop_gain_measurable(OPEN_LOOP_GAIN_CEILING_DB) is True
     # Above the ceiling: an over-estimated three-stage cascade rails (#155).
-    assert open_loop_measurable(178.8) is False
+    assert open_loop_gain_measurable(178.8) is False
     # No computed gain (single-stage / gated) → no evidence of railing.
-    assert open_loop_measurable(None) is True
+    assert open_loop_gain_measurable(None) is True
+
+
+def _cap(ref: str) -> Device:
+    return Device(ref=ref, type="capacitor", terminals={"p": "a", "m": "b"})
+
+
+def test_compensation_caps_keyed_by_device_ref_in_farads():
+    # FD three-stage: two caps per slot pair, comp2* slots take the inner cap.
+    slots = {"comp1_p": [_cap("c1_comp1_p")], "comp1_n": [_cap("c1_comp1_n")],
+             "comp2_p": [_cap("c1_comp2_p")], "comp2_n": [_cap("c1_comp2_n")]}
+    caps = size_compensation_caps(slots, cc_pf=2.0, cc2_pf=0.5)
+    assert caps == pytest.approx({"c1_comp1_p": 2.0e-12, "c1_comp1_n": 2.0e-12,
+                                  "c1_comp2_p": 0.5e-12, "c1_comp2_n": 0.5e-12})
+
+
+def test_compensation_caps_comp2_falls_back_to_cc1():
+    slots = {"comp1": [_cap("c1_comp1")], "comp2": [_cap("c1_comp2")]}
+    caps = size_compensation_caps(slots, cc_pf=2.0, cc2_pf=None)
+    assert caps == pytest.approx({"c1_comp1": 2.0e-12, "c1_comp2": 2.0e-12})
+
+
+def test_compensation_caps_empty_when_uncompensated():
+    assert size_compensation_caps({"compensation": [_cap("c1_compensation")]},
+                                  cc_pf=None, cc2_pf=None) == {}
+    assert size_compensation_caps({}, cc_pf=2.0, cc2_pf=None) == {}
 
 
 def test_unity_gain_bw():
@@ -269,7 +295,7 @@ def test_size_one_stage_opamp(one_stage_fbr):
 
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.transistors, "Must have at least some transistors sized"
-    assert result.cc_pf is None  # one-stage has no comp cap
+    assert result.capacitors == {}  # one-stage has no comp cap
 
     # All sized transistors must have W and L within tech bounds
     for ref, s in result.transistors.items():
@@ -294,7 +320,7 @@ def test_size_one_stage_reports_every_performance_metric(one_stage_fbr):
     spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12, gain_min_db=40)
     result = size_circuit(parsed, sr_result, fbr_result, topology, _tech(), spec)
 
-    assert result.cc_pf is None, "one-stage must stay uncompensated"
+    assert result.capacitors == {}, "one-stage must stay uncompensated"
     missing = {"gain_db", "gbw_hz", "phase_margin_deg", "slew_rate_vps",
                "cmrr_db", "psrr_db"} - set(result.metrics)
     assert not missing, f"single-stage metrics still withheld: {sorted(missing)}"
@@ -422,8 +448,7 @@ def test_size_two_stage_all_specs(two_stage_fbr):
 
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.transistors
-    assert result.cc_pf is not None
-    assert result.cc_pf > 0
+    assert result.capacitors["c1_compensation"] > 0
 
     # All W/L must be within tech bounds
     for ref, s in result.transistors.items():
@@ -474,8 +499,7 @@ def test_size_two_stage_cc_from_sr(two_stage_fbr):
         slew_rate_min_vps=3.5e6, gbw_min_hz=2.5e6, phase_margin_min_deg=60,
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-    assert result.cc_pf is not None
-    cc_f = result.cc_pf * 1e-12
+    cc_f = result.capacitors["c1_compensation"]
     # SR = iBias / Cc ≥ SR_spec → Cc ≤ iBias / SR_spec
     cc_max_from_sr = spec.ibias / spec.slew_rate_min_vps
     assert cc_f <= cc_max_from_sr * 1.001  # 0.1% tolerance for rounding
@@ -496,8 +520,7 @@ def test_size_two_stage_cc_stability_floor(two_stage_fbr):
         slew_rate_min_vps=3e5, gbw_min_hz=2e6, phase_margin_min_deg=60,
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-    assert result.cc_pf is not None
-    cc_f = result.cc_pf * 1e-12
+    cc_f = result.capacitors["c1_compensation"]
     assert cc_f == pytest.approx(_CC_STABILITY_RATIO * spec.cl)  # not ibias/SR = 66.7 pF
     assert cc_f <= spec.ibias / spec.slew_rate_min_vps  # SR still met (with margin)
 
@@ -623,7 +646,8 @@ def test_size_fd_basic(two_stage_fd_fbr):
 
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.transistors
-    assert result.cc_pf is not None and result.cc_pf > 0
+    assert set(result.capacitors) == {"c1_comp_p", "c1_comp_n"}
+    assert all(c > 0 for c in result.capacitors.values())
 
     for ref, s in result.transistors.items():
         assert tech.width.min <= s.w_um <= tech.width.max, f"{ref}: W out of bounds"
@@ -708,8 +732,7 @@ def test_fd_cc_from_sr(two_stage_fd_fbr):
         slew_rate_min_vps=3.5e6, gbw_min_hz=2.5e6, phase_margin_min_deg=60,
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
-    assert result.cc_pf is not None
-    cc_f = result.cc_pf * 1e-12
+    cc_f = result.capacitors["c1_comp_p"]
     cc_max_from_sr = spec.ibias / spec.slew_rate_min_vps
     assert cc_f <= cc_max_from_sr * 1.001
 
@@ -815,8 +838,8 @@ def test_size_three_stage_se_basic(three_stage_buffered_se_fbr):
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.transistors
-    assert result.cc_pf is not None and result.cc_pf > 0
-    assert result.cc2_pf is not None and result.cc2_pf > 0
+    assert set(result.capacitors) == {"c1_comp1", "c1_comp2"}
+    assert result.capacitors["c1_comp1"] > 0 and result.capacitors["c1_comp2"] > 0
     for ref, s in result.transistors.items():
         assert tech.width.min <= s.w_um <= tech.width.max, f"{ref}: W out of bounds"
         assert tech.length.min <= s.l_um <= tech.length.max, f"{ref}: L out of bounds"
@@ -833,8 +856,8 @@ def test_three_stage_se_cc2_ratio(three_stage_buffered_se_fbr):
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-    assert result.cc_pf is not None and result.cc2_pf is not None
-    assert result.cc_pf / 4.0 * (1 - 1e-9) <= result.cc2_pf <= result.cc_pf * (1 + 1e-9)
+    cc1, cc2 = result.capacitors["c1_comp1"], result.capacitors["c1_comp2"]
+    assert cc1 / 4.0 * (1 - 1e-9) <= cc2 <= cc1 * (1 + 1e-9)
 
 
 def test_three_stage_se_specs_met(three_stage_rnmc_se_fbr):
@@ -895,8 +918,8 @@ def test_size_three_stage_rnmc_se_basic(three_stage_rnmc_se_fbr):
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-    assert result.cc_pf is not None
-    assert result.cc2_pf is not None
+    assert set(result.capacitors) == {"c1_comp1", "c1_comp2"}
+    assert result.capacitors["c1_comp1"] > 0 and result.capacitors["c1_comp2"] > 0
 
 
 def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
@@ -932,10 +955,11 @@ def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
 
     gm2_old, gm3_old, cc1, _ = gms(None)
     gm2_new, gm3_new, _, cc2_new = gms("reversed_nested_miller")
-    assert not eq.rnmc_stable(gm2_old, gm3_old, cc1, spec.cl)
+    assert gm3_old > gm2_old * (1 + spec.cl / cc1)       # pole pair in the RHP
     assert gm2_new > gm2_old
-    assert eq.rnmc_stable(gm2_new, gm3_new, cc1, spec.cl)
-    assert eq.rnmc_inner_damping(gm2_new, gm3_new, cc1, cc2_new, spec.cl) > 0.5
+    assert gm3_new < gm2_new * (1 + spec.cl / cc1)       # pole pair stable
+    # ...and damped past ζ = 0.5 (the closed form's gm2 floor for it).
+    assert gm2_new > eq.rnmc_min_gm2(gm3_new, cc1, cc2_new, spec.cl, zeta=0.5)
 
 
 # --- FD NMC ---
@@ -949,8 +973,8 @@ def test_size_three_stage_fd_basic(three_stage_buffered_fd_fbr):
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     assert result.transistors
-    assert result.cc_pf is not None and result.cc_pf > 0
-    assert result.cc2_pf is not None and result.cc2_pf > 0
+    assert set(result.capacitors) == {"c1_comp1_p", "c1_comp1_n", "c1_comp2_p", "c1_comp2_n"}
+    assert all(c > 0 for c in result.capacitors.values())
 
 
 @pytest.mark.slow
@@ -1014,8 +1038,8 @@ def test_size_three_stage_rnmc_fd_basic(three_stage_rnmc_fd_fbr):
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech,
                           SizingSpec(**_THREE_STAGE_SPEC))
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
-    assert result.cc_pf is not None
-    assert result.cc2_pf is not None
+    assert set(result.capacitors) == {"c1_comp1_p", "c1_comp1_n", "c1_comp2_p", "c1_comp2_n"}
+    assert all(c > 0 for c in result.capacitors.values())
 
 
 # ---------------------------------------------------------------------------

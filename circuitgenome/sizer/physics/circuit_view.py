@@ -26,6 +26,7 @@ class CircuitView:
 
     :param slot_transistors: FBR slot name -> MOSFET devices in that slot.
     :param slot_resistors: FBR slot name -> resistor devices in that slot.
+    :param slot_capacitors: FBR slot name -> capacitor devices in that slot.
     :param all_transistors: deduplicated ref -> (Device, owning slot); a device
         appearing in several slots is attributed to the highest-priority one.
     :param warnings: topology-mismatch advisories from the structural check.
@@ -40,6 +41,7 @@ class CircuitView:
     """
     slot_transistors: dict[str, list[Device]] = field(default_factory=dict)
     slot_resistors: dict[str, list[Device]] = field(default_factory=dict)
+    slot_capacitors: dict[str, list[Device]] = field(default_factory=dict)
     all_transistors: dict[str, tuple[Device, str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     adopted: list[tuple[str, str]] = field(default_factory=list)
@@ -101,6 +103,18 @@ def _extract_slot_resistors(
         rs = [d for d in sa.structure.devices if d.type == "resistor"]
         if rs:
             result[slot_name] = rs
+    return result
+
+
+def _extract_slot_capacitors(
+    fbr_result: FunctionalBlockRecognitionResult,
+) -> dict[str, list[Device]]:
+    """Return {slot_name: [capacitor_Device, ...]} from the FBR assignments."""
+    result: dict[str, list[Device]] = {}
+    for slot_name, sa in fbr_result.slot_assignments.items():
+        cs = [d for d in sa.structure.devices if d.type == "capacitor"]
+        if cs:
+            result[slot_name] = cs
     return result
 
 
@@ -194,6 +208,7 @@ def analyze_circuit(
     return CircuitView(
         slot_transistors=slot_transistors,
         slot_resistors=_extract_slot_resistors(fbr_result),
+        slot_capacitors=_extract_slot_capacitors(fbr_result),
         all_transistors=_deduplicate_devices(slot_transistors),
         warnings=_check_topology_match(slot_transistors, topology.name),
         adopted=adopted,

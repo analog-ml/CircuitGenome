@@ -286,6 +286,40 @@ def test_comp_resistor_zero_on_output_pole():
     assert out["r1_compensation"] == pytest.approx((2e-12 + 2e-12) / (1e-3 * 2e-12))
 
 
+@pytest.mark.parametrize("scheme, c_out", [
+    ("reversed_nested_miller", 10e-15),   # the follower's gate
+    ("nested_miller", 2e-12),             # CL, as before
+    (None, 2e-12),
+])
+def test_comp_resistor_behind_a_buffer(scheme, c_out):
+    """Behind a source-follower buffer an RNMC last stage drives only the
+    follower's gate, so R = (Cc+Cgs)/(gm·Cc) ≈ 1/gm (issue #262: sized against
+    CL, R was ~5x larger and RNMC buffered designs oscillated).  Other schemes
+    keep CL, whose larger R their phase margin relies on."""
+    from circuitgenome.synthesizer.models import Device
+
+    class _Model(_FakeModel):
+        def cgs(self, dtype, w, l):
+            return 10e-15
+
+    ss = [Device(ref="m1_second_stage", type="nmos",
+                 terminals={"d": "out", "g": "net_mid", "s": "gnd!"})]
+    fol = [Device(ref="m1_output_stage", type="nmos",
+                  terminals={"d": "vdd!", "g": "out", "s": "vout", "b": "gnd!"})]
+    r = Device(ref="r1_compensation", type="resistor",
+               terminals={"t1": "net_mid", "t2": "cn"})
+    blocks = build_blocks({"second_stage": ss, "output_stage": fol},
+                          {"compensation": [r]})
+    sizing = {"m1_second_stage": _sz("m1_second_stage", "nmos"),
+              "m1_output_stage": _sz("m1_output_stage", "nmos")}
+    out, _ = size_resistors(
+        blocks, {"compensation": [r]}, {}, sizing, _Model(),
+        _spec(), load_tech("ptm45"), GmIdIntent(), cc_pf=2.0,
+        compensation_scheme=scheme)
+    # RNMC: (2p + 10f) / (1 mS · 2p) = 1.005 kΩ; otherwise CL's 2 kΩ
+    assert out["r1_compensation"] == pytest.approx((2e-12 + c_out) / (1e-3 * 2e-12))
+
+
 @pytest.mark.parametrize("variant", ["miller_cap_with_nulling_resistor",
                                      "indirect_compensation"])
 def test_comp_resistor_sized_end_to_end(variant):
@@ -294,7 +328,7 @@ def test_comp_resistor_sized_end_to_end(variant):
     res = _size(compensation=variant)
     comp_r = {k: v for k, v in res.resistors.items() if "comp" in k}
     assert comp_r, f"{variant}: compensation resistor not sized"
-    cc_f = res.cc_pf * 1e-12
+    (cc_f,) = res.capacitors.values()  # the one Miller cap, in farads
     for v in comp_r.values():
         assert v > 0 and v != pytest.approx(1e3, rel=1e-6)
         # zero placement is bounded by the stage gm: R·Cc/(Cc+CL) = 1/gm2

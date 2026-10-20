@@ -8,6 +8,8 @@ subcircuits — but its subckts take ``w=``/``l=`` in microns (the library sets
 """
 from pathlib import Path
 
+import pytest
+
 from circuitgenome.sizer.verify import deck
 from circuitgenome.sizer.physics.gmid_lut import GmIdLut
 from circuitgenome.sizer import load_tech
@@ -112,3 +114,41 @@ def test_sky130_op_handle_is_per_polarity():
             == "@m.xdut.x1_input_pair.msky130_fd_pr__pfet_01v8")
     assert (deck._dev_prefix(tech, "m5_tail", "nmos")
             == "@m.xdut.x5_tail.msky130_fd_pr__nfet_01v8")
+
+
+@pytest.mark.parametrize("input_pair", [
+    "differential_pair_pmos",
+    "differential_pair_pmos_degenerated",
+])
+def test_sky130_fd_cascode_tail_without_headroom_is_bias_infeasible(input_pair):
+    """At 1.8 V a PMOS pair biased at Vcm = 0.9 V sits ~0.81 V below its
+    source, leaving ~85 mV for a two-device cascode tail that needs ~250 mV of
+    stacked Vdsat: SPICE puts both tail devices in triode and the tail sources
+    ~13 of its 20 µA.  The sizer must say so.  A source-degenerated pair puts
+    a resistor between each device's source and the tail, and the check used
+    to start its walk down the tail stack from the device's source, find no
+    tail there, and pass (the same node mistake as issue #224)."""
+    from circuitgenome.recognizer import parse, recognize
+    from circuitgenome.recognizer.functional_block_recognizer import assign_slots
+    from circuitgenome.synthesizer.loader import load_modules, load_topologies
+    from circuitgenome.synthesizer.netlist import to_flat_spice
+    from circuitgenome.synthesizer.synthesizer import enumerate_circuits
+    from circuitgenome.sizer import SizingSpec, size_circuit
+
+    want = {"input_pair": input_pair,
+            "load": "folded_cascode_load_pmos_input_differential_output",
+            "tail_current": "cascode_current_mirror_tail_pmos"}
+    topo = next(t for t in load_topologies()
+                if t.name == "two_stage_opamp_fully_differential")
+    circ = next(c for c in enumerate_circuits(topo, load_modules(), config={})
+                if all(c.variant_map[k].name == v for k, v in want.items()))
+    parsed = parse(to_flat_spice(circ, name="dut"))
+    spec = SizingSpec(vdd=1.8, vss=0.0, ibias=20e-6, cl=2e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=50,
+                      gbw_min_hz=2e6, phase_margin_min_deg=60)
+    result = size_circuit(parsed, recognize(parsed),
+                          assign_slots(recognize(parsed), topo), topo,
+                          load_tech("sky130"), spec)
+    assert not result.bias_feasible
+    assert any("cascode tail current source cannot bias" in w
+               for w in result.warnings), result.warnings

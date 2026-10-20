@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from circuitgenome.synthesizer.models import Device
 
 from ..models import SizingSpec, TechParams, TransistorSizing
+from ..physics.rnmc import RNMC
 from ..physics.stage_chain import StageChain
 from ..physics.taxonomy import RAILS, is_signal_device
 from .analyze import OpAmpBlocks
@@ -66,13 +67,17 @@ def size_resistors(
     intent: GmIdIntent,
     cc_pf: float | None = None,
     cc2_pf: float | None = None,
+    compensation_scheme: str | None = None,
 ) -> tuple[dict[str, float], MetricModifiers]:
     """Return ``(extra_resistors, metric_modifiers)``.
 
     ``extra_resistors`` is ``{ref: ohms}`` for the degeneration / tail / bias /
     cmfb / compensation resistors; the :class:`MetricModifiers` carry their
     metric effects into the evaluation phase.  ``cc_pf``/``cc2_pf`` are the
-    planned compensation cap(s) the compensation-slot resistors pair with.
+    planned compensation cap(s) the compensation-slot resistors pair with;
+    ``compensation_scheme`` is the template's three-stage scheme
+    (``topology.config["compensation_scheme"]``), which decides the load a
+    reversed-nested-Miller compensation resistor is sized against.
     """
     out: dict[str, float] = {}
     gm1_factor = 1.0
@@ -143,16 +148,24 @@ def size_resistors(
     # --- Compensation-slot resistors (nulling / indirect series R) ---
     # The synthesizer emits every resistor at a 1 kΩ placeholder; the series
     # R of `miller_cap_with_nulling_resistor` / `indirect_compensation` must
-    # instead track the stage it bridges: R = (Cc+CL)/(gm_out·Cc) places the
-    # compensation zero on the output pole (issue #108).
+    # instead track the stage it bridges: R = (Cc+C)/(gm_out·Cc) places the
+    # compensation zero on the output pole (issue #108).  C is CL, except in a
+    # buffered reversed-nested-Miller amplifier: its last gain stage drives only
+    # the follower's gate, and sizing against CL there made R ~5x 1/gm_out --
+    # an extra pole inside the RNMC inner loop that made those designs
+    # oscillate (issue #262).  Other buffered schemes keep CL: their phase
+    # margin relies on the zero that larger R places (7-27° measured).
     comp_slots = [(name, rs) for name, rs in slot_resistors.items()
                   if name.startswith("comp")]
     if comp_slots and cc_pf:
         gm_out = _output_stage_gm(blocks, sizing, model)
         if gm_out > 0:
+            buffer_cgs = (_output_buffer_cgs(blocks, sizing, model)
+                          if compensation_scheme == RNMC else None)
+            c_out = spec.cl if buffer_cgs is None else buffer_cgs
             for name, rs in comp_slots:
                 slot_cc_f = (cc2_pf if "comp2" in name and cc2_pf else cc_pf) * 1e-12
-                r_val = (slot_cc_f + spec.cl) / (gm_out * slot_cc_f)
+                r_val = (slot_cc_f + c_out) / (gm_out * slot_cc_f)
                 for r in rs:
                     out[r.ref] = r_val
 
@@ -178,6 +191,22 @@ def _output_stage_gm(blocks: OpAmpBlocks, sizing: dict[str, TransistorSizing],
                 if g > 0:
                     return g
     return 0.0
+
+
+def _output_buffer_cgs(blocks: OpAmpBlocks, sizing: dict[str, TransistorSizing],
+                       model) -> float | None:
+    """Gate capacitance of a source-follower output buffer, or ``None``.
+
+    The buffer's signal device is the only load the last gain stage drives
+    besides the compensation network; ``None`` when there is no buffer.
+    """
+    for name in ("output_stage", "output_stage_p", "output_stage_n"):
+        b = blocks.blocks.get(name)
+        for d in (b.mosfets if b else []):
+            s = sizing.get(d.ref)
+            if s and is_signal_device(d):
+                return model.cgs(d.type, s.w_um, s.l_um)
+    return None
 
 
 def _bias_rail_target_v(rail_net: str, consumers: list[Device],

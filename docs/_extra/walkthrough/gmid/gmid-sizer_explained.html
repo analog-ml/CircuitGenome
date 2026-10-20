@@ -518,18 +518,20 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
     view, currents, plan, sizing, modifiers, spec, tech)
 
 <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
-    transistors=sizing, cc_pf=plan.cc_pf, metrics=metrics, margins=margins,
-    solver_status=<span class="tok-str">"GMID"</span>, cc2_pf=plan.cc2_pf,
-    warnings=(view.warnings + plan.warnings + geom_warnings + dc_warnings
-              + si_warnings + eval_notes),
+    transistors=sizing,
     resistors={**currents.load_resistors, **extra_r},
+    capacitors=<span class="tok-fn">size_compensation_caps</span>(
+        view.slot_capacitors, plan.cc_pf, plan.cc2_pf),
+    metrics=metrics, margins=margins,
+    solver_status=<span class="tok-str">"GMID"</span>,
     bias_feasible=bias_feasible,
-    transistor_intents=plan.tintents,
-    open_loop_measurable=eq.open_loop_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)))</code></pre>
+    open_loop_gain_measurable=eq.open_loop_gain_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
+              + eval_notes + adoption_warnings(view.adopted)))</code></pre>
 
-  <p>Notice the <code>return</code> is a <strong>gathering</strong> step. It reaches back into every crate that came down the line — <code>plan.cc_pf</code>, <code>currents.load_resistors</code>, <code>plan.tintents</code> — and the running <code>bias_feasible</code> flag. Because each hand-off was kept as a named object, the final assembly is just picking the right field off each one:</p>
+  <p>Notice the <code>return</code> is a <strong>gathering</strong> step. It reaches back into every crate that came down the line — <code>plan.cc_pf</code> / <code>plan.cc2_pf</code> (expanded onto the netlist's capacitor refs by recognised <code>comp*</code> / <code>comp2*</code> slot), <code>currents.load_resistors</code> — and the running <code>bias_feasible</code> flag. The per-device intents in <code>plan.tintents</code> stay on the plan: they drove the geometry but are not part of the result. Because each hand-off was kept as a named object, the final assembly is just picking the right field off each one:</p>
 
-  <p>The last field, <code>open_loop_measurable</code>, also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155).</p>
+  <p>The <code>open_loop_gain_measurable</code> flag also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155).</p>
 
   <figure class="fig">
     <svg viewBox="0 0 640 230" role="img" aria-label="Assembling the final SizingResult from every upstream crate">
@@ -552,10 +554,10 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
       <rect x="362" y="60" width="240" height="110" rx="12" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
       <text x="482" y="84" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-good)">SizingResult</text>
       <g font-size="10.5" text-anchor="start">
-        <text x="380" y="104">transistors, resistors, cc_pf</text>
+        <text x="380" y="104">transistors, resistors, capacitors</text>
         <text x="380" y="122">metrics, margins</text>
         <text x="380" y="140">warnings (all six sources merged)</text>
-        <text x="380" y="158">bias_feasible, transistor_intents</text>
+        <text x="380" y="158">bias_feasible, open_loop_gain_measurable</text>
       </g>
     </svg>
     <figcaption>The final crate is assembled by field-picking from every earlier crate — the payoff of never flattening the hand-offs into loose variables.</figcaption>

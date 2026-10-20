@@ -45,3 +45,43 @@ Whichever stage's output is wired to the external output net — `second_stage` 
 topology. A **positional** property, deliberately kept distinct from "output stage":
 in an unbuffered amp the load-driving stage is a *gain stage*, not an output stage.
 _Avoid_: Output stage (see above), final gain stage.
+
+## Sizing metrics
+
+**Predicted metrics**:
+Performance figures (gain, GBW, phase margin, slew rate, …) computed by the
+sizer's device model — the Level-1 square-law or the gm/Id lookup table — with no
+circuit simulation. Always what a sizing result carries, for every technology.
+_Avoid_: Analytical metrics (collides with the Level-1 *analytical* sizer, yet gm/Id
+results are predicted too), estimated metrics.
+
+**Measured metrics**:
+The same performance figures read back from a SPICE (ngspice) simulation of the
+sized circuit, at one process corner. The authority whenever it disagrees with the
+predicted metrics.
+_Avoid_: Simulated metrics, SPICE metrics.
+
+## Frequency compensation
+
+**Pole pair**:
+Two non-dominant poles that arise together as the roots of one quadratic and
+can therefore turn complex (`−σ ± jω`) and ring. Three-stage amplifiers (NMC,
+RNMC) have one; single- and two-stage amplifiers have only a single real
+non-dominant pole and cannot ring.
+_Avoid_: Inner poles, inner loop (when the pole pair itself is meant), complex poles
+(the pair may also be two real roots).
+
+**Damping (ζ)**:
+The damping ratio of a pole pair — `ζ = −Re(p)/|p|`, the cosine of the poles'
+angle from the negative real axis. ζ ≥ 0.707 means no resonance peak; ζ = 0 rings
+forever; ζ < 0 is unstable. A sizing target alongside phase margin, because
+phase margin is read at the 0 dB crossing and cannot see a pair resonating
+above it.
+_Avoid_: Damping factor (in prose — same quantity), stability margin.
+
+**Full model**:
+The RNMC open loop solved from its nodal equations — parasitics, stage output
+conductances, the third-stage mirror and an output buffer included — as opposed
+to the **closed forms** derived from the simplified quadratic. The full model
+decides; the closed forms explain and seed the search.
+_Avoid_: Exact model, numerical model, SPICE model (SPICE gives *measured metrics*).

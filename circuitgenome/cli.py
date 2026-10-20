@@ -264,8 +264,8 @@ def _cmd_size(args: argparse.Namespace) -> None:
         print(f"  {ref:<30}  W={s.w_um:.3f}µm  L={s.l_um:.3f}µm  "
               f"IDS={s.ids_a*1e6:.2f}µA  VGS={s.vgs_v:.3f}V  VDS_sat={s.vds_sat_v:.3f}V")
 
-    if result.cc_pf is not None:
-        print(f"  Cc = {result.cc_pf:.1f}pF")
+    for ref, farads in result.capacitors.items():
+        print(f"  {ref:<30}  C={farads*1e12:.2f}pF")
     for ref, ohms in result.resistors.items():
         print(f"  {ref:<30}  R={ohms/1e3:.2f}kΩ")
 
