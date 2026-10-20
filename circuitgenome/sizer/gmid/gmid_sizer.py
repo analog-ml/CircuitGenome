@@ -106,7 +106,8 @@ def size_gmid(
         plan, (sizing, size_warnings, bias_feasible) = refined, resized
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
-        plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf)
+        plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf,
+        compensation_scheme=view.compensation_scheme)
     sizing, level_r = tune_bias_levels(
         view.blocks, currents.ids_map, sizing, plan.model, spec, tech)
     extra_r = {**extra_r, **level_r}
