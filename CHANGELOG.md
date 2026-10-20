@@ -13,6 +13,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Fixed
 
+- 🐛 Fully-differential CMRR/PSRR are now measured from PDK device mismatch (gf180, sky130) instead of ngspice's 260–315 dB rounding error, which passed every spec; PTM/generic report `n/a` ([#261](https://github.com/analog-ml/CircuitGenome/pull/261)).
 - 🐛 A cascode tail under a source-degenerated input pair is now checked for headroom; the check looked for the tail at the pair's source, found nothing past the resistors, and passed sky130 designs whose tail sits in deep triode ([#263](https://github.com/analog-ml/CircuitGenome/pull/263)).
 - 🐛 Current mirrors wider than the PDK's 100 µm limit are built from parallel copies instead of being clamped, so they carry their planned current (a 100 µA source had been running at 50 µA) ([#259](https://github.com/analog-ml/CircuitGenome/pull/259)).
 - 🐛 Buffered reversed-nested-Miller (RNMC) op-amps no longer oscillate because of an oversized nulling resistor. Its last gain stage drives only the output buffer's gate, but the resistor was sized as if it drove the 5 pF load, making it about 5× too large (8.3 kΩ instead of 1.7 kΩ on GF180). That added a pole inside the RNMC inner loop. On GF180, 90 of 100 sampled fully-differential designs now settle in SPICE (was 55), at a median 8° lower measured phase margin. Nested-Miller and two-stage buffered designs are unchanged ([#264](https://github.com/analog-ml/CircuitGenome/pull/264)).

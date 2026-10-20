@@ -13,16 +13,21 @@ operating point):
 
 * **SE loop** (AC/CMRR/PSRR): ``Lfb`` closes out→inn at DC, ``Cfb`` AC-grounds
   the inverting input to the ``cm`` node.
-* **FD loop** (AC/CMRR/PSRR): ``L1``/``L2`` close outp→inn / outn→inp at DC.
+* **FD loop** (AC): inputs resistor-anchored at Vcm, the CMFB owns the output
+  CM (:func:`_loop_fb`).
+* **FD servo** (CMRR/PSRR, under PDK device mismatch): a clamped, DC-only
+  servo nulls the mismatch offset at the inputs (:func:`_fd_servo_fb`).
 * **Unity buffer** (slew/swing): out→inn direct — the large-signal rigs.
 * **FD gain −1** (slew/swing): behavioural sources feed back only the
   differential output, pinning the input CM at Vcm (:func:`_fd_inverting_fb`).
 """
 from __future__ import annotations
 
+import re
+
 import numpy as np
 
-from .deck import _run
+from .deck import _run, _run_capture
 from .rig import _POLARITIES, _deck, _fb_netmap
 
 # Feedback L must be AC-OPEN even at the lowest sweep frequency (1 Hz):
@@ -505,25 +510,19 @@ def _measure_swing_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
 
 def _measure_cmrr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity,
                   adm_db):
-    """Common-mode rejection: ``CMRR = Adm − Acm`` in dB.
+    """Single-ended common-mode rejection: ``CMRR = Adm − Acm`` in dB.
 
-    Same DC feedback loop as the gain bench, but the 1 V AC rides on the input
-    **common mode**: SE — the ``cm`` node itself carries the AC (the inverting
-    input receives it through ``Cfb``, the non-inverting one through the
-    0 V ``Vid``); FD — both gates are AC-coupled to one source, and the
-    common-mode → differential conversion is read at the output.
+    Same DC feedback loop as the gain bench, but the 1 V AC rides on the
+    ``cm`` node itself, i.e. on the input **common mode** (the inverting input
+    receives it through ``Cfb``, the non-inverting one through the 0 V
+    ``Vid``).  Fully-differential designs use :func:`_measure_fd_rejection`.
     """
     if adm_db is None or polarity is None:
         return None
     inp, inn = polarity
     netmap = _fb_netmap(topo, inp, inn)
-    if topo.fd:
-        drive = (f"Vci ci 0 dc 0 ac 1\n"
-                 f"Cc1 inp ci {_CH}\nCc2 inn ci {_CH}\n")
-        fb, outexpr = _loop_fb(topo, vcm, drive)
-    else:
-        fb, outexpr = _loop_fb(topo, vcm, "Vid inp cm dc 0\n")
-        fb = fb.replace(f"Vcm cm 0 {vcm}\n", f"Vcm cm 0 dc {vcm} ac 1\n")
+    fb, outexpr = _loop_fb(topo, vcm, "Vid inp cm dc 0\n")
+    fb = fb.replace(f"Vcm cm 0 {vcm}\n", f"Vcm cm 0 dc {vcm} ac 1\n")
     acm = _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr)
     if acm is None or acm <= 1e-12:   # numerical zero → nothing was measured
         return None
@@ -532,19 +531,138 @@ def _measure_cmrr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity,
 
 def _measure_psrr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity,
                   adm_db):
-    """Positive-supply rejection: ``PSRR+ = Adm − Avdd`` in dB.
+    """Single-ended positive-supply rejection: ``PSRR+ = Adm − Avdd`` in dB.
 
     Same DC feedback loop as the gain bench with a quiet input; the 1 V AC
     rides on VDD and the supply-to-output gain is read at low frequency.
+    Fully-differential designs use :func:`_measure_fd_rejection`.
     """
     if adm_db is None or polarity is None:
         return None
     inp, inn = polarity
     netmap = _fb_netmap(topo, inp, inn)
-    drive = ("Vid inp inn dc 0\n" if topo.fd else "Vid inp cm dc 0\n")
-    fb, outexpr = _loop_fb(topo, vcm, drive)
+    fb, outexpr = _loop_fb(topo, vcm, "Vid inp cm dc 0\n")
     avdd = _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr,
                    sup_ac=True)
     if avdd is None or avdd <= 1e-12:   # numerical zero → nothing was measured
         return None
     return adm_db - 20.0 * np.log10(avdd)
+
+
+# Seeds of the PDK mismatch draws the FD rejection benches run; the worst
+# draw is reported.
+_MISMATCH_SEEDS = tuple(range(1, 9))
+_SERVO_CLAMP_V = 0.05   # per-input limit on the FD offset servo's correction
+
+# One run per draw: the DC differential output and output common mode (did
+# the draw settle?), then the 1 mHz differential output for each 1 V AC
+# stimulus in turn — input difference, input common mode, supply.
+_FD_REJECTION_CONTROL = """op
+let vchk=v(outp)-v(outn)
+print vchk
+let vocm=(v(outp)+v(outn))/2
+print vocm
+ac lin 1 1e-3 1e-3
+let adm=mag(v(outp)-v(outn))
+print adm
+alter vdi acmag=0
+alter vci acmag=1
+ac lin 1 1e-3 1e-3
+let acm=mag(v(outp)-v(outn))
+print acm
+alter vci acmag=0
+alter vsup acmag=1
+ac lin 1 1e-3 1e-3
+let avdd=mag(v(outp)-v(outn))
+print avdd"""
+
+
+def _fd_servo_fb(vcm, sign: int) -> str:
+    """FD rig whose inputs a DC servo moves to null the differential output.
+
+    Mismatch gives the amplifier an input offset of a few mV, and its open-loop
+    gain turns that into a railed differential output on the resistor-anchored
+    gain bench (:func:`_loop_fb`).  Here the differential output is fed back to
+    the inputs through a 1e12 s low-pass, so the servo cancels the offset at DC
+    and is open at the 1 mHz measurement point.  Its correction is clamped to
+    ``±_SERVO_CLAMP_V`` per input — ample for an mV offset — so it cannot drive
+    the inputs out of range into a latched operating point.  ``sign`` picks the
+    feedback direction (the FD polarity hint cannot tell it).  ``Vdi`` (input
+    difference) carries the AC; ``Vci`` (input common mode) is quiet until
+    :data:`_FD_REJECTION_CONTROL` moves the AC onto it.
+    """
+    lim = _SERVO_CLAMP_V
+    corr = f"max(min({sign}*v(lp)/2,{lim}),-{lim})"
+    return (f"Vocm ocm 0 {vcm}\nVci ci 0 dc 0\nVdi di 0 dc 0 ac 1\n"
+            "Esrv vsrv 0 outp outn 1\nRsrv vsrv lp 1\nCsrv lp 0 1e12\n"
+            f"Binp inp 0 v={vcm}+v(ci)+v(di)/2-{corr}\n"
+            f"Binn inn 0 v={vcm}+v(ci)-v(di)/2+{corr}\n")
+
+
+def _fd_draw(name, ports, body_dut, vdd, ibias, cl, vcm, netmap,
+             sign) -> dict[str, float] | None:
+    """One mismatch draw in the servo rig: ``vchk``/``vocm``/``adm``/``acm``/``avdd``.
+
+    ``None`` when ngspice does not print all five (e.g. no ``.op``)."""
+    deck = _deck(name, ports, body_dut, vdd, ibias, cl,
+                 _fd_servo_fb(vcm, sign), netmap, _FD_REJECTION_CONTROL)
+    txt = _run_capture(deck)
+    if not txt:
+        return None
+    vals = dict(re.findall(r"^(vchk|vocm|adm|acm|avdd)\s*=\s*([-\d.eE+]+)",
+                           txt, re.M))
+    if len(vals) < 5:
+        return None
+    return {k: float(v) for k, v in vals.items()}
+
+
+def _draw_settled(r: dict[str, float] | None, vdd: float) -> bool:
+    """Whether a draw (:func:`_fd_draw`) settled at a live operating point.
+
+    The servo must have nulled the difference to within an offset (a draw it
+    cannot hold sits near a rail instead), and the output common mode must
+    sit inside the ``0.1–0.9·Vdd`` window the FD bias check uses: both outputs
+    collapsed to one rail, the all-off state some mismatch draws settle in,
+    null the difference too but have almost no gain.
+    """
+    return (r is not None and abs(r["vchk"]) < 0.05 * vdd
+            and 0.1 * vdd < r["vocm"] < 0.9 * vdd)
+
+
+def _measure_fd_rejection(name, ports, mc_bodies, topo, vdd, ibias, cl, vcm,
+                          polarity):
+    """Fully-differential ``(cmrr_db, psrr_db, skipped)``: the worst over
+    mismatch draws, and how many draws did not settle.
+
+    A perfectly matched FD circuit turns neither input common mode nor supply
+    ripple into a differential output — both halves move together — so its
+    rejection is set by device mismatch alone.  Each body in ``mc_bodies`` is
+    the DUT with one seeded PDK mismatch draw (``deck._dut(mismatch_seed=…)``).
+    Per draw, the servo rig (:func:`_fd_servo_fb`) reads the 1 mHz differential
+    output for a differential (Adm), common-mode (Acm) and supply (Avdd) 1 V
+    stimulus at that draw's own operating point: ``CMRR = Adm/Acm`` and
+    ``PSRR+ = Adm/Avdd``, in dB.  The minimum over the draws is reported; a
+    draw that does not settle at a live operating point (:func:`_draw_settled`)
+    with either servo direction is skipped and counted, and a metric with no
+    usable draw is ``None``.
+    """
+    if polarity is None:
+        return None, None, 0
+    netmap = _fb_netmap(topo, *polarity)
+    cmrr: list[float] = []
+    psrr: list[float] = []
+    signs = (1, -1)
+    skipped = 0
+    for body in mc_bodies:
+        for sign in signs:
+            r = _fd_draw(name, ports, body, vdd, ibias, cl, vcm, netmap, sign)
+            if _draw_settled(r, vdd):
+                break
+        else:   # neither servo direction settled this draw
+            skipped += 1
+            continue
+        signs = (sign, -sign)   # the direction is the circuit's, not the draw's
+        for out, key in ((cmrr, "acm"), (psrr, "avdd")):
+            if r["adm"] > 0 and r[key] > 1e-12:   # numerical zero → not measured
+                out.append(20.0 * np.log10(r["adm"] / r[key]))
+    return (min(cmrr) if cmrr else None, min(psrr) if psrr else None, skipped)

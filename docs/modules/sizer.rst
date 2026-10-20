@@ -236,7 +236,12 @@ unity-gain pulse centred on Vcm (the min of the rising and falling edges, each r
 within 10–90 % of its swing); output swing from an
 inverting −1 DC sweep (fully-differential designs: a differential-only −1 rig,
 both per output); CMRR and PSRR+ from the same feedback loop with the AC
-stimulus riding on the input common mode / the positive supply.  Every bench
+stimulus riding on the input common mode / the positive supply.  A
+fully-differential design's CMRR/PSRR+ come from device mismatch instead: a
+perfectly matched one turns neither into a differential output, so on a PDK
+with mismatch models (GF180MCU, sky130; ``spice_lib.mismatch_switch``) both are
+the worst of 8 seeded mismatch draws, measured with a DC servo that cancels each
+draw's input offset, and on PTM / generic techs they are ``n/a``.  Every bench
 loads each output (both, on a fully-differential design) with the spec's ``cl``
 to ground — the load the analytical metrics are predicted against.  Single-ended
 op-amps are the most robust; fully-differential AC metrics (which depend on the

@@ -240,6 +240,8 @@ args = (name, ports, body_dut, _Topo(ports), vdd, ibias, spec.cl, vcm)</code></p
 
   <p>Note what <code>ac_clean</code> means: <code>reason is None</code> &mdash; not merely that the AC bench returned a number. A circuit measured at &minus;3&nbsp;dB gain returns a perfectly real number with a reason attached, and that is <em>not</em> a basis for a rejection ratio.</p>
 
+  <p>Inside the gate, fully-differential designs take a different path. A perfectly matched FD circuit rejects common mode and supply exactly, so their CMRR/PSRR come from <code>_measure_fd_rejection</code> over 8 seeded PDK mismatch draws (one <code>_dut(&hellip;, mismatch_seed=s)</code> body each). On a tech with no mismatch model they stay <code>None</code> and a note says why.</p>
+
   <h3>The extra key</h3>
   <p>When anything has gone sideways, one more key appears:</p>
   <pre class="code"><code><span class="tok-kw">if</span> notes:

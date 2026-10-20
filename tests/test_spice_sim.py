@@ -661,16 +661,12 @@ def test_fd_three_stage_ac_metrics_are_real():
 
 
 @ngspice
-def test_fd_cmrr_psrr_measured():
-    """#184 acceptance: an FD topology with a clean differential AC gain reports
-    SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
-    cmrr/_measure_psrr, FD branch) gate on the same ``ac_clean`` flag as the AC
-    bench, so once the #165/#167 CMFB output-sense rewire made the open-loop FD
-    gain clean, rejection flows through automatically.  Both are ratios against
-    the differential gain, so each must land above the gain floor (a matched FD
-    deck converts common-mode/supply to a near-zero differential output --
-    numerically small but real, not the garbage-against-garbage the SE guard in
-    test_cmrr_psrr_none_without_clean_gain rejects)."""
+def test_fd_cmrr_psrr_none_without_mismatch_model():
+    """A perfectly matched FD circuit turns neither common mode nor supply into
+    a differential output, so a matched deck measures only ngspice's rounding
+    floor (169.6/207.2 dB here, reported as CMRR/PSRR before).  ptm45 has no
+    mismatch model to break the symmetry, so FD rejection stays None, with a
+    note saying why -- even with a clean differential gain."""
     parsed = parse(_FD_THREE_STAGE_NETLIST)
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_rnmc_fully_differential")
@@ -685,12 +681,64 @@ def test_fd_cmrr_psrr_measured():
     assert result.solver_status == "GMID"
     sim = simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
 
-    gain = sim["gain_db"]
-    assert gain is not None and gain > 0
-    # Rejection = Adm - A(cm|supply); each is a positive dB margin above the
-    # differential gain.  Loose upper bound catches a pure-noise-floor infinity.
-    assert sim["cmrr_db"] is not None and gain < sim["cmrr_db"] < 400.0
-    assert sim["psrr_db"] is not None and gain < sim["psrr_db"] < 400.0
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    assert sim["cmrr_db"] is None and sim["psrr_db"] is None
+    assert any("no device mismatch model" in n for n in sim.get("notes", []))
+
+
+@ngspice
+@pytest.mark.parametrize("tech_name, spec", [
+    ("gf180mcu", SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                            second_stage_current_ratio=2.5, gain_min_db=60,
+                            gbw_min_hz=2e6, phase_margin_min_deg=60)),
+    pytest.param("sky130", SizingSpec(vdd=1.8, vss=0.0, ibias=20e-6, cl=2e-12,
+                                      second_stage_current_ratio=2.5,
+                                      gain_min_db=50, gbw_min_hz=2e6,
+                                      phase_margin_min_deg=60),
+                 marks=pytest.mark.slow),
+])
+def test_fd_cmrr_psrr_from_mismatch_draws(tech_name, spec):
+    """On a PDK with mismatch models, FD CMRR/PSRR come from seeded mismatch
+    draws (worst case): finite, far below the matched deck's 260-315 dB
+    rounding floor, and identical run to run."""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
+    tech = load_tech(tech_name)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    for key in ("cmrr_db", "psrr_db"):
+        assert sim[key] is not None and 10.0 < sim[key] < 150.0, (key, sim)
+    again = simulate_metrics(text, result, tech, spec)
+    assert (again["cmrr_db"], again["psrr_db"]) == (sim["cmrr_db"],
+                                                    sim["psrr_db"])
+
+
+def test_fd_servo_fb_clamps_its_correction():
+    """The offset servo's correction is limited per input, so it cannot push
+    the inputs out of range into a latched operating point."""
+    fb = measure._fd_servo_fb(1.65, -1)
+    lim = measure._SERVO_CLAMP_V
+    assert f"max(min(-1*v(lp)/2,{lim}),-{lim})" in fb
+    assert "Vdi di 0 dc 0 ac 1" in fb and "Vci ci 0 dc 0\n" in fb
+
+
+def test_fd_draw_settled_needs_a_live_output_common_mode():
+    """A draw counts only when the servo nulled the difference *and* the
+    outputs sit mid-supply.  Both outputs collapsed to ground (the all-off
+    state some sky130 mismatch draws settle in, with ~1e-4 of the healthy
+    gain) also null the difference, and must not count."""
+    vdd = 1.8
+    healthy = {"vchk": -6e-3, "vocm": 0.87}
+    railed = {"vchk": 1.58, "vocm": 0.79}
+    all_off = {"vchk": 1e-5, "vocm": 6e-4}
+    assert measure._draw_settled(healthy, vdd)
+    assert not measure._draw_settled(railed, vdd)
+    assert not measure._draw_settled(all_off, vdd)
+    assert not measure._draw_settled(None, vdd)
 
 
 # --- phase-margin plausibility guard ----------------------------------------

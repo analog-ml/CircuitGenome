@@ -15,6 +15,7 @@ spice_lib:
   file: ../pdk/sky130/ngspice/sky130.lib.spice   # trimmed corner library
   corner: tt                                     # nominal corner for sizing
   corners: [tt, ss, ff, sf, fs]                  # CLI verification sweep
+  mismatch_switch: mc_mm_switch                  # per-device mismatch (FD CMRR/PSRR)
 
 device_map:                                      # generic type -> PDK subcircuit
   nmos: sky130_fd_pr__nfet_01v8

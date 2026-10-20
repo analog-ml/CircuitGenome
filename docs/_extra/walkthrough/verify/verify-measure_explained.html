@@ -355,7 +355,7 @@ track = slope &lt;= -<span class="tok-num">0.7</span>            <span class="to
 
   <div class="eq-center"><span class="boxed-eq">CMRR&nbsp;=&nbsp;A<sub>dm</sub>&nbsp;&minus;&nbsp;A<sub>cm</sub>&nbsp;&nbsp;&nbsp;&nbsp;PSRR<sup>+</sup>&nbsp;=&nbsp;A<sub>dm</sub>&nbsp;&minus;&nbsp;A<sub>vdd</sub></span></div>
 
-  <p>The rigs are the gain bench with the stimulus relocated. For CMRR the 1&nbsp;V AC rides on the input common mode (SE: on the <code>cm</code> node itself; FD: both gates AC-coupled to one source). For PSRR it rides on VDD &mdash; which is the entire purpose of <code>_rig()</code>'s <code>sup_ac</code> flag.</p>
+  <p>The rigs are the gain bench with the stimulus relocated. For CMRR the 1&nbsp;V AC rides on the input common mode (the <code>cm</code> node itself). For PSRR it rides on VDD &mdash; which is the entire purpose of <code>_rig()</code>'s <code>sup_ac</code> flag.</p>
 
   <h3>Why they are gated on a clean AC measurement</h3>
   <p>Both are <em>relative</em> to <code>adm_db</code>. If the differential gain came from a corrupted sweep, the ratio is garbage divided by garbage &mdash; and it will still print as a confident-looking number. So the orchestrator only runs these two when the AC bench reported a clean, positive-gain result:</p>
@@ -366,6 +366,10 @@ track = slope &lt;= -<span class="tok-num">0.7</span>            <span class="to
 
   <p>Each also guards its own denominator: an <code>acm</code> or <code>avdd</code> that comes back as numerical zero means nothing was measured, not that rejection was infinite, so the result is <code>None</code> rather than a spectacular figure.</p>
 
+  <h3>Fully differential: mismatch, or nothing</h3>
+  <p>A fully-differential output is <code>v(outp) &minus; v(outn)</code>. Move both inputs together, or wiggle VDD, and two perfectly matched halves move by exactly the same amount, so the difference stays at zero. A matched deck therefore has no common-mode or supply path to measure; the old FD bench read ngspice's rounding error (260&ndash;315&nbsp;dB) and called it rejection. Real FD rejection comes from the halves <em>not</em> matching, so <code>_measure_fd_rejection</code> turns on the PDK's own per-device mismatch models (<code>spice_lib.mismatch_switch</code>, with <code>.option seed=K</code> so every run draws the same devices) and reports the worst of 8 draws.</p>
+  <p>Mismatch also gives the amplifier a few mV of input offset, which its open-loop gain turns into a railed output. So these draws use their own rig, <code>_fd_servo_fb</code>: a DC servo feeds the low-passed differential output back to the inputs to cancel the offset, and is open at the 1&nbsp;mHz measurement point. Its correction is clamped to &plusmn;50&nbsp;mV per input, so it can never push the inputs out of range into a latched state. One ngspice run per draw reads the DC check and the differential, common-mode and supply gains at that draw's own operating point. PTM and generic techs have no mismatch models, so their FD CMRR/PSRR stay <code>None</code>, with a note saying why.</p>
+
 </section>
 
 <section class="part" id="part-9">
@@ -375,7 +379,7 @@ track = slope &lt;= -<span class="tok-num">0.7</span>            <span class="to
   <ul>
     <li><strong>Fully-differential slew rate and swing are per output.</strong> They say how far and how fast each output goes while both still follow, not what the differential signal alone does.</li>
     <li>PSRR is positive-supply only. There is no PSRR&minus;.</li>
-    <li>Every measurement is at one operating point and one corner. Corners are re-measured by calling the whole thing again with a different <code>corner</code>, not by sweeping inside a bench.</li>
+    <li>Every measurement is at one operating point and one corner, except fully-differential CMRR/PSRR, which take the worst of 8 mismatch draws. Corners are re-measured by calling the whole thing again with a different <code>corner</code>, not by sweeping inside a bench.</li>
     <li>The polarity search tries exactly two assignments. That is all a two-input amplifier has, but it does mean a circuit that settles under <em>neither</em> yields nothing at all &mdash; correctly, since there is no configuration in which it works.</li>
     <li>None of these is sign-off. They are a fast, independent cross-check on the analytical estimate; a real design still needs a real verification flow.</li>
   </ul>

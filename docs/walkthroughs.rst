@@ -27,7 +27,10 @@ Sizer
 - `ngspice verification <walkthrough/verify/index.html>`__ — the simulated
   bench: building a runnable deck from a sized netlist, finding the circuit's
   input polarity by experiment, the six metric testbenches, and the DC
-  bias-soundness verdict.
+  bias-soundness verdict.  Its `fully-differential CMRR & PSRR
+  <walkthrough/verify/verify-fd-rejection_explained.html>`__ deep dive covers
+  why a matched FD circuit rejects common mode exactly, and how the bench
+  measures it from PDK mismatch.
 - `Analytical (Level-1) sizer <walkthrough/analytical/index.html>`__ — the
   card-less square-law path: how device constraints linearise into a CP-SAT
   integer program.

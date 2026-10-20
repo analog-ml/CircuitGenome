@@ -37,18 +37,32 @@ def ngspice_available() -> bool:
     return shutil.which("ngspice") is not None
 
 
-def _emit_model(tech: TechParams, corner: str | None = None) -> str:
+def _emit_model(tech: TechParams, corner: str | None = None,
+                mismatch_seed: int | None = None) -> str:
     """Return the SPICE ``.model``/``.include``/``.lib`` block for ``tech``.
 
     * ``spice_lib`` (foundry PDK, e.g. GF180MCU): ``.include`` the global design
       file (if any) then ``.lib "<file>" <corner>`` — devices are subcircuits.
+      With ``mismatch_seed`` the library's ``mismatch_switch`` is turned on
+      after the ``.lib`` and ngspice's random seed is fixed, so every device
+      gets its own repeatable mismatch draw.
     * ``spice_model`` (PTM): flat ``.include`` of ``.model nmos``/``pmos`` cards.
     * neither: synthesise a Level-1 ``.model`` from ``mu_cox``/``vth``/``lam``.
+
+    :raises ValueError: when ``mismatch_seed`` is given for a tech without a
+        ``mismatch_switch`` — there is no mismatch model to turn on.
     """
+    if mismatch_seed is not None and not (
+            tech.spice_lib and tech.spice_lib.mismatch_switch):
+        raise ValueError(f"{tech.name} has no mismatch model")
     if tech.spice_lib:
         lib = tech.spice_lib
         out = f'.include "{lib.design}"\n' if lib.design else ""
-        return out + f'.lib "{lib.file}" {corner or lib.corner}\n'
+        out += f'.lib "{lib.file}" {corner or lib.corner}\n'
+        if mismatch_seed is not None:
+            out += (f".param {lib.mismatch_switch}=1\n"
+                    f".option seed={mismatch_seed}\n")
+        return out
     if tech.spice_model:
         return f'.include "{tech.spice_model}"\n'
     n, p = tech.nmos, tech.pmos
@@ -220,15 +234,18 @@ def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
 
 
 def _dut(tech: TechParams, name: str, body: list[str],
-         corner: str | None = None) -> str:
+         corner: str | None = None, mismatch_seed: int | None = None) -> str:
     """Title line + model block + the sized ``.subckt`` definition.
 
     The leading comment is mandatory: SPICE always treats the first deck line as
     the title and ignores it, which would otherwise swallow the first ``.model``.
     For a PDK tech the device lines are rewritten to subcircuit instances.
+    ``mismatch_seed`` turns on the PDK's device mismatch (see
+    :func:`_emit_model`).
     """
     return ("* circuitgenome spice verification\n"
-            + _emit_model(tech, corner) + f".subckt {name} __PORTS__\n"
+            + _emit_model(tech, corner, mismatch_seed)
+            + f".subckt {name} __PORTS__\n"
             + "\n".join(_emit_body(tech, body)) + "\n.ends\n")
 
 

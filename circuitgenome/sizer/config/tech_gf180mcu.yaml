@@ -14,6 +14,7 @@ spice_lib:
   file: ../pdk/gf180/ngspice/sm141064.ngspice    # corner library
   corner: typical                                # nominal corner for sizing
   corners: [typical, ss, ff, sf, fs]             # CLI verification sweep
+  mismatch_switch: sw_stat_mismatch              # per-device mismatch (FD CMRR/PSRR)
 
 device_map:                                      # generic type -> PDK subcircuit
   nmos: nmos_3p3
