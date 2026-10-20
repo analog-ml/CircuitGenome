@@ -554,12 +554,14 @@ def _measure_psrr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity,
 _MISMATCH_SEEDS = tuple(range(1, 9))
 _SERVO_CLAMP_V = 0.05   # per-input limit on the FD offset servo's correction
 
-# One run per draw: the DC differential output (did the servo null it?), then
-# the 1 mHz differential output for each 1 V AC stimulus in turn — input
-# difference, input common mode, supply.
+# One run per draw: the DC differential output and output common mode (did
+# the draw settle?), then the 1 mHz differential output for each 1 V AC
+# stimulus in turn — input difference, input common mode, supply.
 _FD_REJECTION_CONTROL = """op
 let vchk=v(outp)-v(outn)
 print vchk
+let vocm=(v(outp)+v(outn))/2
+print vocm
 ac lin 1 1e-3 1e-3
 let adm=mag(v(outp)-v(outn))
 print adm
@@ -599,24 +601,38 @@ def _fd_servo_fb(vcm, sign: int) -> str:
 
 def _fd_draw(name, ports, body_dut, vdd, ibias, cl, vcm, netmap,
              sign) -> dict[str, float] | None:
-    """One mismatch draw in the servo rig: ``vchk``/``adm``/``acm``/``avdd``.
+    """One mismatch draw in the servo rig: ``vchk``/``vocm``/``adm``/``acm``/``avdd``.
 
-    ``None`` when ngspice does not print all four (e.g. no ``.op``)."""
+    ``None`` when ngspice does not print all five (e.g. no ``.op``)."""
     deck = _deck(name, ports, body_dut, vdd, ibias, cl,
                  _fd_servo_fb(vcm, sign), netmap, _FD_REJECTION_CONTROL)
     txt = _run_capture(deck)
     if not txt:
         return None
-    vals = dict(re.findall(r"^(vchk|adm|acm|avdd)\s*=\s*([-\d.eE+]+)", txt,
-                           re.M))
-    if len(vals) < 4:
+    vals = dict(re.findall(r"^(vchk|vocm|adm|acm|avdd)\s*=\s*([-\d.eE+]+)",
+                           txt, re.M))
+    if len(vals) < 5:
         return None
     return {k: float(v) for k, v in vals.items()}
 
 
+def _draw_settled(r: dict[str, float] | None, vdd: float) -> bool:
+    """Whether a draw (:func:`_fd_draw`) settled at a live operating point.
+
+    The servo must have nulled the difference to within an offset (a draw it
+    cannot hold sits near a rail instead), and the output common mode must
+    sit inside the ``0.1–0.9·Vdd`` window the FD bias check uses: both outputs
+    collapsed to one rail, the all-off state some mismatch draws settle in,
+    null the difference too but have almost no gain.
+    """
+    return (r is not None and abs(r["vchk"]) < 0.05 * vdd
+            and 0.1 * vdd < r["vocm"] < 0.9 * vdd)
+
+
 def _measure_fd_rejection(name, ports, mc_bodies, topo, vdd, ibias, cl, vcm,
                           polarity):
-    """Fully-differential ``(cmrr_db, psrr_db)``: the worst over mismatch draws.
+    """Fully-differential ``(cmrr_db, psrr_db, skipped)``: the worst over
+    mismatch draws, and how many draws did not settle.
 
     A perfectly matched FD circuit turns neither input common mode nor supply
     ripple into a differential output — both halves move together — so its
@@ -626,25 +642,27 @@ def _measure_fd_rejection(name, ports, mc_bodies, topo, vdd, ibias, cl, vcm,
     output for a differential (Adm), common-mode (Acm) and supply (Avdd) 1 V
     stimulus at that draw's own operating point: ``CMRR = Adm/Acm`` and
     ``PSRR+ = Adm/Avdd``, in dB.  The minimum over the draws is reported; a
-    draw whose servo cannot null the output (it sits near a rail instead of
-    within an offset of zero) is skipped, and a metric with no usable draw is
-    ``None``.
+    draw that does not settle at a live operating point (:func:`_draw_settled`)
+    with either servo direction is skipped and counted, and a metric with no
+    usable draw is ``None``.
     """
     if polarity is None:
-        return None, None
+        return None, None, 0
     netmap = _fb_netmap(topo, *polarity)
     cmrr: list[float] = []
     psrr: list[float] = []
     signs = (1, -1)
+    skipped = 0
     for body in mc_bodies:
         for sign in signs:
             r = _fd_draw(name, ports, body, vdd, ibias, cl, vcm, netmap, sign)
-            if r is not None and abs(r["vchk"]) < 0.05 * vdd:
+            if _draw_settled(r, vdd):
                 break
-        else:   # neither servo direction nulled this draw
+        else:   # neither servo direction settled this draw
+            skipped += 1
             continue
         signs = (sign, -sign)   # the direction is the circuit's, not the draw's
         for out, key in ((cmrr, "acm"), (psrr, "avdd")):
             if r["adm"] > 0 and r[key] > 1e-12:   # numerical zero → not measured
                 out.append(20.0 * np.log10(r["adm"] / r[key]))
-    return (min(cmrr) if cmrr else None, min(psrr) if psrr else None)
+    return (min(cmrr) if cmrr else None, min(psrr) if psrr else None, skipped)

@@ -26,9 +26,10 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``,
     ``cmrr_db``, ``psrr_db``.  Missing/failed measurements are ``None``
     (CMRR/PSRR need a measured differential gain first).  Fully-differential
-    CMRR/PSRR are the worst case over seeded PDK mismatch draws, and ``None``
-    on a tech without a mismatch model (``spice_lib.mismatch_switch``): a
-    matched FD circuit rejects common mode and supply exactly.
+    CMRR/PSRR are the worst case over seeded PDK mismatch draws (a draw that
+    does not settle at a live operating point is left out, with a note), and
+    ``None`` on a tech without a mismatch model (``spice_lib.mismatch_switch``):
+    a matched FD circuit rejects common mode and supply exactly.
     Fully-differential slew rate and swing are per output, like the
     single-ended ones.  A fully-differential design can
     report a phase margin ≤ 0 — a real instability, flagged in ``notes``;
@@ -97,9 +98,15 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
             try:
                 mc_bodies = [_dut(tech, name, body, corner, mismatch_seed=s)
                              for s in _MISMATCH_SEEDS]
-                out["cmrr_db"], out["psrr_db"] = _measure_fd_rejection(
+                out["cmrr_db"], out["psrr_db"], skipped = _measure_fd_rejection(
                     name, ports, mc_bodies, topo, vdd, ibias, spec.cl, vcm,
                     polarity)
+                if skipped:
+                    notes.append(
+                        f"CMRR/PSRR: {skipped} of {len(mc_bodies)} mismatch "
+                        "draws did not settle at a live operating point "
+                        "(output railed, or both outputs collapsed to a rail) "
+                        "and were left out")
             except Exception as e:
                 _oops("CMRR/PSRR", e)
         else:

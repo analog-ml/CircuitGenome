@@ -726,6 +726,21 @@ def test_fd_servo_fb_clamps_its_correction():
     assert "Vdi di 0 dc 0 ac 1" in fb and "Vci ci 0 dc 0\n" in fb
 
 
+def test_fd_draw_settled_needs_a_live_output_common_mode():
+    """A draw counts only when the servo nulled the difference *and* the
+    outputs sit mid-supply.  Both outputs collapsed to ground (the all-off
+    state some sky130 mismatch draws settle in, with ~1e-4 of the healthy
+    gain) also null the difference, and must not count."""
+    vdd = 1.8
+    healthy = {"vchk": -6e-3, "vocm": 0.87}
+    railed = {"vchk": 1.58, "vocm": 0.79}
+    all_off = {"vchk": 1e-5, "vocm": 6e-4}
+    assert measure._draw_settled(healthy, vdd)
+    assert not measure._draw_settled(railed, vdd)
+    assert not measure._draw_settled(all_off, vdd)
+    assert not measure._draw_settled(None, vdd)
+
+
 # --- phase-margin plausibility guard ----------------------------------------
 
 def test_pm_plausible_range():

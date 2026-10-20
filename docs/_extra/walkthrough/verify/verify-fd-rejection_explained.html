@@ -588,6 +588,8 @@ inp − inn = −4.9993 mV                    (the servo found −Vos by itself)
 <pre class="code"><code>op
 let vchk=v(outp)-v(outn)
 print vchk                       <span class="tok-com">← did the servo null it?</span>
+let vocm=(v(outp)+v(outn))/2
+print vocm                       <span class="tok-com">← …and are the outputs alive, mid-supply?</span>
 ac lin 1 1e-3 1e-3               <span class="tok-com">← one point at 1 mHz, Vdi carries the AC</span>
 let adm=mag(v(outp)-v(outn))
 print adm
@@ -607,7 +609,7 @@ print avdd</code></pre>
     <defs><marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
     <g font-size="11" text-anchor="middle">
       <rect x="30" y="30" width="130" height="50" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="95" y="52" font-weight="600">op</text><text x="95" y="68" fill="var(--fig-muted)">vchk</text>
+      <text x="95" y="52" font-weight="600">op</text><text x="95" y="68" fill="var(--fig-muted)">vchk, vocm</text>
       <rect x="220" y="30" width="140" height="50" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
       <text x="290" y="52" font-weight="600">AC on Vdi</text><text x="290" y="68" fill="var(--fig-muted)">adm</text>
       <rect x="410" y="30" width="140" height="50" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
@@ -635,16 +637,16 @@ print avdd</code></pre>
     txt = _run_capture(deck)
     <span class="tok-kw">if not</span> txt:
         <span class="tok-kw">return None</span>
-    vals = dict(re.findall(<span class="tok-str">r"^(vchk|adm|acm|avdd)\s*=\s*([-\d.eE+]+)"</span>, txt,
-                           re.M))
-    <span class="tok-kw">if</span> len(vals) &lt; <span class="tok-num">4</span>:
+    vals = dict(re.findall(<span class="tok-str">r"^(vchk|vocm|adm|acm|avdd)\s*=\s*([-\d.eE+]+)"</span>,
+                           txt, re.M))
+    <span class="tok-kw">if</span> len(vals) &lt; <span class="tok-num">5</span>:
         <span class="tok-kw">return None</span>
     <span class="tok-kw">return</span> {k: float(v) <span class="tok-kw">for</span> k, v <span class="tok-kw">in</span> vals.items()}</code></pre>
 <ul>
   <li><strong><code>_run_capture</code> + <code>print</code></strong>, not <code>wrdata</code>: each <code>ac</code> creates a new result plot (<code>ac1</code>, <code>ac2</code>, <code>ac3</code>), and one <code>wrdata</code> cannot easily mix them. <code>op.py</code> already parses <code>print</code> output with a regex.</li>
   <li><strong>Distinct <code>let</code> names</strong> label each reading so the regex can find it.</li>
   <li><strong>All or nothing:</strong> if the operating point fails, ngspice stops early and lines are missing; the draw is <code>None</code>, never half-measured.</li>
-  <li><code>_fd_draw</code> only <em>reports</em> <code>vchk</code>; judging it is the caller's job (Part 7).</li>
+  <li><code>_fd_draw</code> only <em>reports</em> <code>vchk</code> and <code>vocm</code>; judging them is <code>_draw_settled</code>'s job (Part 7).</li>
 </ul>
 
 <h3>One real sky130 draw, by hand</h3>
@@ -676,21 +678,24 @@ PSRR+ = 66.16 − 28.91 = <span class="tok-num">37.25 dB</span>      (PMOS pair:
     netmap = _fb_netmap(topo, *polarity)
     cmrr, psrr = [], []
     signs = (<span class="tok-num">1</span>, <span class="tok-num">-1</span>)
+    skipped = <span class="tok-num">0</span>
     <span class="tok-kw">for</span> body <span class="tok-kw">in</span> mc_bodies:
         <span class="tok-kw">for</span> sign <span class="tok-kw">in</span> signs:
             r = _fd_draw(name, ports, body, vdd, ibias, cl, vcm, netmap, sign)
-            <span class="tok-kw">if</span> r <span class="tok-kw">is not None and</span> abs(r[<span class="tok-str">"vchk"</span>]) &lt; <span class="tok-num">0.05</span> * vdd:
+            <span class="tok-kw">if</span> _draw_settled(r, vdd):
                 <span class="tok-kw">break</span>
-        <span class="tok-kw">else</span>:   <span class="tok-com"># neither servo direction nulled this draw</span>
+        <span class="tok-kw">else</span>:   <span class="tok-com"># neither servo direction settled this draw</span>
+            skipped += <span class="tok-num">1</span>
             <span class="tok-kw">continue</span>
         signs = (sign, -sign)   <span class="tok-com"># the direction is the circuit's, not the draw's</span>
         <span class="tok-kw">for</span> out, key <span class="tok-kw">in</span> ((cmrr, <span class="tok-str">"acm"</span>), (psrr, <span class="tok-str">"avdd"</span>)):
             <span class="tok-kw">if</span> r[<span class="tok-str">"adm"</span>] &gt; <span class="tok-num">0</span> <span class="tok-kw">and</span> r[key] &gt; <span class="tok-num">1e-12</span>:   <span class="tok-com"># numerical zero → not measured</span>
                 out.append(<span class="tok-num">20.0</span> * np.log10(r[<span class="tok-str">"adm"</span>] / r[key]))
-<span class="keyline">    <span class="tok-kw">return</span> (min(cmrr) <span class="tok-kw">if</span> cmrr <span class="tok-kw">else None</span>, min(psrr) <span class="tok-kw">if</span> psrr <span class="tok-kw">else None</span>)</span></code></pre>
+<span class="keyline">    <span class="tok-kw">return</span> (min(cmrr) <span class="tok-kw">if</span> cmrr <span class="tok-kw">else None</span>, min(psrr) <span class="tok-kw">if</span> psrr <span class="tok-kw">else None</span>, skipped)</span></code></pre>
 
 <ul>
-  <li><strong>&ldquo;Nulled&rdquo;</strong> means <code>|vchk| &lt; 0.05&middot;VDD</code> (165&nbsp;mV on gf180, 90&nbsp;mV on sky130). A nulled draw sits at the offset (0.3&ndash;33&nbsp;mV); a railed one near VDD (1.8&ndash;3.3&nbsp;V), so the limit separates them cleanly.</li>
+  <li><strong>&ldquo;Settled&rdquo;</strong> (<code>_draw_settled</code>) means two things. The difference is nulled, <code>|vchk| &lt; 0.05&middot;VDD</code> (165&nbsp;mV on gf180, 90&nbsp;mV on sky130): a nulled draw sits at the offset (0.3&ndash;33&nbsp;mV), a railed one near VDD. And the outputs are alive: <code>vocm</code> inside the 0.1&ndash;0.9&middot;VDD window the FD bias check uses. Some sky130 draws settle with <em>both</em> outputs at ground, the all-off state; their difference is zero too, but their gain is 10&#8315;&#8308;&ndash;10&#8315;&#8310; of a healthy draw&rsquo;s, and counting one once read a CMRR of &minus;1.8&nbsp;dB.</li>
+  <li><strong>Skipped draws are reported</strong>: <code>simulate_metrics</code> adds a note such as &ldquo;4 of 8 mismatch draws did not settle&rdquo;, so a design that dies on half its chips is not shown only through its healthy half.</li>
   <li><strong><code>for &hellip; else</code></strong>: the <code>else</code> runs only if the loop ended without <code>break</code>, i.e. neither sign worked, and <code>continue</code> skips that chip.</li>
   <li><strong>Remembering the sign</strong>: the right direction depends on the wiring, not on millivolts of mismatch, so after chip&nbsp;1 every chip tries it first, typically 9 runs instead of up to 16.</li>
   <li><strong>The <code>1e-12</code> guard</strong>: a leak that reads as numerical zero is &ldquo;not measured&rdquo;, never &ldquo;infinite rejection&rdquo;, so Part 1's trap cannot return.</li>
