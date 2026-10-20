@@ -57,7 +57,8 @@ class GridSpec:
     """Discrete geometry or capacitance grid.
 
     :param min: Minimum value (µm for W/L, pF for cap).
-    :param max: Maximum value.
+    :param max: Maximum value -- for the width grid, the widest *single*
+        device the PDK models (a wider total is built from parallel fingers).
     :param step: Discretisation step.
     """
     min: float
@@ -68,6 +69,13 @@ class GridSpec:
         """Snap ``x`` to ``step``, clamped to ``[min, max]``."""
         v = round(x / self.step) * self.step
         return float(min(max(v, self.min), self.max))
+
+    def snap_total(self, x: float) -> float:
+        """Snap a *total* width ``x`` to ``step``, floored at ``min`` but not
+        capped: the netlist splits one past ``max`` into parallel fingers of
+        at most ``max`` each (:attr:`TransistorSizing.fingers`)."""
+        v = round(x / self.step) * self.step
+        return float(max(v, self.min))
 
 
 @dataclass
@@ -84,11 +92,17 @@ class SpiceLib:
     :param design: Optional resolved path to a global settings file to ``.include``
         before the corner ``.lib`` (``design.ngspice``).
     :param corners: Corners to re-measure for the CLI verification table.
+    :param mismatch_switch: Name of the library ``.param`` that turns on its
+        per-device mismatch models (GF180 ``sw_stat_mismatch``, sky130
+        ``mc_mm_switch``); ``None`` when the PDK ships none.  The
+        fully-differential CMRR/PSRR benches need it: a matched FD circuit
+        rejects common mode and supply exactly.
     """
     file: str
     corner: str = "typical"
     design: str | None = None
     corners: list[str] = field(default_factory=list)
+    mismatch_switch: str | None = None
 
 
 @dataclass
@@ -196,11 +210,14 @@ class TransistorSizing:
     r"""Sizing result for a single transistor.
 
     :param ref: Device reference in the netlist (e.g. ``"m1_input_pair"``).
-    :param w_um: Gate width in µm.
+    :param w_um: Gate width in µm -- the device's *total* width.
     :param l_um: Gate length in µm.
     :param ids_a: Quiescent drain-source current in A.
     :param vgs_v: Quiescent gate-source voltage in V.
     :param vds_sat_v: Minimum \|VDS\| for saturation in V.
+    :param fingers: Parallel devices the netlist builds ``w_um`` from, each
+        ``w_um / fingers`` wide -- more than one only when the total is wider
+        than the PDK's widest single device (``tech.width.max``).
     """
     ref: str
     w_um: float
@@ -208,6 +225,7 @@ class TransistorSizing:
     ids_a: float
     vgs_v: float
     vds_sat_v: float
+    fingers: int = 1
 
 
 @dataclass

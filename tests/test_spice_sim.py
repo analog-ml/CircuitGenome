@@ -21,7 +21,7 @@ from circuitgenome.sizer import (
     size_circuit,
     SizingSpec,
 )
-from circuitgenome.sizer.verify import deck, measure, rig
+from circuitgenome.sizer.verify import deck, measure, read_op_operating_point, rig
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
@@ -465,8 +465,10 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
     sees the global loop).  The sizer keeps gm3 ≥ 3.5·gm2 and sizes Cc2 for
     the inner pair's damping, so both a plain and a nulling-resistor comp2
     settle; restoring the old inner loop by hand (third-stage signal W × 0.3
-    → gm3 ≈ 2·gm2, Cc2 = Cc1/4) brings the ringing back, and the settling
-    gate's one-sided kick must condemn it."""
+    → gm3 ≈ 2·gm2, Cc2 = Cc1/4, and the third-stage current source back to
+    the single 100 µm device it was clamped to, which carried ~half its
+    planned current) brings the ringing back, and the settling gate's
+    one-sided kick must condemn it."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_nmc_fully_differential")
@@ -485,9 +487,13 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
                       gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     if gm3_scale != 1.0:  # restore the old inner loop: gm3 ≈ 2·gm2, Cc2 = Cc1/4
-        tr = {ref: (replace(s, w_um=s.w_um * gm3_scale)
-                    if ref.startswith("mn1_third_stage") else s)
-              for ref, s in result.transistors.items()}
+        def _old(ref, s):
+            if ref.startswith("mn1_third_stage"):
+                return replace(s, w_um=s.w_um * gm3_scale)
+            if ref.startswith("mp1_third_stage"):  # the old width-clamped source
+                return replace(s, w_um=tech.width.max, fingers=1)
+            return s
+        tr = {ref: _old(ref, s) for ref, s in result.transistors.items()}
         cc1 = next(c for ref, c in result.capacitors.items() if "comp1" in ref)
         caps = {ref: (cc1 / 4.0 if "comp2" in ref else c)
                 for ref, c in result.capacitors.items()}
@@ -655,16 +661,12 @@ def test_fd_three_stage_ac_metrics_are_real():
 
 
 @ngspice
-def test_fd_cmrr_psrr_measured():
-    """#184 acceptance: an FD topology with a clean differential AC gain reports
-    SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
-    cmrr/_measure_psrr, FD branch) gate on the same ``ac_clean`` flag as the AC
-    bench, so once the #165/#167 CMFB output-sense rewire made the open-loop FD
-    gain clean, rejection flows through automatically.  Both are ratios against
-    the differential gain, so each must land above the gain floor (a matched FD
-    deck converts common-mode/supply to a near-zero differential output --
-    numerically small but real, not the garbage-against-garbage the SE guard in
-    test_cmrr_psrr_none_without_clean_gain rejects)."""
+def test_fd_cmrr_psrr_none_without_mismatch_model():
+    """A perfectly matched FD circuit turns neither common mode nor supply into
+    a differential output, so a matched deck measures only ngspice's rounding
+    floor (169.6/207.2 dB here, reported as CMRR/PSRR before).  ptm45 has no
+    mismatch model to break the symmetry, so FD rejection stays None, with a
+    note saying why -- even with a clean differential gain."""
     parsed = parse(_FD_THREE_STAGE_NETLIST)
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_rnmc_fully_differential")
@@ -679,12 +681,64 @@ def test_fd_cmrr_psrr_measured():
     assert result.solver_status == "GMID"
     sim = simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
 
-    gain = sim["gain_db"]
-    assert gain is not None and gain > 0
-    # Rejection = Adm - A(cm|supply); each is a positive dB margin above the
-    # differential gain.  Loose upper bound catches a pure-noise-floor infinity.
-    assert sim["cmrr_db"] is not None and gain < sim["cmrr_db"] < 400.0
-    assert sim["psrr_db"] is not None and gain < sim["psrr_db"] < 400.0
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    assert sim["cmrr_db"] is None and sim["psrr_db"] is None
+    assert any("no device mismatch model" in n for n in sim.get("notes", []))
+
+
+@ngspice
+@pytest.mark.parametrize("tech_name, spec", [
+    ("gf180mcu", SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                            second_stage_current_ratio=2.5, gain_min_db=60,
+                            gbw_min_hz=2e6, phase_margin_min_deg=60)),
+    pytest.param("sky130", SizingSpec(vdd=1.8, vss=0.0, ibias=20e-6, cl=2e-12,
+                                      second_stage_current_ratio=2.5,
+                                      gain_min_db=50, gbw_min_hz=2e6,
+                                      phase_margin_min_deg=60),
+                 marks=pytest.mark.slow),
+])
+def test_fd_cmrr_psrr_from_mismatch_draws(tech_name, spec):
+    """On a PDK with mismatch models, FD CMRR/PSRR come from seeded mismatch
+    draws (worst case): finite, far below the matched deck's 260-315 dB
+    rounding floor, and identical run to run."""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
+    tech = load_tech(tech_name)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    for key in ("cmrr_db", "psrr_db"):
+        assert sim[key] is not None and 10.0 < sim[key] < 150.0, (key, sim)
+    again = simulate_metrics(text, result, tech, spec)
+    assert (again["cmrr_db"], again["psrr_db"]) == (sim["cmrr_db"],
+                                                    sim["psrr_db"])
+
+
+def test_fd_servo_fb_clamps_its_correction():
+    """The offset servo's correction is limited per input, so it cannot push
+    the inputs out of range into a latched operating point."""
+    fb = measure._fd_servo_fb(1.65, -1)
+    lim = measure._SERVO_CLAMP_V
+    assert f"max(min(-1*v(lp)/2,{lim}),-{lim})" in fb
+    assert "Vdi di 0 dc 0 ac 1" in fb and "Vci ci 0 dc 0\n" in fb
+
+
+def test_fd_draw_settled_needs_a_live_output_common_mode():
+    """A draw counts only when the servo nulled the difference *and* the
+    outputs sit mid-supply.  Both outputs collapsed to ground (the all-off
+    state some sky130 mismatch draws settle in, with ~1e-4 of the healthy
+    gain) also null the difference, and must not count."""
+    vdd = 1.8
+    healthy = {"vchk": -6e-3, "vocm": 0.87}
+    railed = {"vchk": 1.58, "vocm": 0.79}
+    all_off = {"vchk": 1e-5, "vocm": 6e-4}
+    assert measure._draw_settled(healthy, vdd)
+    assert not measure._draw_settled(railed, vdd)
+    assert not measure._draw_settled(all_off, vdd)
+    assert not measure._draw_settled(None, vdd)
 
 
 # --- phase-margin plausibility guard ----------------------------------------
@@ -1172,3 +1226,34 @@ def test_se_slew_is_not_limited_by_the_input_common_mode():
     result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
     measured = simulate_metrics(text, result, tech, spec)["slew_rate_vps"]
     assert measured == pytest.approx(result.metrics["slew_rate_vps"], rel=0.15)
+
+
+@pytest.mark.spice
+@pytest.mark.skipif(not ngspice_available(), reason="ngspice not on PATH")
+def test_wide_current_source_carries_its_planned_current_in_spice():
+    """A third-stage current source sized past one GF180 device (100 µm) runs
+    as parallel fingers and carries the planned current: clamped to a single
+    100 µm device it ran at half (~50 of 100 µA)."""
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+            "tail_current": "current_mirror_tail_pmos",
+            "second_stage": "noninverting_stage_nmos",
+            "third_stage": "common_source_nmos",
+            "comp1": "miller_cap", "comp2": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+    wide = {ref: s for ref, s in result.transistors.items() if s.fingers > 1}
+    assert wide, "fixture no longer needs a device wider than one PDK device"
+    op = read_op_operating_point(text, result, tech, spec)
+    for ref, s in wide.items():
+        assert abs(op[ref]["id"]) == pytest.approx(s.ids_a, rel=0.1)
