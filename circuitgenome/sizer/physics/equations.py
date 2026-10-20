@@ -422,6 +422,18 @@ def _poles(G, C):
     return np.linalg.eigvals(-np.linalg.solve(C, G))
 
 
+def _has_rhp_pole(poles) -> bool:
+    """``True`` when a pole lies in the right half plane.
+
+    A pole below ``1e-12`` of the fastest one is not resolved: the eigenvalues
+    of ``−C⁻¹G`` carry an absolute error of about ``eps·max|p|``, so its sign
+    is round-off.  That is the dominant pole of a loop whose output
+    conductances are floored (DC gain ~1e27), and it does not count.
+    """
+    resolved = 1e-12 * max((abs(p) for p in poles), default=0.0)
+    return any(p.real > 1e-9 * abs(p) and abs(p) > resolved for p in poles)
+
+
 def _open_loop_gain(G, C, b, out, w):
     """``A(jω) = v[out]`` at each angular frequency ``w``, signed so ``A(0) > 0``."""
     import numpy as np
@@ -497,14 +509,15 @@ def phase_margin_rnmc_deg(
         capacitance, and its output-node conductance besides its own gm — or
         ``None``.
     :returns: ``0.0`` when the open loop has a right-half-plane pole (no
-        margin to speak of); ``None`` when the gain never reaches 0 dB.
+        margin to speak of; a pole too slow to resolve does not count, see
+        :func:`_has_rhp_pole`); ``None`` when the gain never reaches 0 dB.
     """
     import numpy as np
 
     G, C, b, out = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
                                  g1, g2, g3, mirror_pole_hz, buffer)
     poles = _poles(G, C)
-    if any(p.real > 1e-9 * abs(p) for p in poles):
+    if _has_rhp_pole(poles):
         return 0.0
     # Sweep two decades past every pole and the nominal crossover gm1/Cc1.
     corners = [abs(p) for p in poles if abs(p) > 0] + [gm1 / cc1_f]
