@@ -382,7 +382,9 @@ Phase 4b — Size: DC bias feasibility (headroom + cascode budget)
 a **headroom repair** checks the tail's saturation headroom and, when short,
 re-sizes the tail mirror group to a higher gm/Id (lower ``Vdsat``) — keeping
 mirror ratios consistent; then a **cascode-aware budget** sums a stacked tail's
-series ``Vdsat`` and flags infeasibility a single-device check would miss.  It
+series ``Vdsat`` (walking down from the tail node, which a source-degenerated
+pair puts one resistor beyond its devices' sources) and flags infeasibility a
+single-device check would miss.  It
 returns the (possibly repaired) sizing, the warnings, and a ``bias_feasible``
 verdict — the input sizing is never mutated.
 
