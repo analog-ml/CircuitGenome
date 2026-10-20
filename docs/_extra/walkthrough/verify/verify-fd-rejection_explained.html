@@ -778,7 +778,7 @@ PSRR+ = 66.16 − 28.91 = <span class="tok-num">37.25 dB</span>      (PMOS pair:
     <tr><td>No PSRR&minus; (every spec uses <code>vss = 0</code>)</td><td>negative-supply rejection not covered</td></tr>
     <tr><td>PTM / generic have no mismatch models</td><td>FD CMRR/PSRR are <code>n/a</code>; constraining specs leave designs unverified</td></tr>
     <tr><td>SE benches stay matched</td><td>SE CMRR is a little optimistic for real silicon</td></tr>
-    <tr><td>sky130 folded cascode reads 13&ndash;15&nbsp;dB</td><td>real for the circuit as sized: its cascode tail is in triode (see the case study below)</td></tr>
+    <tr><td>sky130 folded cascode reads 13&ndash;15&nbsp;dB</td><td>real for the circuit as sized, whose cascode tail is in triode; the sizer rejects such designs (see the case study below)</td></tr>
   </tbody>
 </table>
 <h3>Case study: why the sky130 folded cascode reads 13&ndash;15&nbsp;dB</h3>
@@ -799,7 +799,7 @@ PSRR+ = 66.16 − 28.91 = <span class="tok-num">37.25 dB</span>      (PMOS pair:
 </table>
 <p><strong>Mismatch in the CMFB amplifier itself does nothing.</strong> It has a single output net that feeds both halves equally, so its mismatch only shifts the common mode. The tail and bias generator, also shared by both halves, behave the same way. What converts common mode into a differential signal is the mismatch between the <em>paired</em> current sources in the folded branches, above all the two PMOS sources <code>mp1/mp2_load</code> that carry the CMFB's correction current. Mismatch in those two devices alone reproduces nearly the whole effect. The input pair, which the textbook formula focuses on, gives 62&nbsp;dB on its own.</p>
 <p>That mechanism also needs a large common-mode current entering the branches, which a cascode tail should block. The operating point shows why it doesn't here: at 1.8&nbsp;V the pair's common source sits at 1.71&nbsp;V, leaving 90&nbsp;mV for two stacked tail transistors, so both are in triode (<code>mp3_tail_current</code>: V<sub>ds</sub> 0.04&nbsp;V against V<sub>dsat</sub> 0.29&nbsp;V, g<sub>m</sub>/g<sub>ds</sub> = 0.2). The &ldquo;current source&rdquo; is effectively a small resistor. On gf180 the same circuit keeps both tail devices saturated (+0.10 and +0.14&nbsp;V of margin) and reads 82.7&nbsp;dB.</p>
-<p>So the 13&ndash;15&nbsp;dB is real physics for the circuit as sized, and the bench is right to report it. The defect is upstream: the sizer's 78.7&nbsp;dB estimate assumes a saturated tail, and the SPICE bias gate passes this operating point.</p>
+<p>So the 13&ndash;15&nbsp;dB is real physics for the circuit as sized, and the bench is right to report it. In the real flow, though, this circuit never reaches the benches: the sizer flags it <code>bias_feasible = False</code> (85&nbsp;mV of headroom against 251&nbsp;mV of stacked V<sub>dsat</sub>), and the designer and CLI reject it before any simulation. This case study called the benches directly, bypassing that verdict. Its source-degenerated twin, which read 13.0&nbsp;dB, did slip through, because the headroom check looked for the tail at the pair's source, one resistor short of it; <a href="https://github.com/analog-ml/CircuitGenome/pull/263">#263</a> fixes that.</p>
 
 <table>
   <thead><tr><th>Part</th><th>One line</th></tr></thead>
