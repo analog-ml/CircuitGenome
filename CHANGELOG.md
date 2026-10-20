@@ -13,6 +13,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Fixed
 
+- 🐛 Current mirrors wider than the PDK's 100 µm limit are built from parallel copies instead of being clamped, so they carry their planned current (a 100 µA source had been running at 50 µA) ([#259](https://github.com/analog-ml/CircuitGenome/pull/259)).
 - 🐛 Buffered reversed-nested-Miller (RNMC) op-amps no longer oscillate because of an oversized nulling resistor. Its last gain stage drives only the output buffer's gate, but the resistor was sized as if it drove the 5 pF load, making it about 5× too large (8.3 kΩ instead of 1.7 kΩ on GF180). That added a pole inside the RNMC inner loop. On GF180, 90 of 100 sampled fully-differential designs now settle in SPICE (was 55), at a median 8° lower measured phase margin. Nested-Miller and two-stage buffered designs are unchanged ([#264](https://github.com/analog-ml/CircuitGenome/pull/264)).
 - 🐛 SPICE results no longer depend on machine load: ngspice now runs single-threaded and is stopped by CPU time, not a 60-second wall clock that busy machines turned into missing measurements ([#257](https://github.com/analog-ml/CircuitGenome/pull/257)).
 - 🐛 Predicted slew rate is now the slowest current-limited stage, not just the input stage; the median error against ngspice drops from +65 % to +2 %. The slew bench now measures the 10–90 % range of the edge, around mid-supply, and no longer reads a latched output as an edge ([#258](https://github.com/analog-ml/CircuitGenome/pull/258)).

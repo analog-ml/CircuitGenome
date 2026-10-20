@@ -21,7 +21,7 @@ from circuitgenome.sizer import (
     size_circuit,
     SizingSpec,
 )
-from circuitgenome.sizer.verify import deck, measure, rig
+from circuitgenome.sizer.verify import deck, measure, read_op_operating_point, rig
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
@@ -465,8 +465,10 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
     sees the global loop).  The sizer keeps gm3 ≥ 3.5·gm2 and sizes Cc2 for
     the inner pair's damping, so both a plain and a nulling-resistor comp2
     settle; restoring the old inner loop by hand (third-stage signal W × 0.3
-    → gm3 ≈ 2·gm2, Cc2 = Cc1/4) brings the ringing back, and the settling
-    gate's one-sided kick must condemn it."""
+    → gm3 ≈ 2·gm2, Cc2 = Cc1/4, and the third-stage current source back to
+    the single 100 µm device it was clamped to, which carried ~half its
+    planned current) brings the ringing back, and the settling gate's
+    one-sided kick must condemn it."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_nmc_fully_differential")
@@ -485,9 +487,13 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
                       gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     if gm3_scale != 1.0:  # restore the old inner loop: gm3 ≈ 2·gm2, Cc2 = Cc1/4
-        tr = {ref: (replace(s, w_um=s.w_um * gm3_scale)
-                    if ref.startswith("mn1_third_stage") else s)
-              for ref, s in result.transistors.items()}
+        def _old(ref, s):
+            if ref.startswith("mn1_third_stage"):
+                return replace(s, w_um=s.w_um * gm3_scale)
+            if ref.startswith("mp1_third_stage"):  # the old width-clamped source
+                return replace(s, w_um=tech.width.max, fingers=1)
+            return s
+        tr = {ref: _old(ref, s) for ref, s in result.transistors.items()}
         cc1 = next(c for ref, c in result.capacitors.items() if "comp1" in ref)
         caps = {ref: (cc1 / 4.0 if "comp2" in ref else c)
                 for ref, c in result.capacitors.items()}
@@ -1172,3 +1178,34 @@ def test_se_slew_is_not_limited_by_the_input_common_mode():
     result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
     measured = simulate_metrics(text, result, tech, spec)["slew_rate_vps"]
     assert measured == pytest.approx(result.metrics["slew_rate_vps"], rel=0.15)
+
+
+@pytest.mark.spice
+@pytest.mark.skipif(not ngspice_available(), reason="ngspice not on PATH")
+def test_wide_current_source_carries_its_planned_current_in_spice():
+    """A third-stage current source sized past one GF180 device (100 µm) runs
+    as parallel fingers and carries the planned current: clamped to a single
+    100 µm device it ran at half (~50 of 100 µA)."""
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+            "tail_current": "current_mirror_tail_pmos",
+            "second_stage": "noninverting_stage_nmos",
+            "third_stage": "common_source_nmos",
+            "comp1": "miller_cap", "comp2": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+    wide = {ref: s for ref, s in result.transistors.items() if s.fingers > 1}
+    assert wide, "fixture no longer needs a device wider than one PDK device"
+    op = read_op_operating_point(text, result, tech, spec)
+    for ref, s in wide.items():
+        assert abs(op[ref]["id"]) == pytest.approx(s.ids_a, rel=0.1)
