@@ -191,14 +191,23 @@ def unsized_mos_refs(body: list[str], result: SizingResult) -> list[str]:
 
 
 def _inject_sizes(body: list[str], result: SizingResult) -> list[str]:
-    """Set sized W/L (MOSFETs), C (comp caps) and R (sized load resistors)."""
+    """Set sized W/L (MOSFETs), C (comp caps) and R (sized load resistors).
+
+    A MOSFET sized as ``fingers`` parallel devices is emitted as that many
+    lines, ``<ref>`` then ``<ref>__f2`` …, each ``w_um / fingers`` wide.
+    """
     out = []
     for line in body:
         tok = line.split()
         ref = tok[0]
         if len(tok) >= 6 and tok[5].lower() in _MOS_MODELS and ref in result.transistors:
+            # A device wider than one PDK device is built from parallel
+            # fingers; the first keeps the ref so op-point probes still find it.
             s = result.transistors[ref]
-            out.append(f"{line.rstrip()} W={s.w_um:.5f}u L={s.l_um:.5f}u")
+            for k in range(1, s.fingers + 1):
+                name = ref if k == 1 else f"{ref}__f{k}"
+                out.append(f"{name} {' '.join(tok[1:]).rstrip()} "
+                           f"W={s.w_um / s.fingers:.5f}u L={s.l_um:.5f}u")
         elif ref in result.resistors and len(tok) >= 4:
             # sized load resistor: replace the placeholder value with R (ohms)
             out.append(f"{tok[0]} {tok[1]} {tok[2]} {result.resistors[ref]:.4f}")

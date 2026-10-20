@@ -260,6 +260,7 @@ LUT says  Id/W = 5 µA/µm  <span class="tok-com"># density at (gm/Id=15, L)</sp
 
 W = Id / (Id/W) = 20 / 5 = 4.0 µm      <span class="tok-com"># forced — no choice</span></code></pre>
   <p>Four microns. Not "somewhere between 3 and 5, let the solver decide" — <em>exactly</em> four, then snapped to the manufacturing grid.</p>
+  <p>The same division can ask for more than the PDK's widest single device (100&nbsp;µm on GF180), and here it is capped: most devices carry whatever current their series device forces, so the cap only shifts their V<sub>GS</sub>. The exception is a <strong>mirror output</strong>, whose current <em>is</em> its width ratio to the reference &mdash; a 100&nbsp;µA source mirrored from a 20&nbsp;µA reference at a long L needs ~210&nbsp;µm, and capped at 100&nbsp;µm it carried about half its planned current. So the mirror-ratio pass keeps the full <em>total</em> width, which the netlist builds from parallel fingers.</p>
 
   <h3>But three things still need patching</h3>
   <p>If every device stood alone, we'd be done after that division. Real circuits add three coupling rules the raw per-device pass ignores — and the last four helpers exist precisely to patch them, in order:</p>
