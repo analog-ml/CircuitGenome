@@ -100,6 +100,23 @@ def _pm_plausible(pm: float | None) -> bool:
     return pm is None or 0.0 < pm <= 180.0
 
 
+def _zero_db_crossings(f, gdb, phase) -> list[tuple[float, float]]:
+    """``[(f_hz, pm_deg), ...]`` at every 0 dB crossing of an open-loop sweep.
+
+    Each crossing is interpolated linearly in log-frequency; its margin is
+    ``180° + phase`` there.  Crossings in either direction count: a gain that
+    comes back above 0 dB crosses twice more.
+    """
+    out = []
+    for i0 in np.nonzero(np.diff(np.sign(gdb)))[0]:
+        i1 = i0 + 1
+        t = (0 - gdb[i0]) / (gdb[i1] - gdb[i0])
+        lf0, lf1 = np.log10(f[i0]), np.log10(f[i1])
+        out.append((float(10 ** (lf0 + t * (lf1 - lf0))),
+                    float(180.0 + phase[i0] + t * (phase[i1] - phase[i0]))))
+    return out
+
+
 def _loop_fb(topo, vcm, drive: str) -> tuple[str, str]:
     """The DC-bias network + output expression, with ``drive`` lines.
 
@@ -140,13 +157,19 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
     winning ``polarity`` is returned for the other benches to reuse (``None``
     when nothing usable settled).
 
+    ``gbw`` is the first 0 dB crossing; ``pm`` is the **worst** margin over
+    every crossing (issue #269): a gain that dips under 0 dB and comes back
+    above it crosses again, possibly with almost no phase left, and reading
+    only the first crossing reported ~104° for designs that ring in closed
+    loop.  It can then be ≤ 0°.
+
     The **measured** low-frequency gain is reported even when it is ≤ 0 dB (a
     mis-biased circuit that does not amplify) — ``gbw``/``pm`` are then ``None``
     (no 0-dB crossing) and ``reason`` explains why.  When every settled branch
-    is corrupt (PM outside ``(0°, 180°]``) the whole extraction is discarded:
-    all three values are ``None`` and ``reason`` says so.  The one exception
-    is a fully-differential PM ≤ 0°, which is a real open-loop instability and
-    is returned as measured (issue #236).  ``reason`` is ``None`` on a normal
+    is corrupt (first-crossing PM outside ``(0°, 180°]``) the whole extraction
+    is discarded: all three values are ``None`` and ``reason`` says so.  The
+    one exception is a fully-differential PM ≤ 0°, which is a real open-loop
+    instability and is returned as measured (issue #236).  ``reason`` is ``None`` on a normal
     (positive-gain) measurement.
     """
     settled = False
@@ -194,27 +217,29 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
         phase = np.degrees(np.unwrap(np.arctan2(im, re)))
         phase -= phase[0]
         gain_db = float(gdb[0])
-        gbw = pm = None
-        below = np.where(gdb <= 0)[0]
-        if below.size and below[0] > 0:
-            i1 = int(below[0]); i0 = i1 - 1
-            lf0, lf1 = np.log10(f[i0]), np.log10(f[i1])
-            t = (0 - gdb[i0]) / (gdb[i1] - gdb[i0])
-            gbw = float(10 ** (lf0 + t * (lf1 - lf0)))
-            ph_gbw = phase[i0] + t * (phase[i1] - phase[i0])
-            pm = float(180.0 + ph_gbw)   # excess phase is negative → PM < 180
+        gbw = pm = pm_first = None
+        crossings = _zero_db_crossings(f, gdb, phase)
+        if crossings and gdb[0] > 0:
+            gbw, pm_first = crossings[0]   # excess phase is negative → PM < 180
+            # A gain that dips under 0 dB and comes back above it crosses
+            # again, often with far less phase left: the worst crossing is
+            # the loop's margin (issue #269).
+            pm = min(p for _f, p in crossings)
         # Keep the plausible-PM branch, then the higher gain (the negative-
         # feedback one); report it even if ≤ 0 dB so a mis-biased circuit
-        # isn't silently dropped.
-        rank = (_pm_plausible(pm), gain_db)
+        # isn't silently dropped.  Plausibility is judged at the first
+        # crossing, where a corrupted sweep shows; a later one may genuinely
+        # read ≤ 0° (gain back above 0 dB past −180°).
+        rank = (_pm_plausible(pm_first), gain_db)
         if best_rank is None or rank > best_rank:
-            best, best_rank, best_pol = (gain_db, gbw, pm), rank, (inp, inn)
+            best, best_rank, best_pol = (gain_db, gbw, pm, pm_first), rank, (inp, inn)
     if best is None:
         reason = ("open-loop AC did not settle (output railed) — gain not measurable"
                   if not settled else "open-loop AC sweep did not converge")
         return None, None, None, reason, None
-    gain_db, gbw, pm = best
-    if not _pm_plausible(pm):
+    gain_db, gbw, pm, pm_first = best
+    if not _pm_plausible(pm_first):
+        pm = pm_first
         if pm > 180.0:
             # Phase LEAD at the crossing on a falling gain = a non-minimum-
             # phase (right-half-plane) response — a genuinely mis-compensated

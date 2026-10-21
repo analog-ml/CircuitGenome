@@ -517,13 +517,14 @@ compensation variants, and one ringing half is enough to make the amplifier
 ring, so the sizer evaluates each half and keeps the worse
 (:func:`~circuitgenome.sizer.physics.rnmc.worst_half`).
 
-Without a buffer none of this is modelled.  :math:`C_L` then sits on the
-third-stage output and dwarfs its drains, and the compensation resistors are
-sized against :math:`C_L` (several times :math:`1/g_{m3}`).  Such a resistor
-leaves the open-loop gain hovering near 0 dB over a decade, where a fraction of
-a dB moves the crossing — and the margin — by tens of degrees: on a gf180
-single-ended design the model with the resistor read 13° where SPICE measured
-103°.
+Without a buffer :math:`C_L` sits on the third-stage output and dwarfs its
+drains, so :math:`c_3` is left at 0.  The compensation resistors are still
+modelled, and sized at :math:`1/g_{m3}` there too (issue #269).  Sized against
+:math:`C_L` instead — several times :math:`1/g_{m3}` — a resistor in series
+with :math:`C_{c1}` held the open-loop gain near 0 dB past its first crossing
+(:math:`g_{m1}R \approx 1`) until it crossed again with almost no phase left:
+on a gf180 single-ended design the model with the resistor read 13°, SPICE's
+worst crossing 4.6°, and in unity feedback the circuit rang at 28 MHz.
 
 ----
 

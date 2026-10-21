@@ -110,8 +110,10 @@ def refine_rnmc_plan(
         gm3_min = gm3
     cc1_f, cc2_f = plan.cc_pf * 1e-12, plan.cc2_pf * 1e-12
     # Behind a buffer a raised gm2 is built past one PDK device (and scored
-    # with that device's gate); without one the model leaves out the
-    # CL-sized compensation resistors, and is not trusted that far (#266).
+    # with that device's gate).  Without one the third stage drives CL, which
+    # leaves the inner pair ~5x of gm3/gm2 room, so the second stage never
+    # needs it -- and allowing it there moved designs SPICE then rated worse
+    # (#268).
     buffered = chain.output_buffer is not None
     g = tuple(1.0 / st.rout if st.rout < float("inf") else 0.0 for st in stages[:3])
     design = rnmc.design_rnmc(

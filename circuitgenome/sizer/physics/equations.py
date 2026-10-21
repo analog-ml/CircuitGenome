@@ -336,9 +336,10 @@ def compensation_resistor_ohm(cc_f: float, c_out_f: float, gm_out: float) -> flo
     R = (Cc + C)/(gm_out·Cc)
 
     places the compensation zero on the output pole of the stage the branch
-    wraps (issue #108).  ``C`` is the load that stage drives: ``CL``, or the
-    output buffer's gate in a buffered RNMC amplifier (issue #262), where R
-    then comes out close to ``1/gm_out``.
+    wraps (issue #108).  ``C`` is the load that stage drives: ``CL`` —
+    except in an RNMC amplifier, where it is the output buffer's gate (issue
+    #262) or ``0`` without a buffer (issue #269), so R comes out close to
+    ``1/gm_out``.
 
     :param cc_f: The branch's compensation cap in F.
     :param c_out_f: Load on the wrapped stage's output in F.
@@ -571,6 +572,8 @@ def phase_margin_rnmc_deg(
         bare ``Cc2`` feeds the first-stage output forward into the second's,
         a right-half-plane zero near ``gm2/Cc2``; ``R2 ≈ 1/gm`` cancels it,
         which is what damps a buffered RNMC loop's pole pair (issue #266).
+        Several times ``1/gm`` in series with ``Cc1`` holds the gain near
+        0 dB past the first crossing (issue #269).
     :returns: ``0.0`` when the open loop has a right-half-plane pole (no
         margin to speak of; a pole too slow to resolve does not count, see
         :func:`_has_rhp_pole`); ``None`` when the gain never reaches 0 dB.

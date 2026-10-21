@@ -188,6 +188,9 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
 
   <p>Excess phase is negative on a stable amplifier, so PM lands below 180&deg;. The 0-dB crossing itself is found by linear interpolation in log-frequency between the samples that straddle it, and the phase is interpolated at the same fraction.</p>
 
+  <h3>Every crossing, not just the first</h3>
+  <p>The gain does not always fall through 0&nbsp;dB once and stay down. On some reversed-nested-Miller designs it dips just under 0&nbsp;dB near 10&nbsp;MHz, flattens, rises back above it and crosses again near 27&nbsp;MHz &mdash; with almost no phase left. The first crossing read about 104&deg;; in unity feedback the same circuit rang at 28&nbsp;MHz (issue #269). So <code>_zero_db_crossings()</code> lists every crossing, the GBW is the first one, and the reported PM is the <strong>worst</strong>, the same rule the sizer's RNMC model uses. The plausibility check of Part&nbsp;4 still looks at the first crossing, where a corrupted sweep shows; a later one can genuinely read 0&deg; or less.</p>
+
 </section>
 
 <section class="part" id="part-4">
