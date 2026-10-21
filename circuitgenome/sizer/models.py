@@ -37,12 +37,17 @@ class MosfetParams:
     :param phi: Surface-potential term 2φF in V (only meaningful with a
         non-zero ``gamma``). Defaults to ``0.7``.
     :param cox: Gate-oxide capacitance per unit area Cox in F/µm²
-        (``εox/tox``). Feeds the only capacitance the sizer models — the
-        gate capacitance ``Cgs = (2/3)·W·L·Cox`` that places a single-stage
-        OTA's mirror pole (issue #221). ``None`` when the tech YAML omits it,
-        in which case the single-stage phase margin is withheld rather than
-        guessed. Unlike ``mu_cox``, this is required by *neither* sizing path:
-        both the Level-1 and gm/Id backends read it only for that pole.
+        (``εox/tox``). Feeds the gate capacitance ``Cgs = (2/3)·W·L·Cox``
+        that places a single-stage OTA's mirror pole (issue #221) and loads
+        the RNMC model's nodes. ``None`` when the tech YAML omits it, in which
+        case the single-stage phase margin is withheld rather than guessed.
+        Unlike ``mu_cox``, this is required by *neither* sizing path: both the
+        Level-1 and gm/Id backends read it only for those capacitances.
+    :param cdb: Drain-bulk junction capacitance per µm of gate width in F/µm,
+        at a mid-supply drain voltage. Only the RNMC phase-margin model reads
+        it, for the third stage's output behind an output buffer (issue #266).
+        ``None`` when the tech YAML omits it: drain capacitance is then not
+        modelled.
     """
     vth: float | None = None
     mu_cox: float | None = None
@@ -50,6 +55,7 @@ class MosfetParams:
     gamma: float = 0.0
     phi: float = 0.7
     cox: float | None = None
+    cdb: float | None = None
 
 
 @dataclass

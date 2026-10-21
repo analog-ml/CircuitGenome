@@ -355,7 +355,16 @@ drives gm3.
 :math:`C_{c1}` loop, which matters: a follower driving a capacitor presents a
 negative input resistance above :math:`g_{m,f}/C_L`.
 
-Steps 4–6 are unchanged by the extra nodes; the tables just grow to 4×4 or 5×5.
+**Behind a buffer: the third-stage output and the compensation resistors.**
+Two more parts appear only on the ``*_buffered_*`` templates (see
+`Behind a buffer`_ below).  The third-stage output gets its own capacitance to
+ground, :math:`c_3` — the drains on it (``cap(V3, None, c3_f)``).  And a
+compensation branch with a series resistor — a nulling or indirect variant —
+becomes one extra node between its capacitor and its resistor
+(``branch(V1, V2, cc2_f, r2_ohm)``).
+
+Steps 4–6 are unchanged by the extra nodes; the tables just grow to 4×4 or
+larger.
 
 Step 4 — Find the poles
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -453,6 +462,68 @@ pair at 300 MHz.  The rules for the edge cases:
    * - A stage output conductance of 0
      - floored at :math:`10^{-9} g_m`, which keeps the DC gain finite without
        moving anything near crossover
+
+.. _Behind a buffer:
+
+Behind a buffer: the third-stage output and the compensation resistors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With a source follower between the third stage and :math:`C_L`, the
+follower's output pole (:math:`g_{m,f}/C_L`, ~10 MHz on gf180) lies far below
+the inner loop's frequencies, so there :math:`C_L` no longer loads the
+third-stage output at all.  That node carries only what is wired to it — its
+drains, a few tens of fF — and the stability condition tightens from
+:math:`g_{m3} < g_{m2}(1 + C_L/C_{c1})` to roughly
+:math:`g_{m3} < g_{m2}(1 + c_3/C_{c1}) \approx 1.03\,g_{m2}`.
+
+Two details then decide whether the pair is stable, and the model has both
+(issue #266):
+
+- **The drains on the third-stage output** (:math:`c_3`).  The technology's
+  ``cdb`` gives each drain's junction capacitance per µm of width.
+- **A resistor in series with** :math:`C_{c2}`.  A bare :math:`C_{c2}` feeds
+  the first-stage output straight into the second's, a right-half-plane zero
+  near :math:`g_{m2}/C_{c2}` (~73 MHz on gf180) that costs phase right where the
+  inner loop crosses over.  A resistor of about :math:`1/g_m` in series
+  cancels it.  The model adds the resistor each branch actually has, sized by
+  the same rule as the netlist's
+  (:func:`~circuitgenome.sizer.physics.equations.compensation_resistor_ohm`).
+
+On #266's gf180 design #7210 (bare caps, :math:`g_{m3} \approx 1.05\,g_{m2}`),
+with the values SPICE's ``.op`` measures:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 25 25
+
+   * - Change
+     - Model :math:`\zeta`
+     - SPICE
+   * - none
+     - −0.06
+     - rings at 123 MHz (:math:`\zeta = -0.08`)
+   * - 1.7 kΩ in series with :math:`C_{c1}`
+     - −0.06
+     - rings
+   * - 1.7 kΩ in series with :math:`C_{c2}`
+     - +0.91
+     - settles
+   * - +300 fF on each third-stage output
+     - +0.10
+     - settles
+
+The two halves of a fully-differential amplifier can carry different
+compensation variants, and one ringing half is enough to make the amplifier
+ring, so the sizer evaluates each half and keeps the worse
+(:func:`~circuitgenome.sizer.physics.rnmc.worst_half`).
+
+Without a buffer none of this is modelled.  :math:`C_L` then sits on the
+third-stage output and dwarfs its drains, and the compensation resistors are
+sized against :math:`C_L` (several times :math:`1/g_{m3}`).  Such a resistor
+leaves the open-loop gain hovering near 0 dB over a decade, where a fraction of
+a dB moves the crossing — and the margin — by tens of degrees: on a gf180
+single-ended design the model with the resistor read 13° where SPICE measured
+103°.
 
 ----
 

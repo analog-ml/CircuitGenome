@@ -66,6 +66,11 @@ class DeviceModel(Protocol):
         """
         ...
 
+    def cdb(self, dtype: str, w_um: float) -> float:
+        """Drain junction capacitance in F, or ``0.0`` when the tech has no
+        ``cdb`` (see :func:`~.equations.cdb`)."""
+        ...
+
     def vgs(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
         """Gate-source voltage in V (signed: +ve NMOS, −ve PMOS)."""
         ...
@@ -133,6 +138,10 @@ class Level1Model:
     def cgs(self, dtype, w_um, l_um):
         """``(2/3)·W·L·Cox`` from the tech's ``cox`` (:func:`~.equations.cgs`)."""
         return eq.cgs(_params(self.tech, dtype).cox, w_um, l_um)
+
+    def cdb(self, dtype, w_um):
+        """``W·cdb`` from the tech's ``cdb`` (:func:`~.equations.cdb`)."""
+        return eq.cdb(_params(self.tech, dtype).cdb, w_um)
 
     def vgs(self, dtype, w_um, l_um, ids):
         """Square-law gate-source voltage (:func:`~.equations.vgs_from_ids`)."""
@@ -258,6 +267,10 @@ class GmIdModel:
         constant keeps this primitive identical across both backends.
         """
         return eq.cgs(_params(self.tech, dtype).cox, w_um, l_um)
+
+    def cdb(self, dtype, w_um):
+        """``W·cdb`` from the tech's ``cdb`` (:func:`~.equations.cdb`)."""
+        return eq.cdb(_params(self.tech, dtype).cdb, w_um)
 
     def vgs(self, dtype, w_um, l_um, ids):
         """Gate-source voltage from the LUT, signed +ve NMOS / −ve PMOS."""

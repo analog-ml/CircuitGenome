@@ -8,6 +8,8 @@ pair at gm1 ≈ 169 µS after bias repair, the second stage at its minimum width
 with a right-half-plane response; raising gm2 to 0.72 mS alone left gain
 coming back above 0 dB after the phase passed −180°.
 """
+from dataclasses import replace
+
 import pytest
 
 from circuitgenome.sizer import SizingSpec
@@ -208,3 +210,74 @@ def test_output_follower_inside_the_cc1_loop_is_seen():
     buffered = dict(kw, buffer=(0.3e-3, 19.9e-15, 1e-5))
     assert eq.rnmc_pole_damping(*args, **buffered) < 0
     assert eq.phase_margin_rnmc_deg(*args, **buffered) == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Buffered RNMC: compensation resistors and the third-stage output (#266)
+# --------------------------------------------------------------------------- #
+# #266's gf180 FD design #7210 as SPICE's .op measures it: gm3 ≈ 1.05·gm2,
+# 1.25 pF caps, a source follower driving the 5 pF load, and ~32 fF of drains
+# on the third-stage output -- all that node carries at the inner loop's
+# ~120 MHz, where the follower's output pole (9.6 MHz) has long since shorted
+# CL away.
+_BUF = (0.1e-3, 0.573e-3, 0.601e-3, 1.25e-12, 1.25e-12, 5e-12)
+_BUF_KW = dict(c1_f=182.5e-15, c2_f=57.2e-15, g1=1e-9, g2=2.3e-6, g3=7.54e-6,
+               mirror_pole_hz=747e6, buffer=(0.3014e-3, 5.38e-15, 40.4e-6),
+               c3_f=32e-15)
+
+
+def test_cc2_series_resistor_damps_the_buffered_pair():
+    """SPICE: #7210 rings at ~120 MHz with bare caps and settles once ~1/gm
+    sits in series with Cc2, but not with Cc1.  A bare Cc2 feeds the
+    first-stage output forward into the second's (a right-half-plane zero
+    near gm2/Cc2 ≈ 73 MHz); the resistor cancels it."""
+    assert eq.rnmc_pole_damping(*_BUF, **_BUF_KW) < 0
+    assert eq.phase_margin_rnmc_deg(*_BUF, **_BUF_KW) == 0.0
+    assert eq.rnmc_pole_damping(*_BUF, **_BUF_KW, comp_r=(1700.0, 0.0)) < 0
+    assert eq.rnmc_pole_damping(*_BUF, **_BUF_KW, comp_r=(0.0, 1700.0)) > 0.7
+    assert eq.phase_margin_rnmc_deg(*_BUF, **_BUF_KW, comp_r=(0.0, 1700.0)) > 30
+
+
+def test_third_stage_output_capacitance_damps_the_buffered_pair():
+    """SPICE: +300 fF from each third-stage output to ground settles #7210,
+    +100 fF still rings.  The model's pair moves left with every femtofarad
+    and crosses into the left half plane near +100 fF -- a little early."""
+    def zeta(c3):
+        return eq.rnmc_pole_damping(*_BUF, **dict(_BUF_KW, c3_f=c3))
+    assert zeta(32e-15) < 0 < zeta(332e-15)
+    assert zeta(32e-15) < zeta(132e-15) < zeta(232e-15) < zeta(332e-15)
+
+
+def test_comp_resistances_follow_the_sizing_rule_per_half():
+    """Each half gets the resistor size_resistors would give its branch
+    (≈ 1/gm3 behind a buffer), a bare cap 0; identical halves collapse."""
+    cc1, cc2, cbuf, gm3 = 1.25e-12, 0.6e-12, 8e-15, 0.6e-3
+    r1 = eq.compensation_resistor_ohm(cc1, cbuf, gm3)
+    r2 = eq.compensation_resistor_ohm(cc2, cbuf, gm3)
+    assert r1 == pytest.approx((cc1 + cbuf) / (gm3 * cc1))
+    assert rnmc.comp_resistances(((False, True), (True, False)), gm3, cc1, cc2,
+                                 cbuf) == [(0.0, r2), (r1, 0.0)]
+    assert rnmc.comp_resistances(((True, True), (True, True)), gm3, cc1, cc2,
+                                 cbuf) == [(r1, r2)]
+    assert rnmc.comp_resistances((), gm3, cc1, cc2, cbuf) == [(0.0, 0.0)]
+
+
+def test_metrics_report_the_worse_half():
+    """The halves of an FD amplifier can carry different compensation
+    variants; one ringing half makes the whole amplifier ring."""
+    gm1, gm2, gm3, cc1, cc2, cl = _BUF
+    kw = _BUF_KW
+    stages = (Stage(gm1, 1 / kw["g1"]), Stage(gm2, 1 / kw["g2"]),
+              Stage(gm3, 1 / kw["g3"]))
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=cl)
+    chain = StageChain(stages=stages, cc_pf=cc1 * 1e12, cc2_pf=cc2 * 1e12,
+                       compensation_scheme=rnmc.RNMC,
+                       node_caps_f=(kw["c1_f"], kw["c2_f"], kw["c3_f"]),
+                       third_stage_mirror_pole_hz=kw["mirror_pole_hz"],
+                       output_buffer=kw["buffer"])
+
+    def pm(halves):
+        return evaluate_metrics(replace(chain, comp_resistors=halves),
+                                spec)[0]["phase_margin_deg"]
+    assert pm(((False, True), (False, True))) > 30
+    assert pm(((False, True), (False, False))) == 0.0

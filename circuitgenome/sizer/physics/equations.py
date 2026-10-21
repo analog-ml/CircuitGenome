@@ -112,11 +112,11 @@ def cgs(cox_f_per_um2: float | None, w_um: float, l_um: float) -> float:
 
     Cgs = (2/3)·W·L·Cox
 
-    The only capacitance the sizer models. It exists to place the mirror pole
-    of a load-compensated single-stage OTA (issue #221), where the dominant
-    pole is set by the external ``CL`` and the *non*-dominant one by the gate
-    capacitance on the mirror node. Overlap and fringe capacitance are ignored,
-    so this under-estimates Cgs at short L.
+    It places the mirror pole of a load-compensated single-stage OTA (issue
+    #221), where the dominant pole is set by the external ``CL`` and the
+    *non*-dominant one by the gate capacitance on the mirror node, and loads
+    the RNMC model's nodes. Overlap and fringe capacitance are ignored, so
+    this under-estimates Cgs at short L.
 
     :param w_um: Gate width in µm.
     :param l_um: Gate length in µm.
@@ -127,6 +127,23 @@ def cgs(cox_f_per_um2: float | None, w_um: float, l_um: float) -> float:
     if not cox_f_per_um2:
         return 0.0
     return _CGS_SAT_FRACTION * w_um * l_um * cox_f_per_um2
+
+
+def cdb(cdb_f_per_um: float | None, w_um: float) -> float:
+    """Drain-bulk junction capacitance in F.
+
+    Cdb = W·cdb
+
+    The junction scales with the drain's area, which the PDK lays out in
+    proportion to the width, so it is independent of L.  Only the RNMC model
+    reads it (issue #266): behind an output buffer the third stage's drains
+    are most of what its output node carries.
+
+    :param cdb_f_per_um: Junction capacitance per µm of width in F/µm, or
+        ``None`` for a tech that does not supply one — which returns ``0.0``.
+    :param w_um: Gate width in µm (the device's total width).
+    """
+    return (cdb_f_per_um or 0.0) * w_um
 
 
 def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
@@ -313,6 +330,23 @@ def phase_margin_three_stage_deg(
 # positive — the pair stable — only while gm3 < gm2·(1 + CL/Cc1).
 
 
+def compensation_resistor_ohm(cc_f: float, c_out_f: float, gm_out: float) -> float:
+    """Series resistor in Ω of a nulling / indirect compensation branch.
+
+    R = (Cc + C)/(gm_out·Cc)
+
+    places the compensation zero on the output pole of the stage the branch
+    wraps (issue #108).  ``C`` is the load that stage drives: ``CL``, or the
+    output buffer's gate in a buffered RNMC amplifier (issue #262), where R
+    then comes out close to ``1/gm_out``.
+
+    :param cc_f: The branch's compensation cap in F.
+    :param c_out_f: Load on the wrapped stage's output in F.
+    :param gm_out: gm of the wrapped (last gain) stage in A/V.
+    """
+    return (cc_f + c_out_f) / (gm_out * cc_f)
+
+
 def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
                  c2_f: float = 0.0, zeta: float = 0.7) -> float:
     """Smallest ``gm2`` in A/V that damps the RNMC pole pair to ``zeta``.
@@ -346,13 +380,16 @@ def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
 
 
 def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
-                  mirror_pole_hz, buffer):
+                  mirror_pole_hz, buffer, c3_f=0.0, r1_ohm=0.0, r2_ohm=0.0):
     """Nodal equations ``(G + s·C)·v = b`` of the RNMC half circuit (Vin = 1).
 
     ``v`` holds the node voltages: ``v[0..2]`` the first-, second- and
-    third-stage outputs, then the third-stage mirror node and the buffer's
-    output when present.  Returns ``(G, C, b, out)``, ``out`` being the index
-    of the node that drives ``CL``.
+    third-stage outputs, then the third-stage mirror node, the buffer's
+    output, and the inner node of each compensation branch with a series
+    resistor (``r1_ohm`` with ``Cc1``, ``r2_ohm`` with ``Cc2``), when present.
+    ``c3_f`` is the third-stage output's capacitance to ground besides ``CL``.
+    Returns ``(G, C, b, out)``, ``out`` being the index of the node that
+    drives ``CL``.
 
     A zero output conductance would make the DC gain infinite; flooring it at
     ``1e-9·gm`` keeps the DC gain finite without moving anything near
@@ -362,8 +399,9 @@ def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
 
     g1, g2, g3 = (max(g, 1e-9 * gm) for g, gm in ((g1, gm1), (g2, gm2), (g3, gm3)))
     V1, V2, V3 = 0, 1, 2
-    n = 3 + bool(mirror_pole_hz) + bool(buffer)
+    n = 3 + bool(mirror_pole_hz) + bool(buffer) + bool(r1_ohm) + bool(r2_ohm)
     G, C, b = np.zeros((n, n)), np.zeros((n, n)), np.zeros(n)
+    extra = iter(range(3, n))
 
     def cap(i, j, c):
         """Capacitor ``c`` between nodes ``i`` and ``j`` (``j=None``: ground)."""
@@ -377,12 +415,24 @@ def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
         """Current ``gm·v[ctrl]`` drawn out of node ``i``."""
         G[i, ctrl] += gm
 
+    def branch(i, j, c, r):
+        """Compensation cap ``c`` from ``i`` to ``j``, through ``r`` when set."""
+        if not r:
+            cap(i, j, c)
+            return
+        x = next(extra)
+        cap(i, x, c)
+        G[x, x] += 1.0 / r
+        G[j, j] += 1.0 / r
+        G[x, j] -= 1.0 / r
+        G[j, x] -= 1.0 / r
+
     # Stage 1 (inverting): gm1·Vin out of V1.  Both Miller caps hang off V1.
     b[V1] = -gm1
     G[V1, V1] += g1
     cap(V1, None, c1_f)
-    cap(V1, V3, cc1_f)
-    cap(V1, V2, cc2_f)
+    branch(V1, V3, cc1_f, r1_ohm)
+    branch(V1, V2, cc2_f, r2_ohm)
 
     # Stage 2 (inverting): gm2·V1 out of V2.
     vccs(V2, V1, gm2)
@@ -393,13 +443,14 @@ def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
     # there is one, an extra node with v_m·(1 + s/ωm) = V2.
     drive = V2
     if mirror_pole_hz:
-        m = 3
+        m = next(extra)
         vccs(m, V2, -1.0)
         G[m, m] += 1.0
         cap(m, None, 1.0 / (2.0 * math.pi * mirror_pole_hz))
         drive = m
     vccs(V3, drive, -gm3)
     G[V3, V3] += g3
+    cap(V3, None, c3_f)
 
     # Load: CL on V3, or on a source-follower buffer's output, which the
     # follower charges with gm_f·(V3 − v_out).
@@ -407,7 +458,7 @@ def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
         cap(V3, None, cl_f)
         return G, C, b, V3
     gm_f, cgs_f, g_f = buffer
-    out = n - 1
+    out = next(extra)
     cap(V3, out, cgs_f)
     vccs(out, V3, -gm_f)
     G[out, out] += gm_f + g_f
@@ -450,6 +501,8 @@ def rnmc_pole_damping(
     g1: float = 0.0, g2: float = 0.0, g3: float = 0.0,
     mirror_pole_hz: float | None = None,
     buffer: tuple[float, float, float] | None = None,
+    c3_f: float = 0.0,
+    comp_r: tuple[float, float] = (0.0, 0.0),
 ) -> float:
     """Worst damping ``ζ`` over the RNMC loop's non-dominant poles.
 
@@ -458,14 +511,14 @@ def rnmc_pole_damping(
     — the cosine of a pole's angle from the negative real axis.  Read off
     the poles of the full model (arguments as for
     :func:`phase_margin_rnmc_deg`), so it sees the parasitics, the
-    third-stage mirror and an output buffer.  The dominant (smallest) pole is
-    skipped; a real pole counts as ``1``.  The sizer aims for ``0.7``, the
+    third-stage mirror, an output buffer and series compensation resistors.
+    The dominant (smallest) pole is skipped; a real pole counts as ``1``.  The sizer aims for ``0.7``, the
     Butterworth placement (no resonance peak).
 
     :returns: Negative when any non-dominant pole is in the right half plane.
     """
     G, C, _, _ = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
-                               g1, g2, g3, mirror_pole_hz, buffer)
+                               g1, g2, g3, mirror_pole_hz, buffer, c3_f, *comp_r)
     non_dominant = sorted(_poles(G, C), key=abs)[1:]
     return float(min((-p.real / abs(p) for p in non_dominant if abs(p) > 0),
                      default=1.0))
@@ -478,6 +531,8 @@ def phase_margin_rnmc_deg(
     g1: float = 0.0, g2: float = 0.0, g3: float = 0.0,
     mirror_pole_hz: float | None = None,
     buffer: tuple[float, float, float] | None = None,
+    c3_f: float = 0.0,
+    comp_r: tuple[float, float] = (0.0, 0.0),
 ) -> float | None:
     """Phase margin in degrees of a reversed-nested-Miller three-stage amp.
 
@@ -508,6 +563,14 @@ def phase_margin_rnmc_deg(
         between the third stage and ``CL`` — its gm, its gate-source
         capacitance, and its output-node conductance besides its own gm — or
         ``None``.
+    :param c3_f: Parasitic from the third-stage output to ground in F,
+        besides ``CL`` (the drains on it; behind a buffer, nearly all it
+        carries at the inner loop's frequencies).
+    :param comp_r: ``(R1, R2)`` in Ω in series with ``Cc1`` and ``Cc2`` — a
+        nulling or indirect compensation branch — ``0.0`` for a bare cap.  A
+        bare ``Cc2`` feeds the first-stage output forward into the second's,
+        a right-half-plane zero near ``gm2/Cc2``; ``R2 ≈ 1/gm`` cancels it,
+        which is what damps a buffered RNMC loop's pole pair (issue #266).
     :returns: ``0.0`` when the open loop has a right-half-plane pole (no
         margin to speak of; a pole too slow to resolve does not count, see
         :func:`_has_rhp_pole`); ``None`` when the gain never reaches 0 dB.
@@ -515,7 +578,7 @@ def phase_margin_rnmc_deg(
     import numpy as np
 
     G, C, b, out = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
-                                 g1, g2, g3, mirror_pole_hz, buffer)
+                                 g1, g2, g3, mirror_pole_hz, buffer, c3_f, *comp_r)
     poles = _poles(G, C)
     if _has_rhp_pole(poles):
         return 0.0

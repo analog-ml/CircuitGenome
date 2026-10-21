@@ -168,15 +168,28 @@ class StageChain:
     :param compensation_scheme: the template's three-stage compensation;
         ``"reversed_nested_miller"`` selects the full-model RNMC phase margin
         (:func:`~.equations.phase_margin_rnmc_deg`).
-    :param node_caps_f: gate capacitance in F on each gain stage's output
-        node (every device gated there), input pair first.  Only the RNMC
-        phase margin reads it: the second-stage output's entry is the third
-        stage's wide input gate, comparable to ``Cc2``.
+    :param node_caps_f: capacitance in F on each gain stage's output node,
+        input pair first.  The first two entries are the gates of every
+        device gated there; the second-stage output's is mostly the third
+        stage's wide input gate, comparable to ``Cc2``.  The third is the
+        third stage's output behind an output buffer -- the follower's gate
+        net, its gates (the follower's own aside: ``output_buffer`` models
+        it) plus the drain junctions on it, nearly all that node carries
+        (issue #266) -- and ``0.0`` without one, where ``CL`` dwarfs it.
+        Only the RNMC phase margin reads it.
     :param third_stage_mirror_pole_hz: current-mirror node pole of a
         non-inverting third stage in Hz, ``None`` when it has no mirror.
     :param output_buffer: ``(gm, cgs, g_out)`` of a source-follower output
         buffer (RNMC only): the third stage then drives the follower's gate
         and ``CL`` sits on the follower's output; ``None`` without one.
+    :param comp_resistors: per half of a buffered RNMC amplifier (one entry
+        single-ended, ``_p`` then ``_n`` fully differential), whether its
+        ``Cc1`` and its ``Cc2`` branch have a series resistor (a nulling or
+        indirect compensation variant).  The halves can differ.  Empty
+        without a buffer: there the resistors are sized against ``CL``
+        (several times ``1/gm3``) and leave the open-loop gain hovering near
+        0 dB, where the model's margin is not trustworthy, so they are not
+        modelled (issue #266).
     :param k_slew: fraction of the tail current the first stage can steer into
         its output node -- ``1.0`` when a current-mirror load collects both
         halves of a single-ended pair, ``0.5`` without a mirror or per side of
@@ -199,6 +212,7 @@ class StageChain:
     node_caps_f: tuple[float, ...] = ()
     third_stage_mirror_pole_hz: float | None = None
     output_buffer: tuple[float, float, float] | None = None
+    comp_resistors: tuple[tuple[bool, bool], ...] = ()
     k_slew: float = 1.0
     buffer_ids: float | None = None
 
@@ -693,26 +707,45 @@ def build_stage_chain(
     supply.append(spec.ibias * max(n_bias, 1))
 
     # --- RNMC only: the parasitics its full-model phase margin needs ---
+    follower = next((d for d in _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
+                     if is_signal_device(d)), None)
     node_caps: tuple[float, ...] = ()
     ts_mirror_pole = None
     buffer = None
+    comp_resistors: tuple[tuple[bool, bool], ...] = ()
     if view.compensation_scheme == RNMC:
-        out_nets = [out1] + [sig.terminals.get("d") if sig else None
-                             for sig in signal_devs]
-        node_caps = tuple(
-            sum(model.cgs(d.type, sizing[d.ref].w_um, sizing[d.ref].l_um)
-                for d in mosfets
-                if net and d.ref in sizing and d.terminals.get("g") == net)
-            for net in out_nets)
+        def cap_on(net: str | None, terminal: str, cap) -> float:
+            """``cap(device, sizing)`` summed over the devices whose
+            ``terminal`` is on ``net`` (an output buffer's own gate aside)."""
+            return sum(cap(d, sizing[d.ref]) for d in mosfets
+                       if net and d.ref in sizing and d.terminals.get(terminal) == net
+                       and not (terminal == "g" and d is follower))
+
+        def cgs(d, sd):
+            return model.cgs(d.type, sd.w_um, sd.l_um)
+
+        def cdb(d, sd):
+            return model.cdb(d.type, sd.w_um)
+        v2 = signal_devs[0].terminals.get("d") if signal_devs[0] else None
+        # Behind a buffer the third stage's output is the follower's gate (a
+        # non-inverting stage's signal device drains into its mirror instead).
+        v3 = follower.terminals.get("g") if follower else None
+        node_caps = (cap_on(out1, "g", cgs), cap_on(v2, "g", cgs),
+                     cap_on(v3, "g", cgs) + cap_on(v3, "d", cdb))
         if len(slot_devs) > 1:
             ts_mirror_pole = _mirror_pole_hz(slot_devs[1], mosfets, model, sizing)
         buffer = _output_buffer(slot_transistors, model, sizing)
+        if buffer is not None:
+            halves = sorted(slot[len("comp1"):] for slot in view.slot_capacitors
+                            if slot.startswith("comp1"))
+            comp_resistors = tuple(
+                (bool(view.slot_resistors.get(f"comp1{h}")),
+                 bool(view.slot_resistors.get(f"comp2{h}")))
+                for h in halves)
 
     k_fs = _first_stage_gain_factor(slot_transistors)
     fully_differential = any(s in slot_transistors
                              for s in ("second_stage_p", "second_stage_n"))
-    follower = next((d for d in _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
-                     if is_signal_device(d)), None)
 
     return StageChain(
         stages=tuple(stages),
@@ -729,6 +762,7 @@ def build_stage_chain(
         node_caps_f=node_caps,
         third_stage_mirror_pole_hz=ts_mirror_pole,
         output_buffer=buffer,
+        comp_resistors=comp_resistors,
         k_slew=0.5 if fully_differential else k_fs,
         buffer_ids=_ids(follower) if follower is not None else None,
     )

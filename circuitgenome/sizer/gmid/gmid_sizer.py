@@ -78,7 +78,7 @@ def size_gmid(
         sizing, geom_warnings, geom_feasible = assign_geometry_gmid(
             plan.model, view.all_transistors, view.slot_transistors,
             currents.ids_map, plan.tintents, plan.gm_req_map, tech,
-            vod_max_map=plan.vod_max_map)
+            vod_max_map=plan.vod_max_map, wide_refs=plan.wide_refs)
         sizing, dc_warnings, bias_feasible = check_dc_operating_point(
             plan.model, view.blocks, view.slot_transistors, view.all_transistors,
             currents.ids_map, sizing, spec, tech)
