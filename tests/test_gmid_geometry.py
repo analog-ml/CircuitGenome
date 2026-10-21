@@ -103,6 +103,26 @@ def test_geometry_on_grid(tech, model):
     assert tech.length.min <= s.l_um <= tech.length.max
 
 
+def test_wide_signal_device_is_not_capped():
+    """Issue #266: a signal device in ``wide_refs`` keeps the full LUT width
+    its gm requirement needs, past the widest single device (the netlist
+    builds it from parallel fingers); any other device stays capped.  gf180:
+    its 3.3 V devices need hundreds of µm for weak inversion at 40 µA."""
+    tech = load_tech("gf180mcu")
+    model = GmIdModel(tech, GmIdLut(tech.gmid_lut))
+    d = Device(ref="m1", type="pmos", terminals={"d": "o1", "g": "n1", "s": "vdd!"})
+    all_t = {"m1": (d, "second_stage")}
+    slot_t = {"second_stage": [d]}
+    ids, gm = {"m1": 40e-6}, {"m1": 20 * 40e-6}   # gm/Id 20: weak inversion
+    args = (model, all_t, slot_t, ids, _intents({"m1": SIGNAL}), gm, tech)
+    capped, _, _ = assign_geometry_gmid(*args)
+    wide, _, _ = assign_geometry_gmid(*args, wide_refs=frozenset({"m1"}))
+    assert capped["m1"].w_um == tech.width.max
+    assert wide["m1"].w_um > tech.width.max
+    assert model.gm("pmos", wide["m1"].w_um, wide["m1"].l_um, 40e-6) == \
+        pytest.approx(gm["m1"], rel=0.05)
+
+
 def _cs_load_circuit():
     """Single-ended first stage: mirrored current-source loads + a MOSFET tail."""
     mref = Device(ref="mref", type="nmos",

@@ -228,6 +228,7 @@ def assign_geometry_gmid(
     gm_target_map: dict[str, float],        # ref → required gm in A/V (signal devices)
     tech: TechParams,
     vod_max_map: dict[str, float] | None = None,  # ref → max VDS_sat in V (swing)
+    wide_refs: frozenset[str] = frozenset(),  # refs built past width.max (fingers)
 ) -> tuple[dict[str, TransistorSizing], list[str], bool]:
     """Return ``({ref: TransistorSizing}, warnings, feasible)`` for the gm/Id path.
 
@@ -246,6 +247,10 @@ def assign_geometry_gmid(
       folded-cascode + common_source_nmos candidates lost to a blanket floor).
       Those candidates' high loop gain keeps the swing bench tracking well
       past the Vdsat point, so the floor is not needed there.
+
+    ``wide_refs`` keep their full LUT width past ``tech.width.max`` (parallel
+    fingers, :attr:`~..models.TransistorSizing.fingers`); every other device
+    is capped at the widest single device.
 
     ``feasible`` is ``False`` when an output-path device cannot fit its raw
     budget even at the weakest inversion.
@@ -283,7 +288,8 @@ def assign_geometry_gmid(
             gm_id=ti.gm_id, l_um=model.length_for(ti.l_mult),
             gm_id_min=gm_id_min,
         )
-        W[ref] = tech.width.snap(geo.w_um)
+        W[ref] = (tech.width.snap_total if ref in wide_refs
+                  else tech.width.snap)(geo.w_um)
         L[ref] = geo.l_um
         if geo.gm_id_capped:
             warnings.append(

@@ -50,6 +50,10 @@ class SizingPlan:
     :param tintents: ref → resolved :class:`~.intent.TransistorIntent`.
     :param warnings: gm-ceiling advisories (a spec that needs more gm than the
         device can physically deliver at its bias current).
+    :param wide_refs: signal devices whose width may exceed the PDK's widest
+        single device, built from parallel fingers: a buffered RNMC
+        amplifier's second stage once the refinement raises its gm past what
+        one capped device delivers (issue #266).
     """
     model: GmIdModel
     gm_req_map: dict[str, float]
@@ -58,6 +62,7 @@ class SizingPlan:
     cc2_pf: float | None
     tintents: dict[str, TransistorIntent]
     warnings: list[str]
+    wide_refs: frozenset[str] = frozenset()
 
 
 def _load_seed_v(tech: TechParams, intent: GmIdIntent) -> dict[str, float]:

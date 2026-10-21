@@ -948,7 +948,10 @@ formula cannot see the problem.  For RNMC the sizer instead
    (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`)
    until the full model's poles are damped to 0.7
    (:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`) and the
-   phase-margin spec holds, up to the second stage's weak-inversion ceiling;
+   phase-margin spec holds, up to the second stage's weak-inversion ceiling
+   (behind an output buffer the gm/Id pipeline builds a raised second stage
+   wider than one PDK device from parallel fingers, so the gm it plans with is
+   the gm it gets — issue #266);
 2. then **raises** :math:`C_{c2}` in steps up to :math:`C_{c1}`;
 3. and only as a last resort **caps** :math:`g_{m3}` (on the third stage's
    input device, so a non-inverting stage's mirror keeps its sizing).
@@ -960,7 +963,9 @@ emitted either way.  The phase
 margin itself comes from the full transfer function evaluated on a frequency
 sweep (:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`),
 including the stage-output parasitics, the third stage's mirror pole and — on
-the ``*_buffered_*`` templates — the source-follower output buffer, and is the
+the ``*_buffered_*`` templates — the source-follower output buffer, the drains
+on the third stage's output and each compensation branch's series resistor
+(on the worse half of a fully-differential amplifier, issue #266), and is the
 **worst over every 0 dB crossing** — a lightly damped pair that lifts
 the gain back above 0 dB after the phase has passed :math:`-180^{\circ}` is a
 negative gain margin and reports a negative PM; an open loop with
