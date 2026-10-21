@@ -771,6 +771,29 @@ def test_ac_bench_reports_the_worst_zero_db_crossing():
 
 
 @ngspice
+def test_se_power_is_measured_in_unity_feedback():
+    """Issue #271: single-ended power is read where the amplifier runs.
+
+    With both inputs at Vcm and no loop, #418's output rails and drags its
+    internal nodes along; its PMOS second stage then turns the third stage's
+    NMOS input device fully on into a bare diode mirror, which drew ~7.9 mW.
+    In unity feedback every stage carries its planned current (third stage
+    ~100 uA, second ~40 uA): about 1 mW in all.
+    """
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12)
+    result = SizingResult(
+        transistors={ref: TransistorSizing(ref, w, l, 0.0, 0.0, 0.0)
+                     for ref, (w, l) in _RNMC_SE_418_SIZES.items()},
+        resistors=_RNMC_SE_418_R, capacitors=_RNMC_SE_418_C,
+        metrics={}, margins={}, solver_status="GMID")
+    sim = simulate_metrics(_RNMC_SE_418_NETLIST, result, tech, spec)
+    assert sim["power_w"] is not None and 0.7e-3 < sim["power_w"] < 1.5e-3, \
+        sim["power_w"]
+
+
+@ngspice
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the
     sizer's definition), not left None — a None on a constrained spec left

@@ -248,6 +248,8 @@ phase -= phase[<span class="tok-num">0</span>]                <span class="tok-c
 
   <p>Single-ended is the textbook trick: a huge inductor closes the loop at DC (setting the bias) and is an open at AC; a huge capacitor grounds the inverting input at AC. The loop is closed for biasing and open for measuring.</p>
 
+  <p>The power bench borrows the same loop for its operating point, keeping whichever polarity settles the output closest to Vcm. Without it, both inputs at Vcm and nothing else, a high-gain single-ended amplifier rails its output and drags its internal nodes along; a reversed-nested-Miller design whose second and third stages have opposite polarity then turns its third stage's input device fully on and reads up to 40&times; its quiescent power (issue #271).</p>
+
   <p>Fully-differential used to tie <code>outp</code>&rarr;<code>inn</code> and <code>outn</code>&rarr;<code>inp</code>. That is now understood to have been wrong in three separate ways:</p>
 
   <ul>
