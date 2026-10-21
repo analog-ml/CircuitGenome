@@ -617,6 +617,34 @@ buffered sizing whose level-shifted edge misses the swing spec by more than
 follower's :math:`|V_{GS}|` cannot drop much below :math:`V_{th}` even in weak
 inversion, so no other sizing choice recovers it.
 
+A fully-differential design with a **difference-difference (DDA) CMFB** has a
+second limit on both edges (issue #272).  The DDA senses each output with its
+own differential pair against ``vcm_ref``.  As the outputs split, each pair
+steers its tail current to one side, and once a pair carries its whole tail on
+one device, the CMFB no longer responds to the output common mode.  A
+square-law pair gets there at a differential input of :math:`\sqrt{2}\,V_{ov}`,
+so each output stays CM-regulated only within
+
+.. math::
+
+   V_{out} \in V_{ocm} \pm \sqrt{2}\,V_{DS,sat}(\text{sense device}),
+   \qquad V_{ocm} = \tfrac{1}{2}(V_{DD} + V_{SS}),
+
+with :math:`V_{DS,sat}` at the sense device's quiescent half-tail current
+(:func:`~circuitgenome.sizer.physics.stage_chain.cmfb_sense_range`).  Each
+swing edge is the tighter of this and the output-stage limit above.  On gf180
+the default sizing gives ±0.24 V, i.e. 1.41–1.89 V; over 24 sampled DDA
+designs SPICE puts the low edge at 1.32–1.52 V and the high edge at
+1.76–2.00 V.  Past the edge one output sticks while the other keeps moving, so
+the output CM drifts by up to ~0.7 V.  A
+resistive-sense CMFB averages the outputs through resistors before its pair
+and has no such limit.  The gm/Id sizer rejects a DDA sizing whose edge misses
+the swing spec by more than 0.15 V (``bias_feasible = False``,
+:func:`~circuitgenome.sizer.physics.stage_chain.check_cmfb_sense_swing`).
+A larger sense-pair overdrive would widen the range, but only to about
+:math:`V_{ocm} - V_{th} - V_{DS,sat}(\text{tail})` (≈ ±0.75 V on gf180), and
+the sizer does not trade it against the CM loop's gain.
+
 ----
 
 Feasibility verdict and SPICE metrics (PTM / foundry PDKs)
