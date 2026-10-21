@@ -14,6 +14,7 @@ spice_lib:
   file: ../pdk/gf180/ngspice/sm141064.ngspice    # corner library
   corner: typical                                # nominal corner for sizing
   corners: [typical, ss, ff, sf, fs]             # CLI verification sweep
+  mismatch_switch: sw_stat_mismatch              # per-device mismatch (FD CMRR/PSRR)
 
 device_map:                                      # generic type -> PDK subcircuit
   nmos: nmos_3p3
@@ -31,14 +32,20 @@ gmid_lut: models/gf180mcu_gmid.npz   # gm/Id LUT (drives sizing)
 # parameter: it feeds only Cgs = (2/3)·W·L·Cox, which places a single-stage
 # OTA's mirror pole (issue #221).  Cross-checked against the LUT's ft-implied
 # Cgg = gm/(2π·ft) — agreement is within ~5-50% across the L axis.
+# cdb (F/µm of width) is ngspice's drain-bulk junction capacitance (capbd) of
+# a saturated nmos_3p3/pmos_3p3 at |Vdb| = 1.65 V (Vdd/2): it scales with W
+# alone (identical at W = 10/100 µm, L = 0.56/1.12 µm) and moves only ±13 %
+# over |Vdb| = 0.8-2.5 V.  Only the RNMC phase-margin model reads it (#266).
 nmos:
   gamma: 0.3101          # √V   body-effect coefficient γ (issue #106)
   phi: 0.3650            # V    surface potential 2φF
   cox: 4.316e-15         # F/µm² (toxe = 8.0 nm)
+  cdb: 4.13e-16          # F/µm  drain junction capacitance per µm of width
 pmos:
   gamma: 0.5220          # √V   body-effect coefficient γ (issue #106)
   phi: 0.4900            # V    surface potential 2φF
   cox: 4.371e-15         # F/µm² (toxe = 7.9 nm)
+  cdb: 3.64e-16          # F/µm  drain junction capacitance per µm of width
 
 width:
   min: 0.22

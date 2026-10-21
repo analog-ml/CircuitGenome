@@ -68,3 +68,28 @@ model under-predicted. Kept in the metric's own unit where that unit is already 
 log or linear scale (dB, degrees, volts), and as a percentage of the predicted
 value for figures that span decades (GBW, slew rate, power).
 _Avoid_: Approximation error, model gap, delta.
+
+## Frequency compensation
+
+**Pole pair**:
+Two non-dominant poles that arise together as the roots of one quadratic and
+can therefore turn complex (`−σ ± jω`) and ring. Three-stage amplifiers (NMC,
+RNMC) have one; single- and two-stage amplifiers have only a single real
+non-dominant pole and cannot ring.
+_Avoid_: Inner poles, inner loop (when the pole pair itself is meant), complex poles
+(the pair may also be two real roots).
+
+**Damping (ζ)**:
+The damping ratio of a pole pair — `ζ = −Re(p)/|p|`, the cosine of the poles'
+angle from the negative real axis. ζ ≥ 0.707 means no resonance peak; ζ = 0 rings
+forever; ζ < 0 is unstable. A sizing target alongside phase margin, because
+phase margin is read at the 0 dB crossing and cannot see a pair resonating
+above it.
+_Avoid_: Damping factor (in prose — same quantity), stability margin.
+
+**Full model**:
+The RNMC open loop solved from its nodal equations — parasitics, stage output
+conductances, the third-stage mirror and an output buffer included — as opposed
+to the **closed forms** derived from the simplified quadratic. The full model
+decides; the closed forms explain and seed the search.
+_Avoid_: Exact model, numerical model, SPICE model (SPICE gives *measured metrics*).

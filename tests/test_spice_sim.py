@@ -21,7 +21,7 @@ from circuitgenome.sizer import (
     size_circuit,
     SizingSpec,
 )
-from circuitgenome.sizer.verify import deck, measure, rig
+from circuitgenome.sizer.verify import deck, measure, read_op_operating_point, rig
 
 
 def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
@@ -465,8 +465,10 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
     sees the global loop).  The sizer keeps gm3 ≥ 3.5·gm2 and sizes Cc2 for
     the inner pair's damping, so both a plain and a nulling-resistor comp2
     settle; restoring the old inner loop by hand (third-stage signal W × 0.3
-    → gm3 ≈ 2·gm2, Cc2 = Cc1/4) brings the ringing back, and the settling
-    gate's one-sided kick must condemn it."""
+    → gm3 ≈ 2·gm2, Cc2 = Cc1/4, and the third-stage current source back to
+    the single 100 µm device it was clamped to, which carried ~half its
+    planned current) brings the ringing back, and the settling gate's
+    one-sided kick must condemn it."""
     mods = load_modules()
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_nmc_fully_differential")
@@ -485,9 +487,13 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
                       gain_min_db=60, gbw_min_hz=2e6, phase_margin_min_deg=60)
     result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
     if gm3_scale != 1.0:  # restore the old inner loop: gm3 ≈ 2·gm2, Cc2 = Cc1/4
-        tr = {ref: (replace(s, w_um=s.w_um * gm3_scale)
-                    if ref.startswith("mn1_third_stage") else s)
-              for ref, s in result.transistors.items()}
+        def _old(ref, s):
+            if ref.startswith("mn1_third_stage"):
+                return replace(s, w_um=s.w_um * gm3_scale)
+            if ref.startswith("mp1_third_stage"):  # the old width-clamped source
+                return replace(s, w_um=tech.width.max, fingers=1)
+            return s
+        tr = {ref: _old(ref, s) for ref, s in result.transistors.items()}
         cc1 = next(c for ref, c in result.capacitors.items() if "comp1" in ref)
         caps = {ref: (cc1 / 4.0 if "comp2" in ref else c)
                 for ref, c in result.capacitors.items()}
@@ -501,6 +507,267 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
     assert ok is settles, reason
     if not settles:
         assert "differential output oscillates" in reason
+
+
+# A GMID-sized gf180 RNMC buffered FD op-amp (#266's sample design #4620:
+# PMOS second stage, noninverting_stage_nmos third stage, a bare Cc2 on the p
+# half), frozen with its sizes so the test pins the settling gate's numerics,
+# not whatever the sizer makes of the circuit.  Its RNMC inner loop has a
+# weakly unstable pole pair at ~120 MHz (zeta ~ -0.04).
+_FD_4620_NETLIST = """\
+.subckt c4620 ibias vcm_ref in1 in2 outp outn vdd! gnd!
+m1_input_pair net_loadout1 in1 net_tail net_tail nmos
+m2_input_pair net_loadout2 in2 net_tail net_tail nmos
+m1_load net_loadout1 net_cmfb_out vdd! vdd! pmos
+m2_load net_loadout2 net_cmfb_out vdd! vdd! pmos
+mn1_tail_current net_bias7 net_bias7 gnd! gnd! nmos
+mn2_tail_current tail_current_internal_1 net_bias7 gnd! gnd! nmos
+mn3_tail_current net_tail net_bias8 tail_current_internal_1 gnd! nmos
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mp4_bias_gen net_bias4 bias_gen_pref vdd! vdd! pmos
+mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+mp5_bias_gen net_bias5 bias_gen_pref vdd! vdd! pmos
+mn5_bias_gen net_bias5 net_bias5 gnd! gnd! nmos
+mp6_bias_gen net_bias6 bias_gen_pref vdd! vdd! pmos
+mn6_bias_gen net_bias6 net_bias6 gnd! gnd! nmos
+mp7_bias_gen net_bias7 bias_gen_pref vdd! vdd! pmos
+mp8_bias_gen net_bias8 bias_gen_pref vdd! vdd! pmos
+mn8_bias_gen net_bias8 net_bias8 bias_gen_mid8 gnd! nmos
+r8_bias_gen bias_gen_mid8 gnd! 1k
+mp9_bias_gen net_bias9 bias_gen_pref vdd! vdd! pmos
+mn9_bias_gen net_bias9 net_bias9 gnd! gnd! nmos
+r1_cmfb outp cmfb_sense 1k
+r2_cmfb outn cmfb_sense 1k
+m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
+m2_cmfb net_cmfb_out cmfb_sense cmfb_tail gnd! nmos
+m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
+m4_cmfb net_cmfb_out net_cmfb_out vdd! vdd! pmos
+m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
+mp1_second_stage_p net_mid2_p net_loadout2 vdd! vdd! pmos
+mn1_second_stage_p net_mid2_p net_bias5 gnd! gnd! nmos
+mn1_third_stage_p third_stage_p_nmir net_mid2_p gnd! gnd! nmos
+mp2_third_stage_p net_ampout_p third_stage_p_nmir vdd! vdd! pmos
+mp1_third_stage_p third_stage_p_nmir third_stage_p_nmir vdd! vdd! pmos
+mn2_third_stage_p net_ampout_p net_bias6 gnd! gnd! nmos
+mn1_output_stage_p vdd! net_ampout_p outp gnd! nmos
+mn2_output_stage_p outp net_bias9 gnd! gnd! nmos
+c1_comp1_p net_loadout2 net_ampout_p 1p
+c1_comp2_p net_loadout2 net_mid2_p 1p
+mp1_second_stage_n net_mid2_n net_loadout1 vdd! vdd! pmos
+mn1_second_stage_n net_mid2_n net_bias5 gnd! gnd! nmos
+mn1_third_stage_n third_stage_n_nmir net_mid2_n gnd! gnd! nmos
+mp2_third_stage_n net_ampout_n third_stage_n_nmir vdd! vdd! pmos
+mp1_third_stage_n third_stage_n_nmir third_stage_n_nmir vdd! vdd! pmos
+mn2_third_stage_n net_ampout_n net_bias6 gnd! gnd! nmos
+mn1_output_stage_n vdd! net_ampout_n outn gnd! nmos
+mn2_output_stage_n outn net_bias9 gnd! gnd! nmos
+c1_comp1_n net_loadout1 net_ampout_n 1p
+c1_comp2_n net_loadout1 comp2_n_ind 1p
+r1_comp2_n comp2_n_ind net_mid2_n 1k
+.ends
+"""
+_FD_4620_SIZES = {  # ref: (W µm, L µm, fingers)
+    "m1_input_pair": (0.860, 0.56, 1),
+    "m2_input_pair": (0.860, 0.56, 1),
+    "m1_load": (8.880, 0.56, 1),
+    "m2_load": (8.880, 0.56, 1),
+    "mn1_tail_current": (9.760, 1.12, 1),
+    "mn2_tail_current": (9.760, 1.12, 1),
+    "mn3_tail_current": (9.760, 1.12, 1),
+    "mp1_second_stage_p": (100.000, 0.56, 1),
+    "mn1_second_stage_p": (19.520, 1.12, 1),
+    "mp1_second_stage_n": (100.000, 0.56, 1),
+    "mn1_second_stage_n": (19.520, 1.12, 1),
+    "mn1_third_stage_p": (8.580, 0.56, 1),
+    "mp1_third_stage_p": (30.710, 0.56, 1),
+    "mp2_third_stage_p": (30.710, 0.56, 1),
+    "mn2_third_stage_p": (48.800, 1.12, 1),
+    "mn1_third_stage_n": (8.580, 0.56, 1),
+    "mp1_third_stage_n": (30.710, 0.56, 1),
+    "mp2_third_stage_n": (30.710, 0.56, 1),
+    "mn2_third_stage_n": (48.800, 1.12, 1),
+    "mn1_output_stage_p": (9.630, 0.28, 1),
+    "mn2_output_stage_p": (9.760, 1.12, 1),
+    "mn1_output_stage_n": (9.630, 0.28, 1),
+    "mn2_output_stage_n": (9.760, 1.12, 1),
+    "mnref_bias_gen": (9.760, 1.12, 1),
+    "mnfeed_bias_gen": (9.760, 1.12, 1),
+    "mpfeed_bias_gen": (42.085, 1.12, 1),
+    "mnpref_bias_gen": (9.760, 1.12, 1),
+    "mncasc_bias_gen": (100.000, 1.12, 1),
+    "mppref_bias_gen": (42.085, 1.12, 1),
+    "mpcasc_bias_gen": (42.085, 1.12, 1),
+    "mncdio_bias_gen": (3.255, 1.12, 1),
+    "mp4_bias_gen": (42.085, 1.12, 1),
+    "mn4_bias_gen": (9.760, 1.12, 1),
+    "mp5_bias_gen": (42.085, 1.12, 1),
+    "mn5_bias_gen": (9.760, 1.12, 1),
+    "mp6_bias_gen": (42.085, 1.12, 1),
+    "mn6_bias_gen": (9.760, 1.12, 1),
+    "mp7_bias_gen": (42.085, 1.12, 1),
+    "mp8_bias_gen": (42.085, 1.12, 1),
+    "mn8_bias_gen": (9.760, 1.12, 1),
+    "mp9_bias_gen": (42.085, 1.12, 1),
+    "mn9_bias_gen": (9.760, 1.12, 1),
+    "m1_cmfb": (2.495, 0.56, 1),
+    "m2_cmfb": (2.495, 0.56, 1),
+    "m3_cmfb": (8.880, 0.56, 1),
+    "m4_cmfb": (8.880, 0.56, 1),
+    "m5_cmfb": (9.760, 1.12, 1),
+}
+_FD_4620_R = {
+    "r8_bias_gen": 13528.9,
+    "r1_cmfb": 1000000.0,
+    "r2_cmfb": 1000000.0,
+    "r1_comp2_n": 1677.0,
+}
+_FD_4620_C = {
+    "c1_comp1_p": 1.25e-12,
+    "c1_comp2_p": 1.25e-12,
+    "c1_comp1_n": 1.25e-12,
+    "c1_comp2_n": 1.25e-12,
+}
+_FD_4620_GBW_HZ = 7650295
+
+
+@ngspice
+def test_fd_settling_gate_resolves_a_fast_local_oscillation():
+    """Issue #266: the settling transient's time step must resolve a ~120 MHz
+    local-loop oscillation.  At ngspice's default step (t_end / 4000,
+    ~1.3 ns here) the integrator's own error damps #4620's weakly unstable
+    pair and the outputs read settled; at any step <= 1.2 ns they ring at
+    140-180 mV differential, far above the 33 mV limit."""
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12)
+    result = SizingResult(
+        transistors={ref: TransistorSizing(ref, w, l, 0.0, 0.0, 0.0, fingers=f)
+                     for ref, (w, l, f) in _FD_4620_SIZES.items()},
+        resistors=_FD_4620_R, capacitors=_FD_4620_C,
+        metrics={"gbw_hz": _FD_4620_GBW_HZ}, margins={}, solver_status="GMID")
+    from circuitgenome.sizer.verify import op
+    if op._fd_ringing(_FD_4620_NETLIST, result, tech, spec) is None:
+        pytest.skip("settling transient hit the ngspice CPU limit")
+    ok, reason = check_bias_soundness(_FD_4620_NETLIST, result, tech, spec)
+    assert not ok and "differential output oscillates" in reason, reason
+
+
+# A GMID-sized gf180 RNMC single-ended op-amp from #269's sample (design #418:
+# a nulling resistor in Cc1 sized against CL, ~8.3 kOhm), frozen with its sizes
+# so the test pins the AC bench, not the sizer.  Its open-loop gain dips under
+# 0 dB at 10 MHz, comes back up and crosses again at 27 MHz with ~5 deg left:
+# in unity feedback a small step rings at 28 MHz.
+_RNMC_SE_418_NETLIST = """\
+.subckt dut ibias in1 in2 out vdd! gnd!
+m1_input_pair net_diff1 in1 net_tail net_tail nmos
+m2_input_pair net_fold2 in2 net_tail net_tail nmos
+mp1_load net_diff1 net_bias1 vdd! vdd! pmos
+mp2_load net_fold2 net_bias1 vdd! vdd! pmos
+mp3_load load_internal_0 net_bias2 net_diff1 vdd! pmos
+mp4_load net_mid1 net_bias2 net_fold2 vdd! pmos
+mn1_load load_internal_0 load_internal_0 load_internal_1 gnd! nmos
+mn2_load net_mid1 load_internal_0 load_internal_2 gnd! nmos
+mn3_load load_internal_1 load_internal_1 gnd! gnd! nmos
+mn4_load load_internal_2 load_internal_1 gnd! gnd! nmos
+r1_tail_current net_tail gnd! 1k
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mn1_bias_gen net_bias1 ibias gnd! gnd! nmos
+mp1_bias_gen net_bias1 net_bias1 vdd! vdd! pmos
+mn2_bias_gen net_bias2 ibias gnd! gnd! nmos
+mp2_bias_gen net_bias2 net_bias2 bias_gen_mid2 vdd! pmos
+r2_bias_gen bias_gen_mid2 vdd! 1k
+mp5_bias_gen net_bias5 bias_gen_pref vdd! vdd! pmos
+mn5_bias_gen net_bias5 net_bias5 gnd! gnd! nmos
+mp6_bias_gen net_bias6 bias_gen_pref vdd! vdd! pmos
+mn6_bias_gen net_bias6 net_bias6 gnd! gnd! nmos
+mp1_second_stage net_mid2 net_mid1 vdd! vdd! pmos
+mn1_second_stage net_mid2 net_bias5 gnd! gnd! nmos
+mn1_third_stage third_stage_nmir net_mid2 gnd! gnd! nmos
+mp2_third_stage out third_stage_nmir vdd! vdd! pmos
+mp1_third_stage third_stage_nmir third_stage_nmir vdd! vdd! pmos
+mn2_third_stage out net_bias6 gnd! gnd! nmos
+r1_comp1 net_mid1 comp1_cn 1k
+c1_comp1 comp1_cn out 1p
+c1_comp2 net_mid1 net_mid2 1p
+.ends
+"""
+_RNMC_SE_418_SIZES = {  # ref: (W um, L um)
+    "m1_input_pair": (0.860, 0.56),
+    "m2_input_pair": (0.860, 0.56),
+    "mp1_load": (42.085, 1.12),
+    "mp2_load": (42.085, 1.12),
+    "mp3_load": (21.040, 1.12),
+    "mp4_load": (21.040, 1.12),
+    "mn1_load": (2.495, 0.56),
+    "mn2_load": (2.495, 0.56),
+    "mn3_load": (2.495, 0.56),
+    "mn4_load": (2.495, 0.56),
+    "mp1_second_stage": (100.000, 0.56),
+    "mn1_second_stage": (19.520, 1.12),
+    "mn1_third_stage": (8.580, 0.56),
+    "mp1_third_stage": (30.710, 0.56),
+    "mp2_third_stage": (30.710, 0.56),
+    "mn2_third_stage": (48.800, 1.12),
+    "mnref_bias_gen": (9.760, 1.12),
+    "mnfeed_bias_gen": (9.760, 1.12),
+    "mpfeed_bias_gen": (42.085, 1.12),
+    "mnpref_bias_gen": (9.760, 1.12),
+    "mncasc_bias_gen": (100.000, 1.12),
+    "mppref_bias_gen": (42.085, 1.12),
+    "mn1_bias_gen": (9.760, 1.12),
+    "mp1_bias_gen": (42.085, 1.12),
+    "mn2_bias_gen": (9.760, 1.12),
+    "mp2_bias_gen": (42.085, 1.12),
+    "mpcasc_bias_gen": (42.085, 1.12),
+    "mncdio_bias_gen": (3.255, 1.12),
+    "mp5_bias_gen": (42.085, 1.12),
+    "mn5_bias_gen": (9.760, 1.12),
+    "mp6_bias_gen": (42.085, 1.12),
+    "mn6_bias_gen": (9.760, 1.12),
+}
+_RNMC_SE_418_R = {
+    "r1_tail_current": 33602.7,
+    "r2_bias_gen": 12721.7,
+    "r1_comp1": 8333.1,
+}
+_RNMC_SE_418_C = {
+    "c1_comp1": 1.25e-12,
+    "c1_comp2": 4.6875e-13,
+}
+
+
+@ngspice
+def test_ac_bench_reports_the_worst_zero_db_crossing():
+    """Issue #269: an open loop that crosses 0 dB more than once is judged
+    by its worst crossing.  #418's gain dips below 0 dB at 10 MHz (PM ~104 deg
+    there), comes back above it and crosses again at 27 MHz with ~5 deg left;
+    the bench used to report only the first crossing."""
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12)
+    result = SizingResult(
+        transistors={ref: TransistorSizing(ref, w, l, 0.0, 0.0, 0.0)
+                     for ref, (w, l) in _RNMC_SE_418_SIZES.items()},
+        resistors=_RNMC_SE_418_R, capacitors=_RNMC_SE_418_C,
+        metrics={}, margins={}, solver_status="GMID")
+    sim = simulate_metrics(_RNMC_SE_418_NETLIST, result, tech, spec)
+    gbw, pm = sim["gbw_hz"], sim["phase_margin_deg"]
+    assert gbw is not None and 5e6 < gbw < 15e6   # the first crossing is the GBW
+    assert pm is not None and pm < 30, pm
 
 
 @ngspice
@@ -655,16 +922,12 @@ def test_fd_three_stage_ac_metrics_are_real():
 
 
 @ngspice
-def test_fd_cmrr_psrr_measured():
-    """#184 acceptance: an FD topology with a clean differential AC gain reports
-    SPICE CMRR and PSRR (not n/a).  The FD rejection benches (measure._measure_
-    cmrr/_measure_psrr, FD branch) gate on the same ``ac_clean`` flag as the AC
-    bench, so once the #165/#167 CMFB output-sense rewire made the open-loop FD
-    gain clean, rejection flows through automatically.  Both are ratios against
-    the differential gain, so each must land above the gain floor (a matched FD
-    deck converts common-mode/supply to a near-zero differential output --
-    numerically small but real, not the garbage-against-garbage the SE guard in
-    test_cmrr_psrr_none_without_clean_gain rejects)."""
+def test_fd_cmrr_psrr_none_without_mismatch_model():
+    """A perfectly matched FD circuit turns neither common mode nor supply into
+    a differential output, so a matched deck measures only ngspice's rounding
+    floor (169.6/207.2 dB here, reported as CMRR/PSRR before).  ptm45 has no
+    mismatch model to break the symmetry, so FD rejection stays None, with a
+    note saying why -- even with a clean differential gain."""
     parsed = parse(_FD_THREE_STAGE_NETLIST)
     topo = next(t for t in load_topologies()
                 if t.name == "three_stage_opamp_rnmc_fully_differential")
@@ -679,12 +942,180 @@ def test_fd_cmrr_psrr_measured():
     assert result.solver_status == "GMID"
     sim = simulate_metrics(_FD_THREE_STAGE_NETLIST, result, tech, spec)
 
-    gain = sim["gain_db"]
-    assert gain is not None and gain > 0
-    # Rejection = Adm - A(cm|supply); each is a positive dB margin above the
-    # differential gain.  Loose upper bound catches a pure-noise-floor infinity.
-    assert sim["cmrr_db"] is not None and gain < sim["cmrr_db"] < 400.0
-    assert sim["psrr_db"] is not None and gain < sim["psrr_db"] < 400.0
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    assert sim["cmrr_db"] is None and sim["psrr_db"] is None
+    assert any("no device mismatch model" in n for n in sim.get("notes", []))
+
+
+# A gf180 RNMC buffered FD op-amp from #266's sample (design #7210: PMOS
+# second stage, noninverting_stage_nmos third stage, bare Miller caps on both
+# halves), frozen because enumerating this topology live takes minutes.
+# Behind the source follower its third-stage output carries only its drains,
+# so with gm3 >= gm2 the inner pair sits in the right half plane and rings at
+# ~120 MHz.  Two things damp it: a gm2 well above gm3 (the second stage's
+# signal PMOS must then be wider than one 100 um gf180 device), or a resistor
+# in series with Cc2, which cancels the right-half-plane zero a bare Cc2 feeds
+# forward.
+_FD_RNMC_BUFFERED_NETLIST = """\
+.subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
+m1_input_pair net_diff1 in1 net_tail net_tail nmos
+m2_input_pair net_diff2 in2 net_tail net_tail nmos
+mp1_load net_diff1 net_bias1 vdd! vdd! pmos
+mp2_load net_diff2 net_bias1 vdd! vdd! pmos
+mp3_load net_loadout1 net_bias2 net_diff1 vdd! pmos
+mp4_load net_loadout2 net_bias2 net_diff2 vdd! pmos
+mn1_load net_loadout1 net_bias3 load_internal_0 gnd! nmos
+mn2_load net_loadout2 net_bias3 load_internal_1 gnd! nmos
+mn3_load load_internal_0 net_cmfb_out gnd! gnd! nmos
+mn4_load load_internal_1 net_cmfb_out gnd! gnd! nmos
+r1_tail_current net_tail gnd! 1k
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mn1_bias_gen net_bias1 ibias gnd! gnd! nmos
+mp1_bias_gen net_bias1 net_bias1 vdd! vdd! pmos
+mn2_bias_gen net_bias2 ibias gnd! gnd! nmos
+mp2_bias_gen net_bias2 net_bias2 bias_gen_mid2 vdd! pmos
+r2_bias_gen bias_gen_mid2 vdd! 1k
+mp3_bias_gen net_bias3 bias_gen_pref vdd! vdd! pmos
+mn3_bias_gen net_bias3 net_bias3 bias_gen_mid3 gnd! nmos
+r3_bias_gen bias_gen_mid3 gnd! 1k
+mp4_bias_gen net_bias4 bias_gen_pref vdd! vdd! pmos
+mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+mp5_bias_gen net_bias5 bias_gen_pref vdd! vdd! pmos
+mn5_bias_gen net_bias5 net_bias5 gnd! gnd! nmos
+mp6_bias_gen net_bias6 bias_gen_pref vdd! vdd! pmos
+mn6_bias_gen net_bias6 net_bias6 gnd! gnd! nmos
+mp9_bias_gen net_bias9 bias_gen_pref vdd! vdd! pmos
+mn9_bias_gen net_bias9 net_bias9 gnd! gnd! nmos
+r1_cmfb outp cmfb_sense 1k
+r2_cmfb outn cmfb_sense 1k
+m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
+m2_cmfb vdd! cmfb_sense cmfb_tail gnd! nmos
+m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
+m4_cmfb net_cmfb_out cmfb_d1 vdd! vdd! pmos
+m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
+m6_cmfb net_cmfb_out net_cmfb_out gnd! gnd! nmos
+mp1_second_stage_p net_mid2_p net_loadout2 vdd! vdd! pmos
+mn1_second_stage_p net_mid2_p net_bias5 gnd! gnd! nmos
+mn1_third_stage_p third_stage_p_nmir net_mid2_p gnd! gnd! nmos
+mp2_third_stage_p net_ampout_p third_stage_p_nmir vdd! vdd! pmos
+mp1_third_stage_p third_stage_p_nmir third_stage_p_nmir vdd! vdd! pmos
+mn2_third_stage_p net_ampout_p net_bias6 gnd! gnd! nmos
+mn1_output_stage_p vdd! net_ampout_p outp gnd! nmos
+mn2_output_stage_p outp net_bias9 gnd! gnd! nmos
+c1_comp1_p net_loadout2 net_ampout_p 1p
+c1_comp2_p net_loadout2 net_mid2_p 1p
+mp1_second_stage_n net_mid2_n net_loadout1 vdd! vdd! pmos
+mn1_second_stage_n net_mid2_n net_bias5 gnd! gnd! nmos
+mn1_third_stage_n third_stage_n_nmir net_mid2_n gnd! gnd! nmos
+mp2_third_stage_n net_ampout_n third_stage_n_nmir vdd! vdd! pmos
+mp1_third_stage_n third_stage_n_nmir third_stage_n_nmir vdd! vdd! pmos
+mn2_third_stage_n net_ampout_n net_bias6 gnd! gnd! nmos
+mn1_output_stage_n vdd! net_ampout_n outn gnd! nmos
+mn2_output_stage_n outn net_bias9 gnd! gnd! nmos
+c1_comp1_n net_loadout1 net_ampout_n 1p
+c1_comp2_n net_loadout1 net_mid2_n 1p
+.ends
+"""
+
+
+@ngspice
+@pytest.mark.parametrize("cc2_resistor", [False, True])
+def test_buffered_rnmc_fd_is_sized_to_settle(cc2_resistor):
+    """Issue #266: a buffered gf180 RNMC FD design that rang in SPICE now
+    settles, and the sizer predicts a real phase margin for it.
+
+    Bare (as synthesized), the sizer used to ask for a gm2 one 100 um PMOS
+    cannot deliver, size against it anyway, and leave gm3 >= gm2: the outputs
+    rang at ~120 MHz.  Now the raised gm2 is built from parallel devices.
+    With a nulling resistor in both Cc2 branches the loop was always damped,
+    but the model ignored compensation resistors and predicted PM 0."""
+    import re
+    text = _FD_RNMC_BUFFERED_NETLIST
+    if cc2_resistor:   # miller_cap -> miller_cap_with_nulling_resistor wiring
+        text = re.sub(r"^c1_comp2_(\w) (\S+) (\S+) (\S+)$",
+                      r"r1_comp2_\1 \2 comp2_\1_cn 1k\nc1_comp2_\1 comp2_\1_cn \3 \4",
+                      text, flags=re.M)
+        assert text.count("r1_comp2_") == 2
+    parsed = parse(text)
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_buffered_fully_differential")
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=50,
+                      gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5, power_max_w=2.5e-3,
+                      output_swing_max_v=2.0, output_swing_min_v=1.1)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID" and result.bias_feasible
+    if cc2_resistor:   # recognised as a nulling resistor and sized as one
+        assert {"r1_comp2_p", "r1_comp2_n"} <= set(result.resistors)
+    else:              # gm2 delivered by a second stage wider than one device
+        assert result.transistors["mp1_second_stage_p"].fingers > 1
+    assert result.metrics["phase_margin_deg"] > 45
+    ok, reason = check_bias_soundness(text, result, tech, spec)
+    assert ok, reason
+
+
+@ngspice
+@pytest.mark.parametrize("tech_name, spec", [
+    ("gf180mcu", SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                            second_stage_current_ratio=2.5, gain_min_db=60,
+                            gbw_min_hz=2e6, phase_margin_min_deg=60)),
+    pytest.param("sky130", SizingSpec(vdd=1.8, vss=0.0, ibias=20e-6, cl=2e-12,
+                                      second_stage_current_ratio=2.5,
+                                      gain_min_db=50, gbw_min_hz=2e6,
+                                      phase_margin_min_deg=60),
+                 marks=pytest.mark.slow),
+])
+def test_fd_cmrr_psrr_from_mismatch_draws(tech_name, spec):
+    """On a PDK with mismatch models, FD CMRR/PSRR come from seeded mismatch
+    draws (worst case): finite, far below the matched deck's 260-315 dB
+    rounding floor, and identical run to run."""
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos",
+        "load": "current_source_load_nmos",
+        "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting"})
+    tech = load_tech(tech_name)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gain_db"] is not None and sim["gain_db"] > 0
+    for key in ("cmrr_db", "psrr_db"):
+        assert sim[key] is not None and 10.0 < sim[key] < 150.0, (key, sim)
+    again = simulate_metrics(text, result, tech, spec)
+    assert (again["cmrr_db"], again["psrr_db"]) == (sim["cmrr_db"],
+                                                    sim["psrr_db"])
+
+
+def test_fd_servo_fb_clamps_its_correction():
+    """The offset servo's correction is limited per input, so it cannot push
+    the inputs out of range into a latched operating point."""
+    fb = measure._fd_servo_fb(1.65, -1)
+    lim = measure._SERVO_CLAMP_V
+    assert f"max(min(-1*v(lp)/2,{lim}),-{lim})" in fb
+    assert "Vdi di 0 dc 0 ac 1" in fb and "Vci ci 0 dc 0\n" in fb
+
+
+def test_fd_draw_settled_needs_a_live_output_common_mode():
+    """A draw counts only when the servo nulled the difference *and* the
+    outputs sit mid-supply.  Both outputs collapsed to ground (the all-off
+    state some sky130 mismatch draws settle in, with ~1e-4 of the healthy
+    gain) also null the difference, and must not count."""
+    vdd = 1.8
+    healthy = {"vchk": -6e-3, "vocm": 0.87}
+    railed = {"vchk": 1.58, "vocm": 0.79}
+    all_off = {"vchk": 1e-5, "vocm": 6e-4}
+    assert measure._draw_settled(healthy, vdd)
+    assert not measure._draw_settled(railed, vdd)
+    assert not measure._draw_settled(all_off, vdd)
+    assert not measure._draw_settled(None, vdd)
 
 
 # --- phase-margin plausibility guard ----------------------------------------
@@ -1172,3 +1603,34 @@ def test_se_slew_is_not_limited_by_the_input_common_mode():
     result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
     measured = simulate_metrics(text, result, tech, spec)["slew_rate_vps"]
     assert measured == pytest.approx(result.metrics["slew_rate_vps"], rel=0.15)
+
+
+@pytest.mark.spice
+@pytest.mark.skipif(not ngspice_available(), reason="ngspice not on PATH")
+def test_wide_current_source_carries_its_planned_current_in_spice():
+    """A third-stage current source sized past one GF180 device (100 µm) runs
+    as parallel fingers and carries the planned current: clamped to a single
+    100 µm device it ran at half (~50 of 100 µA)."""
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+            "tail_current": "current_mirror_tail_pmos",
+            "second_stage": "noninverting_stage_nmos",
+            "third_stage": "common_source_nmos",
+            "comp1": "miller_cap", "comp2": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+    wide = {ref: s for ref, s in result.transistors.items() if s.fingers > 1}
+    assert wide, "fixture no longer needs a device wider than one PDK device"
+    op = read_op_operating_point(text, result, tech, spec)
+    for ref, s in wide.items():
+        assert abs(op[ref]["id"]) == pytest.approx(s.ids_a, rel=0.1)

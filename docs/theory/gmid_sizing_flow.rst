@@ -344,9 +344,17 @@ Phase 4a — Size: assign geometry (LUT → W/L, symmetry, mirror ratios)
 forward pass, driven by each device's ``TransistorIntent``: (a) the LUT gives
 per-device (W, L) from ``Id`` + the block's gm/Id region and L (signal devices
 solve gm/Id from ``gm_req``); (b) snap W to grid via
-:meth:`~circuitgenome.sizer.models.GridSpec.snap`; (c) *symmetry* — matched pairs
+:meth:`~circuitgenome.sizer.models.GridSpec.snap`, capped at the widest single
+PDK device — except the plan's ``wide_refs``, second-stage signal devices of a
+buffered RNMC amplifier whose gm the refinement raised past what one capped
+device delivers (issue #266), which keep their full width as parallel fingers;
+(c) *symmetry* — matched pairs
 share the anchor's geometry; (d) *mirror ratios* — each output W = exact current
-ratio × the diode reference's W.  Returns
+ratio × the diode reference's W, *not* capped
+(:meth:`~circuitgenome.sizer.models.GridSpec.snap_total`): a mirror output's
+current is its width ratio, so one wider than a single PDK device is built from
+parallel fingers (``TransistorSizing.fingers``) rather than clamped to carry
+less than planned.  Returns
 :class:`~circuitgenome.sizer.models.TransistorSizing` (W, L, Vgs, Vdsat).
 
 .. code-block:: python
@@ -377,7 +385,9 @@ Phase 4b — Size: DC bias feasibility (headroom + cascode budget)
 a **headroom repair** checks the tail's saturation headroom and, when short,
 re-sizes the tail mirror group to a higher gm/Id (lower ``Vdsat``) — keeping
 mirror ratios consistent; then a **cascode-aware budget** sums a stacked tail's
-series ``Vdsat`` and flags infeasibility a single-device check would miss.  It
+series ``Vdsat`` (walking down from the tail node, which a source-degenerated
+pair puts one resistor beyond its devices' sources) and flags infeasibility a
+single-device check would miss.  It
 returns the (possibly repaired) sizing, the warnings, and a ``bias_feasible``
 verdict — the input sizing is never mutated.
 

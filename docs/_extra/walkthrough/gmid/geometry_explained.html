@@ -260,6 +260,8 @@ LUT says  Id/W = 5 µA/µm  <span class="tok-com"># density at (gm/Id=15, L)</sp
 
 W = Id / (Id/W) = 20 / 5 = 4.0 µm      <span class="tok-com"># forced — no choice</span></code></pre>
   <p>Four microns. Not "somewhere between 3 and 5, let the solver decide" — <em>exactly</em> four, then snapped to the manufacturing grid.</p>
+  <p>The same division can ask for more than the PDK's widest single device (100&nbsp;µm on GF180), and here it is capped: most devices carry whatever current their series device forces, so the cap only shifts their V<sub>GS</sub>. The exception is a <strong>mirror output</strong>, whose current <em>is</em> its width ratio to the reference &mdash; a 100&nbsp;µA source mirrored from a 20&nbsp;µA reference at a long L needs ~210&nbsp;µm, and capped at 100&nbsp;µm it carried about half its planned current. So the mirror-ratio pass keeps the full <em>total</em> width, which the netlist builds from parallel fingers.</p>
+  <p>One signal device is exempt too. When the reversed-nested-Miller refinement raises the second stage's gm to damp its inner pole pair, a capped device would simply not deliver it: on GF180 a 40&nbsp;µA PMOS second stage tops out near 0.58&nbsp;mS at 100&nbsp;µm, while the loop needed more than its third stage's 0.60&nbsp;mS, and those designs oscillated (issue #266). The refinement lists such devices in <code>plan.wide_refs</code>, and they keep their full width (here up to ~920&nbsp;µm, ten fingers). It does so only behind an output buffer: without one the third stage drives the load itself, which leaves the inner pole pair about five times as much room in gm3/gm2, so the second stage never needs widening.</p>
 
   <h3>But three things still need patching</h3>
   <p>If every device stood alone, we'd be done after that division. Real circuits add three coupling rules the raw per-device pass ignores — and the last four helpers exist precisely to patch them, in order:</p>
@@ -633,7 +635,8 @@ cascode_load = <span class="tok-fn">any</span>(intents[d.ref].role == CASCODE <s
             feasible = <span class="tok-kw">False</span>; warnings.<span class="tok-fn">append</span>(...)
     geo = model.<span class="tok-fn">geometry_for</span>(device.type, ids_map[ref], ti.role, ...,
                              gm_id_min=gm_id_min)               <span class="tok-com"># W = Id / (Id/W)</span>
-    W[ref] = tech.width.<span class="tok-fn">snap</span>(geo.w_um)
+    W[ref] = (tech.width.snap_total <span class="tok-kw">if</span> ref <span class="tok-kw">in</span> wide_refs
+              <span class="tok-kw">else</span> tech.width.snap)(geo.w_um)        <span class="tok-com"># wide_refs: uncapped (fingers)</span>
     L[ref] = geo.l_um</code></pre>
 
   <p>The long <code>if</code> is the swing-floor gate we built the bookkeepers for: apply a floor only to a device that (a) has a swing budget, (b) truly sits on the output, (c) is <em>not</em> a mirror output, and (d) is not a signal device under a cascode load (whose Vgs is a delicate stage-interface pin that must not move). Every excluded device is still checked later against the raw budget — nothing is silently skipped.</p>

@@ -87,6 +87,7 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             gamma=float(d.get("gamma", 0.0)),
             phi=float(d.get("phi", 0.7)),
             cox=float(d["cox"]) if "cox" in d else None,
+            cdb=float(d["cdb"]) if "cdb" in d else None,
         )
 
     def _grid(d: dict, min_key: str = "min", max_key: str = "max") -> GridSpec:
@@ -119,6 +120,7 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             corner=str(lib_d.get("corner", "typical")),
             design=_resolve(lib_d.get("design")),
             corners=[str(c) for c in lib_d.get("corners", [])],
+            mismatch_switch=lib_d.get("mismatch_switch"),
         )
     device_map = data.get("device_map")
     if device_map is not None:

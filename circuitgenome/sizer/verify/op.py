@@ -31,10 +31,16 @@ def read_op_operating_point(
     (issue #162): both inputs and ``vcm_ref`` sit at Vcm with no feedback loop
     — the CMFB / loads own the output CM, which is exactly the DC state the
     metric benches run at.  Either way each MOSFET's actual operating point is
-    read through ``@m.xdut.<ref>[...]``; returns ``None`` when ngspice is
+    read through ``@m.xdut.<ref>[...]`` (``id`` is the whole device's current,
+    every parallel finger included); returns ``None`` when ngspice is
     unavailable or the bias doesn't settle.
     """
     op, _fail = _read_op(netlist_text, result, tech, spec)
+    # The probe reads the first finger of a multi-finger device: report the
+    # whole device's current.
+    for ref, s in result.transistors.items():
+        if op and s.fingers > 1 and "id" in op.get(ref, {}):
+            op[ref]["id"] *= s.fingers
     return op
 
 
@@ -176,6 +182,14 @@ _KICK_FRAC = 0.05
 #: still show over the last quarter of the window: a settled amplifier is
 #: flat there, an unstable one keeps ringing.
 _SETTLED_FRAC = 0.01
+#: Largest transient time step (s) of the settling check.  A local loop rings
+#: at a frequency its device parasitics set, not the GBW: #266's RNMC inner
+#: loops oscillate at 100-125 MHz.  ngspice's default step (the print step,
+#: ``t_end / 4000``, ~1.3 ns at a 7.7 MHz GBW) damps such a weakly unstable
+#: pair numerically, so the outputs read settled (one design rings at
+#: 150 mV with any step <= 1.2 ns).  0.5 ns keeps 16 points per period up to
+#: 125 MHz, for ~2.3x the CPU time of the default step.
+_SETTLE_MAX_STEP_S = 0.5e-9
 
 
 def _fd_ringing(netlist_text: str, result: SizingResult, tech: TechParams,
@@ -191,10 +205,12 @@ def _fd_ringing(netlist_text: str, result: SizingResult, tech: TechParams,
     DC state (inputs and ``vcm_ref`` at Vcm) a current pulse into ``outp``
     alone moves it by ``_KICK_FRAC``·Vdd, exciting both modes; the residual
     is read over the last quarter of a window of ~40 GBW periods (the CM loop
-    crosses near GBW).  ``None`` when the transient cannot run — including
-    the CPU limit (:data:`~.deck._CPU_LIMIT_S`), which a rail-to-rail
-    oscillator can hit by stalling ngspice; ``None`` is no evidence, so such
-    a circuit passes here and is caught by the AC bench's RHP check instead.
+    crosses near GBW), at a step of at most :data:`_SETTLE_MAX_STEP_S` so a
+    fast local oscillation is not damped away numerically.  ``None`` when the
+    transient cannot run — including the CPU limit
+    (:data:`~.deck._CPU_LIMIT_S`), which a rail-to-rail oscillator can hit by
+    stalling ngspice; ``None`` is no evidence, so such a circuit passes here
+    and is caught by the AC bench's RHP check instead.
     The limit is on CPU, not wall-clock, time, so machine load alone cannot
     turn a healthy design's transient into ``None``.
     """
@@ -217,7 +233,8 @@ def _fd_ringing(netlist_text: str, result: SizingResult, tech: TechParams,
             + _rig(vdd, ibias, sink=_iref_sink(body))
             + f"Cl1 outp 0 {spec.cl}\nCl2 outn 0 {spec.cl}\n"
             + fb + _xline(name, ports, netmap) + "\n"
-            + f".control\ntran {t_end / 4000} {t_end}\n"
+            + f".control\ntran {t_end / 4000} {t_end} 0 "
+            + f"{min(t_end / 4000, _SETTLE_MAX_STEP_S)}\n"
             + "wrdata __OUT__ v(outp) v(outn)\n.endc\n.end\n")
     a = _run(deck, ["v(outp)", "v(outn)"])
     if a is None or a.shape[0] < 20 or a.shape[1] < 4:

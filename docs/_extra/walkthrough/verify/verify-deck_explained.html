@@ -153,6 +153,8 @@
 
   <p>The <code>corner</code> argument only bites on the PDK branch: it overrides the tech's nominal corner so a caller can re-measure the same sized design at <code>ss</code>, <code>ff</code>, <code>sf</code> and <code>fs</code> without re-sizing it.</p>
 
+  <p>So does <code>mismatch_seed</code>: after the <code>.lib</code> line it appends <code>.param &lt;mismatch_switch&gt;=1</code> (GF180 <code>sw_stat_mismatch</code>, sky130 <code>mc_mm_switch</code>) and <code>.option seed=&lt;seed&gt;</code>. Every device then gets its own random, repeatable mismatch draw, which the fully-differential CMRR/PSRR benches need. A tech without a <code>mismatch_switch</code> raises <code>ValueError</code>, because it has no mismatch model to turn on.</p>
+
 </section>
 
 <section class="part" id="part-3">
@@ -162,6 +164,8 @@
   <blockquote><p><strong>The one job:</strong> write each device's chosen W/L (and each capacitor's chosen value) into the netlist lines &mdash; and notice loudly if some device has no chosen value at all.</p></blockquote>
 
   <p><code>_inject_sizes()</code> walks the subcircuit body and rewrites each device line from the <code>SizingResult</code>: MOSFETs get <code>W=</code>/<code>L=</code>, compensation capacitors get their <code>capacitors[ref]</code> value, sized load resistors get their resistance — each a plain lookup by device ref.</p>
+
+  <p>A MOSFET whose total width is wider than one PDK device has <code>fingers &gt; 1</code> and becomes that many identical lines in parallel &mdash; <code>&lt;ref&gt;</code>, then <code>&lt;ref&gt;__f2</code>, &hellip; &mdash; each <code>w_um / fingers</code> wide. (The GF180 device subcircuit ignores an <code>m=</code> multiplier, so the copies are written out.) The first copy keeps the original name, so operating-point probes still find it; <code>read_op_operating_point</code> multiplies its current back up to the whole device's.</p>
 
   <p>The neighbouring function is the one worth knowing about:</p>
 

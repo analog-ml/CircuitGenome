@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FD CMRR/PSRR &mdash; explained</title>
+<style>
+  :root {
+    --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
+    --accent:#b4531f; --accent-sf:#fbeee4; --link:#9a4419;
+    --fig-bg:#ffffff; --fig-stroke:#3a3833; --fig-muted:#b9b4a8; --fig-accent:#b4531f;
+    --fig-accent2:#2f6f6a; --fig-fill:#fbeee4; --fig-fill2:#e6f0ef; --fig-text:#1c1b19;
+    --fig-bad:#c0392b; --fig-good:#2f7d4f; --fig-bad-fill:#fbe6e2; --fig-good-fill:#e4f2e8;
+    --code-bg:#f4f1ea;
+    --tok-kw:#a63a1c; --tok-str:#3f7d3a; --tok-num:#8a5a00; --tok-com:#9a968c; --tok-fn:#2f6f6a;
+  }
+  :root[data-theme="dark"] {
+    --bg:#171614; --surface:#201e1b; --text:#ece8e0; --muted:#a19c90; --border:#34312b;
+    --accent:#e08a4e; --accent-sf:#2a211a; --link:#f0a068;
+    --fig-bg:#201e1b; --fig-stroke:#d8d3c8; --fig-muted:#6a655b; --fig-accent:#e08a4e;
+    --fig-accent2:#5bb5ad; --fig-fill:#2a211a; --fig-fill2:#1c2726; --fig-text:#ece8e0;
+    --fig-bad:#e06b5c; --fig-good:#6cc48d; --fig-bad-fill:#2b1c1a; --fig-good-fill:#17251d;
+    --code-bg:#1a1815;
+    --tok-kw:#e08a4e; --tok-str:#8fca7f; --tok-num:#d6a55a; --tok-com:#6f6a60; --tok-fn:#5bb5ad;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns:240px minmax(0,760px); gap:48px;
+    max-width:1100px; margin:0 auto; padding:0 24px 120px; }
+  @media (max-width:860px){ .wrap{grid-template-columns:1fr;} #toc{position:static;max-height:none;} }
+  header { grid-column:1/-1; padding:44px 0 8px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 6px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--muted); font-size:1.05rem; }
+  h2 { font-size:1.5rem; margin:2.2em 0 0.5em; letter-spacing:-0.3px; padding-top:14px;
+    border-top:1px solid var(--border); }
+  h3 { font-size:1.15rem; margin:1.6em 0 0.4em; }
+  p,li { max-width:68ch; }
+  a { color:var(--link); }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  blockquote { margin:1.2em 0; padding:12px 18px; border-left:3px solid var(--accent);
+    background:var(--accent-sf); border-radius:0 8px 8px 0; }
+  blockquote p { margin:0; }
+  #toc { position:sticky; top:24px; align-self:start; font-size:0.92rem;
+    max-height:calc(100vh - 48px); overflow:auto; }
+  #toc .label { text-transform:uppercase; letter-spacing:1px; font-size:0.72rem;
+    color:var(--muted); margin-bottom:10px; }
+  #toc a { display:block; padding:4px 0 4px 12px; color:var(--muted); text-decoration:none;
+    border-left:2px solid transparent; }
+  #toc a:hover, #toc a.active { color:var(--accent); border-left-color:var(--accent); }
+  figure.fig { margin:1.6em 0; padding:20px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  figure.fig svg { display:block; max-width:100%; height:auto; margin:0 auto; }
+  figure.fig figcaption { margin-top:12px; text-align:center; color:var(--muted);
+    font-size:0.9rem; font-style:italic; }
+  figure.fig svg text { fill:var(--fig-text); font-family:inherit; }
+  pre.code { background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; overflow-x:auto; font-size:0.9rem; line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; background:var(--code-bg);
+    padding:1px 5px; border-radius:5px; font-size:0.9em; }
+  pre.code code { background:none; padding:0; }
+  .tok-kw{color:var(--tok-kw);font-weight:600;} .tok-str{color:var(--tok-str);}
+  .tok-num{color:var(--tok-num);} .tok-com{color:var(--tok-com);font-style:italic;}
+  .tok-fn{color:var(--tok-fn);}
+  table { border-collapse:collapse; margin:1.4em 0; width:100%; font-size:0.95rem; }
+  th,td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+  th { background:var(--accent-sf); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-center { text-align:center; margin:1.4em 0; }
+  .boxed-eq { display:inline-block; padding:12px 22px; border:2px solid var(--accent);
+    border-radius:10px; background:var(--surface); font-size:1.1rem; }
+  math { font-size:1.05em; }
+  .keyline { background:var(--accent-sf); border-left:3px solid var(--accent); padding:2px 8px;
+    border-radius:4px; }
+  #theme-toggle { position:fixed; top:16px; right:16px; z-index:10; background:var(--surface);
+    color:var(--text); border:1px solid var(--border); border-radius:999px; padding:7px 14px;
+    cursor:pointer; font-size:0.85rem; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  #theme-toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .fig.interactive .node { cursor:pointer; }
+  .fig.interactive.dim .node:not(.hl){ opacity:0.28; }
+  .fig.interactive.dim .edge:not(.hl){ opacity:0.15; }
+</style>
+</head>
+<body>
+<button id="theme-toggle" aria-label="Toggle light/dark theme">◐ Theme</button>
+<div class="wrap">
+<p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
+
+<header>
+  <h1>Fully-differential CMRR &amp; PSRR &mdash; explained</h1>
+  <div class="subtitle"><code>verify/measure.py</code> &middot; <code>verify/deck.py</code> &middot; <code>verify/simulate.py</code> &mdash; why a perfect simulation reports infinite rejection, and how PR #261 measures a real one from the PDK's own transistor mismatch.</div>
+</header>
+
+<nav id="toc">
+  <div class="label">Contents</div>
+  <a href="#part-1">1 &middot; Why this exists</a>
+  <a href="#part-2">2 &middot; Mismatch</a>
+  <a href="#part-3">3 &middot; Turning mismatch on</a>
+  <a href="#part-4">4 &middot; Offset rails the output</a>
+  <a href="#part-5">5 &middot; The DC servo</a>
+  <a href="#part-6">6 &middot; One draw, one run</a>
+  <a href="#part-7">7 &middot; Putting it together</a>
+</nav>
+
+<main>
+
+<blockquote><p><strong>The one question:</strong> how do we measure how well a fully-differential op-amp ignores noise, when a perfect simulation says it ignores <em>all</em> of it?</p></blockquote>
+
+<p>The PR's pieces, as a call graph. Each box is one Part below; the analog background comes first, and the function that ties everything together comes last.</p>
+
+<figure class="fig interactive">
+  <svg viewBox="0 0 760 330" role="img" aria-label="Call graph of the fully-differential rejection bench">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <g class="node" data-group="sim">
+      <rect x="250" y="14" width="260" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+      <text x="380" y="34" text-anchor="middle" font-weight="600" font-size="13" fill="var(--fig-accent)">simulate_metrics()</text>
+      <text x="380" y="50" text-anchor="middle" font-size="10" fill="var(--fig-muted)">routing &middot; Part 7</text>
+    </g>
+    <path class="edge" data-group="sim" d="M330,60 L160,104" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <path class="edge" data-group="sim" d="M430,60 L560,104" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <g class="node" data-group="se">
+      <rect x="30" y="106" width="250" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+      <text x="155" y="126" text-anchor="middle" font-weight="600" font-size="12">_measure_cmrr / _measure_psrr</text>
+      <text x="155" y="142" text-anchor="middle" font-size="10" fill="var(--fig-muted)">single-ended &middot; unchanged</text>
+    </g>
+    <g class="node" data-group="dut">
+      <rect x="330" y="106" width="190" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="425" y="126" text-anchor="middle" font-weight="600" font-size="12">_dut(mismatch_seed=1..8)</text>
+      <text x="425" y="142" text-anchor="middle" font-size="10" fill="var(--fig-muted)">8 imperfect chips &middot; Part 3</text>
+    </g>
+    <g class="node" data-group="rej">
+      <rect x="545" y="106" width="195" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="642" y="126" text-anchor="middle" font-weight="600" font-size="12">_measure_fd_rejection()</text>
+      <text x="642" y="142" text-anchor="middle" font-size="10" fill="var(--fig-muted)">worst of 8 &middot; Part 7</text>
+    </g>
+    <path class="edge" data-group="dut" d="M425,152 L425,196" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <g class="node" data-group="dut">
+      <rect x="330" y="198" width="190" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/>
+      <text x="425" y="218" text-anchor="middle" font-weight="600" font-size="12">_emit_model()</text>
+      <text x="425" y="234" text-anchor="middle" font-size="10" fill="var(--fig-muted)">.param switch=1 &middot; .option seed</text>
+    </g>
+    <path class="edge" data-group="rej" d="M642,152 L642,196" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <g class="node" data-group="rej">
+      <rect x="545" y="198" width="195" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="642" y="218" text-anchor="middle" font-weight="600" font-size="12">_fd_draw()</text>
+      <text x="642" y="234" text-anchor="middle" font-size="10" fill="var(--fig-muted)">one ngspice run per chip &middot; Part 6</text>
+    </g>
+    <path class="edge" data-group="rej" d="M642,244 L642,272" fill="none" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <g class="node" data-group="rej">
+      <rect x="545" y="274" width="195" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="642" y="294" text-anchor="middle" font-weight="600" font-size="12">_fd_servo_fb()</text>
+      <text x="642" y="310" text-anchor="middle" font-size="10" fill="var(--fig-muted)">offset-cancelling rig &middot; Part 5</text>
+    </g>
+    <path class="edge" data-group="dut" d="M520,129 L543,129" fill="none" stroke="var(--fig-accent2)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <text x="155" y="196" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">background (no code):</text>
+    <text x="155" y="212" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Part 1 &middot; why matched FD cancels</text>
+    <text x="155" y="228" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Part 2 &middot; transistor mismatch</text>
+    <text x="155" y="244" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Part 4 &middot; offset rails the output</text>
+  </svg>
+  <figcaption>Hover a box to highlight its path. The dashed arrow is the hand-off: the 8 mismatched chip bodies are handed to the rejection bench.</figcaption>
+</figure>
+
+<!-- ============================================================ PART 1 -->
+<section class="part" id="part-1">
+<h2>Part 1 &middot; Why this exists</h2>
+
+<blockquote><p><strong>The one job:</strong> if someone wiggles the inputs together, or wiggles the power supply, how much of that wiggle leaks into the op-amp's output?</p></blockquote>
+
+<p>An op-amp is supposed to amplify only the <strong>difference</strong> between its two inputs. Any input signal splits into two parts:</p>
+<ul>
+  <li><strong>differential</strong>: <code>v<sub>dm</sub> = in+ &minus; in&minus;</code>, the signal we want;</li>
+  <li><strong>common mode</strong>: <code>v<sub>cm</sub> = (in+ + in&minus;)/2</code>, what both inputs share, usually noise or interference.</li>
+</ul>
+
+<p>Two scores say how well the amplifier ignores what it should ignore:</p>
+<div class="eq-center"><span class="boxed-eq">CMRR&nbsp;=&nbsp;A<sub>dm</sub>&nbsp;/&nbsp;A<sub>cm</sub> &nbsp;&nbsp;&nbsp;&nbsp; PSRR<sup>+</sup>&nbsp;=&nbsp;A<sub>dm</sub>&nbsp;/&nbsp;A<sub>vdd</sub></span></div>
+<p><code>A<sub>cm</sub></code> is the gain from a common-mode wiggle to the output; <code>A<sub>vdd</sub></code> is the gain from ripple on the positive supply. Both are quoted in dB (<code>20&middot;log<sub>10</sub></code>): 60&nbsp;dB is 1&nbsp;000&times;, and real op-amps typically reach 60&ndash;100&nbsp;dB. Remember that range.</p>
+
+<h3>Two boats on the tide</h3>
+<p>A single-ended (SE) op-amp has one output, measured against ground. A fully-differential (FD) op-amp is two mirror-image halves, and its output is the <strong>difference</strong> between its two output wires. Picture two boats tied side by side: the tide (common mode) lifts both equally, so their height difference never changes.</p>
+
+<figure class="fig">
+  <svg viewBox="0 0 760 230" role="img" aria-label="Single-ended output sees a common-mode wiggle; fully-differential difference cancels it">
+    <defs><marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <text x="190" y="24" text-anchor="middle" font-weight="600" font-size="13">Single-ended</text>
+    <line x1="60" y1="180" x2="320" y2="180" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <text x="190" y="200" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">ground (fixed reference)</text>
+    <rect x="160" y="110" width="60" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+    <text x="190" y="130" text-anchor="middle" font-size="11">out</text>
+    <path d="M190,108 L190,70" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar1)"/>
+    <text x="232" y="88" font-size="11" fill="var(--fig-accent)">+3 mV</text>
+    <text x="190" y="222" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-bad)">the leak is visible &rarr; finite CMRR</text>
+
+    <line x1="380" y1="20" x2="380" y2="210" stroke="var(--border)" stroke-width="1.5"/>
+
+    <text x="570" y="24" text-anchor="middle" font-weight="600" font-size="13">Fully-differential</text>
+    <rect x="460" y="110" width="60" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+    <text x="490" y="130" text-anchor="middle" font-size="11">outp</text>
+    <path d="M490,108 L490,70" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar1)"/>
+    <text x="440" y="88" text-anchor="end" font-size="11" fill="var(--fig-accent)">+3 mV</text>
+    <rect x="620" y="110" width="60" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+    <text x="650" y="130" text-anchor="middle" font-size="11">outn</text>
+    <path d="M650,108 L650,70" stroke="var(--fig-accent)" stroke-width="2" marker-end="url(#ar1)"/>
+    <text x="700" y="88" font-size="11" fill="var(--fig-accent)">+3 mV</text>
+    <rect x="470" y="160" width="200" height="30" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+    <text x="570" y="180" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-good)">outp &minus; outn = 0</text>
+    <text x="570" y="222" text-anchor="middle" font-size="11" font-weight="600" fill="var(--fig-good)">matched halves cancel exactly &rarr; CMRR = &infin;</text>
+  </svg>
+  <figcaption>The same 3 mV leak reaches both FD outputs, and the difference erases it. In a matched circuit, supply ripple cancels the same way.</figcaption>
+</figure>
+
+<div class="eq-center"><span class="boxed-eq">perfectly matched halves &rArr; A<sub>cm</sub> = 0 &rArr; CMRR = &infin;</span></div>
+
+<h3>So what did the old bench print?</h3>
+<p>The SPICE deck builds the two halves from identical transistors, so the true answer is exactly zero. But a computer subtracts two large, nearly equal floating-point numbers:</p>
+<pre class="code"><code>v(outp) = 1.650000000000123 V
+v(outn) = 1.650000000000122 V
+──────────────────────────────
+difference ≈ 1e-12 V              <span class="tok-com">← rounding error, not the circuit</span></code></pre>
+<p>Dividing a real gain by that rounding error gives absurd rejection. A gf180 FD circuit with 77.6&nbsp;dB of gain, traced by hand:</p>
+<pre class="code"><code>A_dm ≈ 7 600
+A_cm ≈ 1e-12
+CMRR = 7 600 / 1e-12 = 7.6e15  →  20·log10 ≈ <span class="tok-num">318 dB</span></code></pre>
+<p>That is the 260&ndash;315&nbsp;dB the old bench reported across a gf180 sample. <strong>It was measuring the precision of the calculator.</strong></p>
+
+<h3>Why it was a real bug</h3>
+<p>The designer accepts candidates by comparing SPICE numbers to the spec. With <code>cmrr_min_db = 60</code>, 318&nbsp;dB passes, so every FD circuit passed every CMRR and PSRR spec. Occasionally the noise landed under the bench's <code>1e-12</code> &ldquo;nothing measured&rdquo; cutoff, and that circuit was rejected as <em>unverified</em>: pass or fail was partly luck. The existing test only checked <code>gain &lt; cmrr &lt; 400</code>, and 318 fits inside that window.</p>
+
+<table>
+  <thead><tr><th></th><th>SE op-amp</th><th>FD op-amp</th></tr></thead>
+  <tbody>
+    <tr><td>Output</td><td><code>v(out)</code> vs ground</td><td><code>v(outp) &minus; v(outn)</code></td></tr>
+    <tr><td>Matched circuit, CM wiggle</td><td>leaks a little</td><td>cancels exactly</td></tr>
+    <tr><td>CMRR in a perfect simulation</td><td>real number (e.g. 78&nbsp;dB)</td><td><strong>&infin;</strong></td></tr>
+    <tr><td>What makes it finite in real life</td><td>topology (tail stiffness)</td><td><strong>mismatch between the halves</strong></td></tr>
+  </tbody>
+</table>
+
+<p><strong>In one sentence:</strong> matched FD halves cancel every common-mode and supply wiggle exactly, so the old bench divided by floating-point rounding error and called it rejection.</p>
+</section>
+
+<!-- ============================================================ PART 2 -->
+<section class="part" id="part-2">
+<h2>Part 2 &middot; Mismatch</h2>
+
+<blockquote><p><strong>The one job:</strong> if two transistors are drawn identically, how different do they actually come out, and how much CMRR does that difference cost?</p></blockquote>
+
+<p>Manufacturing works at the scale of atoms. The dopant atoms under each gate land at random, gate edges are rough, the oxide thickness varies by fractions of a nanometre. So every transistor's threshold voltage <code>V<sub>th</sub></code> comes out a little different. Two bakers following one cookie recipe never get the same number of chocolate chips.</p>
+
+<h3>Global vs local: the distinction that matters</h3>
+<figure class="fig">
+  <svg viewBox="0 0 760 210" role="img" aria-label="Process corners shift all transistors together; mismatch shifts each independently">
+    <text x="190" y="24" text-anchor="middle" font-weight="600" font-size="13">Global (process corner)</text>
+    <g font-size="11" text-anchor="middle">
+      <rect x="60" y="50" width="110" height="50" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="115" y="80">left half</text>
+      <rect x="210" y="50" width="110" height="50" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="265" y="80">right half</text>
+      <text x="115" y="124" fill="var(--fig-accent)" font-weight="600">+20 mV</text>
+      <text x="265" y="124" fill="var(--fig-accent)" font-weight="600">+20 mV</text>
+    </g>
+    <rect x="70" y="146" width="240" height="30" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="1.5"/>
+    <text x="190" y="166" text-anchor="middle" font-size="11" fill="var(--fig-good)">symmetry kept &rarr; FD CMRR still &infin;</text>
+
+    <line x1="380" y1="20" x2="380" y2="196" stroke="var(--border)" stroke-width="1.5"/>
+
+    <text x="570" y="24" text-anchor="middle" font-weight="600" font-size="13">Local (mismatch)</text>
+    <g font-size="11" text-anchor="middle">
+      <rect x="440" y="50" width="110" height="50" rx="6" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="495" y="80">left half</text>
+      <rect x="590" y="50" width="110" height="50" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/><text x="645" y="80">right half</text>
+      <text x="495" y="124" fill="var(--fig-accent)" font-weight="600">+4 mV</text>
+      <text x="645" y="124" fill="var(--fig-accent2)" font-weight="600">&minus;3 mV</text>
+    </g>
+    <rect x="450" y="146" width="240" height="30" rx="6" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="1.5"/>
+    <text x="570" y="166" text-anchor="middle" font-size="11" fill="var(--fig-accent)">symmetry broken &rarr; FD CMRR finite</text>
+  </svg>
+  <figcaption>The corner sweep (ss/ff/sf/fs) moves both halves together and so can never make FD CMRR finite. Only mismatch breaks the symmetry, and before this PR it was never simulated.</figcaption>
+</figure>
+
+<h3>How big? Pelgrom's rule</h3>
+<p>A big gate covers many dopant atoms, so the randomness averages out, like flipping 10&nbsp;000 coins instead of 10. Pelgrom (1989) measured it:</p>
+<div class="eq-center"><span class="boxed-eq">&sigma;(&Delta;V<sub>th</sub>) = A<sub>Vt</sub> / &radic;(W&middot;L)</span></div>
+<p>It is written line for line in the gf180 <code>nmos_3p3</code> wrapper:</p>
+<pre class="code"><code>+ par_vth=0.007148                                   <span class="tok-com">← A_Vt = 7.148 mV·µm</span>
++ p_sqrtarea='sqrt((par_leff)*(par_weff))'           <span class="tok-com">← √(W·L)</span>
++ var_vth='0.7071*par_vth* 1e-06 / p_sqrtarea'       <span class="tok-com">← Pelgrom, per device</span>
++ mis_vth=agauss(0,var_vth,1)                        <span class="tok-com">← the random draw</span>
+m0 d g s b nmos_3p3 ... delvto='mis_vth*sw_stat_mismatch'</code></pre>
+<p>The <code>0.7071</code> is <code>1/&radic;2</code>: Pelgrom's <code>A<sub>Vt</sub></code> describes the difference between <em>two</em> devices, and a difference of two independent draws spreads &radic;2 more than one. And <code>sw_stat_mismatch</code> is <code>0</code> by default, the off switch this PR turns on.</p>
+
+<p><strong>Traced by hand</strong> for <code>w=2u l=0.5u</code>:</p>
+<pre class="code"><code>Leff = 0.5 − 0.15 = 0.35 µm      Weff = 2.0 + 0.10 = 2.10 µm
+√(W·L) = √0.735 ≈ 0.857 µm
+σ(Vth)  = 0.7071 × 7.148 / 0.857 ≈ <span class="tok-num">5.9 mV</span>   (one device)
+σ(ΔVth) = 7.148 / 0.857          ≈ <span class="tok-num">8.3 mV</span>   (a pair)</code></pre>
+<p>In ngspice, two such &ldquo;identical&rdquo; transistors with mismatch on drew <strong>29.9&nbsp;&micro;A vs 28.5&nbsp;&micro;A</strong>, 4.8% apart, which is what a few mV of <code>&Delta;V<sub>th</sub></code> at this bias predicts.</p>
+
+<h3>How mismatch makes FD CMRR finite</h3>
+<figure class="fig">
+  <svg viewBox="0 0 760 240" role="img" aria-label="Common-mode input changes tail current which splits unequally between mismatched pair transistors">
+    <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <rect x="30" y="30" width="170" height="54" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <text x="115" y="52" text-anchor="middle" font-size="12" font-weight="600">CM wiggle &Delta;v<tspan baseline-shift="sub" font-size="9">cm</tspan></text>
+    <text x="115" y="70" text-anchor="middle" font-size="10" fill="var(--fig-muted)">both gates pushed alike</text>
+    <path d="M200,57 L248,57" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+    <rect x="250" y="30" width="200" height="54" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+    <text x="350" y="52" text-anchor="middle" font-size="12" font-weight="600">tail current changes</text>
+    <text x="350" y="70" text-anchor="middle" font-size="10" fill="var(--fig-muted)">&asymp; &Delta;v<tspan baseline-shift="sub" font-size="8">cm</tspan> / R<tspan baseline-shift="sub" font-size="8">SS</tspan> (topology)</text>
+    <path d="M350,84 L250,140" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+    <path d="M350,84 L450,140" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+    <rect x="160" y="142" width="170" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+    <text x="245" y="162" text-anchor="middle" font-size="11.5" font-weight="600">M1 (g<tspan baseline-shift="sub" font-size="8">m</tspan> + &Delta;g<tspan baseline-shift="sub" font-size="8">m</tspan>/2)</text>
+    <text x="245" y="178" text-anchor="middle" font-size="10" fill="var(--fig-muted)">takes a bit more</text>
+    <rect x="370" y="142" width="170" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+    <text x="455" y="162" text-anchor="middle" font-size="11.5" font-weight="600">M2 (g<tspan baseline-shift="sub" font-size="8">m</tspan> &minus; &Delta;g<tspan baseline-shift="sub" font-size="8">m</tspan>/2)</text>
+    <text x="455" y="178" text-anchor="middle" font-size="10" fill="var(--fig-muted)">takes a bit less</text>
+    <path d="M540,164 L588,164" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar2)"/>
+    <rect x="590" y="134" width="150" height="60" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+    <text x="665" y="158" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-bad)">outp &minus; outn &ne; 0</text>
+    <text x="665" y="176" text-anchor="middle" font-size="10" fill="var(--fig-muted)">a real, finite leak</text>
+    <text x="380" y="222" text-anchor="middle" font-size="11" fill="var(--fig-muted)">leak = (how much the tail lets CM through) &times; (how unequal the halves are)</text>
+  </svg>
+  <figcaption>Two things must happen together for common mode to leak through: a finite tail impedance (topology) and an unequal split (mismatch).</figcaption>
+</figure>
+
+<div class="eq-center"><span class="boxed-eq">CMRR<sub>FD</sub> &asymp; 2&middot;g<sub>m</sub>R<sub>SS</sub> &times; g<sub>m</sub>/&Delta;g<sub>m</sub></span></div>
+<pre class="code"><code>topology:  gm = 200 µS, R_SS = 1 MΩ  →  2·gm·R_SS = 400   →  52 dB
+mismatch:  Δgm/gm = 5 %              →  gm/Δgm   = 20    →  26 dB
+CMRR ≈ 400 × 20 = 8 000                                   →  <span class="tok-num">78 dB</span>
+Δgm = 0                              →  CMRR = ∞          (Part 1's dead end)</code></pre>
+<p>The sizer's analytical formula, <code>g<sub>m1</sub>/(2&middot;g<sub>d,tail</sub>) = g<sub>m</sub>R<sub>SS</sub>/2</code>, is the topology factor only, the single-ended view. So for FD designs, analytical and SPICE now measure different things (e.g. 40.6 vs 71.4&nbsp;dB on one gf180 circuit), and that gap is the missing <code>g<sub>m</sub>/&Delta;g<sub>m</sub></code>, not a model bug.</p>
+<p>PSRR follows the same story. With a <strong>PMOS input pair</strong> the tail hangs from VDD, so supply ripple looks to the pair just like a common-mode input. That is why PMOS-input designs read CMRR&nbsp;&asymp;&nbsp;PSRR (36.2 / 35.9&nbsp;dB on one sky130 circuit).</p>
+
+<p>Mismatch is random, so one simulation describes one imaginary chip. The bench simulates <strong>8</strong> and reports the worst (Part 7).</p>
+
+<p><strong>In one sentence:</strong> Pelgrom's random, <code>1/&radic;(W&middot;L)</code>-sized mismatch is the only thing that lets common mode and supply leak into an FD output, so it must be in the simulation for CMRR and PSRR to mean anything.</p>
+</section>
+
+<!-- ============================================================ PART 3 -->
+<section class="part" id="part-3">
+<h2>Part 3 &middot; Turning mismatch on: <code>_emit_model()</code></h2>
+
+<blockquote><p><strong>The one job:</strong> tell ngspice &ldquo;give every transistor its own random imperfection, and the same imperfections every time&rdquo;.</p></blockquote>
+
+<p>Both foundry PDKs already ship the mismatch physics, switched off. The switch names differ, so each tech's YAML records its own:</p>
+<table>
+  <thead><tr><th>PDK</th><th>Switch</th><th>Where the PDK sets it to 0</th></tr></thead>
+  <tbody>
+    <tr><td>gf180</td><td><code>sw_stat_mismatch</code></td><td><code>design.ngspice</code>, the <code>.include</code> before the <code>.lib</code></td></tr>
+    <tr><td>sky130</td><td><code>mc_mm_switch</code></td><td><strong>inside</strong> each corner section of <code>sky130.lib.spice</code></td></tr>
+    <tr><td>ptm45 / generic</td><td><em>none</em></td><td>no mismatch model</td></tr>
+  </tbody>
+</table>
+<pre class="code"><code><span class="tok-com"># tech_gf180mcu.yaml → spice_lib:</span>
+  mismatch_switch: sw_stat_mismatch     <span class="tok-com"># new SpiceLib field; None when absent</span></code></pre>
+
+<pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_emit_model</span>(tech, corner=<span class="tok-kw">None</span>, mismatch_seed=<span class="tok-kw">None</span>) -&gt; str:
+    <span class="tok-kw">if</span> mismatch_seed <span class="tok-kw">is not None and not</span> (
+            tech.spice_lib <span class="tok-kw">and</span> tech.spice_lib.mismatch_switch):
+        <span class="tok-kw">raise</span> ValueError(<span class="tok-str">f"{tech.name} has no mismatch model"</span>)
+    <span class="tok-kw">if</span> tech.spice_lib:
+        lib = tech.spice_lib
+        out = <span class="tok-str">f'.include "{lib.design}"\n'</span> <span class="tok-kw">if</span> lib.design <span class="tok-kw">else</span> <span class="tok-str">""</span>
+        out += <span class="tok-str">f'.lib "{lib.file}" {corner or lib.corner}\n'</span>
+        <span class="tok-kw">if</span> mismatch_seed <span class="tok-kw">is not None</span>:
+<span class="keyline">            out += (<span class="tok-str">f".param {lib.mismatch_switch}=1\n"</span>
+                    <span class="tok-str">f".option seed={mismatch_seed}\n"</span>)</span>
+        <span class="tok-kw">return</span> out</code></pre>
+
+<ul>
+  <li><strong>The guard</strong> refuses mismatch on PTM. Without it, the PTM branch would silently ignore the seed and return a perfectly matched deck, which is the original bug again.</li>
+  <li><strong><code>.param &lt;switch&gt;=1</code></strong> redefines the switch; when ngspice sees a <code>.param</code> twice, the later one wins, so every <code>delvto = mis_vth &times; 1</code> becomes a real random shift.</li>
+  <li><strong><code>.option seed=K</code></strong> fixes the random sequence: a deck of cards shuffled with seed&nbsp;3 always comes out in the same order.</li>
+</ul>
+
+<h3>Why the line order matters (sky130)</h3>
+<figure class="fig">
+  <svg viewBox="0 0 760 220" role="img" aria-label="The mismatch override must follow the sky130 lib section">
+    <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <rect x="60" y="20" width="420" height="104" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <text x="78" y="44" font-size="12" font-family="ui-monospace,monospace">.lib sky130.lib.spice tt</text>
+    <rect x="90" y="56" width="360" height="28" rx="5" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="1.5"/>
+    <text x="104" y="75" font-size="12" font-family="ui-monospace,monospace" fill="var(--fig-bad)">.param mc_mm_switch=0</text>
+    <text x="104" y="110" font-size="11" font-family="ui-monospace,monospace" fill="var(--fig-muted)">.include ...nfet_01v8__tt.pm3.spice ...</text>
+    <rect x="60" y="140" width="420" height="32" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+    <text x="78" y="161" font-size="12" font-family="ui-monospace,monospace" fill="var(--fig-good)">.param mc_mm_switch=1   .option seed=K</text>
+    <path d="M500,156 C560,156 560,70 470,70" fill="none" stroke="var(--fig-good)" stroke-width="2" marker-end="url(#ar3)"/>
+    <text x="580" y="104" font-size="11.5" font-weight="600" fill="var(--fig-good)">later wins</text>
+    <text x="580" y="122" font-size="10.5" fill="var(--fig-muted)">overrides the PDK's 0</text>
+    <text x="270" y="204" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">placed before the .lib, the PDK's own =0 would come later and silently switch mismatch back off</text>
+  </svg>
+  <figcaption>The override goes after the <code>.lib</code> line. The sky130 unit test pins exactly this order.</figcaption>
+</figure>
+
+<h3>Proof, from raw ngspice</h3>
+<table>
+  <thead><tr><th>Experiment (two identical devices)</th><th class="num">device 1</th><th class="num">device 2</th></tr></thead>
+  <tbody>
+    <tr><td>gf180, switch off</td><td class="num">28.345 &micro;A</td><td class="num">28.345 &micro;A</td></tr>
+    <tr><td>gf180, switch on</td><td class="num">28.190 &micro;A</td><td class="num">27.439 &micro;A</td></tr>
+    <tr><td>gf180, seed 1, run 1</td><td class="num">28.772 &micro;A</td><td class="num">29.214 &micro;A</td></tr>
+    <tr><td>gf180, seed 1, run 2</td><td class="num">28.772 &micro;A</td><td class="num">29.214 &micro;A</td></tr>
+    <tr><td>gf180, seed 2</td><td class="num">27.996 &micro;A</td><td class="num">28.210 &micro;A</td></tr>
+    <tr><td>sky130, switch off / on</td><td class="num">4.349 / 4.679 &micro;A</td><td class="num">4.349 / 3.988 &micro;A</td></tr>
+  </tbody>
+</table>
+<p>The switch turns mismatch on, the same seed gives the same chip, a new seed gives a new chip. And critically, the <strong>two devices differ</strong>: the random draw lives inside each transistor's subcircuit, so every instance rolls its own dice. One shared draw for the whole circuit would be a global shift, a corner, and would keep the symmetry.</p>
+<div class="eq-center"><span class="boxed-eq">one random draw per transistor, not one per circuit</span></div>
+<p><code>simulate_metrics</code> then builds 8 imperfect copies of the same sized design: <code>[_dut(tech, name, body, corner, mismatch_seed=s) for s in _MISMATCH_SEEDS]</code>.</p>
+
+<p><strong>In one sentence:</strong> two lines appended after the PDK's <code>.lib</code> turn its built-in per-transistor mismatch on and fix the seed, and the guard makes sure a tech without mismatch models can never quietly measure a perfect circuit.</p>
+</section>
+
+<!-- ============================================================ PART 4 -->
+<section class="part" id="part-4">
+<h2>Part 4 &middot; The new problem: offset rails the output</h2>
+
+<blockquote><p><strong>The one job:</strong> once the halves are unequal, where does an open-loop FD op-amp's output actually sit, and can we measure anything there?</p></blockquote>
+
+<p>Mismatch gives the amplifier an <strong>input offset</strong> <code>V<sub>os</sub></code>: the small input difference needed to balance the output, like a bathroom scale reading 0.4&nbsp;kg with nobody on it. It is a few millivolts. The CMRR bench runs the op-amp open-loop, and open-loop gain multiplies those millivolts:</p>
+<pre class="code"><code>A_dm = 77.6 dB ≈ 7 600×      Vos = 5 mV
+v_out = 7 600 × 5 mV = <span class="tok-num">38 V</span>     ← on a 3.3 V supply: clipped at a rail</code></pre>
+<p>Turning mismatch on with the old rig, the DC differential output for 5 seeds was <code>&minus;3.19, +3.24, +3.22, +3.18, +3.25 V</code> (gf180) where healthy is &ldquo;a few mV&rdquo;. At a rail, transistors sit in triode or off. AC analysis linearises around that broken operating point, so the gains describe a broken amplifier: testing a car's acceleration while it is parked against a wall. Worse, the railed rig printed believable numbers (110&ndash;118&nbsp;dB on gf180, 39&ndash;64&nbsp;dB on sky130), so nothing would warn you.</p>
+
+<h3>&ldquo;Doesn't the CMFB keep the outputs centred?&rdquo;</h3>
+<figure class="fig">
+  <svg viewBox="0 0 760 230" role="img" aria-label="Railed outputs whose average still satisfies the CMFB">
+    <line x1="80" y1="40" x2="520" y2="40" stroke="var(--fig-stroke)" stroke-width="2.5"/>
+    <text x="70" y="44" text-anchor="end" font-size="11">3.3 V</text>
+    <line x1="80" y1="115" x2="520" y2="115" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="70" y="119" text-anchor="end" font-size="11">1.65 V</text>
+    <line x1="80" y1="190" x2="520" y2="190" stroke="var(--fig-stroke)" stroke-width="2.5"/>
+    <text x="70" y="194" text-anchor="end" font-size="11">0 V</text>
+    <circle cx="220" cy="42" r="9" fill="var(--fig-bad)"/>
+    <text x="236" y="32" font-size="11.5" font-weight="600" fill="var(--fig-bad)">outp &asymp; 3.28 V</text>
+    <circle cx="380" cy="188" r="9" fill="var(--fig-bad)"/>
+    <text x="396" y="182" font-size="11.5" font-weight="600" fill="var(--fig-bad)">outn &asymp; 0.02 V</text>
+    <rect x="270" y="105" width="60" height="20" rx="4" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+    <text x="300" y="119" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--fig-good)">avg</text>
+    <rect x="560" y="60" width="180" height="46" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+    <text x="650" y="80" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-good)">average = 1.65 V</text>
+    <text x="650" y="96" text-anchor="middle" font-size="10" fill="var(--fig-muted)">the CMFB is satisfied</text>
+    <rect x="560" y="126" width="180" height="46" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+    <text x="650" y="146" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-bad)">difference = 3.26 V</text>
+    <text x="650" y="162" text-anchor="middle" font-size="10" fill="var(--fig-muted)">railed, and invisible to it</text>
+  </svg>
+  <figcaption>The CMFB holds the <em>average</em> of the outputs, like a harbour master who only keeps the boats' average height at the dock. It cannot see, or fix, the difference.</figcaption>
+</figure>
+<div class="eq-center"><span class="boxed-eq">The CMFB controls the average of the outputs, not their difference.</span></div>
+
+<p>Before this PR the open-loop rig was fine only because perfect symmetry made <code>V<sub>os</sub> = 0</code>. The FD gain bench (<code>_loop_fb</code>) still holds the inputs at Vcm through 1&nbsp;G&Omega; resistors with nothing fed back. The <strong>single-ended</strong> bench never had this problem: its huge inductor <code>Lfb</code> is a wire at DC (feedback cancels the offset) and an open circuit at the measurement frequency (open-loop gain). That is exactly what the FD bench needs.</p>
+
+<table>
+  <thead><tr><th>Option</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>Close a normal feedback loop (e.g. gain &minus;1)</td><td>measures closed-loop gain; CMRR needs open-loop <code>A<sub>dm</sub></code></td></tr>
+    <tr><td>Apply <code>&minus;V<sub>os</sub></code> by hand</td><td>unknown in advance; different for every seed</td></tr>
+    <tr><td>Bring back the pre-#165 cross ties</td><td>bistable against a real CMFB; latches</td></tr>
+    <tr><td><strong>DC-only differential feedback (a servo)</strong></td><td><strong>finds <code>&minus;V<sub>os</sub></code> itself and is invisible to the AC measurement</strong></td></tr>
+  </tbody>
+</table>
+
+<p><strong>In one sentence:</strong> a few millivolts of mismatch offset times huge open-loop gain pins the differential output to the rails, which the CMFB never notices, so the bench needs feedback that cancels the offset at DC but vanishes at the measurement frequency.</p>
+</section>
+
+<!-- ============================================================ PART 5 -->
+<section class="part" id="part-5">
+<h2>Part 5 &middot; The DC servo: <code>_fd_servo_fb()</code></h2>
+
+<blockquote><p><strong>The one job:</strong> automatically find and apply the <code>&minus;V<sub>os</sub></code> that balances the output, without the correction touching the AC measurement.</p></blockquote>
+
+<p>Think of balancing a tray on one finger while someone taps it to measure its wobble. A fast hand cancels the taps too; no hand lets the tray slide off. A <strong>very slow hand</strong> corrects only the slow drift and never notices the taps.</p>
+
+<pre class="code"><code>_SERVO_CLAMP_V = <span class="tok-num">0.05</span>   <span class="tok-com"># per-input limit on the FD offset servo's correction</span>
+
+<span class="tok-kw">def</span> <span class="tok-fn">_fd_servo_fb</span>(vcm, sign: int) -&gt; str:
+    lim = _SERVO_CLAMP_V
+    corr = <span class="tok-str">f"max(min({sign}*v(lp)/2,{lim}),-{lim})"</span>
+    <span class="tok-kw">return</span> (<span class="tok-str">f"Vocm ocm 0 {vcm}\nVci ci 0 dc 0\nVdi di 0 dc 0 ac 1\n"</span>
+            <span class="tok-str">"Esrv vsrv 0 outp outn 1\nRsrv vsrv lp 1\nCsrv lp 0 1e12\n"</span>
+<span class="keyline">            <span class="tok-str">f"Binp inp 0 v={vcm}+v(ci)+v(di)/2-{corr}\n"</span>
+            <span class="tok-str">f"Binn inn 0 v={vcm}+v(ci)-v(di)/2+{corr}\n"</span>)</span></code></pre>
+
+<figure class="fig">
+  <svg viewBox="0 0 760 250" role="img" aria-label="Servo loop: differential output measured, low-pass filtered, clamped and fed back to the inputs">
+    <defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <rect x="40" y="40" width="130" height="80" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <text x="105" y="70" text-anchor="middle" font-size="11.5" font-weight="600">Binp / Binn</text>
+    <text x="105" y="88" text-anchor="middle" font-size="10" fill="var(--fig-muted)">③ drive inputs</text>
+    <text x="105" y="104" text-anchor="middle" font-size="10" fill="var(--fig-muted)">vcm + ci &plusmn; di/2 &mp; corr</text>
+    <path d="M170,80 L228,80" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar5)"/>
+    <text x="199" y="72" text-anchor="middle" font-size="10">inp, inn</text>
+    <rect x="230" y="30" width="160" height="100" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2.5"/>
+    <text x="310" y="72" text-anchor="middle" font-size="12.5" font-weight="600">FD op-amp</text>
+    <text x="310" y="92" text-anchor="middle" font-size="10" fill="var(--fig-muted)">CMFB &rarr; ocm</text>
+    <path d="M390,80 L448,80" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar5)"/>
+    <text x="419" y="72" text-anchor="middle" font-size="10">outp, outn</text>
+    <rect x="450" y="40" width="130" height="80" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+    <text x="515" y="70" text-anchor="middle" font-size="11.5" font-weight="600">Esrv</text>
+    <text x="515" y="88" text-anchor="middle" font-size="10" fill="var(--fig-muted)">① measure</text>
+    <text x="515" y="104" text-anchor="middle" font-size="10" fill="var(--fig-muted)">vsrv = outp &minus; outn</text>
+    <path d="M580,80 L620,80 L620,170" fill="none" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar5)"/>
+    <rect x="540" y="172" width="180" height="60" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+    <text x="630" y="196" text-anchor="middle" font-size="11.5" font-weight="600">Rsrv 1 &Omega; + Csrv 10&sup1;&sup2; F</text>
+    <text x="630" y="214" text-anchor="middle" font-size="10" fill="var(--fig-muted)">② &tau; = 10&sup1;&sup2; s (&asymp; 32 000 years)</text>
+    <path d="M540,202 L352,202" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar5)"/>
+    <text x="445" y="194" text-anchor="middle" font-size="10">v(lp)</text>
+    <rect x="200" y="176" width="150" height="52" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
+    <text x="275" y="198" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-accent)">clamp &plusmn;50 mV</text>
+    <text x="275" y="216" text-anchor="middle" font-size="10" fill="var(--fig-muted)">corr = sign&middot;v(lp)/2</text>
+    <path d="M200,202 L105,202 L105,122" fill="none" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar5)"/>
+  </svg>
+  <figcaption>Measure the imbalance, slow it down enormously, push back on the inputs. The ideal E- and B-sources draw no current, so the outputs carry only the spec's load capacitance.</figcaption>
+</figure>
+
+<h3>The B-sources separate the two worlds</h3>
+<p>Add and subtract the two formulas (ignoring the clamp):</p>
+<pre class="code"><code>inp − inn     = v(di) − 2·corr      <span class="tok-com">← differential: stimulus knob + servo</span>
+(inp + inn)/2 = vcm + v(ci)         <span class="tok-com">← common mode: stimulus knob only</span></code></pre>
+<p>The servo can only ever move the <strong>difference</strong>, never the common mode whose leakage we are measuring.</p>
+
+<h3>Trace the DC loop</h3>
+<p>At DC the capacitor is open, so <code>v(lp) = v<sub>out</sub></code> and <code>inp &minus; inn = &minus;sign&middot;v<sub>out</sub></code>. With the offset battery:</p>
+<div class="eq-center"><span class="boxed-eq">v<sub>out</sub> = A&middot;(&minus;v<sub>out</sub> + V<sub>os</sub>) &rArr; v<sub>out</sub> = A/(1+A)&middot;V<sub>os</sub> &asymp; V<sub>os</sub></span></div>
+<pre class="code"><code>A = 7 600, Vos = 5 mV
+v_out     = 7 600/7 601 × 5 mV = <span class="tok-num">4.9993 mV</span>   (instead of railing at 3.3 V)
+inp − inn = −4.9993 mV                    (the servo found −Vos by itself)</code></pre>
+<p>The leftover output <em>is</em> the offset, which is why nulled outputs sat at 4&ndash;16&nbsp;mV on gf180 and up to 33&nbsp;mV on sky130.</p>
+
+<h3>Trace the AC measurement</h3>
+<figure class="fig">
+  <svg viewBox="0 0 760 150" role="img" aria-label="Log frequency axis: servo corner far below the measurement frequency">
+    <line x1="40" y1="80" x2="720" y2="80" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <rect x="40" y="60" width="140" height="40" fill="var(--fig-fill2)" stroke="none"/>
+    <text x="110" y="52" text-anchor="middle" font-size="10.5" fill="var(--fig-accent2)" font-weight="600">servo active</text>
+    <line x1="180" y1="60" x2="180" y2="100" stroke="var(--fig-accent2)" stroke-width="2.5"/>
+    <text x="180" y="120" text-anchor="middle" font-size="10.5">f<tspan baseline-shift="sub" font-size="8">c</tspan> = 1.6&times;10&#8315;&sup1;&sup3; Hz</text>
+    <line x1="520" y1="60" x2="520" y2="100" stroke="var(--fig-accent)" stroke-width="2.5"/>
+    <text x="520" y="52" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--fig-accent)">we read here</text>
+    <text x="520" y="120" text-anchor="middle" font-size="10.5">1 mHz</text>
+    <line x1="640" y1="70" x2="640" y2="90" stroke="var(--fig-muted)" stroke-width="2"/>
+    <text x="640" y="120" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">~Hz: amp's pole</text>
+    <text x="350" y="142" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">&asymp;10 decades apart: the servo passes only 1.6&times;10&#8315;&sup1;&#8304; of the 1 mHz signal</text>
+  </svg>
+  <figcaption>DC: the servo's loop gain is the full amplifier gain, so the offset is cancelled. 1&nbsp;mHz: the loop gain is A&times;1.6&times;10&#8315;&sup1;&#8304;, at most 1.6&times;10&#8315;&#8308; for a 120&nbsp;dB amp, which shifts the gain by 0.0014&nbsp;dB.</figcaption>
+</figure>
+<p>&ldquo;32 000 years&rdquo; costs no simulation time: <code>op</code> solves the after-infinite-time state directly (capacitor open), and AC analysis solves the steady 1&nbsp;mHz response directly.</p>
+
+<h3>The clamp: why &plusmn;50&nbsp;mV</h3>
+<p>The first, unclamped prototype latched on several seeds:</p>
+<figure class="fig">
+  <svg viewBox="0 0 760 200" role="img" aria-label="The latch cycle of an unclamped servo">
+    <defs><marker id="ar5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <g font-size="11" text-anchor="middle">
+      <rect x="30" y="30" width="170" height="54" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="115" y="53" font-weight="600">output railed</text><text x="115" y="70" fill="var(--fig-muted)">v_out = +3.28 V</text>
+      <rect x="290" y="30" width="180" height="54" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="380" y="53" font-weight="600">corr = 1.64 V per input</text><text x="380" y="70" fill="var(--fig-muted)">inp &asymp; 0.01 V, inn &asymp; 3.29 V</text>
+      <rect x="560" y="30" width="170" height="54" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="645" y="53" font-weight="600">input pair OFF</text><text x="645" y="70" fill="var(--fig-muted)">inputs out of range</text>
+      <rect x="290" y="126" width="180" height="54" rx="8" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
+      <text x="380" y="149" font-weight="600">no gain</text><text x="380" y="166" fill="var(--fig-muted)">nothing pulls the output back</text>
+    </g>
+    <path d="M200,57 L288,57" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar5b)"/>
+    <path d="M470,57 L558,57" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar5b)"/>
+    <path d="M645,84 L645,153 L472,153" fill="none" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar5b)"/>
+    <path d="M290,153 L115,153 L115,86" fill="none" stroke="var(--fig-bad)" stroke-width="2" marker-end="url(#ar5b)"/>
+  </svg>
+  <figcaption>A self-consistent stuck state, like a thermostat that heats so hard it melts its own sensor. Real offsets are a few mV (worst seen ~33&nbsp;mV), so &plusmn;50&nbsp;mV per input never limits a real correction, but it keeps the pair alive and the latch cannot form.</figcaption>
+</figure>
+<p>With the clamp, all 30 prototype draws (3 circuits &times; 5 seeds, both PDKs) nulled. A draw whose offset exceeded 100&nbsp;mV would saturate the clamp, rail, and be rejected by the DC check (Part 7): an honest &ldquo;cannot measure&rdquo;.</p>
+
+<h3>The <code>sign</code>: why both directions are tried</h3>
+<p>Negative feedback must oppose the imbalance, and which way that is depends on which input is non-inverting. The AC bench's FD polarity is only a hint (the two assignments differ only in sign), so the caller tries both. On a gf180 NMOS-pair circuit, sign&nbsp;+1 railed 4 of 5 seeds and sign&nbsp;&minus;1 nulled all 5. When the wrong sign happened to null (ngspice found the unstable balance, a pencil on its tip), it gave the same CMRR, 56.2&nbsp;dB. The AC reading depends only on the operating point, so the rule is simply: accept whichever sign nulls the output.</p>
+
+<p><strong>In one sentence:</strong> <code>_fd_servo_fb</code> feeds the differential output back through a 10&sup1;&sup2;&nbsp;s filter, cancelling the mismatch offset at DC while staying blind at 1&nbsp;mHz, and its &plusmn;50&nbsp;mV clamp keeps it from shoving the inputs into a latch.</p>
+</section>
+
+<!-- ============================================================ PART 6 -->
+<section class="part" id="part-6">
+<h2>Part 6 &middot; One draw, one run: <code>_fd_draw()</code></h2>
+
+<blockquote><p><strong>The one job:</strong> for one mismatched chip, is the output balanced, and if so, what are its differential, common-mode and supply gains?</p></blockquote>
+
+<p>AC analysis is linear: several AC sources at once would add up and be impossible to separate. So, like testing which of three taps leaks by opening one at a time, the control script moves a single 1&nbsp;V AC stimulus between knobs:</p>
+
+<pre class="code"><code>op
+let vchk=v(outp)-v(outn)
+print vchk                       <span class="tok-com">← did the servo null it?</span>
+let vocm=(v(outp)+v(outn))/2
+print vocm                       <span class="tok-com">← …and are the outputs alive, mid-supply?</span>
+ac lin 1 1e-3 1e-3               <span class="tok-com">← one point at 1 mHz, Vdi carries the AC</span>
+let adm=mag(v(outp)-v(outn))
+print adm
+<span class="keyline">alter vdi acmag=0
+alter vci acmag=1</span>                 <span class="tok-com">← move the stimulus to the common mode</span>
+ac lin 1 1e-3 1e-3
+let acm=mag(v(outp)-v(outn))
+print acm
+alter vci acmag=0
+alter vsup acmag=1               <span class="tok-com">← …then onto VDD</span>
+ac lin 1 1e-3 1e-3
+let avdd=mag(v(outp)-v(outn))
+print avdd</code></pre>
+
+<figure class="fig">
+  <svg viewBox="0 0 760 170" role="img" aria-label="One operating point shared by three AC readings">
+    <defs><marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <g font-size="11" text-anchor="middle">
+      <rect x="30" y="30" width="130" height="50" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
+      <text x="95" y="52" font-weight="600">op</text><text x="95" y="68" fill="var(--fig-muted)">vchk, vocm</text>
+      <rect x="220" y="30" width="140" height="50" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="290" y="52" font-weight="600">AC on Vdi</text><text x="290" y="68" fill="var(--fig-muted)">adm</text>
+      <rect x="410" y="30" width="140" height="50" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="480" y="52" font-weight="600">AC on Vci</text><text x="480" y="68" fill="var(--fig-muted)">acm</text>
+      <rect x="600" y="30" width="140" height="50" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
+      <text x="670" y="52" font-weight="600">AC on Vsup</text><text x="670" y="68" fill="var(--fig-muted)">avdd</text>
+    </g>
+    <path d="M160,55 L218,55" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar6)"/>
+    <path d="M360,55 L408,55" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar6)"/>
+    <text x="384" y="46" text-anchor="middle" font-size="9" fill="var(--fig-muted)">alter</text>
+    <path d="M550,55 L598,55" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar6)"/>
+    <text x="574" y="46" text-anchor="middle" font-size="9" fill="var(--fig-muted)">alter</text>
+    <rect x="30" y="104" width="710" height="34" rx="6" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/>
+    <text x="385" y="126" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--fig-good)">one operating point: this draw's mismatch, servo-nulled; alter changes AC amplitudes only</text>
+  </svg>
+  <figcaption>All three gains describe the same chip in the same state, which a ratio like CMRR needs. Separate runs only guarantee that if each converges to the identical point.</figcaption>
+</figure>
+
+<p>Why 1&nbsp;mHz? It is below even a sub-hertz dominant pole, so it reads the full low-frequency gain; it matches the first point of the main gain bench; and it is ten decades above the servo's corner.</p>
+
+<pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_fd_draw</span>(name, ports, body_dut, vdd, ibias, cl, vcm, netmap,
+             sign) -&gt; dict[str, float] | <span class="tok-kw">None</span>:
+    deck = _deck(name, ports, body_dut, vdd, ibias, cl,
+                 _fd_servo_fb(vcm, sign), netmap, _FD_REJECTION_CONTROL)
+    txt = _run_capture(deck)
+    <span class="tok-kw">if not</span> txt:
+        <span class="tok-kw">return None</span>
+    vals = dict(re.findall(<span class="tok-str">r"^(vchk|vocm|adm|acm|avdd)\s*=\s*([-\d.eE+]+)"</span>,
+                           txt, re.M))
+    <span class="tok-kw">if</span> len(vals) &lt; <span class="tok-num">5</span>:
+        <span class="tok-kw">return None</span>
+    <span class="tok-kw">return</span> {k: float(v) <span class="tok-kw">for</span> k, v <span class="tok-kw">in</span> vals.items()}</code></pre>
+<ul>
+  <li><strong><code>_run_capture</code> + <code>print</code></strong>, not <code>wrdata</code>: each <code>ac</code> creates a new result plot (<code>ac1</code>, <code>ac2</code>, <code>ac3</code>), and one <code>wrdata</code> cannot easily mix them. <code>op.py</code> already parses <code>print</code> output with a regex.</li>
+  <li><strong>Distinct <code>let</code> names</strong> label each reading so the regex can find it.</li>
+  <li><strong>All or nothing:</strong> if the operating point fails, ngspice stops early and lines are missing; the draw is <code>None</code>, never half-measured.</li>
+  <li><code>_fd_draw</code> only <em>reports</em> <code>vchk</code> and <code>vocm</code>; judging them is <code>_draw_settled</code>'s job (Part 7).</li>
+</ul>
+
+<h3>One real sky130 draw, by hand</h3>
+<pre class="code"><code>vchk = 3.376e-04 V   →  0.34 mV, below 0.05·VDD = 90 mV           ✅ nulled
+adm  = 2 032.22      →  66.16 dB   (nominal gain 66.4 dB: healthy point)
+acm  = 27.104        →  28.66 dB
+avdd = 27.878        →  28.91 dB
+CMRR  = 66.16 − 28.66 = <span class="tok-num">37.50 dB</span>
+PSRR+ = 66.16 − 28.91 = <span class="tok-num">37.25 dB</span>      (PMOS pair: CMRR ≈ PSRR, as Part 2 predicted)</code></pre>
+
+<h3>Why one run</h3>
+<p>Every ngspice launch re-reads the PDK library. The first version used 4 runs per draw (32+ per circuit) and took <strong>15.7&nbsp;s</strong> on sky130; one run per draw takes <strong>4.4&nbsp;s</strong>, about 3.5&times; faster, with numbers identical to all 7 printed digits (seed&nbsp;1: <code>adm 2.032220e+03</code>, <code>acm 2.710371e+01</code>, <code>avdd 2.787803e+01</code> both ways).</p>
+
+<p><strong>In one sentence:</strong> one ngspice run per chip checks the DC output, then moves a single 1&nbsp;V stimulus from the differential knob to the common mode to VDD with <code>alter</code>, so all three gains come from the same operating point.</p>
+</section>
+
+<!-- ============================================================ PART 7 -->
+<section class="part" id="part-7">
+<h2>Part 7 &middot; Putting it together</h2>
+
+<blockquote><p><strong>The one job:</strong> given 8 imaginary chips of one design, what single CMRR and PSRR should we report, and which designs get this treatment at all?</p></blockquote>
+
+<pre class="code"><code>_MISMATCH_SEEDS = tuple(range(<span class="tok-num">1</span>, <span class="tok-num">9</span>))
+
+<span class="tok-kw">def</span> <span class="tok-fn">_measure_fd_rejection</span>(name, ports, mc_bodies, topo, vdd, ibias, cl, vcm,
+                          polarity):
+    <span class="tok-kw">if</span> polarity <span class="tok-kw">is None</span>:
+        <span class="tok-kw">return None</span>, <span class="tok-kw">None</span>
+    netmap = _fb_netmap(topo, *polarity)
+    cmrr, psrr = [], []
+    signs = (<span class="tok-num">1</span>, <span class="tok-num">-1</span>)
+    skipped = <span class="tok-num">0</span>
+    <span class="tok-kw">for</span> body <span class="tok-kw">in</span> mc_bodies:
+        <span class="tok-kw">for</span> sign <span class="tok-kw">in</span> signs:
+            r = _fd_draw(name, ports, body, vdd, ibias, cl, vcm, netmap, sign)
+            <span class="tok-kw">if</span> _draw_settled(r, vdd):
+                <span class="tok-kw">break</span>
+        <span class="tok-kw">else</span>:   <span class="tok-com"># neither servo direction settled this draw</span>
+            skipped += <span class="tok-num">1</span>
+            <span class="tok-kw">continue</span>
+        signs = (sign, -sign)   <span class="tok-com"># the direction is the circuit's, not the draw's</span>
+        <span class="tok-kw">for</span> out, key <span class="tok-kw">in</span> ((cmrr, <span class="tok-str">"acm"</span>), (psrr, <span class="tok-str">"avdd"</span>)):
+            <span class="tok-kw">if</span> r[<span class="tok-str">"adm"</span>] &gt; <span class="tok-num">0</span> <span class="tok-kw">and</span> r[key] &gt; <span class="tok-num">1e-12</span>:   <span class="tok-com"># numerical zero → not measured</span>
+                out.append(<span class="tok-num">20.0</span> * np.log10(r[<span class="tok-str">"adm"</span>] / r[key]))
+<span class="keyline">    <span class="tok-kw">return</span> (min(cmrr) <span class="tok-kw">if</span> cmrr <span class="tok-kw">else None</span>, min(psrr) <span class="tok-kw">if</span> psrr <span class="tok-kw">else None</span>, skipped)</span></code></pre>
+
+<ul>
+  <li><strong>&ldquo;Settled&rdquo;</strong> (<code>_draw_settled</code>) means two things. The difference is nulled, <code>|vchk| &lt; 0.05&middot;VDD</code> (165&nbsp;mV on gf180, 90&nbsp;mV on sky130): a nulled draw sits at the offset (0.3&ndash;33&nbsp;mV), a railed one near VDD. And the outputs are alive: <code>vocm</code> inside the 0.1&ndash;0.9&middot;VDD window the FD bias check uses. Some sky130 draws settle with <em>both</em> outputs at ground, the all-off state; their difference is zero too, but their gain is 10&#8315;&#8308;&ndash;10&#8315;&#8310; of a healthy draw&rsquo;s, and counting one once read a CMRR of &minus;1.8&nbsp;dB.</li>
+  <li><strong>Skipped draws are reported</strong>: <code>simulate_metrics</code> adds a note such as &ldquo;4 of 8 mismatch draws did not settle&rdquo;, so a design that dies on half its chips is not shown only through its healthy half.</li>
+  <li><strong><code>for &hellip; else</code></strong>: the <code>else</code> runs only if the loop ended without <code>break</code>, i.e. neither sign worked, and <code>continue</code> skips that chip.</li>
+  <li><strong>Remembering the sign</strong>: the right direction depends on the wiring, not on millivolts of mismatch, so after chip&nbsp;1 every chip tries it first, typically 9 runs instead of up to 16.</li>
+  <li><strong>The <code>1e-12</code> guard</strong>: a leak that reads as numerical zero is &ldquo;not measured&rdquo;, never &ldquo;infinite rejection&rdquo;, so Part 1's trap cannot return.</li>
+</ul>
+
+<h3>Report the worst chip</h3>
+<figure class="fig">
+  <svg viewBox="0 0 760 240" role="img" aria-label="CMRR of eight mismatch draws with the minimum highlighted">
+    <line x1="60" y1="200" x2="720" y2="200" stroke="var(--fig-stroke)" stroke-width="2"/>
+    <g font-size="10" fill="var(--fig-muted)" text-anchor="end">
+      <text x="52" y="204">60</text><text x="52" y="144">75</text><text x="52" y="84">90</text>
+    </g>
+    <line x1="60" y1="140" x2="720" y2="140" stroke="var(--border)" stroke-width="1"/>
+    <line x1="60" y1="80" x2="720" y2="80" stroke="var(--border)" stroke-width="1"/>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="85"  y="130" width="50" height="70"  rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="110" y="124">77.5</text><text x="110" y="218" fill="var(--fig-muted)">1</text>
+      <rect x="165" y="141" width="50" height="59"  rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="190" y="135">74.8</text><text x="190" y="218" fill="var(--fig-muted)">2</text>
+      <rect x="245" y="154" width="50" height="46"  rx="3" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2.5"/><text x="270" y="148" font-weight="700" fill="var(--fig-bad)">71.4</text><text x="270" y="218" fill="var(--fig-muted)">3</text>
+      <rect x="325" y="124" width="50" height="76"  rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="350" y="118">78.9</text><text x="350" y="218" fill="var(--fig-muted)">4</text>
+      <rect x="405" y="133" width="50" height="67"  rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="430" y="127">76.7</text><text x="430" y="218" fill="var(--fig-muted)">5</text>
+      <rect x="485" y="82"  width="50" height="118" rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="510" y="76">89.4</text><text x="510" y="218" fill="var(--fig-muted)">6</text>
+      <rect x="565" y="83"  width="50" height="117" rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="590" y="77">89.3</text><text x="590" y="218" fill="var(--fig-muted)">7</text>
+      <rect x="645" y="76"  width="50" height="124" rx="3" fill="var(--fig-fill2)" stroke="var(--fig-accent2)"/><text x="670" y="70">91.0</text><text x="670" y="218" fill="var(--fig-muted)">8</text>
+    </g>
+    <text x="390" y="236" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">seed (one imaginary chip each) &middot; CMRR in dB &middot; reported: min = 71.4 dB (the average, 81.1 dB, would hide chip 3)</text>
+  </svg>
+  <figcaption>gf180 PMOS pair with a current-source load. A spec is a promise about every chip, so the bench reports the weakest one, like rating a bridge by its weakest beam.</figcaption>
+</figure>
+
+<h3>The routing in <code>simulate_metrics()</code></h3>
+<pre class="code"><code><span class="tok-kw">if</span> ac_clean <span class="tok-kw">and</span> topo.fd:
+    <span class="tok-kw">if</span> tech.spice_lib <span class="tok-kw">and</span> tech.spice_lib.mismatch_switch:
+        mc_bodies = [_dut(tech, name, body, corner, mismatch_seed=s)
+                     <span class="tok-kw">for</span> s <span class="tok-kw">in</span> _MISMATCH_SEEDS]
+        out[<span class="tok-str">"cmrr_db"</span>], out[<span class="tok-str">"psrr_db"</span>] = _measure_fd_rejection(…)
+    <span class="tok-kw">else</span>:
+        notes.append(<span class="tok-str">"CMRR/PSRR not measured: … has no device mismatch model, …"</span>)
+<span class="tok-kw">elif</span> ac_clean:
+    …  <span class="tok-com"># single-ended: _measure_cmrr / _measure_psrr, unchanged</span></code></pre>
+
+<figure class="fig">
+  <svg viewBox="0 0 760 310" role="img" aria-label="Decision tree routing designs to the right CMRR/PSRR path">
+    <defs><marker id="ar7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <g font-size="11" text-anchor="middle">
+      <rect x="290" y="14" width="180" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="380" y="37" font-weight="600">AC gain clean?</text>
+      <rect x="40" y="92" width="170" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/><text x="125" y="112" font-weight="600">None</text><text x="125" y="127" font-size="9.5" fill="var(--fig-muted)">ratio vs a corrupt gain</text>
+      <rect x="400" y="96" width="180" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="490" y="119" font-weight="600">fully differential?</text>
+      <rect x="590" y="176" width="150" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2"/><text x="665" y="196" font-weight="600">SE benches</text><text x="665" y="211" font-size="9.5" fill="var(--fig-muted)">matched, unchanged</text>
+      <rect x="300" y="180" width="200" height="36" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/><text x="400" y="203" font-weight="600">PDK mismatch switch?</text>
+      <rect x="130" y="256" width="180" height="44" rx="8" fill="var(--fig-good-fill)" stroke="var(--fig-good)" stroke-width="2"/><text x="220" y="276" font-weight="600" fill="var(--fig-good)">8 chips &rarr; worst</text><text x="220" y="291" font-size="9.5" fill="var(--fig-muted)">gf180, sky130</text>
+      <rect x="420" y="256" width="180" height="44" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/><text x="510" y="276" font-weight="600" fill="var(--fig-accent)">None + note</text><text x="510" y="291" font-size="9.5" fill="var(--fig-muted)">ptm45, generic</text>
+    </g>
+    <path d="M330,50 L150,90" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar7)"/><text x="228" y="62" font-size="10" fill="var(--fig-muted)">no</text>
+    <path d="M430,50 L480,94" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar7)"/><text x="472" y="66" font-size="10" fill="var(--fig-muted)">yes</text>
+    <path d="M540,132 L640,174" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar7)"/><text x="604" y="148" font-size="10" fill="var(--fig-muted)">no</text>
+    <path d="M450,132 L410,178" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar7)"/><text x="414" y="154" font-size="10" fill="var(--fig-muted)">yes</text>
+    <path d="M350,216 L240,254" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar7)"/><text x="280" y="232" font-size="10" fill="var(--fig-muted)">yes</text>
+    <path d="M450,216 L500,254" stroke="var(--fig-muted)" stroke-width="2" marker-end="url(#ar7)"/><text x="488" y="232" font-size="10" fill="var(--fig-muted)">no</text>
+  </svg>
+  <figcaption>The <code>ac_clean</code> gate comes first, unchanged. The capability check reads the tech's data (<code>mismatch_switch</code>), not its name, so a third PDK with mismatch models needs only one YAML line.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Outcome</th><th><code>cmrr_db</code></th><th>Designer verdict (<code>cmrr_min_db = 60</code>)</th></tr></thead>
+  <tbody>
+    <tr><td>gf180 FD, worst chip 71.4&nbsp;dB</td><td class="num">71.4</td><td>pass (honest)</td></tr>
+    <tr><td>gf180 FD, worst chip 46.9&nbsp;dB</td><td class="num">46.9</td><td>fail (honest; used to pass at ~300&nbsp;dB)</td></tr>
+    <tr><td>ptm45 FD</td><td><code>None</code> + note</td><td>unverified</td></tr>
+    <tr><td>any FD, every chip railed</td><td><code>None</code></td><td>unverified</td></tr>
+  </tbody>
+</table>
+
+<h3>The hidden equation</h3>
+<p>The code never writes it, but the PR is a small Monte Carlo worst-case estimator of Part 2's textbook result:</p>
+<div class="eq-center"><span class="boxed-eq">CMRR<sub>reported</sub> = min<sub>k=1..8</sub> 20&middot;log<sub>10</sub>(A<sub>dm,k</sub>/A<sub>cm,k</sub>), &nbsp; CMRR<sub>k</sub> &asymp; 2g<sub>m</sub>R<sub>SS</sub>&middot;g<sub>m</sub>/&Delta;g<sub>m,k</sub></span></div>
+<p>If the leak is roughly Gaussian across chips, the largest of 8 draws typically lands about 1.7&sigma; out (<code>P(all 8 below x) = 0.5</code> gives <code>x &asymp; 1.7&sigma;</code>), so &ldquo;worst of 8&rdquo; is roughly a 1.5&ndash;2&sigma; worst case, conservative but not the 3&sigma; of production sign-off.</p>
+
+<h3>Honest limitations</h3>
+<table>
+  <thead><tr><th>Limitation</th><th>Consequence</th></tr></thead>
+  <tbody>
+    <tr><td>Only 8 chips (sky130 adds ~4.5&nbsp;s per FD design)</td><td>&asymp;1.5&ndash;2&sigma;, not 3&sigma;; <code>_MISMATCH_SEEDS</code> is a one-line change</td></tr>
+    <tr><td>One frequency (1&nbsp;mHz)</td><td>high-frequency CMRR, which usually drops, is not reported</td></tr>
+    <tr><td>gf180's wrapper applies only <code>V<sub>th</sub></code> mismatch (it computes <code>mis_k</code> but never uses it)</td><td>gf180 may overestimate CMRR slightly</td></tr>
+    <tr><td>No PSRR&minus; (every spec uses <code>vss = 0</code>)</td><td>negative-supply rejection not covered</td></tr>
+    <tr><td>PTM / generic have no mismatch models</td><td>FD CMRR/PSRR are <code>n/a</code>; constraining specs leave designs unverified</td></tr>
+    <tr><td>SE benches stay matched</td><td>SE CMRR is a little optimistic for real silicon</td></tr>
+    <tr><td>sky130 folded cascode reads 13&ndash;15&nbsp;dB</td><td>real for the circuit as sized, whose cascode tail is in triode; the sizer rejects such designs (see the case study below)</td></tr>
+  </tbody>
+</table>
+<h3>Case study: why the sky130 folded cascode reads 13&ndash;15&nbsp;dB</h3>
+<p>Folded-cascode designs on sky130 read only 13&ndash;15&nbsp;dB of CMRR against 87.6&nbsp;dB of gain and a 78.7&nbsp;dB analytical estimate. To find out which devices are responsible, the bench was re-run with mismatch on in one block at a time; every other device was wired to a copy of the PDK model with its mismatch term zeroed.</p>
+<table>
+  <thead><tr><th>Mismatch on only in</th><th class="num">Worst CMRR</th><th class="num">Median</th></tr></thead>
+  <tbody>
+    <tr><td>all devices (the bench)</td><td class="num">15.3&nbsp;dB</td><td class="num">19.3&nbsp;dB</td></tr>
+    <tr><td>none (sanity check)</td><td class="num">300&nbsp;dB floor</td><td class="num">300&nbsp;dB</td></tr>
+    <tr><td>CMFB amplifier <code>m1&ndash;m5_cmfb</code></td><td class="num">&asymp;266&nbsp;dB floor</td><td class="num">275&nbsp;dB</td></tr>
+    <tr><td><strong>CMFB-driven load sources <code>mp1/mp2_load</code></strong></td><td class="num"><strong>16.2&nbsp;dB</strong></td><td class="num"><strong>21.1&nbsp;dB</strong></td></tr>
+    <tr><td>fold sinks <code>mn3/mn4_load</code></td><td class="num">25.9&nbsp;dB</td><td class="num">34.0&nbsp;dB</td></tr>
+    <tr><td>cascodes</td><td class="num">37.7&nbsp;dB</td><td class="num">48.5&nbsp;dB</td></tr>
+    <tr><td>input pair</td><td class="num">61.9&nbsp;dB</td><td class="num">69.9&nbsp;dB</td></tr>
+    <tr><td>second stage</td><td class="num">84.5&nbsp;dB</td><td class="num">88.4&nbsp;dB</td></tr>
+    <tr><td>tail + bias generator</td><td class="num">&asymp;260&nbsp;dB floor</td><td class="num">275&nbsp;dB</td></tr>
+  </tbody>
+</table>
+<p><strong>Mismatch in the CMFB amplifier itself does nothing.</strong> It has a single output net that feeds both halves equally, so its mismatch only shifts the common mode. The tail and bias generator, also shared by both halves, behave the same way. What converts common mode into a differential signal is the mismatch between the <em>paired</em> current sources in the folded branches, above all the two PMOS sources <code>mp1/mp2_load</code> that carry the CMFB's correction current. Mismatch in those two devices alone reproduces nearly the whole effect. The input pair, which the textbook formula focuses on, gives 62&nbsp;dB on its own.</p>
+<p>That mechanism also needs a large common-mode current entering the branches, which a cascode tail should block. The operating point shows why it doesn't here: at 1.8&nbsp;V the pair's common source sits at 1.71&nbsp;V, leaving 90&nbsp;mV for two stacked tail transistors, so both are in triode (<code>mp3_tail_current</code>: V<sub>ds</sub> 0.04&nbsp;V against V<sub>dsat</sub> 0.29&nbsp;V, g<sub>m</sub>/g<sub>ds</sub> = 0.2). The &ldquo;current source&rdquo; is effectively a small resistor. On gf180 the same circuit keeps both tail devices saturated (+0.10 and +0.14&nbsp;V of margin) and reads 82.7&nbsp;dB.</p>
+<p>So the 13&ndash;15&nbsp;dB is real physics for the circuit as sized, and the bench is right to report it. In the real flow, though, this circuit never reaches the benches: the sizer flags it <code>bias_feasible = False</code> (85&nbsp;mV of headroom against 251&nbsp;mV of stacked V<sub>dsat</sub>), and the designer and CLI reject it before any simulation. This case study called the benches directly, bypassing that verdict. Its source-degenerated twin, which read 13.0&nbsp;dB, did slip through, because the headroom check looked for the tail at the pair's source, one resistor short of it; <a href="https://github.com/analog-ml/CircuitGenome/pull/263">#263</a> fixes that.</p>
+
+<table>
+  <thead><tr><th>Part</th><th>One line</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>matched FD halves cancel exactly, so the old bench divided by rounding error</td></tr>
+    <tr><td>2</td><td>Pelgrom mismatch, <code>A<sub>Vt</sub>/&radic;(WL)</code>, is the only thing that makes FD rejection finite</td></tr>
+    <tr><td>3</td><td><code>.param &lt;switch&gt;=1</code> + <code>.option seed=K</code>, after the <code>.lib</code></td></tr>
+    <tr><td>4</td><td>offset &times; open-loop gain rails the output; the CMFB sees only the average</td></tr>
+    <tr><td>5</td><td>a 10&sup1;&sup2;&nbsp;s servo cancels offset at DC and is blind at 1&nbsp;mHz; &plusmn;50&nbsp;mV clamp</td></tr>
+    <tr><td>6</td><td><code>alter</code> moves one stimulus between knobs, all at one operating point</td></tr>
+    <tr><td>7</td><td>8 chips, remember the sign, report the worst; PTM &rarr; <code>n/a</code></td></tr>
+  </tbody>
+</table>
+
+<hr>
+<p><strong>In one sentence:</strong> the FD rejection bench replaces a measurement of floating-point rounding error with a real one, by turning on the PDK's own transistor mismatch for 8 repeatable imaginary chips, holding each chip's output out of the rails with a slow offset-cancelling servo, reading its differential, common-mode and supply gains in one simulation, and reporting the worst chip &mdash; or an honest <code>n/a</code> when the tech has no mismatch models.</p>
+</section>
+
+</main>
+</div>
+<script>
+  (function(){
+    var root=document.documentElement;
+    var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme',dark?'dark':'light');
+    document.getElementById('theme-toggle').addEventListener('click',function(){
+      root.setAttribute('data-theme',root.getAttribute('data-theme')==='dark'?'light':'dark');
+    });
+  })();
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a')), map={};
+    links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var obs=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting&&map[e.target.id]){
+          links.forEach(function(l){l.classList.remove('active');});
+          map[e.target.id].classList.add('active');
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('section.part').forEach(function(s){obs.observe(s);});
+  })();
+  document.querySelectorAll('figure.fig.interactive').forEach(function(fig){
+    fig.querySelectorAll('.node').forEach(function(node){
+      node.addEventListener('mouseenter',function(){
+        var g=node.getAttribute('data-group');
+        fig.classList.add('dim');
+        fig.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){el.classList.add('hl');});
+      });
+      node.addEventListener('mouseleave',function(){
+        fig.classList.remove('dim');
+        fig.querySelectorAll('.hl').forEach(function(el){el.classList.remove('hl');});
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -34,19 +34,23 @@ _CAP_PREFIX = _ADVISORY_PREFIX + " third-stage gm capped"
 
 
 def _node_cap_at(model: GmIdModel, dev: Device, s: TransistorSizing,
-                 c_node: float) -> Callable[[float], float]:
+                 c_node: float, *, capped: bool = True) -> Callable[[float], float]:
     """Gate capacitance on ``dev``'s node as a function of ``dev``'s gm.
 
     ``c_node`` is the node's capacitance at the current sizing; re-sizing
     ``dev`` for another gm (same current and length, LUT width) swaps its
-    own gate capacitance for the new one.
+    own gate capacitance for the new one.  The width is clamped to the PDK's
+    widest single device unless ``capped`` is ``False`` (a device the
+    geometry builds from parallel fingers).
     """
     width = model.tech.width
     c_now = model.cgs(dev.type, s.w_um, s.l_um)
 
     def at(gm: float) -> float:
         w_um = model.geometry_for(dev.type, s.ids_a, SIGNAL, gm, l_um=s.l_um).w_um
-        w_um = min(max(w_um, width.min), width.max)
+        w_um = max(w_um, width.min)
+        if capped:
+            w_um = min(w_um, width.max)
         return c_node - c_now + model.cgs(dev.type, w_um, s.l_um)
     return at
 
@@ -64,6 +68,10 @@ def refine_rnmc_plan(
 
     ``changed`` is ``True`` when the second-stage gm requirement rose, Cc2
     grew or the third-stage gm requirement fell — the caller must re-size.
+    Behind an output buffer, a raised second-stage signal device joins the
+    plan's ``wide_refs``: the geometry then builds it past the widest single
+    PDK device, so it delivers the gm2 the design was scored with (issue
+    #266).  Without one it stays capped.
     The plan's RNMC advisories are updated for this design.  A
     non-RNMC circuit, or one without three live stages, comes back unchanged.
     ``hold_gm2`` caps gm2 at its sized value — for when raising it has broken
@@ -101,15 +109,23 @@ def refine_rnmc_plan(
     if plan.gm_req_map.get(ts[0].ref, gm3) < gm3 * (1.0 - 1e-3):
         gm3_min = gm3
     cc1_f, cc2_f = plan.cc_pf * 1e-12, plan.cc2_pf * 1e-12
+    # Behind a buffer a raised gm2 is built past one PDK device (and scored
+    # with that device's gate).  Without one the third stage drives CL, which
+    # leaves the inner pair ~5x of gm3/gm2 room, so the second stage never
+    # needs it -- and allowing it there moved designs SPICE then rated worse
+    # (#268).
+    buffered = chain.output_buffer is not None
     g = tuple(1.0 / st.rout if st.rout < float("inf") else 0.0 for st in stages[:3])
     design = rnmc.design_rnmc(
         gm1, gm2, gm3, cc1_f=cc1_f, cc2_f=cc2_f, cl_f=spec.cl,
         gm2_max=gm2_max, gm3_min=min(gm3_min, gm3),
         pm_min_deg=spec.phase_margin_min_deg,
-        c1_f=_node_cap_at(plan.model, *ss, chain.node_caps_f[0]),
+        c1_f=_node_cap_at(plan.model, *ss, chain.node_caps_f[0],
+                          capped=not buffered),
         c2_f=_node_cap_at(plan.model, *ts, chain.node_caps_f[1]), g=g,
         mirror_pole_hz=chain.third_stage_mirror_pole_hz,
-        buffer=chain.output_buffer)
+        buffer=chain.output_buffer, c3_f=chain.node_caps_f[2],
+        comp_resistors=chain.comp_resistors)
 
     raise_gm2 = design.gm2 > gm2
     cap_gm3 = design.gm3 < gm3
@@ -122,6 +138,7 @@ def refine_rnmc_plan(
     warnings = [w for w in plan.warnings if not w.startswith(_ADVISORY_PREFIX)]
     warnings += caps + [w for w in new if not w.startswith(_CAP_PREFIX)]
     gm_req = dict(plan.gm_req_map)
+    wide = set(plan.wide_refs)
     # gm3 is capped on the third stage's input device only: a non-inverting
     # stage's mirror keeps its sizing, and with it the output device's low
     # Vdsat (swing).
@@ -130,8 +147,10 @@ def refine_rnmc_plan(
             continue
         if raise_gm2 and slot in SECOND_STAGE_SLOTS:
             gm_req[ref] = max(gm_req[ref], design.gm2)
+            if buffered:   # one PDK-width device may not reach the raised gm2
+                wide.add(ref)
         elif (cap_gm3 and slot in THIRD_STAGE_SLOTS
               and dev.terminals.get("g") in stage2_out):
             gm_req[ref] = design.gm3
     return replace(plan, gm_req_map=gm_req, cc2_pf=design.cc2_f * 1e12,
-                   warnings=warnings), changed
+                   warnings=warnings, wide_refs=frozenset(wide)), changed

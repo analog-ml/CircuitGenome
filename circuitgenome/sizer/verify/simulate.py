@@ -4,8 +4,10 @@ from __future__ import annotations
 from ..models import SizingResult, SizingSpec, TechParams
 from .deck import _dut, _inject_sizes, _parse_subckt, unsized_mos_refs
 from .measure import (
+    _MISMATCH_SEEDS,
     _measure_ac,
     _measure_cmrr,
+    _measure_fd_rejection,
     _measure_power,
     _measure_psrr,
     _measure_sr,
@@ -24,7 +26,12 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
     ``slew_rate_vps``, ``output_swing_max_v``, ``output_swing_min_v``,
     ``cmrr_db``, ``psrr_db``.  Missing/failed measurements are ``None``
     (CMRR/PSRR need a measured differential gain first).  Fully-differential
-    slew rate and swing are per output, like the single-ended ones.  A fully-differential design can
+    CMRR/PSRR are the worst case over seeded PDK mismatch draws (a draw that
+    does not settle at a live operating point is left out, with a note), and
+    ``None`` on a tech without a mismatch model (``spice_lib.mismatch_switch``):
+    a matched FD circuit rejects common mode and supply exactly.
+    Fully-differential slew rate and swing are per output, like the
+    single-ended ones.  A fully-differential design can
     report a phase margin ≤ 0 — a real instability, flagged in ``notes``;
     the single-ended bench discards one as a corrupt sweep.  Every bench
     loads each output with ``spec.cl`` — the load ``evaluate_metrics``
@@ -86,7 +93,27 @@ def simulate_metrics(netlist_text: str, result: SizingResult,
         _oops("output-swing", e)
     # CMRR/PSRR are relative to the differential gain: without a clean Adm
     # measurement the ratio is garbage-on-garbage, so they stay None.
-    if ac_clean:
+    if ac_clean and topo.fd:
+        if tech.spice_lib and tech.spice_lib.mismatch_switch:
+            try:
+                mc_bodies = [_dut(tech, name, body, corner, mismatch_seed=s)
+                             for s in _MISMATCH_SEEDS]
+                out["cmrr_db"], out["psrr_db"], skipped = _measure_fd_rejection(
+                    name, ports, mc_bodies, topo, vdd, ibias, spec.cl, vcm,
+                    polarity)
+                if skipped:
+                    notes.append(
+                        f"CMRR/PSRR: {skipped} of {len(mc_bodies)} mismatch "
+                        "draws did not settle at a live operating point "
+                        "(output railed, or both outputs collapsed to a rail) "
+                        "and were left out")
+            except Exception as e:
+                _oops("CMRR/PSRR", e)
+        else:
+            notes.append(f"CMRR/PSRR not measured: {tech.name} has no device "
+                         "mismatch model, and a matched fully-differential "
+                         "circuit rejects common mode and supply exactly")
+    elif ac_clean:
         try:
             out["cmrr_db"] = _measure_cmrr(*args, polarity=polarity,
                                            adm_db=out["gain_db"])

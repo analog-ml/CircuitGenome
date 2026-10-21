@@ -31,6 +31,7 @@ when the tail can't actually bias.
 from __future__ import annotations
 
 from ..physics.device_model import GmIdModel
+from ..physics.stage_chain import _tail_current_net
 from ..models import SizingSpec, TechParams, TransistorSizing
 from .analyze import OpAmpBlocks
 
@@ -164,7 +165,7 @@ def _repair_tail_headroom(model, ip, tc_dev, all_transistors, sizing, spec,
             idw = model.lut.id_per_w(dev.type, gm_id, s.l_um) if s else 0.0
             if not s or idw <= 0:
                 continue
-            w_new = tech.width.snap(abs(s.ids_a) / idw)
+            w_new = tech.width.snap_total(abs(s.ids_a) / idw)
             out[dev.ref] = TransistorSizing(
                 ref=dev.ref, w_um=w_new, l_um=s.l_um, ids_a=s.ids_a,
                 vgs_v=model.vgs(dev.type, w_new, s.l_um, s.ids_a),
@@ -237,11 +238,13 @@ def check_dc_operating_point(
     bias_feasible = not any("headroom" in w for w in warnings)
 
     # Cascode-aware budget: a stacked tail needs the *sum* of its devices' Vdsat.
+    # The walk starts at the tail's drain, which a source-degenerated pair
+    # puts one resistor beyond the devices' sources.
     ip = blocks.input_pair
     tail = blocks.tail
     if ip and tail and ip.mosfets and tail.is_cascode:
         ip_dev = ip.mosfets[0]
-        net_tail = ip_dev.terminals.get("s")
+        net_tail = _tail_current_net(ip_dev.terminals.get("s"), ip.resistors)
         s_ip = sizing.get(ip_dev.ref)
         if net_tail and s_ip:
             vcm = spec.vcm

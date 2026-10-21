@@ -9,23 +9,27 @@ from __future__ import annotations
 
 from . import equations as eq
 from ..models import SizingSpec
-from .rnmc import RNMC
+from .rnmc import RNMC, comp_resistances, worst_half
 from .stage_chain import StageChain
 
 
 def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
                        cc2_f: float, cl_f: float) -> float | None:
     """Full-model RNMC phase margin (:func:`~.equations.phase_margin_rnmc_deg`)
-    from the chain's stage gm/rout, node parasitics, third-stage mirror and
-    output buffer."""
+    from the chain's stage gm/rout, node parasitics, third-stage mirror,
+    output buffer and compensation resistors — on the worse half when the
+    halves' compensation differs (:func:`~.rnmc.worst_half`)."""
     s = chain.stages
     caps = chain.node_caps_f or (0.0, 0.0, 0.0)
     g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s[:3]]
-    return eq.phase_margin_rnmc_deg(
-        gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f,
-        c1_f=caps[0], c2_f=caps[1], g1=g[0], g2=g[1], g3=g[2],
-        mirror_pole_hz=chain.third_stage_mirror_pole_hz,
-        buffer=chain.output_buffer)
+    buffer = chain.output_buffer
+    pairs = comp_resistances(chain.comp_resistors, s[2].gm, cc_f, cc2_f,
+                             buffer[1] if buffer else 0.0)
+    _, pm = worst_half(
+        gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f, pairs,
+        c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],
+        mirror_pole_hz=chain.third_stage_mirror_pole_hz, buffer=buffer)
+    return pm
 
 
 def _slew_rate(chain: StageChain, cc_f: float, cc2_f: float | None,

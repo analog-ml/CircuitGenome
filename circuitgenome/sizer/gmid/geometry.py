@@ -164,7 +164,10 @@ def _apply_mirror_ratios(
 
     MOSFETs are grouped by (gate-net, type); a diode-connected member (g == d)
     is the reference.  Output W is the current ratio times the reference's W at
-    matched L (no ``Fraction`` rounding).
+    matched L (no ``Fraction`` rounding).  ``snap`` must not cap the result: a
+    mirror output's current *is* its width ratio, so one clamped to the widest
+    single device carries less than planned -- a total width is built from
+    parallel fingers instead (:meth:`~..models.GridSpec.snap_total`).
     """
     groups: dict[tuple, list[str]] = {}
     for ref, (device, _slot) in all_transistors.items():
@@ -225,6 +228,7 @@ def assign_geometry_gmid(
     gm_target_map: dict[str, float],        # ref → required gm in A/V (signal devices)
     tech: TechParams,
     vod_max_map: dict[str, float] | None = None,  # ref → max VDS_sat in V (swing)
+    wide_refs: frozenset[str] = frozenset(),  # refs built past width.max (fingers)
 ) -> tuple[dict[str, TransistorSizing], list[str], bool]:
     """Return ``({ref: TransistorSizing}, warnings, feasible)`` for the gm/Id path.
 
@@ -243,6 +247,10 @@ def assign_geometry_gmid(
       folded-cascode + common_source_nmos candidates lost to a blanket floor).
       Those candidates' high loop gain keeps the swing bench tracking well
       past the Vdsat point, so the floor is not needed there.
+
+    ``wide_refs`` keep their full LUT width past ``tech.width.max`` (parallel
+    fingers, :attr:`~..models.TransistorSizing.fingers`); every other device
+    is capped at the widest single device.
 
     ``feasible`` is ``False`` when an output-path device cannot fit its raw
     budget even at the weakest inversion.
@@ -280,7 +288,8 @@ def assign_geometry_gmid(
             gm_id=ti.gm_id, l_um=model.length_for(ti.l_mult),
             gm_id_min=gm_id_min,
         )
-        W[ref] = tech.width.snap(geo.w_um)
+        W[ref] = (tech.width.snap_total if ref in wide_refs
+                  else tech.width.snap)(geo.w_um)
         L[ref] = geo.l_um
         if geo.gm_id_capped:
             warnings.append(
@@ -292,10 +301,10 @@ def assign_geometry_gmid(
     _apply_symmetry(W, L, slot_transistors, ids_map)
 
     # --- 4: current-mirror ratios (exact, no Fraction approximation) ---
-    _apply_mirror_ratios(W, L, all_transistors, ids_map, tech.width.snap)
+    _apply_mirror_ratios(W, L, all_transistors, ids_map, tech.width.snap_total)
 
     # --- 5: deliberate margin for a knife-edge current-source load ---
-    _apply_load_current_margin(W, slot_transistors, tech.width.snap)
+    _apply_load_current_margin(W, slot_transistors, tech.width.snap_total)
 
     # --- 6: build TransistorSizing with final geometry ---
     sizing: dict[str, TransistorSizing] = {}

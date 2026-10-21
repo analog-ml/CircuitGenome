@@ -8,7 +8,11 @@ square-law device equations, the CMRR → SR → GBW → gain → PM constraint 
 the CP-SAT integer linearisation, and a worked numerical example.
 :doc:`../../theory/gmid_sizing_flow` covers the **gm/Id** path: the five-phase
 procedural pipeline and the role vs functional-building-block tagging that fixes
-each device's ``gm/Id``.  Which path runs for a given technology is decided in
+each device's ``gm/Id``.  :doc:`../../theory/rnmc_stability` explains how a
+reversed-nested-Miller loop is judged — poles, damping ζ and phase margin from
+a small nodal model, and :doc:`../../theory/rnmc_buffered_oscillation` gives
+the analog background for one case of it: why buffered RNMC op-amps
+oscillated (issue #266) and how the sizer now avoids it.  Which path runs for a given technology is decided in
 :doc:`../../modules/sizer`, *Path selection*.
 
 .. toctree::
@@ -16,3 +20,5 @@ each device's ``gm/Id``.  Which path runs for a given technology is decided in
 
    ../../theory/sizing_flow
    ../../theory/gmid_sizing_flow
+   ../../theory/rnmc_stability
+   ../../theory/rnmc_buffered_oscillation

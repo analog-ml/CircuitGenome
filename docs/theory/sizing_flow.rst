@@ -641,7 +641,9 @@ grounds its report in ngspice instead:
   GBW, phase margin, slew rate (min of the rising and falling edges), quiescent
   power, CMRR, PSRR+, and output swing.  A metric ngspice cannot extract is shown
   as ``n/a`` (no analytical fallback), and ngspice is **required** — the command
-  errors if it is not installed.
+  errors if it is not installed.  Fully-differential CMRR/PSRR+ are the worst
+  case over seeded PDK mismatch draws (GF180MCU, sky130), and ``n/a`` on a tech
+  without mismatch models.
 
 * **Corner sweep (foundry PDKs).**  A PDK tech (``spice_lib``, e.g. GF180MCU) is
   sized at its nominal corner, then the sized design is re-measured across the
@@ -690,7 +692,9 @@ Assumptions and where they break down
 
    **No device mismatch.**  The solver assumes perfectly matched differential
    pairs.  Offset voltage and CMRR degradation from mismatch must be estimated
-   separately (e.g. Pelgrom's model).
+   separately (e.g. Pelgrom's model).  The SPICE check measures it only for
+   fully-differential CMRR/PSRR+, which mismatch alone sets, using the PDK's
+   own mismatch models.
 
 ----
 
@@ -944,7 +948,10 @@ formula cannot see the problem.  For RNMC the sizer instead
    (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`)
    until the full model's poles are damped to 0.7
    (:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`) and the
-   phase-margin spec holds, up to the second stage's weak-inversion ceiling;
+   phase-margin spec holds, up to the second stage's weak-inversion ceiling
+   (behind an output buffer the gm/Id pipeline builds a raised second stage
+   wider than one PDK device from parallel fingers, so the gm it plans with is
+   the gm it gets — issue #266);
 2. then **raises** :math:`C_{c2}` in steps up to :math:`C_{c1}`;
 3. and only as a last resort **caps** :math:`g_{m3}` (on the third stage's
    input device, so a non-inverting stage's mirror keeps its sizing).
@@ -955,12 +962,16 @@ best-damped choice that meets it, else the highest-PM one; an advisory is
 emitted either way.  The phase
 margin itself comes from the full transfer function evaluated on a frequency
 sweep (:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`),
-including the stage-output parasitics, the third stage's mirror pole and — on
-the ``*_buffered_*`` templates — the source-follower output buffer, and is the
+including the stage-output parasitics, the third stage's mirror pole, each
+compensation branch's series resistor and — on the ``*_buffered_*`` templates
+— the source-follower output buffer and the drains on the third stage's output
+(on the worse half of a fully-differential amplifier, issues #266 and #269),
+and is the
 **worst over every 0 dB crossing** — a lightly damped pair that lifts
 the gain back above 0 dB after the phase has passed :math:`-180^{\circ}` is a
 negative gain margin and reports a negative PM; an open loop with
-right-half-plane poles reports 0°.
+right-half-plane poles reports 0°.  :doc:`rnmc_stability` walks through that
+model step by step, with the background on pole pairs and damping.
 
 The buffer matters: :math:`C_{c1}` returns to the third stage's output, which
 then drives only the follower's gate, not :math:`C_L`.  With so little
