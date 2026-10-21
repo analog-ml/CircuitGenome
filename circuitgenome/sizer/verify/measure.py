@@ -11,8 +11,8 @@ swing, CMRR and PSRR benches reuse it instead of re-detecting.
 Feedback rigs (all AC-coupled through huge L/C so the loop only sets the DC
 operating point):
 
-* **SE loop** (AC/CMRR/PSRR): ``Lfb`` closes out→inn at DC, ``Cfb`` AC-grounds
-  the inverting input to the ``cm`` node.
+* **SE loop** (power/AC/CMRR/PSRR): ``Lfb`` closes out→inn at DC, ``Cfb``
+  AC-grounds the inverting input to the ``cm`` node.
 * **FD loop** (AC): inputs resistor-anchored at Vcm, the CMFB owns the output
   CM (:func:`_loop_fb`).
 * **FD servo** (CMRR/PSRR, under PDK device mismatch): a clamped, DC-only
@@ -66,20 +66,44 @@ def _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr,
 
 
 def _measure_power(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
-    """DC operating point → quiescent power."""
-    netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
-              "in1": "cm", "in2": "cm"}
-    for o in topo.out:
-        netmap[o] = o
-    if topo.has_vcm:
-        netmap["vcm_ref"] = "cm"
-    deck = _deck(name, ports, body_dut, vdd, ibias, cl, f"Vcm cm 0 {vcm}\n",
-                 netmap, "op\nwrdata __OUT__ i(Vsup)")
-    data = _run(deck, ["i(Vsup)"])
-    if data is None:
-        return None
-    i = abs(float(data.flatten()[-1]))
-    return vdd * i
+    """DC operating point → quiescent power.
+
+    Single-ended: in unity feedback (``Lfb``/``Cfb`` loop) at both input
+    polarities, keeping the one whose output settles closest to Vcm — the
+    point the amplifier runs at, as in :func:`~.op.read_op_operating_point`.
+    With the loop open the output rails and drags the internal nodes with it,
+    and the power read there can be 40× the quiescent value (issue #271).
+    ``None`` when neither polarity settles inside 10–90 % of the supply.
+    Fully differential: both inputs and ``vcm_ref`` at Vcm, the CMFB owning
+    the output CM.
+    """
+    if topo.fd:
+        netmap = {"ibias": "ibias", "vdd!": "vdd", "gnd!": "0",
+                  "in1": "cm", "in2": "cm", "outp": "outp", "outn": "outn"}
+        if topo.has_vcm:
+            netmap["vcm_ref"] = "cm"
+        deck = _deck(name, ports, body_dut, vdd, ibias, cl,
+                     f"Vcm cm 0 {vcm}\n", netmap, "op\nwrdata __OUT__ i(Vsup)")
+        data = _run(deck, ["i(Vsup)"])
+        if data is None:
+            return None
+        return vdd * abs(float(data.flatten()[-1]))
+    fb, _ = _loop_fb(topo, vcm, "Vid inp cm dc 0\n")
+    best: tuple[float, float] | None = None   # (|vout − vcm|, power)
+    for inp, inn in _POLARITIES:
+        deck = _deck(name, ports, body_dut, vdd, ibias, cl, fb,
+                     _fb_netmap(topo, inp, inn),
+                     "op\nwrdata __OUT__ i(Vsup) v(out)")
+        data = _run(deck, ["i(Vsup)", "v(out)"])
+        if data is None:
+            continue
+        row = data.flatten()
+        i, vout = float(row[1]), float(row[-1])
+        if not (0.1 * vdd < vout < 0.9 * vdd):
+            continue  # wrong polarity → output railed
+        if best is None or abs(vout - vcm) < best[0]:
+            best = (abs(vout - vcm), vdd * abs(i))
+    return best[1] if best else None
 
 
 def _pm_plausible(pm: float | None) -> bool:

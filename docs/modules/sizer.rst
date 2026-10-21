@@ -231,7 +231,8 @@ from ``mu_cox``/``vth``/``lam`` for ``generic``:
   redundant for PTM / PDK techs (already SPICE-measured).
 
 Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loop
-AC-coupled-feedback testbench; power from the DC operating point; slew rate from a
+AC-coupled-feedback testbench; power from the DC operating point (single-ended: in
+unity feedback, with the output settled at Vcm); slew rate from a
 unity-gain pulse centred on Vcm (the min of the rising and falling edges, each read
 within 10–90 % of its swing); output swing from an
 inverting −1 DC sweep (fully-differential designs: a differential-only −1 rig,
