@@ -49,8 +49,22 @@ class DeviceModel(Protocol):
         """Transconductance gm in A/V at the device's operating point."""
         ...
 
-    def gds(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
-        """Output conductance gds in A/V at the device's operating point."""
+    def gds(self, dtype: str, w_um: float, l_um: float, ids: float,
+            vds: float | None = None) -> float:
+        """Output conductance gds in A/V at the device's operating point.
+
+        ``vds`` is the device's quiescent ``|Vds|`` in V when known; ``None``
+        keeps the backend's single-point value.
+        """
+        ...
+
+    def gmb(self, dtype: str, w_um: float, l_um: float, ids: float,
+            vsb: float) -> float:
+        """Body transconductance gmbs in A/V at reverse body bias ``vsb`` (V).
+
+        A cascode whose source swings against a fixed bulk adds it to its
+        ``gm`` in the ``ro·(1 + gm·R)`` boost.
+        """
         ...
 
     def vds_sat(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
@@ -127,9 +141,14 @@ class Level1Model:
         """Square-law gm ``√(2·µCox·(W/L)·|Id|)`` (:func:`~.equations.gm`)."""
         return eq.gm(_params(self.tech, dtype).mu_cox, w_um, l_um, ids)
 
-    def gds(self, dtype, w_um, l_um, ids):
-        """Level-1 gds ``λ·|Id|`` — geometry-independent (W/L ignored)."""
+    def gds(self, dtype, w_um, l_um, ids, vds=None):
+        """Level-1 gds ``λ·|Id|`` — geometry- and ``vds``-independent."""
         return eq.gd(_params(self.tech, dtype).lam, ids)
+
+    def gmb(self, dtype, w_um, l_um, ids, vsb):
+        """``0.0``: the Level-1 card this backend is verified against is
+        emitted with ``gamma=0`` (see ``verify.deck._emit_model``)."""
+        return 0.0
 
     def vds_sat(self, dtype, w_um, l_um, ids):
         """Square-law saturation overdrive (:func:`~.equations.vds_sat`)."""
@@ -249,11 +268,29 @@ class GmIdModel:
         """Transconductance ``(gm/Id)·|Id|`` at the geometry's operating point."""
         return self._gm_id_at(dtype, w_um, l_um, ids) * abs(ids)
 
-    def gds(self, dtype, w_um, l_um, ids):
-        """Output conductance ``gm/(gm/gds)`` read from the LUT at the operating gm/Id."""
+    def gds(self, dtype, w_um, l_um, ids, vds=None):
+        """Output conductance ``gm/(gm/gds)`` read from the LUT at the operating gm/Id.
+
+        The table holds gds at ``Vds = Vdd/2``; a known ``vds`` scales it to
+        the device's own drain bias (:meth:`~.gmid_lut.GmIdLut.gds_scale`).
+        A device just above its saturation knee -- under a cascode -- has
+        several times the Vdd/2 value (issue #273).  The read stops at the
+        device's Vdsat: below it the device would be in triode, so the level
+        estimate that supplied ``vds`` (every device saturated) has failed,
+        and the knee value keeps the gain on the over-predicting side.
+        """
         gm_id = self._gm_id_at(dtype, w_um, l_um, ids)
         gm = gm_id * abs(ids)
-        return gm / self.lut.gm_gds(dtype, gm_id, l_um)
+        gds = gm / self.lut.gm_gds(dtype, gm_id, l_um)
+        if vds is not None:
+            vds = max(vds, self.lut.vdsat(dtype, gm_id, l_um))
+            gds *= self.lut.gds_scale(dtype, gm_id, l_um, vds)
+        return gds
+
+    def gmb(self, dtype, w_um, l_um, ids, vsb):
+        """Body transconductance ``gm·(gmbs/gm)`` read from the LUT at ``vsb``."""
+        gm_id = self._gm_id_at(dtype, w_um, l_um, ids)
+        return gm_id * abs(ids) * self.lut.gmb_gm(dtype, gm_id, l_um, vsb)
 
     def vds_sat(self, dtype, w_um, l_um, ids):
         """Saturation overdrive ``VDS,sat`` read from the LUT (V)."""

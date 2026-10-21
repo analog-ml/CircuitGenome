@@ -55,6 +55,14 @@ circuit simulation. Always what a sizing result carries, for every technology.
 _Avoid_: Analytical metrics (collides with the Level-1 *analytical* sizer, yet gm/Id
 results are predicted too), estimated metrics.
 
+**Quiescent node level**:
+The DC voltage of a net that a solved sizing implies, estimated without a
+circuit solve from the rails, the input common mode, every device's planned
+`|Vgs|` and every sized resistor's `I·R`. The predicted gain reads the first
+stage's devices at the `Vds`/`Vsb` these give, not at the gm/Id table's single
+characterisation point (`Vds = Vdd/2`, `Vsb = 0`).
+_Avoid_: Operating point (that is the simulator's `.op` result), DC solution.
+
 **Measured metrics**:
 The same performance figures read back from a SPICE (ngspice) simulation of the
 sized circuit, at one process corner. The authority whenever it disagrees with the

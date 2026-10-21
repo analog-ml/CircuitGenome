@@ -538,6 +538,16 @@ own ``ro`` by ``1 + gm·R`` — the other half of the effect ``gm1_factor``
 derates, and one the modifiers cannot carry because it lands *inside* the
 first stage's parallel combination rather than on top of it.
 
+The first stage's walk reads each device at its **own** bias
+rather than at the lookup table's single sweep point (``Vds = Vdd/2``,
+``Vsb = 0``): :func:`~circuitgenome.sizer.physics.node_levels.estimate_node_levels`
+carries the rails and the input common mode through every device's planned
+``|Vgs|`` and every sized resistor's ``I·R`` to a DC level per net, and the walk
+reads ``gds`` at each device's ``Vds`` and adds ``gmb`` to a cascode's boost when
+its source rides above its bulk.  The device under a cascode sits ~0.1 V above
+its saturation knee, with 4-10x the table's ``gds``; at the single sweep point the
+cascode gain ran 8-20 dB above ngspice (issue #273).
+
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.evaluate import evaluate_circuit
@@ -547,10 +557,10 @@ first stage's parallel combination rather than on top of it.
 
 .. code-block:: text
 
-   {'gain_db': 60.55, 'gbw_hz': 15957948.23, 'phase_margin_deg': 77.44, 'slew_rate_vps': 30000000.0,
+   {'gain_db': 59.63, 'gbw_hz': 15957948.23, 'phase_margin_deg': 77.44, 'slew_rate_vps': 30000000.0,
     'power_w': 0.0, 'cmrr_db': -8.2, 'psrr_db': 49.47}
 
-Gain (60.6 dB) and phase margin (77.4°) clear the spec's 55 dB / 60° targets.  The
+Gain (59.6 dB) and phase margin (77.4°) clear the spec's 55 dB / 60° targets.  The
 poor ``cmrr_db`` traces straight back to Phase 4c: the resistor tail's finite
 conductance (``gd_tail_override``) is a leaky current source, which the CMRR term
 penalises heavily — a concrete example of a Phase-4c modifier shaping a Phase-5

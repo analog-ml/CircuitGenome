@@ -13,7 +13,17 @@ Axes (both per polarity, fields shaped ``(n_L, n_gmid)``):
     ``l_axis``      channel lengths in µm
 
 Fields: ``id_w`` (A/µm), ``gm_gds`` (V/V), ``ft`` (Hz), ``vdsat`` (V),
-``vgs`` (V, magnitude).
+``vgs`` (V, magnitude).  All are characterised at one bias point, ``Vds =
+Vdd/2`` and ``Vsb = 0``.
+
+Two optional correction tables cover devices far from that point (issue
+#273), each a stack of ``(n_L, n_gmid)`` grids over a bias axis:
+    ``gds_scale`` over ``vds_axis``  gds at that Vds over gds at Vdd/2, at equal
+                                     current density (1 at the reference)
+    ``gmb_gm``    over ``vsb_axis``  body transconductance ``gmbs/gm`` at that
+                                     reverse body bias
+A table without them (an older ``.npz``) reads as ``gds_scale = 1`` and
+``gmb_gm = 0``: the single-point behaviour.
 """
 from __future__ import annotations
 
@@ -22,6 +32,13 @@ from pathlib import Path
 import numpy as np
 
 _FIELDS = ("id_w", "gm_gds", "ft", "vdsat", "vgs")
+
+
+def _bracket(axis: np.ndarray, x: float) -> tuple[int, float]:
+    """``(j, t)`` with ``x`` clamped into ``axis[j-1] .. axis[j]`` at fraction ``t``."""
+    x = float(np.clip(x, axis[0], axis[-1]))
+    j = int(np.clip(np.searchsorted(axis, x), 1, len(axis) - 1))
+    return j, (x - axis[j - 1]) / (axis[j] - axis[j - 1])
 
 
 class GmIdLut:
@@ -35,6 +52,12 @@ class GmIdLut:
         self._fields: dict[str, dict[str, np.ndarray]] = {
             dtype: {f: data[f"{dtype}_{f}"] for f in _FIELDS}
             for dtype in ("nmos", "pmos")
+        }
+        self._bias: dict[str, tuple[np.ndarray, dict[str, np.ndarray]]] = {
+            field: (data[axis], {dtype: data[f"{dtype}_{field}"]
+                                 for dtype in ("nmos", "pmos")})
+            for field, axis in (("gds_scale", "vds_axis"), ("gmb_gm", "vsb_axis"))
+            if axis in data
         }
 
     # -- internal helpers ---------------------------------------------------
@@ -62,6 +85,25 @@ class GmIdLut:
         g = float(np.clip(gm_id, self.gm_id_axis[0], self.gm_id_axis[-1]))
         return float(np.interp(g, self.gm_id_axis, row))
 
+    def _bias_lookup(self, dtype: str, field: str, gm_id: float, l_um: float,
+                     bias: float, log: bool) -> float | None:
+        """``field`` at ``(gm_id, l_um)`` and bias ``bias`` (clamped), or ``None``
+        without that table.  Bilinear on each bias layer, then along the bias
+        axis -- in ``log`` space for the convex, decade-spanning ``gds_scale``."""
+        if field not in self._bias:
+            return None
+        axis, grids = self._bias[field]
+        grid = grids[dtype]                            # (n_bias, n_L, n_gmid)
+        la, ga = self.l_axis, self.gm_id_axis
+        jl, tl = _bracket(la, l_um)
+        rows = grid[:, jl - 1] * (1.0 - tl) + grid[:, jl] * tl
+        jg, tg = _bracket(ga, gm_id)
+        layers = rows[:, jg - 1] * (1.0 - tg) + rows[:, jg] * tg
+        x = float(np.clip(bias, axis[0], axis[-1]))
+        if log:
+            return float(np.exp(np.interp(x, axis, np.log(layers))))
+        return float(np.interp(x, axis, layers))
+
     # -- public reads -------------------------------------------------------
     def id_per_w(self, dtype: str, gm_id: float, l_um: float) -> float:
         """Drain current per µm of width (A/µm) at the operating point."""
@@ -70,6 +112,22 @@ class GmIdLut:
     def gm_gds(self, dtype: str, gm_id: float, l_um: float) -> float:
         """Intrinsic-gain ratio gm/gds (V/V)."""
         return self._lookup(dtype, "gm_gds", gm_id, l_um)
+
+    def gds_scale(self, dtype: str, gm_id: float, l_um: float, vds: float) -> float:
+        """gds at ``|vds|`` (V) over the table's Vdd/2 gds, same current density.
+
+        Rises steeply toward the saturation knee: a device ~0.1 V above its
+        Vdsat (under a cascode) has several times the Vdd/2 gds.  ``1.0`` when
+        the table has no Vds axis.
+        """
+        v = self._bias_lookup(dtype, "gds_scale", gm_id, l_um, abs(vds), log=True)
+        return 1.0 if v is None else v
+
+    def gmb_gm(self, dtype: str, gm_id: float, l_um: float, vsb: float) -> float:
+        """Body transconductance ratio ``gmbs/gm`` at reverse body bias ``vsb``
+        (V); ``0.0`` when the table has no Vsb axis."""
+        v = self._bias_lookup(dtype, "gmb_gm", gm_id, l_um, max(vsb, 0.0), log=False)
+        return 0.0 if v is None else v
 
     def ft(self, dtype: str, gm_id: float, l_um: float) -> float:
         """Transition frequency gm/(2π·Cgg) in Hz."""

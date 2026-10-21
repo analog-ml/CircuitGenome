@@ -13,7 +13,8 @@ backends — square-law (:doc:`physics/equations`) and measured LUT
 (:doc:`physics/gmid_lut`) — behind one interface, so everything above it is
 written once.  :doc:`physics/preprocess` derives the per-device currents, gm
 targets and compensation caps from the spec; :doc:`physics/stage_chain`
-extracts the per-stage ``gm``/``Rout`` a *solved* sizing presents; and
+extracts the per-stage ``gm``/``Rout`` a *solved* sizing presents, reading
+devices at the quiescent bias :doc:`physics/node_levels` estimates; and
 :doc:`physics/metrics` turns that chain into predicted metrics and spec
 margins.
 
@@ -29,5 +30,6 @@ Nothing here decides a width, and nothing here runs a simulator — see
    physics/equations
    physics/gmid_lut
    physics/preprocess
+   physics/node_levels
    physics/stage_chain
    physics/metrics
