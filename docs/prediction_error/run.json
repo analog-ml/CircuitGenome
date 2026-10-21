@@ -3,7 +3,7 @@
   "spec": "docs/prediction_error/spec.yaml",
   "n_per_template": 100,
   "seed": 0,
-  "commit": "5ee0e4f",
+  "commit": "f0e9a76",
   "ngspice": "ngspice-44.2",
-  "date": "2026-10-07"
+  "date": "2026-10-21"
 }

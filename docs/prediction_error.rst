@@ -23,36 +23,47 @@ docstring.
 Key observations
 ----------------
 
-From the run recorded below (commit ``5ee0e4f``, 1,254 circuits, 1,210
+From the run recorded below (commit ``f0e9a76``, 1,254 circuits, 1,249
 simulated).  These notes are hand-written; re-check them when the snapshot is
 regenerated.
 
-* **Gain is over-predicted.**  One- and two-stage designs measure 7–14 dB
+* **Gain is over-predicted on one- and two-stage designs**: 7–14 dB
   (median) below the prediction, with a p10 near −20 dB — the cascode bias
   already noted in :doc:`modules/sizer`.  Three-stage designs land within
-  ~2 dB, but only the half below the open-loop bench ceiling is counted, so
+  ~3 dB, but only the half below the open-loop bench ceiling is counted, so
   their highest-gain designs are not represented.
-* **GBW is mildly over-predicted** (median −11 %).  Buffered templates miss by
-  15–20 %; unbuffered three-stage ones are centred on zero.
-* **Phase margin is under-predicted** (median +11°): the model is
-  conservative, most of all on two-stage and buffered RNMC designs.
-* **Slew rate is the largest systematic gap** (median −65 %).  Every buffered
-  template measures ~4.1 V/µs — 20 µA into the 5 pF load, i.e. the follower's
-  bias current — while the model predicts the internal ``ibias / Cc`` limit.
-  Unbuffered designs measure 40–60 % low for the same reason at their own
-  output.
-* **Power is over-predicted** by 13–50 % on every template *except* the
-  single-ended three-stage RNMC ones, which split in two: about half match
-  the other templates, and the other half (53 and 52 of 100) draw 4–40× the
-  predicted power (worst +4,238 %).  Which half a design falls in follows how
-  the polarity of its non-inverting third stage pairs with the first-stage
-  load — a model or sizing gap worth its own issue.
-* **Output swing** is within ~0.25 V on single-ended templates; fully
-  differential ones measure ~1.1 V less swing than predicted on each side.
-  Whether the model or the fully-differential swing bench is at fault is not
-  settled by this data.
-* **CMRR and PSRR** (single-ended only) are under-predicted by 20–50 dB
-  (median), and spread widely: the closed-form estimates are first-order, as
-  the sizer documents.
+* **GBW is mildly over-predicted** (median −12 %).  Buffered templates miss by
+  15–21 %; unbuffered three-stage ones are within ~5 %.
+* **Phase margin is close on RNMC, conservative elsewhere** (median +5.5°).
+  Every RNMC template is within ±4° (median) — the model now sees the
+  follower, compensation resistors and drain capacitance (#264, #268, #270)
+  — and so are the buffered NMC and one-stage templates.  Two-stage designs
+  measure 10–23° more margin than predicted and unbuffered NMC 15–23° more.
+  The bench reads the **worst** of every 0 dB crossing (#270), so a gain
+  that dips under 0 dB and comes back no longer reads as a large margin.
+* **Slew rate is now predicted within ±5 % (median) on 9 of 13 templates**
+  (was −65 % overall): the model takes the slowest current-limited node,
+  including a follower driving the load (#258).  The misses — two-stage and
+  unbuffered NMC single-ended at +11–12 %, unbuffered RNMC single-ended at
+  −7 % and two-stage fully-differential at −6.5 % — come from multi-phase
+  large-signal edges rather than a missing current limit.
+* **Power is over-predicted** by 6–50 % on most templates.  Fully-differential
+  RNMC ones are now *under*-predicted by 7–11 %: their mirror outputs carry
+  the planned current since #259.  The single-ended three-stage RNMC
+  templates still split in two: about half land with the other templates,
+  and the other half (52 of 100 on each) draw 2–40× the predicted power
+  (worst +4,260 %).  Which half a design falls in follows how the polarity of
+  its non-inverting third stage pairs with the first-stage load — a model or
+  sizing gap worth its own issue.
+* **Output swing** is within ~0.25 V on single-ended templates.
+  Fully-differential ones still measure 0.4–1.2 V less swing than predicted
+  on each side (worst on two-stage FD); whether the model or the
+  fully-differential swing bench is at fault is not settled by this data.
+* **CMRR and PSRR are under-predicted** by 13–50 dB (median) on every
+  template but the one-stage PSRR (13 dB over), and spread widely: the
+  closed-form estimates are first-order, as the sizer documents.
+  Fully-differential templates are now included — measured from PDK device
+  mismatch (#261) — and land like the single-ended ones (CMRR +27–34 dB,
+  PSRR +13–22 dB median).
 
 .. include:: prediction_error/tables.inc
