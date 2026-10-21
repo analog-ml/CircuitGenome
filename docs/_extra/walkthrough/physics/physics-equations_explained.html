@@ -137,7 +137,7 @@ Av   = gm * rout = 1000 V/V = 60 dB</code></pre>
     # closed-form gm2 floor for the requested damping
     return gm2_floor</code></pre>Returns the minimum second-stage <code>gm</code> for the target <code>ζ</code>.</td></tr>
     <tr><td>Measure RNMC damping and stability</td><td><span class="eq">\(\zeta_{\mathrm{RNMC}} = \min_{p\in\mathrm{non\text{-}dominant}}\left(-\frac{\operatorname{Re}(p)}{|p|}\right)\)</span><pre><code>def rnmc_pole_damping(gm1, gm2, gm3, cc1_f, cc2_f, cl_f):
-    return min(-pole.real / abs(pole) for pole in non_dominant)</code></pre>Solves the full RNMC model and returns its worst non-dominant <code>ζ</code>; <code>phase_margin_rnmc_deg()</code> uses the same model for the worst phase margin.</td></tr>
+    return min(-pole.real / abs(pole) for pole in non_dominant)</code></pre>Solves the full RNMC model — parasitics, third-stage mirror, output buffer and any compensation-branch series resistors — and returns its worst non-dominant <code>ζ</code>; <code>phase_margin_rnmc_deg()</code> uses the same model for the worst phase margin.</td></tr>
     <tr><td>Power is voltage times current</td><td><span class="eq">\(\displaystyle P_Q = (V_{DD}-V_{SS})\sum_i |I_i|\)</span><pre><code>def quiescent_power(vdd, vss, currents):
     return (vdd - vss) * sum(abs(i) for i in currents)</code></pre>Computes idle supply power.</td></tr>
   </tbody></table>

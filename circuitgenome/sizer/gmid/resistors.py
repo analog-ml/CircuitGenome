@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from circuitgenome.synthesizer.models import Device
 
 from ..models import SizingSpec, TechParams, TransistorSizing
+from ..physics import equations as eq
 from ..physics.rnmc import RNMC
 from ..physics.stage_chain import StageChain
 from ..physics.taxonomy import RAILS, is_signal_device
@@ -165,7 +166,7 @@ def size_resistors(
             c_out = spec.cl if buffer_cgs is None else buffer_cgs
             for name, rs in comp_slots:
                 slot_cc_f = (cc2_pf if "comp2" in name and cc2_pf else cc_pf) * 1e-12
-                r_val = (slot_cc_f + c_out) / (gm_out * slot_cc_f)
+                r_val = eq.compensation_resistor_ohm(slot_cc_f, c_out, gm_out)
                 for r in rs:
                     out[r.ref] = r_val
 

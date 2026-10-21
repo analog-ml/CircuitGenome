@@ -27,6 +27,10 @@ because its DC-bias repair can move the input pair's gm far from the GBW
 requirement and only the sized circuit shows the third stage's gate
 capacitance.  A gm3 cap lands on the third stage's *input* device only, so a
 non-inverting stage's mirror keeps its sizing (and the output its swing).
+
+Behind an output buffer the model also sees the drains on the third stage's
+output and each compensation branch's series resistor, and scores the worse
+half of a fully-differential amplifier (issue #266, :func:`worst_half`).
 """
 from __future__ import annotations
 
@@ -86,6 +90,8 @@ def design_rnmc(
     g: tuple[float, float, float] = (0.0, 0.0, 0.0),
     mirror_pole_hz: float | None = None,
     buffer: tuple[float, float, float] | None = None,
+    c3_f: float = 0.0,
+    comp_resistors: tuple[tuple[bool, bool], ...] = (),
 ) -> RnmcDesign:
     """Choose ``(gm2, Cc2, gm3)`` for a damped, phase-margin-meeting RNMC loop.
 
@@ -117,6 +123,12 @@ def design_rnmc(
     :param buffer: ``(gm, cgs, g_out)`` of a source-follower output buffer
         between the third stage and ``CL`` (see
         :func:`~.equations.phase_margin_rnmc_deg`), or ``None``.
+    :param c3_f: parasitic from the third-stage output to ground in F.
+    :param comp_resistors: per half, whether its ``Cc1``/``Cc2`` branch has a
+        series resistor (:attr:`~.stage_chain.StageChain.comp_resistors`).
+        Each candidate is scored with the resistors
+        :func:`~.equations.compensation_resistor_ohm` would give it, on its
+        worse half.
     """
     pm_target = pm_min_deg if pm_min_deg is not None else 0.0
 
@@ -128,11 +140,15 @@ def design_rnmc(
             return c2_f(gm3_)
         return c2_f * gm3_ / gm3 if gm3 > 0 else c2_f
 
+    c_out_f = buffer[1] if buffer else cl_f
+
     def score(gm2_: float, cc2_: float, gm3_: float) -> RnmcDesign:
         kw = dict(c1_f=c1_at(gm2_), c2_f=c2_at(gm3_), g1=g[0], g2=g[1],
-                  g3=g[2], mirror_pole_hz=mirror_pole_hz, buffer=buffer)
-        zeta = eq.rnmc_pole_damping(gm1, gm2_, gm3_, cc1_f, cc2_, cl_f, **kw)
-        pm = eq.phase_margin_rnmc_deg(gm1, gm2_, gm3_, cc1_f, cc2_, cl_f, **kw)
+                  g3=g[2], mirror_pole_hz=mirror_pole_hz, buffer=buffer,
+                  c3_f=c3_f)
+        zeta, pm = worst_half(
+            gm1, gm2_, gm3_, cc1_f, cc2_, cl_f,
+            comp_resistances(comp_resistors, gm3_, cc1_f, cc2_, c_out_f), **kw)
         met = zeta >= ZETA_TARGET - 1e-9 and pm is not None and pm >= pm_target
         return RnmcDesign(gm2_, cc2_, gm3_, zeta, pm, met)
 
@@ -178,6 +194,41 @@ def design_rnmc(
     if usable:
         return max(usable, key=lambda d: d.pm_deg)
     return max(tried, key=lambda d: d.zeta)
+
+
+def comp_resistances(comp_resistors: tuple[tuple[bool, bool], ...], gm3: float,
+                     cc1_f: float, cc2_f: float,
+                     c_out_f: float) -> list[tuple[float, float]]:
+    """The distinct ``(R1, R2)`` in Ω, in series with ``(Cc1, Cc2)``, of an
+    RNMC amplifier's halves.
+
+    Each resistor is the one :func:`~.equations.compensation_resistor_ohm`
+    sizes against the third stage's gm and ``c_out_f`` (the buffer's gate, or
+    ``CL``); a bare cap gets ``0.0``.  No halves (``comp_resistors`` empty)
+    gives one bare-cap pair.
+    """
+    if not comp_resistors or gm3 <= 0:
+        return [(0.0, 0.0)]
+    def r(cc_f: float) -> float:
+        return eq.compensation_resistor_ohm(cc_f, c_out_f, gm3)
+    return sorted({(r(cc1_f) if r1 else 0.0, r(cc2_f) if r2 else 0.0)
+                   for r1, r2 in comp_resistors})
+
+
+def worst_half(gm1: float, gm2: float, gm3: float, cc1_f: float, cc2_f: float,
+               cl_f: float, pairs: list[tuple[float, float]],
+               **kw) -> tuple[float, float | None]:
+    """``(ζ, PM)`` of the least stable half: the lowest damping
+    (:func:`~.equations.rnmc_pole_damping`) and the lowest phase margin
+    (:func:`~.equations.phase_margin_rnmc_deg`, ``None`` when any half's
+    gain never reaches 0 dB) over the halves' compensation resistors
+    ``pairs``.  An unstable half is enough to make the amplifier ring.
+    """
+    zeta = min(eq.rnmc_pole_damping(gm1, gm2, gm3, cc1_f, cc2_f, cl_f,
+                                    comp_r=r, **kw) for r in pairs)
+    pms = [eq.phase_margin_rnmc_deg(gm1, gm2, gm3, cc1_f, cc2_f, cl_f,
+                                    comp_r=r, **kw) for r in pairs]
+    return zeta, (None if None in pms else min(pms))
 
 
 def signal_cgs_estimate(model, dtype: str, gm: float, ids: float, tech) -> float:

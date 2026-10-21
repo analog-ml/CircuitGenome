@@ -686,6 +686,122 @@ def test_fd_cmrr_psrr_none_without_mismatch_model():
     assert any("no device mismatch model" in n for n in sim.get("notes", []))
 
 
+# A gf180 RNMC buffered FD op-amp from #266's sample (design #7210: PMOS
+# second stage, noninverting_stage_nmos third stage, bare Miller caps on both
+# halves), frozen because enumerating this topology live takes minutes.
+# Behind the source follower its third-stage output carries only its drains,
+# so with gm3 >= gm2 the inner pair sits in the right half plane and rings at
+# ~120 MHz.  Two things damp it: a gm2 well above gm3 (the second stage's
+# signal PMOS must then be wider than one 100 um gf180 device), or a resistor
+# in series with Cc2, which cancels the right-half-plane zero a bare Cc2 feeds
+# forward.
+_FD_RNMC_BUFFERED_NETLIST = """\
+.subckt dut ibias vcm_ref in1 in2 outp outn vdd! gnd!
+m1_input_pair net_diff1 in1 net_tail net_tail nmos
+m2_input_pair net_diff2 in2 net_tail net_tail nmos
+mp1_load net_diff1 net_bias1 vdd! vdd! pmos
+mp2_load net_diff2 net_bias1 vdd! vdd! pmos
+mp3_load net_loadout1 net_bias2 net_diff1 vdd! pmos
+mp4_load net_loadout2 net_bias2 net_diff2 vdd! pmos
+mn1_load net_loadout1 net_bias3 load_internal_0 gnd! nmos
+mn2_load net_loadout2 net_bias3 load_internal_1 gnd! nmos
+mn3_load load_internal_0 net_cmfb_out gnd! gnd! nmos
+mn4_load load_internal_1 net_cmfb_out gnd! gnd! nmos
+r1_tail_current net_tail gnd! 1k
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mn1_bias_gen net_bias1 ibias gnd! gnd! nmos
+mp1_bias_gen net_bias1 net_bias1 vdd! vdd! pmos
+mn2_bias_gen net_bias2 ibias gnd! gnd! nmos
+mp2_bias_gen net_bias2 net_bias2 bias_gen_mid2 vdd! pmos
+r2_bias_gen bias_gen_mid2 vdd! 1k
+mp3_bias_gen net_bias3 bias_gen_pref vdd! vdd! pmos
+mn3_bias_gen net_bias3 net_bias3 bias_gen_mid3 gnd! nmos
+r3_bias_gen bias_gen_mid3 gnd! 1k
+mp4_bias_gen net_bias4 bias_gen_pref vdd! vdd! pmos
+mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+mp5_bias_gen net_bias5 bias_gen_pref vdd! vdd! pmos
+mn5_bias_gen net_bias5 net_bias5 gnd! gnd! nmos
+mp6_bias_gen net_bias6 bias_gen_pref vdd! vdd! pmos
+mn6_bias_gen net_bias6 net_bias6 gnd! gnd! nmos
+mp9_bias_gen net_bias9 bias_gen_pref vdd! vdd! pmos
+mn9_bias_gen net_bias9 net_bias9 gnd! gnd! nmos
+r1_cmfb outp cmfb_sense 1k
+r2_cmfb outn cmfb_sense 1k
+m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
+m2_cmfb vdd! cmfb_sense cmfb_tail gnd! nmos
+m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
+m4_cmfb net_cmfb_out cmfb_d1 vdd! vdd! pmos
+m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
+m6_cmfb net_cmfb_out net_cmfb_out gnd! gnd! nmos
+mp1_second_stage_p net_mid2_p net_loadout2 vdd! vdd! pmos
+mn1_second_stage_p net_mid2_p net_bias5 gnd! gnd! nmos
+mn1_third_stage_p third_stage_p_nmir net_mid2_p gnd! gnd! nmos
+mp2_third_stage_p net_ampout_p third_stage_p_nmir vdd! vdd! pmos
+mp1_third_stage_p third_stage_p_nmir third_stage_p_nmir vdd! vdd! pmos
+mn2_third_stage_p net_ampout_p net_bias6 gnd! gnd! nmos
+mn1_output_stage_p vdd! net_ampout_p outp gnd! nmos
+mn2_output_stage_p outp net_bias9 gnd! gnd! nmos
+c1_comp1_p net_loadout2 net_ampout_p 1p
+c1_comp2_p net_loadout2 net_mid2_p 1p
+mp1_second_stage_n net_mid2_n net_loadout1 vdd! vdd! pmos
+mn1_second_stage_n net_mid2_n net_bias5 gnd! gnd! nmos
+mn1_third_stage_n third_stage_n_nmir net_mid2_n gnd! gnd! nmos
+mp2_third_stage_n net_ampout_n third_stage_n_nmir vdd! vdd! pmos
+mp1_third_stage_n third_stage_n_nmir third_stage_n_nmir vdd! vdd! pmos
+mn2_third_stage_n net_ampout_n net_bias6 gnd! gnd! nmos
+mn1_output_stage_n vdd! net_ampout_n outn gnd! nmos
+mn2_output_stage_n outn net_bias9 gnd! gnd! nmos
+c1_comp1_n net_loadout1 net_ampout_n 1p
+c1_comp2_n net_loadout1 net_mid2_n 1p
+.ends
+"""
+
+
+@ngspice
+@pytest.mark.parametrize("cc2_resistor", [False, True])
+def test_buffered_rnmc_fd_is_sized_to_settle(cc2_resistor):
+    """Issue #266: a buffered gf180 RNMC FD design that rang in SPICE now
+    settles, and the sizer predicts a real phase margin for it.
+
+    Bare (as synthesized), the sizer used to ask for a gm2 one 100 um PMOS
+    cannot deliver, size against it anyway, and leave gm3 >= gm2: the outputs
+    rang at ~120 MHz.  Now the raised gm2 is built from parallel devices.
+    With a nulling resistor in both Cc2 branches the loop was always damped,
+    but the model ignored compensation resistors and predicted PM 0."""
+    import re
+    text = _FD_RNMC_BUFFERED_NETLIST
+    if cc2_resistor:   # miller_cap -> miller_cap_with_nulling_resistor wiring
+        text = re.sub(r"^c1_comp2_(\w) (\S+) (\S+) (\S+)$",
+                      r"r1_comp2_\1 \2 comp2_\1_cn 1k\nc1_comp2_\1 comp2_\1_cn \3 \4",
+                      text, flags=re.M)
+        assert text.count("r1_comp2_") == 2
+    parsed = parse(text)
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_rnmc_buffered_fully_differential")
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=50,
+                      gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5, power_max_w=2.5e-3,
+                      output_swing_max_v=2.0, output_swing_min_v=1.1)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert result.solver_status == "GMID" and result.bias_feasible
+    if cc2_resistor:   # recognised as a nulling resistor and sized as one
+        assert {"r1_comp2_p", "r1_comp2_n"} <= set(result.resistors)
+    else:              # gm2 delivered by a second stage wider than one device
+        assert result.transistors["mp1_second_stage_p"].fingers > 1
+    assert result.metrics["phase_margin_deg"] > 45
+    ok, reason = check_bias_soundness(text, result, tech, spec)
+    assert ok, reason
+
+
 @ngspice
 @pytest.mark.parametrize("tech_name, spec", [
     ("gf180mcu", SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,

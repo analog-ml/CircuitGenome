@@ -442,7 +442,7 @@ gd_tail_override = 1 / 10 kΩ = 100 µS</code></pre>
         c_out = spec.cl <span class="tok-kw">if</span> buffer_cgs <span class="tok-kw">is</span> <span class="tok-kw">None</span> <span class="tok-kw">else</span> buffer_cgs
         <span class="tok-kw">for</span> name, rs <span class="tok-kw">in</span> comp_slots:
             slot_cc_f = (cc2_pf <span class="tok-kw">if</span> <span class="tok-str">"comp2"</span> <span class="tok-kw">in</span> name <span class="tok-kw">and</span> cc2_pf <span class="tok-kw">else</span> cc_pf) * <span class="tok-num">1e-12</span>
-            r_val = (slot_cc_f + c_out) / (gm_out * slot_cc_f)
+            r_val = eq.<span class="tok-fn">compensation_resistor_ohm</span>(slot_cc_f, c_out, gm_out)
             <span class="tok-kw">for</span> r <span class="tok-kw">in</span> rs:
                 out[r.ref] = r_val</code></pre>
 
@@ -465,6 +465,8 @@ gd_tail_override = 1 / 10 kΩ = 100 µS</code></pre>
   <p>It needs the output stage's real transconductance, and that is what <code>_output_stage_gm()</code> fetches — walking the third stage (or the second when there is no third), grabbing the <em>signal</em> device, and returning its <code>gm</code>. The compensation network wraps the <em>last</em> gain stage, so its resistor must be sized against <em>that</em> stage's gm — never the input pair's.</p>
 
   <p>One exception concerns the load. In a buffered op-amp (<code>*_buffered_*</code>) a source follower sits between the last gain stage and the real load, so that stage only drives the follower's gate. For a <strong>reversed-nested-Miller</strong> amplifier this matters. Sized against the 5&nbsp;pF load, R came out about 5× too large (8.3&nbsp;kΩ instead of 1.7&nbsp;kΩ on GF180). The extra pole it adds inside the RNMC inner loop made those designs oscillate (issue #262). So for RNMC <code>_output_buffer_cgs()</code> finds the follower, and the formula uses its <code>Cgs</code>, a few fF, in place of <code>spec.cl</code>, which makes <code>R ≈ 1/gm_out</code>. The nested-Miller and two-stage buffered templates keep <code>spec.cl</code>. They have no such inner loop, and their phase margin relies on the zero the larger R places: switching them over cost 7–27° of measured phase margin.</p>
+
+  <p>The formula itself lives in <code>equations.compensation_resistor_ohm()</code>, because the RNMC phase-margin model applies it too. Behind a buffer that model includes each branch's resistor at the value this rule gives it, so the sizer can see what a nulling resistor in series with <code>Cc2</code> does: it cancels the right-half-plane zero a bare <code>Cc2</code> creates, and damps the inner pole pair (issue #266).</p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 170" role="img" aria-label="Compensation resistor sized from Cc, CL and output stage gm">
