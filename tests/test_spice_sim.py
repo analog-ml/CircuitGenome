@@ -509,6 +509,156 @@ def test_fd_settling_gate_catches_local_loop_oscillation(comp2, gm3_scale, settl
         assert "differential output oscillates" in reason
 
 
+# A GMID-sized gf180 RNMC buffered FD op-amp (#266's sample design #4620:
+# PMOS second stage, noninverting_stage_nmos third stage, a bare Cc2 on the p
+# half), frozen with its sizes so the test pins the settling gate's numerics,
+# not whatever the sizer makes of the circuit.  Its RNMC inner loop has a
+# weakly unstable pole pair at ~120 MHz (zeta ~ -0.04).
+_FD_4620_NETLIST = """\
+.subckt c4620 ibias vcm_ref in1 in2 outp outn vdd! gnd!
+m1_input_pair net_loadout1 in1 net_tail net_tail nmos
+m2_input_pair net_loadout2 in2 net_tail net_tail nmos
+m1_load net_loadout1 net_cmfb_out vdd! vdd! pmos
+m2_load net_loadout2 net_cmfb_out vdd! vdd! pmos
+mn1_tail_current net_bias7 net_bias7 gnd! gnd! nmos
+mn2_tail_current tail_current_internal_1 net_bias7 gnd! gnd! nmos
+mn3_tail_current net_tail net_bias8 tail_current_internal_1 gnd! nmos
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mp4_bias_gen net_bias4 bias_gen_pref vdd! vdd! pmos
+mn4_bias_gen net_bias4 net_bias4 gnd! gnd! nmos
+mp5_bias_gen net_bias5 bias_gen_pref vdd! vdd! pmos
+mn5_bias_gen net_bias5 net_bias5 gnd! gnd! nmos
+mp6_bias_gen net_bias6 bias_gen_pref vdd! vdd! pmos
+mn6_bias_gen net_bias6 net_bias6 gnd! gnd! nmos
+mp7_bias_gen net_bias7 bias_gen_pref vdd! vdd! pmos
+mp8_bias_gen net_bias8 bias_gen_pref vdd! vdd! pmos
+mn8_bias_gen net_bias8 net_bias8 bias_gen_mid8 gnd! nmos
+r8_bias_gen bias_gen_mid8 gnd! 1k
+mp9_bias_gen net_bias9 bias_gen_pref vdd! vdd! pmos
+mn9_bias_gen net_bias9 net_bias9 gnd! gnd! nmos
+r1_cmfb outp cmfb_sense 1k
+r2_cmfb outn cmfb_sense 1k
+m1_cmfb cmfb_d1 vcm_ref cmfb_tail gnd! nmos
+m2_cmfb net_cmfb_out cmfb_sense cmfb_tail gnd! nmos
+m3_cmfb cmfb_d1 cmfb_d1 vdd! vdd! pmos
+m4_cmfb net_cmfb_out net_cmfb_out vdd! vdd! pmos
+m5_cmfb cmfb_tail net_bias4 gnd! gnd! nmos
+mp1_second_stage_p net_mid2_p net_loadout2 vdd! vdd! pmos
+mn1_second_stage_p net_mid2_p net_bias5 gnd! gnd! nmos
+mn1_third_stage_p third_stage_p_nmir net_mid2_p gnd! gnd! nmos
+mp2_third_stage_p net_ampout_p third_stage_p_nmir vdd! vdd! pmos
+mp1_third_stage_p third_stage_p_nmir third_stage_p_nmir vdd! vdd! pmos
+mn2_third_stage_p net_ampout_p net_bias6 gnd! gnd! nmos
+mn1_output_stage_p vdd! net_ampout_p outp gnd! nmos
+mn2_output_stage_p outp net_bias9 gnd! gnd! nmos
+c1_comp1_p net_loadout2 net_ampout_p 1p
+c1_comp2_p net_loadout2 net_mid2_p 1p
+mp1_second_stage_n net_mid2_n net_loadout1 vdd! vdd! pmos
+mn1_second_stage_n net_mid2_n net_bias5 gnd! gnd! nmos
+mn1_third_stage_n third_stage_n_nmir net_mid2_n gnd! gnd! nmos
+mp2_third_stage_n net_ampout_n third_stage_n_nmir vdd! vdd! pmos
+mp1_third_stage_n third_stage_n_nmir third_stage_n_nmir vdd! vdd! pmos
+mn2_third_stage_n net_ampout_n net_bias6 gnd! gnd! nmos
+mn1_output_stage_n vdd! net_ampout_n outn gnd! nmos
+mn2_output_stage_n outn net_bias9 gnd! gnd! nmos
+c1_comp1_n net_loadout1 net_ampout_n 1p
+c1_comp2_n net_loadout1 comp2_n_ind 1p
+r1_comp2_n comp2_n_ind net_mid2_n 1k
+.ends
+"""
+_FD_4620_SIZES = {  # ref: (W µm, L µm, fingers)
+    "m1_input_pair": (0.860, 0.56, 1),
+    "m2_input_pair": (0.860, 0.56, 1),
+    "m1_load": (8.880, 0.56, 1),
+    "m2_load": (8.880, 0.56, 1),
+    "mn1_tail_current": (9.760, 1.12, 1),
+    "mn2_tail_current": (9.760, 1.12, 1),
+    "mn3_tail_current": (9.760, 1.12, 1),
+    "mp1_second_stage_p": (100.000, 0.56, 1),
+    "mn1_second_stage_p": (19.520, 1.12, 1),
+    "mp1_second_stage_n": (100.000, 0.56, 1),
+    "mn1_second_stage_n": (19.520, 1.12, 1),
+    "mn1_third_stage_p": (8.580, 0.56, 1),
+    "mp1_third_stage_p": (30.710, 0.56, 1),
+    "mp2_third_stage_p": (30.710, 0.56, 1),
+    "mn2_third_stage_p": (48.800, 1.12, 1),
+    "mn1_third_stage_n": (8.580, 0.56, 1),
+    "mp1_third_stage_n": (30.710, 0.56, 1),
+    "mp2_third_stage_n": (30.710, 0.56, 1),
+    "mn2_third_stage_n": (48.800, 1.12, 1),
+    "mn1_output_stage_p": (9.630, 0.28, 1),
+    "mn2_output_stage_p": (9.760, 1.12, 1),
+    "mn1_output_stage_n": (9.630, 0.28, 1),
+    "mn2_output_stage_n": (9.760, 1.12, 1),
+    "mnref_bias_gen": (9.760, 1.12, 1),
+    "mnfeed_bias_gen": (9.760, 1.12, 1),
+    "mpfeed_bias_gen": (42.085, 1.12, 1),
+    "mnpref_bias_gen": (9.760, 1.12, 1),
+    "mncasc_bias_gen": (100.000, 1.12, 1),
+    "mppref_bias_gen": (42.085, 1.12, 1),
+    "mpcasc_bias_gen": (42.085, 1.12, 1),
+    "mncdio_bias_gen": (3.255, 1.12, 1),
+    "mp4_bias_gen": (42.085, 1.12, 1),
+    "mn4_bias_gen": (9.760, 1.12, 1),
+    "mp5_bias_gen": (42.085, 1.12, 1),
+    "mn5_bias_gen": (9.760, 1.12, 1),
+    "mp6_bias_gen": (42.085, 1.12, 1),
+    "mn6_bias_gen": (9.760, 1.12, 1),
+    "mp7_bias_gen": (42.085, 1.12, 1),
+    "mp8_bias_gen": (42.085, 1.12, 1),
+    "mn8_bias_gen": (9.760, 1.12, 1),
+    "mp9_bias_gen": (42.085, 1.12, 1),
+    "mn9_bias_gen": (9.760, 1.12, 1),
+    "m1_cmfb": (2.495, 0.56, 1),
+    "m2_cmfb": (2.495, 0.56, 1),
+    "m3_cmfb": (8.880, 0.56, 1),
+    "m4_cmfb": (8.880, 0.56, 1),
+    "m5_cmfb": (9.760, 1.12, 1),
+}
+_FD_4620_R = {
+    "r8_bias_gen": 13528.9,
+    "r1_cmfb": 1000000.0,
+    "r2_cmfb": 1000000.0,
+    "r1_comp2_n": 1677.0,
+}
+_FD_4620_C = {
+    "c1_comp1_p": 1.25e-12,
+    "c1_comp2_p": 1.25e-12,
+    "c1_comp1_n": 1.25e-12,
+    "c1_comp2_n": 1.25e-12,
+}
+_FD_4620_GBW_HZ = 7650295
+
+
+@ngspice
+def test_fd_settling_gate_resolves_a_fast_local_oscillation():
+    """Issue #266: the settling transient's time step must resolve a ~120 MHz
+    local-loop oscillation.  At ngspice's default step (t_end / 4000,
+    ~1.3 ns here) the integrator's own error damps #4620's weakly unstable
+    pair and the outputs read settled; at any step <= 1.2 ns they ring at
+    140-180 mV differential, far above the 33 mV limit."""
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12)
+    result = SizingResult(
+        transistors={ref: TransistorSizing(ref, w, l, 0.0, 0.0, 0.0, fingers=f)
+                     for ref, (w, l, f) in _FD_4620_SIZES.items()},
+        resistors=_FD_4620_R, capacitors=_FD_4620_C,
+        metrics={"gbw_hz": _FD_4620_GBW_HZ}, margins={}, solver_status="GMID")
+    from circuitgenome.sizer.verify import op
+    if op._fd_ringing(_FD_4620_NETLIST, result, tech, spec) is None:
+        pytest.skip("settling transient hit the ngspice CPU limit")
+    ok, reason = check_bias_soundness(_FD_4620_NETLIST, result, tech, spec)
+    assert not ok and "differential output oscillates" in reason, reason
+
+
 @ngspice
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the
