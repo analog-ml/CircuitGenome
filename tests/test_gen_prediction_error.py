@@ -82,14 +82,16 @@ def test_open_loop_ceiling_only_drops_gain_gbw_and_phase_margin():
     assert pe.error_of(row, "slew_rate_vps") == pytest.approx(100.0)
 
 
-def test_fully_differential_cmrr_and_psrr_are_excluded():
+def test_fully_differential_cmrr_and_psrr_count():
+    """Since #261 the FD bench measures CMRR/PSRR from PDK device mismatch,
+    so an FD row's rejection is a real measurement, like a single-ended one."""
     pair = dict(pred={"cmrr_db": 40.0, "gain_db": 80.0},
-                meas={"cmrr_db": 280.0, "gain_db": 78.0})
+                meas={"cmrr_db": 95.0, "gain_db": 78.0})
     fd = _row(template="two_stage_opamp_fully_differential", **pair)
     se = _row(template="two_stage_opamp_single_ended", **pair)
-    assert pe.error_of(fd, "cmrr_db") is None
+    assert pe.error_of(fd, "cmrr_db") == pytest.approx(55.0)
     assert pe.error_of(fd, "gain_db") == pytest.approx(-2.0)
-    assert pe.error_of(se, "cmrr_db") == pytest.approx(240.0)
+    assert pe.error_of(se, "cmrr_db") == pytest.approx(55.0)
 
 
 def test_stats_median_spread_and_signed_worst():

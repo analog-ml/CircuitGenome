@@ -74,11 +74,6 @@ METRICS: dict[str, tuple[str, str, str]] = {
 # error -- they are left out of the statistics for such circuits.
 OPEN_LOOP_METRICS = {"gain_db", "gbw_hz", "phase_margin_deg"}
 
-# A fully-differential circuit is simulated perfectly symmetric (no mismatch),
-# so its common-mode and supply rejection come out practically infinite
-# (230-290 dB) -- again a property of the bench, not a model error.
-SYMMETRY_METRICS = {"cmrr_db", "psrr_db"}
-
 # Per-circuit outcome; only "simulated" rows carry measured metrics.
 OUTCOMES = ("simulated", "sizing_failed", "bias_infeasible_sizer",
             "bias_infeasible_spice", "error")
@@ -248,13 +243,13 @@ def error_of(row: dict, metric: str) -> float | None:
     A pair counts only when the circuit was simulated (sized, bias sound in
     both the sizer and SPICE), both values exist, and the bench measures a
     model-comparable value: gain, GBW and phase margin need a design the
-    open-loop bench can measure, and CMRR/PSRR a single-ended one.
+    open-loop bench can measure.  Fully-differential CMRR/PSRR count: since
+    #261 the bench draws PDK device mismatch instead of reporting a
+    perfectly symmetric circuit's 230-290 dB.
     """
     if row["outcome"] != "simulated":
         return None
     if metric in OPEN_LOOP_METRICS and not row["open_loop_measurable"]:
-        return None
-    if metric in SYMMETRY_METRICS and "fully_differential" in row["template"]:
         return None
     pred, meas = row[f"pred_{metric}"], row[f"meas_{metric}"]
     if pred is None or meas is None:
@@ -353,10 +348,10 @@ def render_tables(rows: list[dict], info: dict, fig_rel: str) -> str:
         "in the sizer's DC check and in a SPICE ``.op``, and ngspice measured",
         "the metric.  Gain, GBW and phase margin additionally skip designs",
         "whose predicted gain is above the open-loop bench ceiling — those rail",
-        "to ~0 dB in that bench, an artefact rather than a model error — and",
-        "CMRR and PSRR skip fully-differential templates, whose perfectly",
-        "symmetric simulation (no device mismatch) measures 230–290 dB.  The",
-        "coverage table counts every circuit-level exclusion:",
+        "to ~0 dB in that bench, an artefact rather than a model error.",
+        "Fully-differential CMRR and PSRR are measured from PDK device",
+        "mismatch draws (#261), so they count too.  The coverage table counts",
+        "every circuit-level exclusion:",
         "",
     ]
     cov_rows = []
