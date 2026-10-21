@@ -13,6 +13,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Fixed
 
+- 🐛 The fully-differential settling check no longer misses a fast, weakly unstable local loop: its transient ran at a ~1.3 ns step, coarse enough for the simulator's own rounding to damp a ~120 MHz oscillation, so one design ringing at 150 mV read as settled; the step is now capped at 0.5 ns ([#267](https://github.com/analog-ml/CircuitGenome/pull/267)).
 - 🐛 The RNMC phase-margin model no longer reports a 0° margin for a stable loop whose dominant pole is too slow to resolve: round-off gave it a random sign, and a positive one read as a right-half-plane pole ([#265](https://github.com/analog-ml/CircuitGenome/pull/265)).
 - 🐛 Fully-differential CMRR/PSRR are now measured from PDK device mismatch (gf180, sky130) instead of ngspice's 260–315 dB rounding error, which passed every spec; PTM/generic report `n/a` ([#261](https://github.com/analog-ml/CircuitGenome/pull/261)).
 - 🐛 A cascode tail under a source-degenerated input pair is now checked for headroom; the check looked for the tail at the pair's source, found nothing past the resistors, and passed sky130 designs whose tail sits in deep triode ([#263](https://github.com/analog-ml/CircuitGenome/pull/263)).
