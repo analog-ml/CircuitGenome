@@ -151,19 +151,23 @@ def size_resistors(
     # R of `miller_cap_with_nulling_resistor` / `indirect_compensation` must
     # instead track the stage it bridges: R = (Cc+C)/(gm_out·Cc) places the
     # compensation zero on the output pole (issue #108).  C is CL, except in a
-    # buffered reversed-nested-Miller amplifier: its last gain stage drives only
-    # the follower's gate, and sizing against CL there made R ~5x 1/gm_out --
-    # an extra pole inside the RNMC inner loop that made those designs
-    # oscillate (issue #262).  Other buffered schemes keep CL: their phase
-    # margin relies on the zero that larger R places (7-27° measured).
+    # reversed-nested-Miller amplifier.  Buffered, its last gain stage drives
+    # only the follower's gate, and sizing against CL there made R ~5x
+    # 1/gm_out -- an extra pole inside the RNMC inner loop that made those
+    # designs oscillate (issue #262).  Unbuffered, R ~5x 1/gm_out held the
+    # loop gain near 0 dB (gm1·R ~ 1) until it crossed again with almost no
+    # phase left: designs that rang at ~28 MHz in closed loop (issue #269).
+    # So RNMC takes C = the follower's gate, or none (R = 1/gm_out).  Other
+    # schemes keep CL: their phase margin relies on the zero that larger R
+    # places (7-27° measured behind a buffer).
     comp_slots = [(name, rs) for name, rs in slot_resistors.items()
                   if name.startswith("comp")]
     if comp_slots and cc_pf:
         gm_out = _output_stage_gm(blocks, sizing, model)
         if gm_out > 0:
-            buffer_cgs = (_output_buffer_cgs(blocks, sizing, model)
-                          if compensation_scheme == RNMC else None)
-            c_out = spec.cl if buffer_cgs is None else buffer_cgs
+            c_out = spec.cl
+            if compensation_scheme == RNMC:
+                c_out = _output_buffer_cgs(blocks, sizing, model) or 0.0
             for name, rs in comp_slots:
                 slot_cc_f = (cc2_pf if "comp2" in name and cc2_pf else cc_pf) * 1e-12
                 r_val = eq.compensation_resistor_ohm(slot_cc_f, c_out, gm_out)

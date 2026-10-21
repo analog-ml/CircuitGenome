@@ -28,9 +28,10 @@ requirement and only the sized circuit shows the third stage's gate
 capacitance.  A gm3 cap lands on the third stage's *input* device only, so a
 non-inverting stage's mirror keeps its sizing (and the output its swing).
 
-Behind an output buffer the model also sees the drains on the third stage's
-output and each compensation branch's series resistor, and scores the worse
-half of a fully-differential amplifier (issue #266, :func:`worst_half`).
+The model also sees each compensation branch's series resistor and, behind
+an output buffer, the drains on the third stage's output, and scores the
+worse half of a fully-differential amplifier (issues #266, #269,
+:func:`worst_half`).
 """
 from __future__ import annotations
 
@@ -140,7 +141,7 @@ def design_rnmc(
             return c2_f(gm3_)
         return c2_f * gm3_ / gm3 if gm3 > 0 else c2_f
 
-    c_out_f = buffer[1] if buffer else cl_f
+    c_out_f = buffer[1] if buffer else 0.0
 
     def score(gm2_: float, cc2_: float, gm3_: float) -> RnmcDesign:
         kw = dict(c1_f=c1_at(gm2_), c2_f=c2_at(gm3_), g1=g[0], g2=g[1],
@@ -204,7 +205,8 @@ def comp_resistances(comp_resistors: tuple[tuple[bool, bool], ...], gm3: float,
 
     Each resistor is the one :func:`~.equations.compensation_resistor_ohm`
     sizes against the third stage's gm and ``c_out_f`` (the buffer's gate, or
-    ``CL``); a bare cap gets ``0.0``.  No halves (``comp_resistors`` empty)
+    ``0`` without one: ``1/gm3``, as ``size_resistors`` sizes it for RNMC); a
+    bare cap gets ``0.0``.  No halves (``comp_resistors`` empty)
     gives one bare-cap pair.
     """
     if not comp_resistors or gm3 <= 0:

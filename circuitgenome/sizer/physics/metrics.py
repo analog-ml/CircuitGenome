@@ -24,7 +24,7 @@ def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
     g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s[:3]]
     buffer = chain.output_buffer
     pairs = comp_resistances(chain.comp_resistors, s[2].gm, cc_f, cc2_f,
-                             buffer[1] if buffer else cl_f)
+                             buffer[1] if buffer else 0.0)
     _, pm = worst_half(
         gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f, pairs,
         c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],

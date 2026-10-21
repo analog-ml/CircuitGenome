@@ -962,10 +962,11 @@ best-damped choice that meets it, else the highest-PM one; an advisory is
 emitted either way.  The phase
 margin itself comes from the full transfer function evaluated on a frequency
 sweep (:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`),
-including the stage-output parasitics, the third stage's mirror pole and — on
-the ``*_buffered_*`` templates — the source-follower output buffer, the drains
-on the third stage's output and each compensation branch's series resistor
-(on the worse half of a fully-differential amplifier, issue #266), and is the
+including the stage-output parasitics, the third stage's mirror pole, each
+compensation branch's series resistor and — on the ``*_buffered_*`` templates
+— the source-follower output buffer and the drains on the third stage's output
+(on the worse half of a fully-differential amplifier, issues #266 and #269),
+and is the
 **worst over every 0 dB crossing** — a lightly damped pair that lifts
 the gain back above 0 dB after the phase has passed :math:`-180^{\circ}` is a
 negative gain margin and reports a negative PM; an open loop with

@@ -182,14 +182,11 @@ class StageChain:
     :param output_buffer: ``(gm, cgs, g_out)`` of a source-follower output
         buffer (RNMC only): the third stage then drives the follower's gate
         and ``CL`` sits on the follower's output; ``None`` without one.
-    :param comp_resistors: per half of a buffered RNMC amplifier (one entry
+    :param comp_resistors: per half of an RNMC amplifier (one entry
         single-ended, ``_p`` then ``_n`` fully differential), whether its
         ``Cc1`` and its ``Cc2`` branch have a series resistor (a nulling or
-        indirect compensation variant).  The halves can differ.  Empty
-        without a buffer: there the resistors are sized against ``CL``
-        (several times ``1/gm3``) and leave the open-loop gain hovering near
-        0 dB, where the model's margin is not trustworthy, so they are not
-        modelled (issue #266).
+        indirect compensation variant).  The halves can differ (issues #266,
+        #269).
     :param k_slew: fraction of the tail current the first stage can steer into
         its output node -- ``1.0`` when a current-mirror load collects both
         halves of a single-ended pair, ``0.5`` without a mirror or per side of
@@ -735,13 +732,12 @@ def build_stage_chain(
         if len(slot_devs) > 1:
             ts_mirror_pole = _mirror_pole_hz(slot_devs[1], mosfets, model, sizing)
         buffer = _output_buffer(slot_transistors, model, sizing)
-        if buffer is not None:
-            halves = sorted(slot[len("comp1"):] for slot in view.slot_capacitors
-                            if slot.startswith("comp1"))
-            comp_resistors = tuple(
-                (bool(view.slot_resistors.get(f"comp1{h}")),
-                 bool(view.slot_resistors.get(f"comp2{h}")))
-                for h in halves)
+        halves = sorted(slot[len("comp1"):] for slot in view.slot_capacitors
+                        if slot.startswith("comp1"))
+        comp_resistors = tuple(
+            (bool(view.slot_resistors.get(f"comp1{h}")),
+             bool(view.slot_resistors.get(f"comp2{h}")))
+            for h in halves)
 
     k_fs = _first_stage_gain_factor(slot_transistors)
     fully_differential = any(s in slot_transistors

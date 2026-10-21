@@ -320,6 +320,30 @@ def test_comp_resistor_behind_a_buffer(scheme, c_out):
     assert out["r1_compensation"] == pytest.approx((2e-12 + c_out) / (1e-3 * 2e-12))
 
 
+@pytest.mark.parametrize("scheme, r_expected", [
+    ("reversed_nested_miller", 1.0 / 1e-3),                  # 1/gm
+    ("nested_miller", (2e-12 + 2e-12) / (1e-3 * 2e-12)),    # CL, as before
+])
+def test_unbuffered_rnmc_comp_resistor_is_one_over_gm(scheme, r_expected):
+    """Issue #269: without a buffer an RNMC last stage still gets R = 1/gm.
+    Sized against CL (~5x larger) it held the loop gain near 0 dB until a
+    second crossing with almost no phase left, and those designs rang in
+    closed loop.  Other schemes keep CL."""
+    from circuitgenome.synthesizer.models import Device
+
+    ss = [Device(ref="m1_second_stage", type="nmos",
+                 terminals={"d": "out", "g": "net_mid", "s": "gnd!"})]
+    r = Device(ref="r1_compensation", type="resistor",
+               terminals={"t1": "net_mid", "t2": "cn"})
+    blocks = build_blocks({"second_stage": ss}, {"compensation": [r]})
+    out, _ = size_resistors(
+        blocks, {"compensation": [r]}, {},
+        {"m1_second_stage": _sz("m1_second_stage", "nmos")}, _FakeModel(),
+        _spec(), load_tech("ptm45"), GmIdIntent(), cc_pf=2.0,
+        compensation_scheme=scheme)
+    assert out["r1_compensation"] == pytest.approx(r_expected)
+
+
 @pytest.mark.parametrize("variant", ["miller_cap_with_nulling_resistor",
                                      "indirect_compensation"])
 def test_comp_resistor_sized_end_to_end(variant):

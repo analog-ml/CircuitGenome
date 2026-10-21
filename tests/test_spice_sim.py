@@ -659,6 +659,117 @@ def test_fd_settling_gate_resolves_a_fast_local_oscillation():
     assert not ok and "differential output oscillates" in reason, reason
 
 
+# A GMID-sized gf180 RNMC single-ended op-amp from #269's sample (design #418:
+# a nulling resistor in Cc1 sized against CL, ~8.3 kOhm), frozen with its sizes
+# so the test pins the AC bench, not the sizer.  Its open-loop gain dips under
+# 0 dB at 10 MHz, comes back up and crosses again at 27 MHz with ~5 deg left:
+# in unity feedback a small step rings at 28 MHz.
+_RNMC_SE_418_NETLIST = """\
+.subckt dut ibias in1 in2 out vdd! gnd!
+m1_input_pair net_diff1 in1 net_tail net_tail nmos
+m2_input_pair net_fold2 in2 net_tail net_tail nmos
+mp1_load net_diff1 net_bias1 vdd! vdd! pmos
+mp2_load net_fold2 net_bias1 vdd! vdd! pmos
+mp3_load load_internal_0 net_bias2 net_diff1 vdd! pmos
+mp4_load net_mid1 net_bias2 net_fold2 vdd! pmos
+mn1_load load_internal_0 load_internal_0 load_internal_1 gnd! nmos
+mn2_load net_mid1 load_internal_0 load_internal_2 gnd! nmos
+mn3_load load_internal_1 load_internal_1 gnd! gnd! nmos
+mn4_load load_internal_2 load_internal_1 gnd! gnd! nmos
+r1_tail_current net_tail gnd! 1k
+mnref_bias_gen ibias ibias gnd! gnd! nmos
+mnfeed_bias_gen bias_gen_feed_pref ibias gnd! gnd! nmos
+mpfeed_bias_gen bias_gen_feed_pref bias_gen_feed_pref vdd! vdd! pmos
+mpcasc_bias_gen bias_gen_ncasc bias_gen_feed_pref vdd! vdd! pmos
+mncdio_bias_gen bias_gen_ncasc bias_gen_ncasc gnd! gnd! nmos
+mnpref_bias_gen bias_gen_prefsrc ibias gnd! gnd! nmos
+mncasc_bias_gen bias_gen_pref bias_gen_ncasc bias_gen_prefsrc gnd! nmos
+mppref_bias_gen bias_gen_pref bias_gen_pref vdd! vdd! pmos
+mn1_bias_gen net_bias1 ibias gnd! gnd! nmos
+mp1_bias_gen net_bias1 net_bias1 vdd! vdd! pmos
+mn2_bias_gen net_bias2 ibias gnd! gnd! nmos
+mp2_bias_gen net_bias2 net_bias2 bias_gen_mid2 vdd! pmos
+r2_bias_gen bias_gen_mid2 vdd! 1k
+mp5_bias_gen net_bias5 bias_gen_pref vdd! vdd! pmos
+mn5_bias_gen net_bias5 net_bias5 gnd! gnd! nmos
+mp6_bias_gen net_bias6 bias_gen_pref vdd! vdd! pmos
+mn6_bias_gen net_bias6 net_bias6 gnd! gnd! nmos
+mp1_second_stage net_mid2 net_mid1 vdd! vdd! pmos
+mn1_second_stage net_mid2 net_bias5 gnd! gnd! nmos
+mn1_third_stage third_stage_nmir net_mid2 gnd! gnd! nmos
+mp2_third_stage out third_stage_nmir vdd! vdd! pmos
+mp1_third_stage third_stage_nmir third_stage_nmir vdd! vdd! pmos
+mn2_third_stage out net_bias6 gnd! gnd! nmos
+r1_comp1 net_mid1 comp1_cn 1k
+c1_comp1 comp1_cn out 1p
+c1_comp2 net_mid1 net_mid2 1p
+.ends
+"""
+_RNMC_SE_418_SIZES = {  # ref: (W um, L um)
+    "m1_input_pair": (0.860, 0.56),
+    "m2_input_pair": (0.860, 0.56),
+    "mp1_load": (42.085, 1.12),
+    "mp2_load": (42.085, 1.12),
+    "mp3_load": (21.040, 1.12),
+    "mp4_load": (21.040, 1.12),
+    "mn1_load": (2.495, 0.56),
+    "mn2_load": (2.495, 0.56),
+    "mn3_load": (2.495, 0.56),
+    "mn4_load": (2.495, 0.56),
+    "mp1_second_stage": (100.000, 0.56),
+    "mn1_second_stage": (19.520, 1.12),
+    "mn1_third_stage": (8.580, 0.56),
+    "mp1_third_stage": (30.710, 0.56),
+    "mp2_third_stage": (30.710, 0.56),
+    "mn2_third_stage": (48.800, 1.12),
+    "mnref_bias_gen": (9.760, 1.12),
+    "mnfeed_bias_gen": (9.760, 1.12),
+    "mpfeed_bias_gen": (42.085, 1.12),
+    "mnpref_bias_gen": (9.760, 1.12),
+    "mncasc_bias_gen": (100.000, 1.12),
+    "mppref_bias_gen": (42.085, 1.12),
+    "mn1_bias_gen": (9.760, 1.12),
+    "mp1_bias_gen": (42.085, 1.12),
+    "mn2_bias_gen": (9.760, 1.12),
+    "mp2_bias_gen": (42.085, 1.12),
+    "mpcasc_bias_gen": (42.085, 1.12),
+    "mncdio_bias_gen": (3.255, 1.12),
+    "mp5_bias_gen": (42.085, 1.12),
+    "mn5_bias_gen": (9.760, 1.12),
+    "mp6_bias_gen": (42.085, 1.12),
+    "mn6_bias_gen": (9.760, 1.12),
+}
+_RNMC_SE_418_R = {
+    "r1_tail_current": 33602.7,
+    "r2_bias_gen": 12721.7,
+    "r1_comp1": 8333.1,
+}
+_RNMC_SE_418_C = {
+    "c1_comp1": 1.25e-12,
+    "c1_comp2": 4.6875e-13,
+}
+
+
+@ngspice
+def test_ac_bench_reports_the_worst_zero_db_crossing():
+    """Issue #269: an open loop that crosses 0 dB more than once is judged
+    by its worst crossing.  #418's gain dips below 0 dB at 10 MHz (PM ~104 deg
+    there), comes back above it and crosses again at 27 MHz with ~5 deg left;
+    the bench used to report only the first crossing."""
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12)
+    result = SizingResult(
+        transistors={ref: TransistorSizing(ref, w, l, 0.0, 0.0, 0.0)
+                     for ref, (w, l) in _RNMC_SE_418_SIZES.items()},
+        resistors=_RNMC_SE_418_R, capacitors=_RNMC_SE_418_C,
+        metrics={}, margins={}, solver_status="GMID")
+    sim = simulate_metrics(_RNMC_SE_418_NETLIST, result, tech, spec)
+    gbw, pm = sim["gbw_hz"], sim["phase_margin_deg"]
+    assert gbw is not None and 5e6 < gbw < 15e6   # the first crossing is the GBW
+    assert pm is not None and pm < 30, pm
+
+
 @ngspice
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the

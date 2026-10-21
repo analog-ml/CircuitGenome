@@ -281,3 +281,24 @@ def test_metrics_report_the_worse_half():
                                 spec)[0]["phase_margin_deg"]
     assert pm(((False, True), (False, True))) > 30
     assert pm(((False, True), (False, False))) == 0.0
+
+
+def test_unbuffered_rnmc_models_its_resistors_at_one_over_gm3():
+    """Issue #269: without a buffer, size_resistors sizes RNMC compensation
+    resistors at 1/gm3 (no load term), and the model applies the same value
+    -- it no longer leaves them out."""
+    gm3 = 0.6e-3
+    assert rnmc.comp_resistances(((True, True),), gm3, CC1, CC2, 0.0) == \
+        [(pytest.approx(1 / gm3), pytest.approx(1 / gm3))]
+    stages = (Stage(GM1, 2e6), Stage(1.5e-3, 7e4), Stage(gm3, 3e4))
+    spec = SizingSpec(vdd=1.0, vss=0.0, ibias=15e-6, cl=CL)
+    chain = StageChain(stages=stages, cc_pf=CC1 * 1e12, cc2_pf=CC2 * 1e12,
+                       compensation_scheme=rnmc.RNMC,
+                       node_caps_f=(1e-15, C2, 0.0))
+
+    pm = evaluate_metrics(replace(chain, comp_resistors=((True, False),)),
+                          spec)[0]["phase_margin_deg"]
+    expected = eq.phase_margin_rnmc_deg(
+        GM1, 1.5e-3, gm3, CC1, CC2, CL, c1_f=1e-15, c2_f=C2,
+        g1=1 / 2e6, g2=1 / 7e4, g3=1 / 3e4, comp_r=(1 / gm3, 0.0))
+    assert pm == pytest.approx(expected)

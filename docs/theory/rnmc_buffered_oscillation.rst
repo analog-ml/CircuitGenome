@@ -231,12 +231,16 @@ On the sample, all 100 buffered fully-differential designs now settle (89
 before); the buffered designs' measured phase margins move by −0.7° to +3.3°,
 and the model no longer predicts 0° for designs that settle.
 
-**Why only behind a buffer.**  Without one, the compensation resistors are
-sized against the 5 pF load and come out several times :math:`1/g_{m3}`.  The
-loop gain then hovers near 0 dB over a decade of frequency, where a fraction of
-a dB moves the crossing — and the phase margin — by tens of degrees; on one
-design the model said 13° and SPICE measured 103°.  Those designs were not
-failing, so unbuffered RNMC is left exactly as it was.
+**Why the wider second stage is only behind a buffer.**  Without one the
+third stage drives :math:`C_L` itself, which leaves the inner pair about
+:math:`5\times` of room in :math:`g_{m3}/g_{m2}`, so the second stage never
+needs widening.  Unbuffered RNMC had a problem of its own, though (issue
+#269): its compensation resistors were sized against the 5 pF load, several
+times :math:`1/g_{m3}`, which held the loop gain near 0 dB past its first
+crossing until a second crossing with almost no phase left.  The SPICE bench
+read only the first crossing and reported ~104°; in closed loop those designs
+rang.  They are now sized at :math:`1/g_{m3}` as well, and the bench reports
+the worst crossing.
 
 **Knobs that were tried and rejected**, applied to the 11 failing designs in
 SPICE:
