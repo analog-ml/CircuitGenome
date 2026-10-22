@@ -11,8 +11,10 @@ Output resistances come from :func:`node_rout`, a cascode-aware walk of the
 device graph: a cascode device boosts the resistance below it by ``1 + gm·R``,
 which a per-device ``gds`` sum cannot see -- as does a source-degeneration
 resistor, which is the same effect with a resistor in place of the device.  It
-reads only ``model.gm`` and ``model.gds``, so both the Level-1 and gm/Id
-backends get the same treatment.
+reads only ``model.gm``, ``model.gds`` and ``model.gmb``, so both the Level-1
+and gm/Id backends get the same treatment.  Given quiescent node levels
+(:mod:`~.node_levels`), each device is read at its own ``Vds``/``Vsb``
+(issue #273).
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from circuitgenome.synthesizer.models import Device
 from .circuit_view import CircuitView
 from .device_model import DeviceModel
 from ..models import SizingSpec, TransistorSizing
+from .node_levels import device_bias, estimate_node_levels
 from .preprocess import _first_stage_gain_factor, _mirror_reference
 from .rnmc import RNMC
 from .taxonomy import (
@@ -42,17 +45,18 @@ def _by_drain(mosfets: list[Device]) -> dict[str, list[Device]]:
     return by_drain
 
 
-def _parallel_rout(devices, by_drain, model, sizing, stop, degen) -> float:
+def _parallel_rout(devices, by_drain, model, sizing, stop, degen, levels) -> float:
     """Parallel combination (Ω) of each device's looking-in drain resistance."""
     g = 0.0
     for d in devices:
-        r = _looking_in_drain(d, by_drain, model, sizing, stop, degen)
+        r = _looking_in_drain(d, by_drain, model, sizing, stop, degen, levels)
         if r > 0:
             g += 1.0 / r
     return 1.0 / g if g > 0 else float("inf")
 
 
-def _looking_in_drain(device, by_drain, model, sizing, stop, degen) -> float:
+def _looking_in_drain(device, by_drain, model, sizing, stop, degen,
+                      levels=None) -> float:
     """Resistance (Ω) looking into ``device``'s drain, cascode-aware.
 
     A cascode device (source on another device's drain) boosts its own ``ro`` by
@@ -75,41 +79,57 @@ def _looking_in_drain(device, by_drain, model, sizing, stop, degen) -> float:
     pair's own source is pinned there as the differential AC ground, and with
     degeneration that ground is one resistor further down.  The ``+ R`` series
     term is dropped, as in the cascode branch above.
+
+    ``levels`` (quiescent node levels, :mod:`~.node_levels`) puts each device
+    at its own bias: ``gds`` at its ``Vds`` and, when its source is off its
+    bulk, ``gm + gmb`` in the boost -- the source swing modulates the
+    threshold too.  Under a cascode the device below sits just above its
+    saturation knee, with several times the table's Vdd/2 ``gds``; reading it
+    there removes most of the 8-20 dB cascode gain over-estimate (issue #273).
+    A device on a net the levels do not reach reads as before.
     """
     s = sizing.get(device.ref)
     if s is None:
         return float("inf")
-    gds = model.gds(device.type, s.w_um, s.l_um, s.ids_a)
+    vds, vsb = device_bias(device, levels or {})
+    gds = model.gds(device.type, s.w_um, s.l_um, s.ids_a, vds=vds)
     ro = 1.0 / gds if gds > 0 else float("inf")
     src = device.terminals.get("s")
     r_deg = degen.get(src)
-    if r_deg:
+
+    def gm_boost() -> float:
         gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
-        return ro * (1.0 + gm * r_deg)
+        if vsb is not None and device.terminals.get("b") != src:
+            gm += model.gmb(device.type, s.w_um, s.l_um, s.ids_a, vsb)
+        return gm
+
+    if r_deg:
+        return ro * (1.0 + gm_boost() * r_deg)
     if src in RAILS or src in stop or src is None:
         return ro
     below = [d for d in by_drain.get(src, []) if d.ref != device.ref]
     if not below:
         return ro
-    gm = model.gm(device.type, s.w_um, s.l_um, s.ids_a)
-    r_src = _parallel_rout(below, by_drain, model, sizing, stop, degen)
-    return ro * (1.0 + gm * r_src) if r_src != float("inf") else float("inf")
+    r_src = _parallel_rout(below, by_drain, model, sizing, stop, degen, levels)
+    return ro * (1.0 + gm_boost() * r_src) if r_src != float("inf") else float("inf")
 
 
 def node_rout(out_net: str, mosfets: list[Device], model, sizing,
               stop: frozenset = frozenset(),
-              degen: dict[str, float] | None = None) -> float:
+              degen: dict[str, float] | None = None,
+              levels: dict[str, float] | None = None) -> float:
     """Cascode-aware output resistance (Ω) at ``out_net`` = parallel of every
     device whose drain is ``out_net`` (each looking-in, cascode-boosted).
 
     ``stop`` lists nets to treat as AC ground (typically the input-pair tail node)
     so the input pair contributes ``ro``, not a tail-degenerated cascode.
     ``degen`` maps a net to the series source resistance between it and that AC
-    ground, which boosts the device above it by ``1 + gm·R``.
+    ground, which boosts the device above it by ``1 + gm·R``.  ``levels``
+    reads each device at its own quiescent bias (see :func:`_looking_in_drain`).
     """
     by_drain = _by_drain(mosfets)
     return _parallel_rout(by_drain.get(out_net, []), by_drain, model, sizing,
-                          stop, degen or {})
+                          stop, degen or {}, levels)
 
 
 # --------------------------------------------------------------------------- #
@@ -672,6 +692,7 @@ def build_stage_chain(
     cc2_pf: float | None = None,
     gd_load_r: float = 0.0,
     resistor_ohms: dict[str, float] | None = None,
+    bias_aware: bool = False,
 ) -> StageChain:
     """Extract the :class:`StageChain` from a solved sizing.
 
@@ -690,6 +711,23 @@ def build_stage_chain(
     signal gate, not the pair's drain: on a folded cascode those are different
     nets.  With no next stage the output node is resolved structurally
     instead — again not the pair's drain, for the same reason (issue #228).
+
+    ``bias_aware`` reads the first stage's output-resistance walk (its
+    ``rout`` and, single-stage, the PSRR load) at each device's own quiescent
+    ``Vds`` and ``Vsb``, estimated by
+    :func:`~.node_levels.estimate_node_levels` from the rails and the input
+    common mode (issue #273).  That is where the cascode stacks are.  The
+    amplifier output is deliberately left unpinned: a device draining onto it
+    reads at the table's own Vdd/2, which on a cascode leans to the safe,
+    over-predicting side.  Later gain stages keep the single-point read: their
+    ``rout`` is taken at the signal device's drain, which on a non-inverting
+    stage is its mirror's diode node rather than its output, and reading those
+    devices at their own bias moved GF180 three-stage gains 1-3.5 dB under
+    SPICE.  The CMRR tail walk keeps it too: read at the tail's own Vds, the
+    predicted CMRR fell ~17 dB below ngspice's median on GF180, where the
+    single-point read sits on it.  Off by default, so the requirement-side
+    callers (the RNMC re-plan) keep the single-point model and sizing is
+    unchanged.
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
@@ -698,6 +736,14 @@ def build_stage_chain(
     tail_net = ip_devs[0].terminals.get("s") if ip_devs else None
     stop = frozenset({tail_net}) if tail_net else frozenset()
     degen = _source_degeneration_r(ip_devs, ip_resistors, resistor_ohms or {})
+    levels: dict[str, float] = {}
+    if bias_aware:
+        pinned = {net: spec.rail_v(net) for net in RAILS}
+        pinned.update({d.terminals.get("g"): spec.vcm for d in ip_devs})
+        resistors = list({r.ref: r for rs in view.slot_resistors.values()
+                          for r in rs}.values())
+        levels = estimate_node_levels(mosfets, resistors, resistor_ohms or {},
+                                      sizing, model, pinned)
 
     def _gm(d: Device) -> float:
         s = sizing.get(d.ref)
@@ -710,10 +756,11 @@ def build_stage_chain(
         s = sizing.get(d.ref) if d is not None else None
         return abs(s.ids_a) if s is not None else 0.0
 
-    def _rout(net: str | None, extra_gd: float = 0.0) -> float:
+    def _rout(net: str | None, extra_gd: float = 0.0,
+              at_bias: dict[str, float] | None = None) -> float:
         if not net:
             return float("inf")
-        r = node_rout(net, mosfets, model, sizing, stop, degen)
+        r = node_rout(net, mosfets, model, sizing, stop, degen, at_bias)
         g = (1.0 / r if r != float("inf") else 0.0) + extra_gd
         return 1.0 / g if g > 0 else float("inf")
 
@@ -742,7 +789,7 @@ def build_stage_chain(
                 or ip_devs[0].terminals.get("d"))
     # The pair's two drain currents add up to the tail current.
     stages = [Stage(gm=_gm(ip_devs[0]) if ip_devs else 0.0,
-                    rout=_rout(out1, gd_load_r),
+                    rout=_rout(out1, gd_load_r, levels),
                     ids=sum(_ids(d) for d in ip_devs if is_signal_device(d)))]
 
     # --- Stages 2 and 3: each numbered gain slot's signal device ---
@@ -779,7 +826,7 @@ def build_stage_chain(
             if (sizing.get(d.ref) is None or d.terminals.get("d") != out1
                     or d.terminals.get("s") in signal_nets):
                 continue
-            r = _looking_in_drain(d, by_drain, model, sizing, stop, degen)
+            r = _looking_in_drain(d, by_drain, model, sizing, stop, degen, levels)
             gd_output_load = 1.0 / r if 0.0 < r < float("inf") else 0.0
         # A resistor load has no device to read: the output-node conductance is
         # exactly 1/R, which the sizer already solved for and passed in here.

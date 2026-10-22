@@ -374,10 +374,23 @@ cap:
 # The gm/Id sizing path drives geometry from a SPICE-characterized table instead
 # of the square law.  For each polarity and channel length we sweep Vgs in
 # saturation (Vds = Vdd/2) at a fixed extraction width and read the BSIM4
-# operating-point parameters, then invert onto a uniform gm/Id axis.
+# operating-point parameters, then invert onto a uniform gm/Id axis.  Two
+# correction tables on the same grid then say how gds moves with Vds and how
+# large gmbs is at a reverse body bias, for devices that sit far from that
+# single sweep point (cascode stacks, issue #273).
 
 # Uniform gm/Id axis (1/V): weak inversion (~24) down to strong inversion (~6).
 _GMID_AXIS = np.round(np.arange(6.0, 24.0 + 1e-9, 0.5), 3)
+
+# Bias axes of the two correction tables (fractions of Vdd).  The Vds grid is
+# dense near the saturation knee, where gds climbs steeply: a device under a
+# cascode sits ~0.1 V above its Vdsat, and there its gds is 4-10x the Vdd/2
+# value the main table holds (issue #273).  Both include the reference point
+# (Vds = Vdd/2, Vsb = 0) exactly.
+_VDS_FRACTIONS = np.concatenate([np.arange(0.03, 0.15, 0.0075),
+                                 [0.15, 0.175, 0.2, 0.25, 0.3, 0.4, 0.5,
+                                  0.6, 0.75, 0.9]])
+_VSB_FRACTIONS = np.array([0.0, 0.05, 0.1, 0.2, 0.3, 0.45, 0.6])
 
 
 def _gmid_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float):
@@ -453,6 +466,70 @@ def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarra
     return out
 
 
+def _bias_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float,
+                vds: float, vsb: float):
+    """Sweep Vgs at a fixed ``(vds, vsb)``; return per-point
+    ``(id_w, gds/id, gmbs/gm)`` -- all magnitudes, ``vsb`` a reverse bias."""
+    w, l = w_um * _UM, l_um * _UM
+    step = vdd / 400.0
+    p = model.prefix(dev)
+    fields = f"{p}[id] {p}[gm] {p}[gds] {p}[gmbs]"
+    if dev == "nmos":
+        src = (f"Vd d 0 {vds:.6e}\nVg g 0 0\nVb b 0 {-vsb:.6e}\n"
+               f"{model.inst('nmos', 'd g 0 b', w, l)}\n")
+        sweep = f".dc Vg 0 {vdd} {step:.6e}"
+    else:
+        src = (f"Vs s 0 {vdd}\nVd d 0 {vdd - vds:.6e}\nVg g 0 {vdd}\n"
+               f"Vb b 0 {vdd + vsb:.6e}\n{model.inst('pmos', 'd g s b', w, l)}\n")
+        sweep = f".dc Vg {vdd} 0 {-step:.6e}"
+    deck = (f"* bias {dev}\n{model.include}{src}.save {fields}\n{sweep}\n"
+            f".control\nrun\nwrdata __OUT__ {fields}\n.endc\n.end\n")
+    data = _run_ngspice(deck)
+    idr, gm = np.abs(data[:, 1]), np.abs(data[:, 3])
+    gds, gmbs = np.abs(data[:, 5]), np.abs(data[:, 7])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return idr / w_um, gds / idr, gmbs / gm
+
+
+def _at_density(id_w_row: np.ndarray, id_w: np.ndarray, field: np.ndarray) -> np.ndarray:
+    """``field`` of one sweep read at each of ``id_w_row``'s current densities.
+
+    The device in a circuit carries a fixed current, so a bias change is
+    compared at equal ``Id/W`` (interpolated in ``log Id/W``, which rises
+    monotonically with Vgs), not at equal Vgs.
+    """
+    ok = (id_w > 0) & np.isfinite(field)
+    x = np.log(id_w[ok])
+    order = np.argsort(x)
+    return np.interp(np.log(id_w_row), x[order], field[ok][order])
+
+
+def _bias_tables(model: _Model, dev: str, vdd: float, w_um: float,
+                 l_axis: np.ndarray, id_w: np.ndarray) -> dict[str, np.ndarray]:
+    """The Vds and Vsb correction tables for one polarity (issue #273).
+
+    ``gds_scale`` (``n_vds × n_L × n_gmid``) is gds at each ``vds_axis`` point
+    over gds at the main table's Vds = Vdd/2, at equal current density
+    (``id_w``, the main table's ``n_L × n_gmid`` grid), so it is exactly 1 at
+    the reference.  ``gmb_gm`` (``n_vsb × n_L × n_gmid``) is ``gmbs/gm`` at
+    each ``vsb_axis`` reverse body bias, Vds = Vdd/2 -- the body
+    transconductance a cascode's source swing adds to its ``gm``.
+    """
+    vds_axis, vsb_axis = vdd * _VDS_FRACTIONS, vdd * _VSB_FRACTIONS
+    scale = np.empty((vds_axis.size,) + id_w.shape)
+    gmb = np.empty((vsb_axis.size,) + id_w.shape)
+    for j, l_um in enumerate(l_axis):
+        ref_w, ref_gds, _ = _bias_sweep(model, dev, vdd, w_um, float(l_um), vdd / 2, 0.0)
+        ref = _at_density(id_w[j], ref_w, ref_gds)
+        for k, vds in enumerate(vds_axis):
+            sw, sg, _ = _bias_sweep(model, dev, vdd, w_um, float(l_um), float(vds), 0.0)
+            scale[k, j] = _at_density(id_w[j], sw, sg) / ref
+        for k, vsb in enumerate(vsb_axis):
+            sw, _, se = _bias_sweep(model, dev, vdd, w_um, float(l_um), vdd / 2, float(vsb))
+            gmb[k, j] = _at_density(id_w[j], sw, se)
+    return {"gds_scale": scale, "gmb_gm": gmb}
+
+
 def extract_gmid(node: str) -> dict:
     """Build the gm/Id LUT arrays for one node (both polarities)."""
     cfg = NODES[node]
@@ -462,7 +539,9 @@ def extract_gmid(node: str) -> dict:
     # ~10 log-spaced lengths from L_min to L_max, snapped to the length grid.
     raw = np.geomspace(lmin, lmax, 10)
     l_axis = np.unique(np.round(np.round(raw / lstep) * lstep, 6))
-    data: dict[str, np.ndarray] = {"gm_id_axis": _GMID_AXIS, "l_axis": l_axis}
+    data: dict[str, np.ndarray] = {"gm_id_axis": _GMID_AXIS, "l_axis": l_axis,
+                                   "vds_axis": vdd * _VDS_FRACTIONS,
+                                   "vsb_axis": vdd * _VSB_FRACTIONS}
     for dev in ("nmos", "pmos"):
         cube = {k: [] for k in ("id_w", "gm_gds", "ft", "vdsat", "vgs")}
         for l_um in l_axis:
@@ -475,6 +554,9 @@ def extract_gmid(node: str) -> dict:
                 cube[k].append(row[k])
         for k, rows in cube.items():
             data[f"{dev}_{k}"] = np.asarray(rows)  # shape (n_L, n_gmid)
+        for k, grid in _bias_tables(model, dev, vdd, w, l_axis,
+                                    data[f"{dev}_id_w"]).items():
+            data[f"{dev}_{k}"] = grid
     return data
 
 

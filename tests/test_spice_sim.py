@@ -1466,6 +1466,40 @@ def test_wideswing_one_stage_gbw_and_pm_track_spice(input_pair, load):
 
 
 @ngspice
+@pytest.mark.parametrize("input_pair,load", [
+    ("differential_pair_pmos", "telescopic_cascode_load_pmos"),
+    ("differential_pair_pmos", "telescopic_cascode_load_wideswing_pmos"),
+    ("differential_pair_nmos", "telescopic_cascode_load_wideswing_nmos"),
+    ("differential_pair_nmos", "folded_cascode_load_nmos_input_single_output"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_single_output"),
+])
+def test_cascode_load_gain_tracks_spice(input_pair, load):
+    """Issue #273: a cascode load's gain read every device at Vds = Vdd/2.
+
+    The device under the cascode sits ~0.1 V above its saturation knee, with
+    4-10x that gds, so the analytical gain ran 7-17 dB above ngspice here
+    (8-20 dB on the prediction-error page).  Read at each device's own Vds
+    and Vsb it lands a few dB above -- never more than the designer gate's
+    3 dB below, which would drop designs SPICE passes.
+    """
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if c.variant_map["load"].name == load
+                and c.variant_map["input_pair"].name == input_pair)
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=2e-12, gain_min_db=40)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gain_db"] is not None
+    assert -3.0 <= result.metrics["gain_db"] - sim["gain_db"] <= 6.0
+
+
+@ngspice
 def test_measured_ac_responds_to_load_capacitance():
     """Issue #222: the benches load the DUT with ``spec.cl``.  The sizing is
     held fixed and only the bench's CL changes, so any response comes from the

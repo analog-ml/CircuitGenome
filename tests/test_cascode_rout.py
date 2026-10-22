@@ -9,15 +9,24 @@ from circuitgenome.synthesizer.models import Device
 
 
 class _FakeModel:
-    """Constant gm / gds for deterministic rout arithmetic."""
-    def __init__(self, gm=1e-3, gds=1e-6):
-        self._gm, self._gds = gm, gds
+    """Constant gm / gds for deterministic rout arithmetic.
+
+    ``gds_at`` maps a ``vds`` to a gds (a bias-aware read), ``gmb`` is the
+    body transconductance at any ``vsb``; both are off by default.
+    """
+    def __init__(self, gm=1e-3, gds=1e-6, gds_at=None, gmb=0.0):
+        self._gm, self._gds, self._gds_at, self._gmb = gm, gds, gds_at, gmb
 
     def gm(self, dtype, w, l, ids):
         return self._gm
 
-    def gds(self, dtype, w, l, ids):
+    def gds(self, dtype, w, l, ids, vds=None):
+        if vds is not None and self._gds_at:
+            return self._gds_at(vds)
         return self._gds
+
+    def gmb(self, dtype, w, l, ids, vsb):
+        return self._gmb
 
 
 class _Sz:
@@ -127,3 +136,44 @@ def test_folded_cascode_boost_sees_every_drain_on_the_folding_node():
     r = node_rout("out", [ip, src, casc], model, sizing, frozenset({"net_tail"}))
     # ro·(1 + gm·(ro ∥ ro)) = 1e6·(1 + 1e-3·0.5e6) = 501 MΩ
     assert math.isclose(r, 1e6 * (1 + 1e-3 * 0.5e6), rel_tol=1e-9)
+
+
+# --------------------------------------------------------------------------- #
+# Quiescent node levels: each device read at its own bias (issue #273)
+# --------------------------------------------------------------------------- #
+def _stack():
+    bot = D("mn_bot", "nmos", g="b1", d="n1", s="0", b="0")
+    casc = D("mn_casc", "nmos", g="b2", d="out", s="n1", b="0")
+    return bot, casc, {"mn_bot": _Sz(), "mn_casc": _Sz()}
+
+
+def test_levels_read_the_device_under_the_cascode_at_its_own_vds():
+    """The bottom device sits at Vds = V(n1); its gds there sets R_source."""
+    bot, casc, sizing = _stack()
+    # 4x the gds at 0.3 V (the knee), the plain 1 µS elsewhere.
+    model = _FakeModel(gm=1e-3, gds=1e-6, gds_at=lambda v: 4e-6 if v < 0.5 else 1e-6)
+    levels = {"0": 0.0, "n1": 0.3, "out": 1.65}
+    r = node_rout("out", [bot, casc], model, sizing, levels=levels)
+    # ro_casc·(1 + gm·ro_bot) = 1e6·(1 + 1e-3·0.25e6)
+    assert math.isclose(r, 1e6 * (1 + 1e-3 * 0.25e6), rel_tol=1e-9)
+    # Without levels both read the plain gds: the pre-#273 1.001 GΩ.
+    assert math.isclose(node_rout("out", [bot, casc], model, sizing),
+                        1e6 * (1 + 1e-3 * 1e6), rel_tol=1e-9)
+
+
+def test_levels_add_gmb_to_a_cascode_riding_off_its_bulk():
+    bot, casc, sizing = _stack()
+    model = _FakeModel(gm=1e-3, gds=1e-6, gmb=0.3e-3)
+    levels = {"0": 0.0, "n1": 0.3}            # out unknown: plain gds there
+    r = node_rout("out", [bot, casc], model, sizing, levels=levels)
+    assert math.isclose(r, 1e6 * (1 + 1.3e-3 * 1e6), rel_tol=1e-9)
+
+
+def test_levels_add_no_gmb_when_bulk_is_the_source():
+    """A device with its bulk tied to its own source has no body modulation."""
+    bot = D("mn_bot", "nmos", g="b1", d="n1", s="0", b="0")
+    casc = D("mn_casc", "nmos", g="b2", d="out", s="n1", b="n1")
+    sizing = {"mn_bot": _Sz(), "mn_casc": _Sz()}
+    model = _FakeModel(gm=1e-3, gds=1e-6, gmb=0.3e-3)
+    r = node_rout("out", [bot, casc], model, sizing, levels={"0": 0.0, "n1": 0.3})
+    assert math.isclose(r, 1e6 * (1 + 1e-3 * 1e6), rel_tol=1e-9)

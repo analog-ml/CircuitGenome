@@ -100,12 +100,15 @@ def evaluate_circuit(
     ``resistor_ohms`` is the sized resistor network from :func:`size_resistors`;
     the chain walk needs the input-pair degeneration values, which no
     :class:`MetricModifiers` field can carry because the ``ro`` boost lands
-    inside ``Rout1``'s parallel combination rather than on top of it.
+    inside ``Rout1``'s parallel combination rather than on top of it, and the
+    bias-leg floor resistors the quiescent node levels drop across.  The
+    chain is built ``bias_aware``: the first stage's devices are read at
+    their own ``Vds``/``Vsb`` (issue #273).
     """
     chain = build_stage_chain(
         view, sizing, plan.model, spec,
         cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf, gd_load_r=currents.gd_load_r,
-        resistor_ohms=resistor_ohms,
+        resistor_ohms=resistor_ohms, bias_aware=True,
     )
     chain = modifiers.apply(chain)
     invalid, notes = _resistor_load_bias(view, currents, sizing, spec)

@@ -386,10 +386,16 @@
   <p>Once you have the operating <code>gm/Id</code>, the answers are direct:</p>
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids):
     <span class="tok-kw">return</span> self.<span class="tok-fn">_gm_id_at</span>(dtype, w_um, l_um, ids) * <span class="tok-fn">abs</span>(ids)
-<span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids):
+<span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids, vds=<span class="tok-kw">None</span>):
     gm_id = self.<span class="tok-fn">_gm_id_at</span>(dtype, w_um, l_um, ids)
     gm = gm_id * <span class="tok-fn">abs</span>(ids)
-    <span class="tok-kw">return</span> gm / self.lut.<span class="tok-fn">gm_gds</span>(dtype, gm_id, l_um)</code></pre>
+    gds = gm / self.lut.<span class="tok-fn">gm_gds</span>(dtype, gm_id, l_um)
+    <span class="tok-kw">if</span> vds <span class="tok-kw">is not</span> <span class="tok-kw">None</span>:
+        vds = <span class="tok-fn">max</span>(vds, self.lut.<span class="tok-fn">vdsat</span>(dtype, gm_id, l_um))
+        gds *= self.lut.<span class="tok-fn">gds_scale</span>(dtype, gm_id, l_um, vds)
+    <span class="tok-kw">return</span> gds</code></pre>
+
+  <p>The table's <code>gm_gds</code> is measured at one drain bias, <code>Vds = Vdd/2</code>. When the caller knows the device's own <code>Vds</code>, <code>gds_scale</code> moves <code>gds</code> there &mdash; several times larger just above the saturation knee, where a device under a cascode sits &mdash; but never deeper than <code>Vdsat</code>, below which the device is in triode and the estimate that supplied <code>vds</code> no longer holds (issue #273). Its sibling <code>gmb(dtype, w_um, l_um, ids, vsb)</code> reads the body transconductance <code>gm&middot;(gmbs/gm)</code> at a reverse body bias the same way; Level-1 returns <code>0</code> for it, since its SPICE card has <code>gamma=0</code>.</p>
 
   <blockquote><p><strong>Looking ahead:</strong> the gm/Id plug has two extra powers Level-1 lacks — a <em>policy</em> for choosing L by role (Part&nbsp;6) and full <em>geometry inversion</em> (Part&nbsp;7). Those are what let it not just <em>measure</em> devices but <em>size</em> them.</p></blockquote>
 </section>
