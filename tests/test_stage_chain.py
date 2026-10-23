@@ -18,8 +18,11 @@ from circuitgenome.synthesizer.models import Device
 from circuitgenome.sizer.physics.stage_chain import (
     Stage,
     StageChain,
+    _CMFB_SENSE_SWING_TOL_V,
     _FOLLOWER_SWING_TOL_V,
+    check_cmfb_sense_swing,
     check_follower_swing,
+    cmfb_sense_range,
     output_swing_headroom,
     _source_degeneration_r,
     _tail_current_net,
@@ -497,6 +500,103 @@ def test_follower_swing_gate(follower, spec_kw, feasible):
     assert bool(warnings) is not feasible
     if warnings:
         assert "source-follower" in warnings[0] and "swing spec" in warnings[0]
+
+
+# --------------------------------------------------------------------------- #
+# Output swing headroom: a DDA CMFB's sense range (issue #272)
+# --------------------------------------------------------------------------- #
+# FD second stages driving outp/outn, and the two CMFB forms sensing them.
+_FD_SS = [_dev("mn_ssp", "nmos", "outp", "x1", "gnd!"),
+          _dev("mp_ssp", "pmos", "outp", "net_bias5", "vdd!"),
+          _dev("mn_ssn", "nmos", "outn", "x2", "gnd!"),
+          _dev("mp_ssn", "pmos", "outn", "net_bias5", "vdd!")]
+_FD_SS_SIZING = {r: _sz(r, v) for r, v in (("mn_ssp", 0.10), ("mp_ssp", 0.15),
+                                           ("mn_ssn", 0.10), ("mp_ssn", 0.15))}
+_DDA = [_dev("m1_cmfb", "nmos", "da", "vcm_ref", "t1"),
+        _dev("m2_cmfb", "nmos", "co", "outp", "t1"),
+        _dev("m3_cmfb", "nmos", "da", "vcm_ref", "t2"),
+        _dev("m4_cmfb", "nmos", "co", "outn", "t2"),
+        _dev("m5_cmfb", "pmos", "da", "da", "vdd!"),
+        _dev("m6_cmfb", "pmos", "co", "co", "vdd!"),
+        _dev("m7_cmfb", "nmos", "t1", "net_bias4", "gnd!"),
+        _dev("m8_cmfb", "nmos", "t2", "net_bias4", "gnd!")]
+_RS = [_dev("m1_cmfb", "nmos", "d1", "sense", "t"),
+       _dev("m2_cmfb", "nmos", "co", "vcm_ref", "t"),
+       _dev("m3_cmfb", "pmos", "d1", "d1", "vdd!"),
+       _dev("m4_cmfb", "pmos", "co", "co", "vdd!"),
+       _dev("m5_cmfb", "nmos", "t", "net_bias4", "gnd!")]
+_BIAS_DIODE = [_dev("mn4_bias_gen", "nmos", "net_bias4", "net_bias4", "gnd!")]
+
+
+def _cmfb_sizing(cmfb, sense_vdsat=0.2):
+    return {**_FD_SS_SIZING, **{d.ref: _sz(d.ref, sense_vdsat) for d in cmfb}}
+
+
+def _fd_view(cmfb):
+    slots = {"second_stage_p": _FD_SS[:2], "second_stage_n": _FD_SS[2:],
+             "bias_gen": list(_BIAS_DIODE), "cmfb": list(cmfb)}
+    return CircuitView(
+        slot_transistors=slots,
+        all_transistors={d.ref: (d, sl) for sl, devs in slots.items() for d in devs})
+
+
+def test_dda_sense_range_is_root2_vdsat_of_the_sense_pair():
+    """Each sense pair has steered its whole tail at ±√2·Vov; the vref-side
+    devices, diodes and tails (gated by internal or bias nets) do not count."""
+    sizing = _cmfb_sizing(_DDA)
+    sizing["m1_cmfb"] = _sz("m1_cmfb", 0.05)     # vref side: not a sense device
+    assert cmfb_sense_range(_fd_view(_DDA), sizing) == pytest.approx(
+        math.sqrt(2) * 0.2)
+
+
+def test_dda_sense_range_caps_the_swing_around_mid_rail():
+    """5 V supply, ±0.283 V range: the outputs are CM-regulated over
+    2.217-2.783 V, far inside the second stage's Vdsat limits."""
+    rng = math.sqrt(2) * 0.2
+    hi, lo = output_swing_headroom(_fd_view(_DDA), _cmfb_sizing(_DDA),
+                                   _BodyModel(), _spec())
+    assert hi == pytest.approx(2.5 - rng) and lo == pytest.approx(2.5 - rng)
+
+
+def test_wide_dda_sense_range_leaves_the_stage_limits():
+    hi, lo = output_swing_headroom(_fd_view(_DDA), _cmfb_sizing(_DDA, 2.0),
+                                   _BodyModel(), _spec())
+    assert (hi, lo) == pytest.approx((0.15, 0.10))
+
+
+def test_resistive_sense_cmfb_does_not_limit_the_swing():
+    """Its pair senses the resistor-averaged CM, never an output directly."""
+    view, sizing = _fd_view(_RS), _cmfb_sizing(_RS)
+    assert cmfb_sense_range(view, sizing) is None
+    assert output_swing_headroom(view, sizing, _BodyModel(), _spec()) == \
+        pytest.approx((0.15, 0.10))
+
+
+_DDA_EDGE = math.sqrt(2) * 0.2          # 2.5 ± 0.283 V on a 5 V supply
+
+
+@pytest.mark.parametrize("spec_kw,feasible", [
+    (dict(output_swing_max_v=4.5), False),
+    (dict(output_swing_min_v=0.5), False),
+    (dict(output_swing_max_v=2.5 + _DDA_EDGE + _CMFB_SENSE_SWING_TOL_V - 0.01,
+          output_swing_min_v=2.5 - _DDA_EDGE - _CMFB_SENSE_SWING_TOL_V + 0.01),
+     True),
+    (dict(output_swing_max_v=2.6, output_swing_min_v=2.4), True),
+    (dict(), True),
+])
+def test_cmfb_sense_swing_gate(spec_kw, feasible):
+    warnings, ok = check_cmfb_sense_swing(_fd_view(_DDA), _cmfb_sizing(_DDA),
+                                          _spec(**spec_kw))
+    assert ok is feasible
+    assert bool(warnings) is not feasible
+    if warnings:
+        assert "difference-difference CMFB" in warnings[0]
+
+
+def test_cmfb_sense_swing_gate_passes_resistive_sense():
+    assert check_cmfb_sense_swing(
+        _fd_view(_RS), _cmfb_sizing(_RS),
+        _spec(output_swing_max_v=4.9, output_swing_min_v=0.1)) == ([], True)
 
 
 def test_evaluate_metrics_reads_the_headroom_off_each_rail():

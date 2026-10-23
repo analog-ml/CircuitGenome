@@ -181,7 +181,8 @@ class StageChain:
         output can get to each rail (output swing), either entry ``None`` when
         it cannot be placed.  The second stage's ``Vdsat`` per polarity, or,
         behind a follower ``output_stage``, the follower's level shift on top
-        of its driving stage (:func:`output_swing_headroom`).
+        of its driving stage; a DDA CMFB's sense range can bind instead
+        (:func:`output_swing_headroom`).
     :param gain_measurable: ``False`` when the DC operating point the
         small-signal formulas sit on does not exist, so every gain-derived
         metric is withheld rather than reported optimistically (issue #148).
@@ -464,6 +465,14 @@ def _source_degeneration_r(ip_devs: list[Device], ip_resistors: list[Device],
 #: the authority for accepts.
 _FOLLOWER_SWING_TOL_V = 0.2
 
+#: How far (V) a DDA CMFB's sense-range swing edge may miss the spec before
+#: :func:`check_cmfb_sense_swing` rejects the sizing.  On 24 sampled gf180
+#: DDA designs the bench edge landed up to 0.11 V beyond the modelled
+#: ``Vocm ± √2·Vdsat`` (and up to 0.13 V short of it): how fast the CM drifts
+#: once the pairs saturate depends on the rest of the amplifier.  As with the
+#: follower gate, only clearer misses are rejected; SPICE decides the rest.
+_CMFB_SENSE_SWING_TOL_V = 0.15
+
 
 def _vdsat_of(devs: list[Device], sizing, dtype: str) -> float | None:
     """``Vdsat`` in V of the first ``dtype`` device of ``devs`` that is sized."""
@@ -488,13 +497,13 @@ def _follower(
     return fol, [d for d in devs if d is not fol]
 
 
-def output_swing_headroom(
+def _stage_swing_headroom(
     view: CircuitView,
     sizing: dict[str, TransistorSizing],
     model: DeviceModel,
     spec: SizingSpec,
 ) -> tuple[float | None, float | None]:
-    """``(below_vdd, above_vss)``: how close to each rail the output can swing.
+    """``(below_vdd, above_vss)`` the output devices alone allow.
 
     Without an output buffer the output node is the second stage's drain, and
     each rail-side device leaves saturation ``Vdsat`` from its rail.
@@ -542,6 +551,66 @@ def output_swing_headroom(
     return (own, shifted) if fol.type == "pmos" else (shifted, own)
 
 
+def cmfb_sense_range(
+    view: CircuitView, sizing: dict[str, TransistorSizing],
+) -> float | None:
+    """How far (V) each output can move from the output CM before a DDA CMFB
+    loses it, or ``None`` when the CMFB does not sense the outputs directly.
+
+    A difference-difference CMFB senses each output with its own differential
+    pair against ``vcm_ref`` (issue #272).  As the outputs split, each pair
+    steers its tail toward one side; once a pair has steered the whole tail,
+    its summed branch currents stop responding to the common mode, so the CM
+    loop has no gain left and the output CM wanders off.  A square-law pair
+    has steered its whole tail at a differential input of
+    ``√2 · Vov``, so each output stays CM-regulated within
+    ``Vocm ± √2 · Vdsat(sense device)``, with ``Vdsat`` taken at the
+    quiescent half-tail current.  A resistive-sense CMFB averages the outputs
+    through resistors first, so its pair sees only the common mode and sets
+    no such limit.
+
+    The sense devices are the CMFB signal devices gated directly by a net that
+    a MOSFET outside the CMFB drives, i.e. an amplifier output.  If several
+    are sized, the narrowest range wins.
+    """
+    cmfb = [d for d in view.slot_transistors.get("cmfb", [])
+            if d.type in ("nmos", "pmos")]
+    own = {d.ref for d in cmfb}
+    driven = {d.terminals.get("d") for d, _slot in view.all_transistors.values()
+              if d.ref not in own}
+    vdsats = [sizing[d.ref].vds_sat_v for d in cmfb
+              if is_signal_device(d) and d.terminals.get("g") in driven
+              and d.ref in sizing]
+    return math.sqrt(2.0) * min(vdsats) if vdsats else None
+
+
+def output_swing_headroom(
+    view: CircuitView,
+    sizing: dict[str, TransistorSizing],
+    model: DeviceModel,
+    spec: SizingSpec,
+) -> tuple[float | None, float | None]:
+    """``(below_vdd, above_vss)``: how close to each rail the output can swing.
+
+    The tighter of two limits on each side:
+
+    * the output devices (:func:`_stage_swing_headroom`): the last stage's
+      rail-side ``Vdsat``, or a source-follower's level shift on top of it;
+    * a DDA CMFB's sense range (:func:`cmfb_sense_range`): beyond
+      ``Vocm ± range`` the output CM is no longer held.  ``Vocm`` is
+      mid-rail, where every testbench rig drives ``vcm_ref``.
+
+    An entry is ``None`` when neither limit can be placed on that side.
+    """
+    hi, lo = _stage_swing_headroom(view, sizing, model, spec)
+    rng = cmfb_sense_range(view, sizing)
+    if rng is None:
+        return hi, lo
+    cm_head = (spec.vdd - spec.vss) / 2.0 - rng
+    return (cm_head if hi is None else max(hi, cm_head),
+            cm_head if lo is None else max(lo, cm_head))
+
+
 def check_follower_swing(
     view: CircuitView,
     sizing: dict[str, TransistorSizing],
@@ -551,7 +620,7 @@ def check_follower_swing(
     """``(warnings, feasible)`` for a follower output stage's level shift.
 
     ``feasible`` is ``False`` when the level-shifted swing edge
-    (:func:`output_swing_headroom`) misses its spec bound by more than
+    (:func:`_stage_swing_headroom`) misses its spec bound by more than
     :data:`_FOLLOWER_SWING_TOL_V`.  No other sizing knob can recover it: the
     shift is the follower's ``|Vgs|``, which even weak inversion cannot take
     below roughly ``Vth``.  Circuits without a follower always pass.
@@ -559,7 +628,7 @@ def check_follower_swing(
     fol, _bias = _follower(view.slot_transistors)
     if fol is None:
         return [], True
-    hi, lo = output_swing_headroom(view, sizing, model, spec)
+    hi, lo = _stage_swing_headroom(view, sizing, model, spec)
     if fol.type == "pmos":           # shifts the low edge up
         side, bound, sign = "low", spec.output_swing_min_v, 1.0
         reached = None if lo is None else spec.vss + lo
@@ -573,6 +642,44 @@ def check_follower_swing(
             f"the swing spec — its |Vgs| level shift limits the {side} swing "
             f"to {reached:.2f} V against the {bound:.2f} V spec; relax the "
             f"swing spec, raise the supply or use an unbuffered topology."], False
+
+
+def check_cmfb_sense_swing(
+    view: CircuitView,
+    sizing: dict[str, TransistorSizing],
+    spec: SizingSpec,
+) -> tuple[list[str], bool]:
+    """``(warnings, feasible)`` for a DDA CMFB's sense range (issue #272).
+
+    ``feasible`` is ``False`` when either CM-regulated swing edge,
+    ``Vocm ± range`` (:func:`cmfb_sense_range`), misses its spec bound by
+    more than :data:`_CMFB_SENSE_SWING_TOL_V`.  The range is set by the sense
+    pairs' overdrive, which the sizer does not adjust: a larger overdrive
+    would widen it, but only up to about ``Vocm − Vth − Vdsat(tail)`` (the
+    tail must stay saturated while one device carries it all) and at the
+    cost of CM-loop gain.  Circuits without a DDA CMFB always pass.
+    """
+    rng = cmfb_sense_range(view, sizing)
+    if rng is None:
+        return [], True
+    vocm = (spec.vdd + spec.vss) / 2.0
+    hi, lo = vocm + rng, vocm - rng
+    misses = []
+    if (spec.output_swing_max_v is not None
+            and spec.output_swing_max_v - hi > _CMFB_SENSE_SWING_TOL_V):
+        misses.append(f"the high swing to {hi:.2f} V against the "
+                      f"{spec.output_swing_max_v:.2f} V spec")
+    if (spec.output_swing_min_v is not None
+            and lo - spec.output_swing_min_v > _CMFB_SENSE_SWING_TOL_V):
+        misses.append(f"the low swing to {lo:.2f} V against the "
+                      f"{spec.output_swing_min_v:.2f} V spec")
+    if not misses:
+        return [], True
+    return [f"cmfb: the difference-difference CMFB holds the output common "
+            f"mode only within ±{rng:.2f} V of {vocm:.2f} V (beyond it each "
+            f"sense pair has steered its whole tail), which limits "
+            f"{' and '.join(misses)}; relax the swing spec or use a "
+            f"resistive-sense CMFB."], False
 
 
 def build_stage_chain(

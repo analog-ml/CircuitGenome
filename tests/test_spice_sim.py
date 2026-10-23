@@ -1372,6 +1372,47 @@ def test_follower_swing_model_tracks_spice(template, follower):
     assert model == pytest.approx(spice, abs=_FOLLOWER_SWING_TOL_V)
 
 
+# --- DDA CMFB sense-range swing (issue #272) ---------------------------------
+
+@ngspice
+@pytest.mark.parametrize("load,cmfb", [
+    ("folded_cascode_load_pmos_input_differential_output",
+     "dda_cmfb_pmos_mirror_inverting"),
+    ("current_source_load_nmos", "dda_cmfb_nmos_mirror_inverting"),
+])
+def test_dda_cmfb_swing_model_tracks_spice(load, cmfb):
+    """A DDA CMFB holds the output CM only while its sense pairs stay
+    unsaturated, so on gf180 the outputs swing ~1.4-1.9 V where the model
+    used to predict ~0.2-3.1 V.  The ``Vocm ± √2·Vdsat`` edges must land
+    within the gate's tolerance of the bench, and the 0.3-3.0 V spec must be
+    flagged by the sizer before SPICE."""
+    from circuitgenome.sizer.physics.stage_chain import _CMFB_SENSE_SWING_TOL_V
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos", "load": load,
+        "tail_current": "current_mirror_tail_pmos", "cmfb": cmfb})
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=50,
+                      gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5, power_max_w=2.5e-3,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert not result.bias_feasible
+    assert "difference-difference CMFB" in result.warnings[0]
+
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    hi, lo = measure._measure_swing(name, ports, body_dut, rig._Topo(ports),
+                                    spec.vdd, spec.ibias, spec.cl, spec.vdd / 2)
+    if hi is None or lo is None:
+        pytest.skip("swing bench did not complete in this environment")
+    assert hi < 2.2 and lo > 1.1                  # far short of either rail
+    assert result.metrics["output_swing_max_v"] == pytest.approx(
+        hi, abs=_CMFB_SENSE_SWING_TOL_V)
+    assert result.metrics["output_swing_min_v"] == pytest.approx(
+        lo, abs=_CMFB_SENSE_SWING_TOL_V)
+
+
 # --- load capacitance (issue #222) ------------------------------------------
 
 def _active_load_one_stage(tech_name, vdd):

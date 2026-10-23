@@ -497,6 +497,14 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    0.2 V.  On gf180 at 3.3 V a PMOS follower cannot pull the output below
    ≈ 0.85 V and an NMOS follower cannot lift it above ≈ 2.2 V, so a
    0.3–3.0 V swing spec rules out every buffered candidate before SPICE.
+   A fully-differential design with a difference-difference CMFB gets the
+   same kind of check:
+   :func:`~circuitgenome.sizer.physics.stage_chain.check_cmfb_sense_swing`
+   rejects it (warning *"…difference-difference CMFB holds the output common
+   mode only within ±…"*) when ``Vocm ± √2·Vdsat`` of its sense pairs misses
+   the swing spec by more than 0.15 V.  On gf180 that range is
+   ≈ 1.41–1.89 V, so DDA candidates are ruled out against any swing spec wider
+   than ≈ 1.26–2.04 V (issue #272).
 
 Phase 4c — Size: non-load resistors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
