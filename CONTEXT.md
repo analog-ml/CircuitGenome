@@ -69,6 +69,14 @@ sized circuit, at one process corner. The authority whenever it disagrees with t
 predicted metrics.
 _Avoid_: Simulated metrics, SPICE metrics.
 
+**Prediction error**:
+How far a predicted metric lands from its measured counterpart on the same sized
+circuit, always signed **measured − predicted** — so a positive error means the
+model under-predicted. Kept in the metric's own unit where that unit is already a
+log or linear scale (dB, degrees, volts), and as a percentage of the predicted
+value for figures that span decades (GBW, slew rate, power).
+_Avoid_: Approximation error, model gap, delta.
+
 ## Frequency compensation
 
 **Pole pair**:
