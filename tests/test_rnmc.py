@@ -262,6 +262,21 @@ def test_comp_resistances_follow_the_sizing_rule_per_half():
     assert rnmc.comp_resistances((), gm3, cc1, cc2, cbuf) == [(0.0, 0.0)]
 
 
+def test_rnmc_gbw_is_the_full_models_first_crossing():
+    """Issue #274: the buffered RNMC loop crosses 0 dB well under
+    gm1/(2π·Cc1) -- the pair near crossover and the follower's gain below 1
+    both pull it, and SPICE measured ~20 % under -- while stages far faster
+    than the crossover leave it there."""
+    gm1, gm2, gm3, cc1, cc2, cl = _BUF
+    gbw = eq.unity_gain_bw_rnmc_hz(*_BUF, **_BUF_KW, comp_r=(0.0, 1700.0))
+    nominal = eq.unity_gain_bw(gm1, cc1)
+    gm_f, _cgs, g_f = _BUF_KW["buffer"]
+    assert gbw < eq.unity_gain_bw(gm1, cc1, gain=gm_f / (gm_f + g_f)) < nominal
+    assert 0.6 * nominal < gbw
+    fast = eq.unity_gain_bw_rnmc_hz(gm1, 100 * gm2, 100 * gm3, cc1, cc2, cl)
+    assert fast == pytest.approx(nominal, rel=0.01)
+
+
 def test_metrics_report_the_worse_half():
     """The halves of an FD amplifier can carry different compensation
     variants; one ringing half makes the whole amplifier ring."""

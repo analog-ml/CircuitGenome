@@ -87,8 +87,178 @@ def test_gbw_and_slew_need_the_miller_cap():
 
     comp = evaluate_metrics(_chain((1e-3, 1e6, 10e-6), (2e-3, 5e5, 1e-3),
                                    cc_pf=2.0), _spec())[0]
-    assert comp["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12))
+    assert comp["gbw_hz"] == pytest.approx(
+        eq.two_stage_loop(1e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)[0])
     assert comp["slew_rate_vps"] == pytest.approx(eq.slew_rate_vps(10e-6, 2e-12))
+
+
+def _two_stage(gm2, *, resistor, buffer=None):
+    """A 1 mA/V pair over a ``gm2`` second stage, Cc = 2 pF into 20 pF."""
+    return _chain((1e-3, 1e6), (gm2, 5e5), cc_pf=2.0, output_buffer=buffer,
+                  comp_resistors=((resistor, False),))
+
+
+def test_a_bare_miller_cap_pulls_the_crossing_under_its_output_pole():
+    """Issue #274: at a ~55° margin the output pole puts the 0 dB crossing
+    ~14 % under gm1/(2π·Cc) -- SPICE measured −13 % and ~51°."""
+    m, _ = evaluate_metrics(_two_stage(14e-3, resistor=False), _spec())
+    assert 45 < m["phase_margin_deg"] < 60
+    assert 0.8 < m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) < 0.9
+
+
+def test_a_nulling_resistor_cancels_the_output_pole():
+    """Issue #274: R = (Cc+CL)/(gm2·Cc), as size_resistors sizes it, puts the
+    zero on the output pole -- SPICE measured ~89° and no pull on GBW."""
+    m, _ = evaluate_metrics(_two_stage(14e-3, resistor=True), _spec())
+    assert m["phase_margin_deg"] > 85
+    assert m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) == pytest.approx(1.0, abs=0.02)
+
+
+def test_gbw_scales_with_the_output_followers_gain():
+    """Issue #274: a source follower passes gm/(gm + gmb + g_out) of its
+    gate's swing, and the 0 dB crossing moves down with it."""
+    buffer = (0.1, 10e-15, 12.5e-3)              # gain 1/1.125, pole 11x crossover
+    m, _ = evaluate_metrics(_two_stage(14e-3, resistor=False, buffer=buffer), _spec())
+    assert m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) == pytest.approx(1 / 1.125, abs=0.02)
+
+
+def test_nested_miller_recovers_the_textbook_crossing_with_fast_stages():
+    """Stages far faster than the crossover leave gm1/(2π·Cc1) and ~90°."""
+    gbw, pm = eq.nested_miller_loop(1e-3, 1.0, 10.0, 2e-12, 1e-12, 20e-12,
+                                    g1=1e-6, g2=1e-4, g3=1e-3)
+    assert gbw == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12), rel=0.02)
+    assert pm > 85
+
+
+def test_a_return_toward_0_db_counts_as_a_crossing():
+    """Issue #274: GF180 NMC #121 crosses 0 dB at 9 MHz with ~98° left, but
+    its lightly damped inner pair lifts the gain back to -0.3 dB near
+    27 MHz.  SPICE puts that peak at +0.04 dB -- a second crossing, 47° --
+    and the model cannot tell the two apart, so the return sets the margin."""
+    kw = dict(c1_f=5.31e-15, c2_f=103.5e-15, g1=6.98e-9, g2=2.42e-6, g3=5.4e-6,
+              mirror_pole_hz=952.8e6)
+    args = (6e-5, 2.4e-4, 8.4e-4, 1.25e-12, 1.008e-12, 5e-12)
+    gbw, pm = eq.nested_miller_loop(*args, comp_r=((5952.0, 0.0),), **kw)
+    assert gbw == pytest.approx(9.25e6, rel=0.02)
+    assert 40 < pm < 50
+    # A nulling resistor of 1/gm3 leaves no such peak: the first crossing sets it.
+    assert eq.nested_miller_loop(*args, comp_r=((1 / 8.4e-4, 0.0),), **kw)[1] > 75
+
+
+def test_a_mixed_fd_amplifier_averages_its_halves():
+    """Issue #274: a fully-differential amplifier with a bare cap on one half
+    and a nulling resistor on the other reads between the two (51° and 89°
+    halves measure ~65° in SPICE): with no CMFB to couple them, the
+    differential output averages its halves, where the worse half alone
+    would read 51°."""
+    def pm(halves):
+        chain = _chain((1e-3, 1e6), (14e-3, 5e5), cc_pf=2.0, comp_resistors=halves)
+        return evaluate_metrics(chain, _spec())[0]["phase_margin_deg"]
+    bare, nulled = pm(((False, False),)), pm(((True, False),))
+    assert bare + 5 < pm(((False, False), (True, False))) < nulled - 5
+
+
+def test_the_cmfb_couples_mismatched_halves_only():
+    """Issue #274: the CMFB feeds the outputs' common mode back into both
+    first-stage nodes.  Matched halves have none to feed back; mismatched
+    ones are pulled from their average toward the halves' harmonic mean,
+    still above the worse half."""
+    args = (1e-3, 14e-3, 2e-12, 20e-12)
+    kw = dict(g1=1e-6, g2=2e-6)
+    r = eq.compensation_resistor_ohm(2e-12, 20e-12, 14e-3)
+    strong = (10e-3, None)
+    assert eq.two_stage_loop(*args, r_ohm=(0.0, 0.0), cmfb=strong, **kw) == \
+        pytest.approx(eq.two_stage_loop(*args, **kw))
+    free = eq.two_stage_loop(*args, r_ohm=(0.0, r), **kw)[1]
+    worse = eq.two_stage_loop(*args, **kw)[1]
+    for cmfb in ((1e-3, None), strong):
+        assert worse + 5 < eq.two_stage_loop(*args, r_ohm=(0.0, r), cmfb=cmfb, **kw)[1] < free - 3
+
+
+def test_two_stage_replan_raises_gm2_for_the_phase_margin():
+    """Issue #274: the closed-form PM rule ignores the bare Miller cap's
+    right-half-plane zero; the re-plan finds the gm2 the full model needs."""
+    from circuitgenome.sizer.physics.metrics import two_stage_replan
+    chain = _chain((1e-3, 1e6), (8e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    spec = _spec(phase_margin_min_deg=60)
+    assert evaluate_metrics(chain, spec)[0]["phase_margin_deg"] < 60
+    gm1, gm2 = two_stage_replan(chain, spec, lambda gm: 0.0, 1.0, 1.0)
+    assert gm1 is None and gm2 > 8e-3
+    raised = _chain((1e-3, 1e6), (gm2, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    assert evaluate_metrics(raised, spec)[0]["phase_margin_deg"] == pytest.approx(60.5, abs=0.05)
+
+
+def test_two_stage_replan_raises_gm1_for_gbw_first():
+    """GBW is met first, through gm1; the phase margin then through gm2,
+    which only lifts GBW further."""
+    from circuitgenome.sizer.physics.metrics import two_stage_replan
+    chain = _chain((1e-3, 1e6), (14e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    gbw = evaluate_metrics(chain, _spec())[0]["gbw_hz"]
+    spec = _spec(gbw_min_hz=1.2 * gbw, phase_margin_min_deg=50)
+    gm1, gm2 = two_stage_replan(chain, spec, lambda gm: 0.0, 1.0, 1.0)
+    raised = _chain((gm1, 1e6), (gm2 or 14e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    m = evaluate_metrics(raised, spec)[0]
+    assert m["gbw_hz"] >= spec.gbw_min_hz and m["phase_margin_deg"] >= 50
+
+
+def test_two_stage_replan_leaves_an_unreachable_spec():
+    """No gm2 under the ceiling reaches the margin: nothing to re-size."""
+    from circuitgenome.sizer.physics.metrics import two_stage_replan
+    chain = _chain((1e-3, 1e6), (8e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    assert two_stage_replan(chain, _spec(phase_margin_min_deg=89), lambda gm: 0.0,
+                            1.0, 9e-3) == (None, None)
+
+
+class _FollowerModel:
+    """gm/gds/cgs constants; ``gmb`` is ``0.13·gm`` at any reverse body bias
+    and records the ``vsb`` it was read at."""
+
+    def __init__(self):
+        self.vsb = None
+
+    def gm(self, dtype, w, l, ids):
+        return 1e-3
+
+    def gds(self, dtype, w, l, ids, vds=None):
+        return 1e-5
+
+    def cgs(self, dtype, w, l):
+        return 10e-15
+
+    def gmb(self, dtype, w, l, ids, vsb):
+        self.vsb = vsb
+        return 0.13e-3 if vsb > 0 else 0.0
+
+
+def _follower_slot(bulk):
+    """An NMOS follower (gate on the amplifier node) over its bias sink."""
+    fol = Device(ref="m1_os", type="nmos",
+                 terminals={"d": "vdd!", "g": "net_amp", "s": "out", "b": bulk})
+    sink = Device(ref="m2_os", type="nmos",
+                  terminals={"d": "out", "g": "net_bias6", "s": "gnd!", "b": "gnd!"})
+    sizing = {d.ref: TransistorSizing(ref=d.ref, w_um=1.0, l_um=1.0, ids_a=1e-5,
+                                      vgs_v=0.8, vds_sat_v=0.2) for d in (fol, sink)}
+    return {"output_stage": [fol, sink]}, sizing
+
+
+def test_output_buffer_counts_the_followers_body_effect():
+    """Issue #274: a follower whose bulk sits on a rail loses gmb at its
+    output, read at the output's quiescent level spec.vcm."""
+    from circuitgenome.sizer.physics.stage_chain import _output_buffer
+    model = _FollowerModel()
+    slots, sizing = _follower_slot(bulk="gnd!")
+    gm, cgs, g_out = _output_buffer(slots, model, sizing, _spec(vdd=3.3))
+    assert (gm, cgs) == (1e-3, 10e-15)
+    assert g_out == pytest.approx(2 * 1e-5 + 0.13e-3)
+    assert model.vsb == pytest.approx(1.65)
+
+
+def test_output_buffer_has_no_body_effect_with_bulk_on_source():
+    from circuitgenome.sizer.physics.stage_chain import _output_buffer
+    model = _FollowerModel()
+    slots, sizing = _follower_slot(bulk="out")
+    assert _output_buffer(slots, model, sizing, _spec())[2] == pytest.approx(2e-5)
+    assert model.vsb is None
 
 
 # --------------------------------------------------------------------------- #
@@ -159,15 +329,17 @@ def test_k_fs_scales_gbw_but_not_cmrr():
     kw = dict(cc_pf=2.0, gd_tail=1e-7)
     full = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), **kw), _spec())[0]
     half = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), k_fs=0.5, **kw), _spec())[0]
-    assert half["gbw_hz"] == pytest.approx(full["gbw_hz"] / 2.0)
+    assert half["gbw_hz"] == pytest.approx(
+        eq.two_stage_loop(0.5e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)[0])
     assert half["cmrr_db"] == pytest.approx(full["cmrr_db"])
 
 
-def test_three_stage_uses_the_three_stage_phase_margin():
+def test_three_stage_uses_the_nested_miller_model():
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), (3e-3, 2e5), cc_pf=2.0, cc2_pf=0.5)
     m, _ = evaluate_metrics(chain, _spec())
-    assert m["phase_margin_deg"] == pytest.approx(
-        eq.phase_margin_three_stage_deg(1e-3, 2e-3, 3e-3, 2e-12, 0.5e-12, 20e-12))
+    gbw, pm = eq.nested_miller_loop(1e-3, 2e-3, 3e-3, 2e-12, 0.5e-12, 20e-12,
+                                    g1=1e-6, g2=2e-6, g3=5e-6)
+    assert (m["gbw_hz"], m["phase_margin_deg"]) == (pytest.approx(gbw), pytest.approx(pm))
 
 
 # --------------------------------------------------------------------------- #
@@ -280,12 +452,13 @@ def test_single_stage_psrr_takes_the_k_fs_single_ended_penalty():
 
 
 def test_a_miller_cap_still_wins_when_a_mirror_pole_is_present():
-    """Multi-stage chains keep the Miller formulas untouched (issue #221)."""
+    """Multi-stage chains keep the Miller model: the single-stage mirror pole
+    does not enter it (issue #221)."""
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), cc_pf=2.0, mirror_pole_hz=1e8)
     m, _ = evaluate_metrics(chain, _spec())
-    assert m["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12))
-    assert m["phase_margin_deg"] == pytest.approx(
-        eq.phase_margin_two_stage_deg(1e-3, 2e-3, 2e-12, 20e-12))
+    gbw, pm = eq.two_stage_loop(1e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)
+    assert m["gbw_hz"] == pytest.approx(gbw)
+    assert m["phase_margin_deg"] == pytest.approx(pm)
 
 
 # --------------------------------------------------------------------------- #

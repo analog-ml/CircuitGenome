@@ -298,6 +298,13 @@ re-clamped to ``cap.max``.
 magnitude first crosses 0 dB) is :math:`g_{m1}/(2\pi C_c)`.  GBW is
 essentially proportional to :math:`g_{m1}` at a fixed :math:`C_c`.
 
+The predicted GBW metric (`Post-sizing performance metrics`_) reads the
+crossing off the full small-signal model, where the output pole pulls it
+~10–15 % under :math:`g_{m1}/(2\pi C_c)` and a source-follower output stage
+by its gain below 1 (issue #274).  This step sizes against the plain formula;
+once the circuit is sized, a two-stage re-plan raises :math:`g_{m1}` to the
+least the full model needs (see `Full-model re-plan (two-stage)`_).
+
 **Why after SR:** The GBW equation can be satisfied by any
 (:math:`g_{m1}`, :math:`C_c`) pair on the line :math:`g_{m1} = 2\pi \cdot
 GBW \cdot C_c`.  Without the SR constraint the sizer would pick the smallest
@@ -417,6 +424,11 @@ post-rounding value — ensures PM is satisfied on the integer grid.
 
 Implementing function: :func:`~circuitgenome.sizer.physics.equations.phase_margin_two_stage_deg`
 
+The closed form leaves out the bare Miller cap's right-half-plane zero at
+:math:`g_{m2}/C_c` and the first-stage node's capacitance, which cost a
+design sized to it 2–5°; the post-sizing re-plan below raises :math:`g_{m2}`
+by that much (issue #274).
+
 **Numerical example** — PM\ :sub:`min` = 60°, :math:`C_L` = 20 pF:
 
 Input pair is PMOS (µ\ :sub:`p`\ C\ :sub:`ox` = 90 µA/V²), :math:`I_{DS,ip}` = 5 µA,
@@ -531,6 +543,29 @@ Objective and symmetry
 
 ----
 
+Full-model re-plan (two-stage)
+------------------------------
+
+The requirements above come from closed forms.  Once the circuit is sized, a
+two-stage amplifier is re-planned against the full model the metrics read
+(:func:`~circuitgenome.sizer.physics.metrics.two_stage_replan`, issue #274):
+
+1. :math:`g_{m1}` rises to the least that meets the GBW spec at the 0 dB
+   crossing, which the output pole pulls ~10–15 % under
+   :math:`g_{m1}/(2\pi C_c)`;
+2. :math:`g_{m2}` then rises to the least that meets the phase margin,
+   which the bare Miller cap's right-half-plane zero and the first-stage
+   node's capacitance hold 2–5° under the closed form.  Its own gate on the
+   first-stage node grows with it, which the search accounts for.
+
+Each targets its spec plus a small allowance for the re-sized geometry's
+rounding (0.5 % GBW, 0.5°), and is searched up to the device's weak-inversion
+:math:`g_m` ceiling; a spec no value below it meets is left alone, and the
+metric reports the shortfall.  The Level-1 sizer re-solves CP-SAT with the
+raised requirements, the gm/Id sizer re-sizes
+(:mod:`~circuitgenome.sizer.gmid.two_stage_refine`); a second pass re-plans
+against what the first delivered.
+
 Post-sizing performance metrics
 --------------------------------
 
@@ -555,12 +590,29 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - :func:`~circuitgenome.sizer.physics.equations.open_loop_gain_db`
      - actual − spec
    * - GBW
-     - :math:`GBW = g_{m1}\,/\,(2\pi C_c)`
-     - :func:`~circuitgenome.sizer.physics.equations.unity_gain_bw`
+     - The first 0 dB crossing of the amplifier's full small-signal model:
+       the half circuit's nodal equations, with the node parasitics, the
+       compensation branch's series resistor, a non-inverting stage's mirror
+       and an output follower (its gain
+       :math:`g_{m,f}/(g_{m,f}+g_{mb,f}+g_{out})` and pole).  A
+       fully-differential amplifier is modelled with both halves, whose
+       compensation can differ, coupled through its CMFB: the slot's devices
+       give the current it feeds back into each first-stage node per volt of
+       output common mode, and its pole.  :math:`g_{m1}/(2\pi C_c)` without
+       a model
+     - :func:`~circuitgenome.sizer.physics.equations.two_stage_loop`,
+       :func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`,
+       :func:`~circuitgenome.sizer.physics.equations.unity_gain_bw_rnmc_hz`
      - actual − spec
    * - Phase margin
-     - :math:`PM = 90° - \arctan(g_{m1}\,C_L\,/\,(g_{m2}\,C_c))`
-     - :func:`~circuitgenome.sizer.physics.equations.phase_margin_two_stage_deg`
+     - The worst margin over every 0 dB crossing of the same full model,
+       and over every return of the gain to within 0.5 dB of 0 dB after the
+       first crossing -- a resonance the model cannot tell from a crossing
+       (the closed form :math:`90° - \arctan(g_{m1}\,C_L\,/\,(g_{m2}\,C_c))`
+       sizes the circuit, not the metric)
+     - :func:`~circuitgenome.sizer.physics.equations.two_stage_loop`,
+       :func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`,
+       :func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`
      - actual − spec
    * - Slew rate
      - :math:`SR = \min\big(k\,I_{tail}/C_c,\; I_2/(C_L + C_c)\big)` --
@@ -827,6 +879,9 @@ With two non-dominant poles, the phase margin is:
 
 where :math:`\omega_t = g_{m1}/C_{c1}` is the unity-gain frequency
 (implemented in :func:`~circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg`).
+It sizes the circuit; the reported margin comes off the full nested-Miller
+model (:func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`),
+where this estimate ran 15–35° pessimistic in SPICE (issue #274).
 
 For a target :math:`\text{PM}_{\min}`, the sizer **splits the phase budget
 equally** between the two poles — each is allowed to contribute at most

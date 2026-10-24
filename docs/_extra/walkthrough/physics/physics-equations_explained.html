@@ -127,8 +127,12 @@ Av   = gm * rout = 1000 V/V = 60 dB</code></pre>
   <table><thead><tr><th>Analog idea</th><th>Corresponding code</th></tr></thead><tbody>
     <tr><td>Stages multiply their gain</td><td><span class="eq">\(\displaystyle A_{v,\mathrm{total}} = \prod_i A_{v,i}, \qquad A_{v,\mathrm{dB}} = 20\log_{10}|A_{v,\mathrm{total}}|\)</span><pre><code>def open_loop_gain_db(stage_gains):
     return 20.0 * log10(abs(prod(stage_gains)))</code></pre>Maps stage gains to dB.</td></tr>
-    <tr><td>Capacitance limits small-signal speed</td><td><span class="eq">\(f_{\mathrm{GBW}} = \frac{g_{m1}}{2\pi C_c}\)</span><pre><code>def unity_gain_bw(gm1_a_v, cc_f):
-    return gm1_a_v / (2.0 * pi * cc_f)</code></pre>Computes GBW.</td></tr>
+    <tr><td>Capacitance limits small-signal speed</td><td><span class="eq">\(f_{\mathrm{GBW}} = A_f\,\frac{g_{m1}}{2\pi C_c}\)</span><pre><code>def unity_gain_bw(gm1_a_v, cc_f, *, gain=1.0):
+    return gain * gm1_a_v / (2.0 * pi * cc_f)</code></pre>Single-pole GBW; <code>gain</code> is an output follower's <code>gm/(gm + gmb + gds)</code>.</td></tr>
+    <tr><td>The real loop crosses lower</td><td><span class="eq">\(\left(G + sC\right)v = b,\quad |A(j\omega_c)| = 1\)</span><pre><code>def two_stage_loop(gm1, gm2, cc_f, cl_f, *, c1_f, c2_f,
+                   g1, g2, buffer, r_ohm):
+    nets = [_two_stage_network(..., r) for r in r_ohm]
+    return _loop_gbw_pm(nets, gm1 / cc_f)   # (GBW, PM)</code></pre>Full-model GBW and phase margin: the half circuit's nodal equations swept in frequency, so the output pole, the Miller cap's right-half-plane zero, a nulling resistor and a follower all count (issue #274). <code>nested_miller_loop</code> does the same for three stages.</td></tr>
     <tr><td>Current limits large-signal speed</td><td><span class="eq">\(\mathrm{SR} = \frac{I}{C}\)</span> (per node)<pre><code>def slew_rate_vps(current_a, cap_f):
     return current_a / cap_f</code></pre>Slew rate of one node; the amplifier slews at its slowest current-limited node.</td></tr>
     <tr><td>Feedback needs phase margin</td><td><span class="eq">\(\mathrm{PM}_{\mathrm{2-stage}} \approx 90^\circ - \tan^{-1}\left(\frac{g_{m1}C_L}{g_{m2}C_c}\right)\)</span><pre><code>def phase_margin_two_stage_deg(gm1, gm2, cc_f, cl_f):
