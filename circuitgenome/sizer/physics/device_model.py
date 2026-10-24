@@ -80,6 +80,15 @@ class DeviceModel(Protocol):
         """
         ...
 
+    def cgg(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
+        """Total gate capacitance in F at the device's operating point.
+
+        Unlike :meth:`cgs` it follows the inversion level: a wide device in
+        weak inversion has a fraction of ``(2/3)·W·L·Cox`` on its gate (a
+        100 µm PTM45 device at gm/Id 24: 34 fF, not 166 fF; issue #274).
+        """
+        ...
+
     def cdb(self, dtype: str, w_um: float) -> float:
         """Drain junction capacitance in F, or ``0.0`` when the tech has no
         ``cdb`` (see :func:`~.equations.cdb`)."""
@@ -157,6 +166,10 @@ class Level1Model:
     def cgs(self, dtype, w_um, l_um):
         """``(2/3)·W·L·Cox`` from the tech's ``cox`` (:func:`~.equations.cgs`)."""
         return eq.cgs(_params(self.tech, dtype).cox, w_um, l_um)
+
+    def cgg(self, dtype, w_um, l_um, ids):
+        """:meth:`cgs`: the square law carries no inversion level."""
+        return self.cgs(dtype, w_um, l_um)
 
     def cdb(self, dtype, w_um):
         """``W·cdb`` from the tech's ``cdb`` (:func:`~.equations.cdb`)."""
@@ -304,6 +317,16 @@ class GmIdModel:
         constant keeps this primitive identical across both backends.
         """
         return eq.cgs(_params(self.tech, dtype).cox, w_um, l_um)
+
+    def cgg(self, dtype, w_um, l_um, ids):
+        """``gm/(2π·fT)`` read from the LUT at the operating gm/Id -- the
+        simulator's own gate capacitance there -- or :meth:`cgs` when the
+        table has no ``fT``."""
+        gm_id = self._gm_id_at(dtype, w_um, l_um, ids)
+        ft = self.lut.ft(dtype, gm_id, l_um)
+        if ft <= 0:
+            return self.cgs(dtype, w_um, l_um)
+        return gm_id * abs(ids) / (2.0 * math.pi * ft)
 
     def cdb(self, dtype, w_um):
         """``W·cdb`` from the tech's ``cdb`` (:func:`~.equations.cdb`)."""

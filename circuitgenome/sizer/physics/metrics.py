@@ -7,29 +7,148 @@ arguments — the chain they built and the spec they were asked to meet.
 """
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
+from dataclasses import replace
+
 from . import equations as eq
 from ..models import SizingSpec
 from .rnmc import RNMC, comp_resistances, worst_half
 from .stage_chain import StageChain
 
 
-def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
-                       cc2_f: float, cl_f: float) -> float | None:
-    """Full-model RNMC phase margin (:func:`~.equations.phase_margin_rnmc_deg`)
-    from the chain's stage gm/rout, node parasitics, third-stage mirror,
-    output buffer and compensation resistors — on the worse half when the
-    halves' compensation differs (:func:`~.rnmc.worst_half`)."""
+def _rnmc_model(chain: StageChain, cc_f: float,
+                cc2_f: float) -> tuple[list[tuple[float, float]], dict]:
+    """The RNMC full model's per-half compensation resistors and the keyword
+    arguments every half shares: the chain's stage gm/rout, node parasitics,
+    third-stage mirror and output buffer."""
     s = chain.stages
     caps = chain.node_caps_f or (0.0, 0.0, 0.0)
     g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s[:3]]
     buffer = chain.output_buffer
     pairs = comp_resistances(chain.comp_resistors, s[2].gm, cc_f, cc2_f,
                              buffer[1] if buffer else 0.0)
-    _, pm = worst_half(
-        gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f, pairs,
-        c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],
-        mirror_pole_hz=chain.third_stage_mirror_pole_hz, buffer=buffer)
+    kw = dict(c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],
+              mirror_pole_hz=chain.third_stage_mirror_pole_hz, buffer=buffer)
+    return pairs, kw
+
+
+def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
+                       cc2_f: float, cl_f: float) -> float | None:
+    """Full-model RNMC phase margin (:func:`~.equations.phase_margin_rnmc_deg`)
+    on the worse half when the halves' compensation differs
+    (:func:`~.rnmc.worst_half`)."""
+    s = chain.stages
+    pairs, kw = _rnmc_model(chain, cc_f, cc2_f)
+    _, pm = worst_half(gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f, pairs, **kw)
     return pm
+
+
+def _rnmc_gbw(chain: StageChain, gm1_loop: float, cc_f: float,
+              cc2_f: float, cl_f: float) -> float | None:
+    """Full-model RNMC GBW (:func:`~.equations.unity_gain_bw_rnmc_hz`), the
+    lower of the halves'; ``None`` when a half never reaches 0 dB."""
+    s = chain.stages
+    pairs, kw = _rnmc_model(chain, cc_f, cc2_f)
+    gbws = [eq.unity_gain_bw_rnmc_hz(gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f,
+                                     cl_f, comp_r=r, **kw) for r in pairs]
+    return None if None in gbws else min(gbws)
+
+
+def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
+                 cc2_f: float | None, cl_f: float) -> tuple[float | None, float | None]:
+    """``(GBW, PM)`` of a two-stage or nested-Miller chain from its full model
+    (:func:`~.equations.two_stage_loop`, :func:`~.equations.nested_miller_loop`):
+    one half single-ended, both halves of a fully-differential chain with its
+    CMFB coupling them (``chain.cmfb_coupling``).
+
+    Each series resistor is the one ``size_resistors`` sizes for these
+    schemes, ``(Cc + CL)/(gm_out·Cc)`` against the last gain stage's gm, which
+    puts its zero on the output pole.
+    """
+    s = chain.stages
+    caps = chain.node_caps_f or (0.0,) * len(s)
+    g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s]
+    gm_out = s[-1].gm
+
+    def r(flag: bool, c_f: float) -> float:
+        return eq.compensation_resistor_ohm(c_f, cl_f, gm_out) if flag and gm_out > 0 else 0.0
+    halves = chain.comp_resistors or ((False, False),)
+    if len(s) > 2:
+        return eq.nested_miller_loop(
+            gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f,
+            c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],
+            mirror_pole_hz=chain.second_stage_mirror_pole_hz,
+            buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
+            comp_r=tuple((r(r1, cc_f), r(r2, cc2_f)) for r1, r2 in halves))
+    return eq.two_stage_loop(
+        gm1_loop, s[1].gm, cc_f, cl_f, c1_f=caps[0], c2_f=caps[1], g1=g[0], g2=g[1],
+        buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
+        r_ohm=tuple(r(r1, cc_f) for r1, _r2 in halves))
+
+
+#: How far the two-stage re-plan aims past each spec -- degrees of phase
+#: margin, a fraction of GBW -- so the re-sized geometry's rounding cannot
+#: leave it a hair short.
+_PM_AIM_DEG = 0.5
+_GBW_AIM = 0.005
+
+
+def two_stage_replan(chain: StageChain, spec: SizingSpec,
+                     c1_at: Callable[[float], float], gm1_max: float,
+                     gm2_max: float) -> tuple[float | None, float | None]:
+    """``(gm1, gm2)`` in A/V a two-stage chain needs to meet its GBW and
+    phase-margin specs in the full model (:func:`~.equations.two_stage_loop`).
+
+    The requirement side sizes both from closed forms -- ``gm1/(2π·Cc)`` and
+    ``90° − arctan(gm1·CL/(gm2·Cc))`` -- which leave out the output pole's
+    pull on the 0 dB crossing, the bare Miller cap's right-half-plane zero
+    and the first-stage node's capacitance; with them a design sized to a
+    spec reads up to 2-5° short of it (issue #274).  gm1 is raised first, to
+    the least that meets GBW; then gm2, to the least that meets the phase
+    margin at that gm1 (a faster output pole only lifts GBW further).
+    ``c1_at(gm2)`` is the first-stage output's capacitance once the second
+    stage is re-sized for ``gm2``; each gm is searched up to its ``*_max``.
+
+    :returns: Each entry the raised gm, or ``None`` when it needs no raise,
+        no value up to its maximum meets the spec, or the chain is not a
+        two-stage one.
+    """
+    s = chain.stages
+    if (len(s) != 2 or not chain.cc_pf or s[0].gm <= 0 or s[1].gm <= 0
+            or not chain.gain_measurable):
+        return None, None
+    cc_f = chain.cc_pf * 1e-12
+    caps = list(chain.node_caps_f or (0.0, 0.0))
+
+    def loop(gm1: float, gm2: float) -> tuple[float, float]:
+        caps[0] = c1_at(gm2)
+        trial = replace(chain, stages=(replace(s[0], gm=gm1), replace(s[1], gm=gm2)),
+                        node_caps_f=tuple(caps))
+        gbw, pm = _miller_loop(trial, chain.k_fs * gm1, cc_f, None, spec.cl)
+        return (gbw or 0.0), (-math.inf if pm is None else pm)
+
+    def least(lo: float, hi: float, ok: Callable[[float], bool]) -> float | None:
+        """Smallest value in ``[lo, hi]`` for which ``ok`` holds (monotone)."""
+        if not ok(hi):
+            return None
+        for _ in range(40):
+            mid = math.sqrt(lo * hi)
+            lo, hi = (lo, mid) if ok(mid) else (mid, hi)
+        return hi
+
+    gm1, gm2 = s[0].gm, s[1].gm
+    new_gm1 = new_gm2 = None
+    gbw_min = spec.gbw_min_hz
+    if gbw_min and loop(gm1, gm2)[0] < gbw_min:
+        new_gm1 = least(gm1, max(gm1_max, gm1),
+                        lambda g: loop(g, gm2)[0] >= gbw_min * (1.0 + _GBW_AIM))
+        gm1 = new_gm1 or gm1
+    pm_min = spec.phase_margin_min_deg
+    if pm_min is not None and loop(gm1, gm2)[1] < pm_min:
+        new_gm2 = least(gm2, max(gm2_max, gm2),
+                        lambda g: loop(gm1, g)[1] >= pm_min + _PM_AIM_DEG)
+    return new_gm1, new_gm2
 
 
 def _slew_rate(chain: StageChain, cc_f: float, cc2_f: float | None,
@@ -130,18 +249,26 @@ def evaluate_metrics(
     cc2_f = (chain.cc2_pf * 1e-12) if chain.cc2_pf else None
     if cc_f and len(stages) > 1 and gm1 > 0:
         if chain.gain_measurable:
-            _record("gbw_hz", eq.unity_gain_bw(gm1_loop, cc_f), spec.gbw_min_hz)
-
+            # GBW and phase margin both come off the amplifier's full
+            # small-signal model (issue #274); a chain without one, or a loop
+            # that never reaches 0 dB, falls back to gm1/(2π·Cc) behind the
+            # output follower's gain.
+            buffer = chain.output_buffer
+            fol_gain = buffer[0] / (buffer[0] + buffer[2]) if buffer else 1.0
             gm2 = stages[1].gm
-            pm = None
-            if (len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f
-                    and chain.compensation_scheme == RNMC):
-                pm = _rnmc_phase_margin(chain, gm1_loop, cc_f, cc2_f, spec.cl)
-            elif len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f:
-                pm = eq.phase_margin_three_stage_deg(
-                    gm1_loop, gm2, stages[2].gm, cc_f, cc2_f, spec.cl)
-            elif gm2 > 0:
+            gbw = pm = None
+            if len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f:
+                if chain.compensation_scheme == RNMC:
+                    pm = _rnmc_phase_margin(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+                    gbw = _rnmc_gbw(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+                else:
+                    gbw, pm = _miller_loop(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+            elif len(stages) == 2 and gm2 > 0:
+                gbw, pm = _miller_loop(chain, gm1_loop, cc_f, None, spec.cl)
+            elif gm2 > 0:   # a three-stage chain with no Cc2 or no third stage
                 pm = eq.phase_margin_two_stage_deg(gm1_loop, gm2, cc_f, spec.cl)
+            _record("gbw_hz", gbw or eq.unity_gain_bw(gm1_loop, cc_f, gain=fol_gain),
+                    spec.gbw_min_hz)
             if pm is not None:
                 _record("phase_margin_deg", pm, spec.phase_margin_min_deg)
 

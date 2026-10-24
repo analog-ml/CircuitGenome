@@ -128,3 +128,22 @@ def test_level1_model_has_no_bias_dependence():
     m = Level1Model(tech)
     assert m.gds("nmos", 4.0, 0.5, 5e-6, vds=0.1) == eq.gd(tech.nmos.lam, 5e-6)
     assert m.gmb("nmos", 4.0, 0.5, 5e-6, 1.0) == 0.0
+
+
+def test_gmid_gate_capacitance_follows_the_inversion_level():
+    """Issue #274: a wide PTM45 device in weak inversion carries a fraction of
+    (2/3)·W·L·Cox on its gate; the table's gm/(2π·fT) reads ~34 fF where the
+    Cox estimate says 166 fF.  Narrow, in strong inversion, they converge."""
+    from circuitgenome.sizer.physics.device_model import GmIdModel
+    tech = load_tech("ptm45")
+    m = GmIdModel(tech, GmIdLut(tech.gmid_lut))
+    wide = m.cgg("nmos", 100.0, 0.09, 40e-6)
+    assert wide == pytest.approx(34e-15, rel=0.1)
+    assert wide < 0.3 * m.cgs("nmos", 100.0, 0.09)
+    narrow = m.cgg("nmos", 1.0, 0.18, 40e-6)
+    assert narrow == pytest.approx(m.cgs("nmos", 1.0, 0.18), rel=0.5)
+
+
+def test_level1_gate_capacitance_is_the_cox_estimate():
+    m = Level1Model(load_tech("generic"))
+    assert m.cgg("nmos", 4.0, 0.5, 5e-6) == m.cgs("nmos", 4.0, 0.5)

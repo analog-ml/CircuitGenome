@@ -12,7 +12,8 @@ sizer, as five phases with explicit hand-offs:
    → :class:`~.plan.SizingPlan`.
 4. **Size** — deterministic geometry from the LUT (:mod:`.geometry`), the DC
    operating-point check and tail repair (:mod:`.bias`), an RNMC inner-loop
-   re-plan on the sized circuit (:mod:`.rnmc_refine`), the stage-interface
+   re-plan on the sized circuit (:mod:`.rnmc_refine`), the two-stage
+   phase-margin re-plan (:mod:`.two_stage_refine`), the stage-interface
    window check and repair (:mod:`.stage_interface`), the non-load
    resistor network (:mod:`.resistors`), the constructed-bias level
    tuning (:mod:`.bias_levels`), and the swing checks the sizing cannot fix:
@@ -52,9 +53,13 @@ from .plan import assign_currents, plan_devices
 from .resistors import size_resistors
 from .rnmc_refine import refine_rnmc_plan
 from .stage_interface import check_stage_interface
+from .two_stage_refine import refine_two_stage_plan
 
 #: Re-plan/re-size rounds for an RNMC inner loop (see :mod:`.rnmc_refine`).
 _RNMC_PASSES = 2
+#: Re-plan/re-size rounds for a two-stage GBW / phase margin (see
+#: :mod:`.two_stage_refine`).
+_TWO_STAGE_PASSES = 2
 
 
 def size_gmid(
@@ -106,6 +111,17 @@ def size_gmid(
         if bias_feasible and not resized[2] and not hold_gm2:
             hold_gm2 = True
             continue
+        plan, (sizing, size_warnings, bias_feasible) = refined, resized
+    # Two-stage: raise gm1/gm2 to the full-model GBW and phase margin's need
+    # (a second pass settles what the first moved), unless a re-size breaks a
+    # sound bias (the second stage's gate sets the first-stage output level).
+    for _ in range(_TWO_STAGE_PASSES):
+        refined, changed = refine_two_stage_plan(view, currents, plan, sizing, spec)
+        if not changed:
+            break
+        resized = _size(refined)
+        if bias_feasible and not resized[2]:
+            break
         plan, (sizing, size_warnings, bias_feasible) = refined, resized
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
