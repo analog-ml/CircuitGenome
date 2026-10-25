@@ -383,6 +383,33 @@ def _follows_pulse(v_rise, v_fall, step) -> bool:
             and v_fall[0] - v_fall.min() >= 0.5 * step)
 
 
+_SR_OSC = 0.1   # back-and-forth travel, as a fraction of the step, that marks
+                # an oscillating pulse half
+
+
+def _oscillates(v, step) -> bool:
+    """Whether the output is still oscillating at the end of one pulse half:
+    over the half's last fifth it travels more than ``_SR_OSC`` of the step
+    beyond its net change.
+
+    A large step can kick a loop that is stable at small signal (nested Miller
+    on GF180) into a sustained oscillation.  The edge readout measures against
+    the half's last sample, so it would read an edge against wherever the
+    oscillation happens to be (one such design read +66 %).  An edge still
+    creeping one way to its final level travels no more than its net change,
+    so a slow design whose window ends early is not mistaken for one."""
+    tail = v[int(0.8 * len(v)):]
+    travel = float(np.abs(np.diff(tail)).sum())
+    return travel - abs(float(tail[-1] - tail[0])) > _SR_OSC * step
+
+
+def _sr_window(vdd, sr_hint: float | None) -> float:
+    """Pulse half-width (s) for a slew rate of about ``sr_hint``: 3× the time
+    the 0.3·Vdd step takes at that rate, so a design slewing at ≥ 1/3 of it
+    completes its transition (default 1 µs without a hint)."""
+    return max(3.0 * 0.3 * vdd / sr_hint, 60e-9) if sr_hint else 1e-6
+
+
 def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
                 sr_hint: float | None = None):
     """Unity-gain large-signal pulse → slew rate (V/s), the **min of the
@@ -393,6 +420,21 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
     response), and the pulse width is scaled so a design slewing at ≥ 1/3 of
     the spec target (``sr_hint``) completes its transition inside the window.
 
+    The transient takes 2000 steps over the window, so a design slewing far
+    faster than the spec target gets an edge only a few samples long (GF180
+    designs slew ~5–25 V/µs against a 0.2 V/µs target: a ~15 µs window at
+    15 ns steps for a ~70 ns edge), and the readout's secant across 20 % of the
+    swing read up to +46 % off those samples.  So the pulse is measured
+    twice: the second time with the window fitted to the first reading (a
+    third of it as ``sr_hint``, which leaves the edge 9× its slewing time to
+    complete and settle), putting ~20 samples in that secant.  Should the
+    second run fail its checks, the first reading stands.
+
+    Either run is rejected when its output does not follow the pulse
+    (:func:`_follows_pulse`) or is still oscillating at the end of either
+    pulse half (:func:`_oscillates`); with both polarities rejected the result
+    is ``None``.
+
     The step is centred on Vcm (``Vcm ± 0.15·Vdd``): a unity buffer's input
     common mode rides with the output, and a step from Vcm up to
     Vcm + 0.3·Vdd moved it a whole step away from the quiescent point the
@@ -402,15 +444,24 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
     halves that excursion, so the edges measure slewing rather than the
     input common-mode range.
     """
-    if topo.fd:
-        return _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
-                              polarity, sr_hint)
+    pulse = _measure_sr_fd if topo.fd else _measure_sr_se
+    args = (name, ports, body_dut, topo, vdd, ibias, cl, vcm)
+    sr, polarity = pulse(*args, _pols(polarity), _sr_window(vdd, sr_hint))
+    if sr is not None and _sr_window(vdd, sr / 3) < _sr_window(vdd, sr_hint):
+        fine, _ = pulse(*args, (polarity,), _sr_window(vdd, sr / 3))
+        if fine is not None:
+            sr = fine
+    return sr
+
+
+def _measure_sr_se(name, ports, body_dut, topo, vdd, ibias, cl, vcm, pols,
+                   t_edge):
+    """One SE unity-buffer pulse of half-width ``t_edge`` (s), trying the
+    polarities ``pols`` in turn → ``(slew rate, polarity)``, or
+    ``(None, None)`` when every polarity is rejected (see :func:`_measure_sr`)."""
     step = 0.3 * vdd
-    # Window long enough for 3× the spec-implied transition time (default 1 µs
-    # per edge when the spec does not constrain slew rate).
-    t_edge = max(3.0 * step / sr_hint, 60e-9) if sr_hint else 1e-6
     t0 = 0.02 * t_edge                     # settle margin before the step
-    for inp, inn in _pols(polarity):
+    for inp, inn in pols:
         netmap = _fb_netmap(topo, inp, inn)
         # unity buffer: out -> inverting input (direct), pulse the non-inverting
         # input across a step centred on Vcm
@@ -427,14 +478,15 @@ def _measure_sr(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None,
         if abs(vo[0] - lo) > 0.4 * vdd:    # unity buffer must start near the low step
             continue
         rising = t < t0 + t_edge           # pulse falls back at t0 + t_edge
-        if not _follows_pulse(vo[rising], vo[~rising], step):
+        if (not _follows_pulse(vo[rising], vo[~rising], step)
+                or _oscillates(vo[rising], step) or _oscillates(vo[~rising], step)):
             continue
         edges = [s for s in (_edge_slew(t[rising], vo[rising], vdd),
                              _edge_slew(t[~rising], vo[~rising], vdd))
                  if s is not None]
         if edges:
-            return float(min(edges))
-    return None
+            return float(min(edges)), (inp, inn)
+    return None, None
 
 
 def _measure_swing(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=None):
@@ -481,22 +533,22 @@ def _measure_swing(name, ports, body_dut, topo, vdd, ibias, cl, vcm, polarity=No
     return None, None
 
 
-def _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
-                   polarity=None, sr_hint: float | None = None):
+def _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm, pols,
+                   t_edge):
     """FD slew rate (V/s): a differential step through the gain −1 rig
     (:func:`_fd_inverting_fb`), the **min over the rising and falling edge of
-    each output**.
+    each output** → ``(slew rate, polarity)``, or ``(None, None)``.
 
     Per output, like the SE bench and like the sizer's ``ibias/Cc`` (each half
     slews its own Miller cap): the differential source steps 0.6·Vdd, so each
-    output moves 0.3·Vdd — the same excursion as the SE unity-buffer step.  Pulse
-    width scales with ``sr_hint`` as in :func:`_measure_sr`.
+    output moves 0.3·Vdd — the same excursion as the SE unity-buffer step.  One
+    pulse of half-width ``t_edge`` (s), trying the polarities ``pols`` in turn;
+    :func:`_measure_sr` sizes the window and runs it twice.
     """
     step = 0.3 * vdd
-    t_edge = max(3.0 * step / sr_hint, 60e-9) if sr_hint else 1e-6
     t0 = 0.02 * t_edge
     src = f"Vd vd 0 pulse(0 {2 * step} {t0} 10p 10p {t_edge} 1)\n"
-    for inp, inn in _pols(polarity):
+    for inp, inn in pols:
         netmap = _fb_netmap(topo, inp, inn)
         deck = _deck(name, ports, body_dut, vdd, ibias, cl,
                      _fd_inverting_fb(vcm, src), netmap,
@@ -511,11 +563,14 @@ def _measure_sr_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
         if abs(vp[0] - vcm) > 0.4 * vdd or abs(vn[0] - vcm) > 0.4 * vdd:
             continue
         first = t < t0 + t_edge            # pulse returns at t0 + t_edge
+        if any(_oscillates(vo[part], step)
+               for vo in (vp, vn) for part in (first, ~first)):
+            continue
         edges = [s for vo in (vp, vn) for part in (first, ~first)
                  if (s := _edge_slew(t[part], vo[part], vdd)) is not None]
         if len(edges) == 4:
-            return float(min(edges))
-    return None
+            return float(min(edges)), (inp, inn)
+    return None, None
 
 
 def _measure_swing_fd(name, ports, body_dut, topo, vdd, ibias, cl, vcm,
