@@ -772,6 +772,75 @@ def test_cmfb_sense_swing_gate_passes_resistive_sense():
         _spec(output_swing_max_v=4.9, output_swing_min_v=0.1)) == ([], True)
 
 
+# --------------------------------------------------------------------------- #
+# Output swing headroom: an FD pair swings symmetrically about Vocm (#281)
+# --------------------------------------------------------------------------- #
+def _fd_follower_view(output_stage):
+    slots = {"second_stage_p": list(_SS), "output_stage_p": list(output_stage)}
+    return CircuitView(
+        slot_transistors=slots,
+        all_transistors={d.ref: (d, sl) for sl, devs in slots.items() for d in devs})
+
+
+def test_fd_nmos_follower_shift_bounds_both_edges():
+    """outn = Vdd − outp around a mid-rail CM: the follower holds the high
+    edge 0.85 V below Vdd, so the low edge stops 0.85 V above Vss, not at the
+    current sink's 0.25 V (gf180: predicted 0.17 V, SPICE 0.96 V)."""
+    head = output_swing_headroom(_fd_follower_view(_NMOS_FOLLOWER), _SIZING,
+                                 _BodyModel(), _spec())
+    assert head == pytest.approx((0.15 + 0.70, 0.15 + 0.70))
+
+
+def test_fd_pmos_follower_shift_bounds_both_edges():
+    head = output_swing_headroom(_fd_follower_view(_PMOS_FOLLOWER), _SIZING,
+                                 _BodyModel(), _spec())
+    assert head == pytest.approx((0.10 + 0.80, 0.10 + 0.80))
+
+
+def test_single_ended_follower_edges_stay_independent():
+    head = output_swing_headroom(_view(_NMOS_FOLLOWER), _SIZING, _BodyModel(), _spec())
+    assert head == pytest.approx((0.85, 0.25))
+
+
+def test_unbuffered_fd_edges_stay_independent():
+    """Its Vdsat limits are soft (SPICE tracks almost to both rails), so
+    mirroring the larger one would only make the other edge pessimistic."""
+    head = output_swing_headroom(_fd_view(_RS), _cmfb_sizing(_RS), _BodyModel(), _spec())
+    assert head == pytest.approx((0.15, 0.10))
+
+
+def test_fd_symmetry_leaves_an_unplaced_side_unplaced():
+    sizing = {k: v for k, v in _SIZING.items() if k != "mn_ss"}
+    hi, lo = output_swing_headroom(_fd_follower_view(_PMOS_FOLLOWER), sizing,
+                                   _BodyModel(), _spec())
+    assert hi == pytest.approx(0.20) and lo is None
+
+
+@pytest.mark.parametrize("follower,spec_kw,feasible", [
+    # NMOS follower: high edge 4.15 V, mirrored low edge 0.85 V.
+    (_NMOS_FOLLOWER, dict(output_swing_min_v=0.3), False),
+    (_NMOS_FOLLOWER, dict(output_swing_min_v=0.85 - _FOLLOWER_SWING_TOL_V + 0.01), True),
+    (_NMOS_FOLLOWER, dict(output_swing_max_v=4.8), False),
+    # PMOS follower: low edge 0.90 V, mirrored high edge 4.10 V.
+    (_PMOS_FOLLOWER, dict(output_swing_max_v=4.8), False),
+    (_PMOS_FOLLOWER, dict(output_swing_max_v=4.1 + _FOLLOWER_SWING_TOL_V - 0.01), True),
+])
+def test_fd_follower_swing_gate_checks_the_mirrored_edge(follower, spec_kw, feasible):
+    warnings, ok = check_follower_swing(_fd_follower_view(follower), _SIZING,
+                                        _BodyModel(), _spec(**spec_kw))
+    assert ok is feasible
+    assert bool(warnings) is not feasible
+
+
+def test_fd_follower_swing_gate_names_both_missed_edges():
+    warnings, ok = check_follower_swing(
+        _fd_follower_view(_NMOS_FOLLOWER), _SIZING, _BodyModel(),
+        _spec(output_swing_max_v=4.8, output_swing_min_v=0.3))
+    assert not ok
+    assert "high swing to 4.15 V" in warnings[0]
+    assert "low swing to 0.85 V" in warnings[0]
+
+
 def test_evaluate_metrics_reads_the_headroom_off_each_rail():
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), swing_headroom=(0.85, 0.25))
     spec = _spec(output_swing_max_v=4.5, output_swing_min_v=0.3)

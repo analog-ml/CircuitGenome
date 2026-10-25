@@ -591,6 +591,39 @@ _FOLLOWER_SWING_TOL_V = 0.2
 _CMFB_SENSE_SWING_TOL_V = 0.15
 
 
+def _is_fully_differential(slot_transistors: dict[str, list[Device]]) -> bool:
+    """Whether the circuit has per-output (``_p``/``_n``) second stages."""
+    return any(s in slot_transistors for s in ("second_stage_p", "second_stage_n"))
+
+
+def _fd_symmetric(
+    slot_transistors: dict[str, list[Device]],
+    hi: float | None,
+    lo: float | None,
+) -> tuple[float | None, float | None]:
+    """``(below_vdd, above_vss)`` with a buffered FD pair's swing symmetry applied.
+
+    The CMFB holds a fully-differential pair's output CM at ``Vocm``, so the
+    outputs move as mirror images, ``outn = 2·Vocm − outp``: one output's high
+    edge is the other's low edge, and each edge is bounded by
+    ``Vocm ± min(Vocm − (Vss + lo), (Vdd − hi) − Vocm)`` (issue #281).  With
+    ``Vocm`` at mid-rail, where every testbench rig drives ``vcm_ref``, that is
+    the larger headroom on both sides.
+
+    Applied only behind a follower ``output_stage``, whose ``|Vgs|`` shift is
+    a hard limit a whole threshold from the rail.  An unbuffered stage's
+    ``Vdsat`` limits are soft -- the swing bench keeps tracking almost to the
+    rails (gf180: 0.01-0.05 V from each) -- so mirroring the larger of them
+    would only make the other edge more pessimistic.  Single-ended and
+    unbuffered circuits, and a side left unplaced, come back unchanged.
+    """
+    if (not _is_fully_differential(slot_transistors)
+            or _follower(slot_transistors)[0] is None or hi is None or lo is None):
+        return hi, lo
+    tight = max(hi, lo)
+    return tight, tight
+
+
 def _vdsat_of(devs: list[Device], sizing, dtype: str) -> float | None:
     """``Vdsat`` in V of the first ``dtype`` device of ``devs`` that is sized."""
     d = next((d for d in devs if d.type == dtype), None)
@@ -717,9 +750,13 @@ def output_swing_headroom(
       ``Vocm ± range`` the output CM is no longer held.  ``Vocm`` is
       mid-rail, where every testbench rig drives ``vcm_ref``.
 
-    An entry is ``None`` when neither limit can be placed on that side.
+    Behind a follower on a fully-differential circuit the outputs swing
+    symmetrically about ``Vocm``, so the follower-shifted side bounds both
+    edges (:func:`_fd_symmetric`).  An entry is ``None`` when neither limit can be
+    placed on that side.
     """
-    hi, lo = _stage_swing_headroom(view, sizing, model, spec)
+    hi, lo = _fd_symmetric(view.slot_transistors,
+                           *_stage_swing_headroom(view, sizing, model, spec))
     rng = cmfb_sense_range(view, sizing)
     if rng is None:
         return hi, lo
@@ -738,27 +775,38 @@ def check_follower_swing(
 
     ``feasible`` is ``False`` when the level-shifted swing edge
     (:func:`_stage_swing_headroom`) misses its spec bound by more than
-    :data:`_FOLLOWER_SWING_TOL_V`.  No other sizing knob can recover it: the
-    shift is the follower's ``|Vgs|``, which even weak inversion cannot take
-    below roughly ``Vth``.  Circuits without a follower always pass.
+    :data:`_FOLLOWER_SWING_TOL_V`.  On a fully-differential circuit the
+    outputs swing symmetrically about mid-rail (:func:`_fd_symmetric`), so the
+    shift bounds the mirrored edge as well and both are checked.  No other
+    sizing knob can recover it: the shift is the follower's ``|Vgs|``, which
+    even weak inversion cannot take below roughly ``Vth``.  Circuits without a
+    follower always pass.
     """
     fol, _bias = _follower(view.slot_transistors)
     if fol is None:
         return [], True
     hi, lo = _stage_swing_headroom(view, sizing, model, spec)
-    if fol.type == "pmos":           # shifts the low edge up
-        side, bound, sign = "low", spec.output_swing_min_v, 1.0
-        reached = None if lo is None else spec.vss + lo
-    else:                            # shifts the high edge down
-        side, bound, sign = "high", spec.output_swing_max_v, -1.0
-        reached = None if hi is None else spec.vdd - hi
-    if (bound is None or reached is None
-            or sign * (reached - bound) <= _FOLLOWER_SWING_TOL_V):
+    shifted = lo if fol.type == "pmos" else hi   # PMOS lifts low, NMOS drops high
+    if shifted is None:
+        return [], True
+    sides = ("low",) if fol.type == "pmos" else ("high",)
+    if _is_fully_differential(view.slot_transistors):
+        sides = ("high", "low")
+    misses = []
+    for side in sides:
+        if side == "low":
+            bound, reached, sign = spec.output_swing_min_v, spec.vss + shifted, 1.0
+        else:
+            bound, reached, sign = spec.output_swing_max_v, spec.vdd - shifted, -1.0
+        if bound is not None and sign * (reached - bound) > _FOLLOWER_SWING_TOL_V:
+            misses.append(f"the {side} swing to {reached:.2f} V against the "
+                          f"{bound:.2f} V spec")
+    if not misses:
         return [], True
     return [f"{fol.ref}: {fol.type} source-follower output stage cannot meet "
-            f"the swing spec — its |Vgs| level shift limits the {side} swing "
-            f"to {reached:.2f} V against the {bound:.2f} V spec; relax the "
-            f"swing spec, raise the supply or use an unbuffered topology."], False
+            f"the swing spec — its |Vgs| level shift limits "
+            f"{' and '.join(misses)}; relax the swing spec, raise the supply "
+            f"or use an unbuffered topology."], False
 
 
 def check_cmfb_sense_swing(
@@ -1021,8 +1069,7 @@ def build_stage_chain(
                 if slot == "compensation" or slot.startswith("comp_"))
 
     k_fs = _first_stage_gain_factor(slot_transistors)
-    fully_differential = any(s in slot_transistors
-                             for s in ("second_stage_p", "second_stage_n"))
+    fully_differential = _is_fully_differential(slot_transistors)
 
     return StageChain(
         stages=tuple(stages),
