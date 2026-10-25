@@ -507,6 +507,9 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    0.2 V.  On gf180 at 3.3 V a PMOS follower cannot pull the output below
    ≈ 0.85 V and an NMOS follower cannot lift it above ≈ 2.2 V, so a
    0.3–3.0 V swing spec rules out every buffered candidate before SPICE.
+   A fully-differential buffered design's outputs swing symmetrically about
+   mid-supply, so there the shift bounds the mirrored edge as well and the
+   check covers both.
    A fully-differential design with a difference-difference CMFB gets the
    same kind of check:
    :func:`~circuitgenome.sizer.physics.stage_chain.check_cmfb_sense_swing`

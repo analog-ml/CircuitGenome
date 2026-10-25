@@ -435,8 +435,9 @@ pole to two decades above the highest — one batched call:
    v = np.linalg.solve(G + 1j * w * C, b)    # all node voltages, every frequency
    gain = v[out]                             # Vin = 1, so V_out is the gain
 
-and reads the margin :math:`180° + \angle A` at each 0 dB crossing.  For the
-example:
+and reads the margin :math:`180° + \angle A` at each 0 dB crossing, pinned
+down between the two samples that straddle it by re-solving there, so the
+result does not depend on the sweep's spacing.  For the example:
 
 .. code-block:: text
 

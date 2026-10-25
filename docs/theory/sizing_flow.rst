@@ -669,6 +669,28 @@ buffered sizing whose level-shifted edge misses the swing spec by more than
 follower's :math:`|V_{GS}|` cannot drop much below :math:`V_{th}` even in weak
 inversion, so no other sizing choice recovers it.
 
+A **fully-differential** design's two edges are not independent (issue #281).
+The CMFB holds the output common mode at :math:`V_{ocm}`, so the outputs move
+as mirror images, :math:`V_{outn} = 2V_{ocm} - V_{outp}`: when one output
+reaches its high edge the other is at its low edge, and whichever side runs out
+of room first stops both.  Each edge is therefore
+
+.. math::
+
+   V_{out} \in V_{ocm} \pm \min\bigl(V_{ocm} - V_{out,\min},\;
+   V_{out,\max} - V_{ocm}\bigr),
+
+with :math:`V_{out,\min}`, :math:`V_{out,\max}` the per-side limits above and
+:math:`V_{ocm}` at mid-rail, i.e. the larger of the two headroom values on both
+sides.  The model applies this behind a follower, where it matters: on gf180
+an NMOS-follower FD design's low edge is the mirror of its ≈ 2.3 V high edge,
+≈ 0.96 V in SPICE, not the current sink's ≈ 0.17 V; a PMOS-follower one's high
+edge is ≈ 2.46 V, not ≈ 3.15 V.  On such a design the follower gate above
+checks the mirrored edge too.  An unbuffered FD design keeps its two
+:math:`V_{DS,sat}` limits: they are soft (SPICE tracks to within ~0.05 V of
+both rails), so mirroring the larger one would only make the other edge more
+pessimistic.
+
 A fully-differential design with a **difference-difference (DDA) CMFB** has a
 second limit on both edges (issue #272).  The DDA senses each output with its
 own differential pair against ``vcm_ref``.  As the outputs split, each pair

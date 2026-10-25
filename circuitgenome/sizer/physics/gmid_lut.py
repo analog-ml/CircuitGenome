@@ -18,10 +18,13 @@ Vdd/2`` and ``Vsb = 0``.
 
 Two optional correction tables cover devices far from that point (issue
 #273), each a stack of ``(n_L, n_gmid)`` grids over a bias axis:
-    ``gds_scale`` over ``vds_axis``  gds at that Vds over gds at Vdd/2, at equal
-                                     current density (1 at the reference)
-    ``gmb_gm``    over ``vsb_axis``  body transconductance ``gmbs/gm`` at that
-                                     reverse body bias
+
+``gds_scale`` over ``vds_axis``
+    gds at that Vds over gds at Vdd/2, at equal current density (1 at the
+    reference)
+``gmb_gm`` over ``vsb_axis``
+    body transconductance ``gmbs/gm`` at that reverse body bias
+
 A table without them (an older ``.npz``) reads as ``gds_scale = 1`` and
 ``gmb_gm = 0``: the single-point behaviour.
 """
