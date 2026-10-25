@@ -310,22 +310,23 @@ def evaluate_metrics(
         _record("output_swing_min_v", spec.vss + head_lo,
                 spec.output_swing_min_v, is_max=True)
 
-    # --- CMRR: the raw pair gm against the tail's finite conductance ---
-    if chain.gain_measurable and gm1 > 0 and chain.gd_tail > 0:
-        _record("cmrr_db", eq.cmrr_db(gm1, chain.gd_tail), spec.cmrr_min_db)
-
-    # --- PSRR (approximate, from the output-driving stage and its load) ---
-    # Supply ripple reaches the output through the load branch's conductance
-    # and is rejected in proportion to that stage's own gm — the second stage
-    # on a multi-stage chain, the input pair itself on a single-stage one,
-    # where the single-ended tap costs the same factor k_fs the gain sees
-    # (#221).  The conductance is the one the load presents to *its own*
-    # reference rail, which is the supply for a VDD-referenced load and ground
-    # for a GND-referenced one; the estimate does not distinguish the two, and
-    # never has (see eq.psrr_db_approx: "accurate PSRR requires simulation").
+    # --- CMRR and PSRR ---
+    # Single-ended: the DC nodal solve of the whole circuit the chain carries,
+    # which follows each topology's own common-mode and supply paths (#290).
+    # Fully differential: closed forms.  CMRR is the raw pair gm against the
+    # tail's finite conductance; PSRR+ the second stage's gm against its load's.
     gm_out = stages[1].gm if len(stages) > 1 else gm1_loop
-    if chain.gain_measurable and gm_out > 0 and chain.gd_output_load > 0:
-        _record("psrr_db", eq.psrr_db_approx(gm_out, chain.gd_output_load),
-                spec.psrr_min_db)
+    if chain.se_rejection_db is not None:
+        if chain.gain_measurable:
+            for key, value, limit in zip(("cmrr_db", "psrr_db"), chain.se_rejection_db,
+                                         (spec.cmrr_min_db, spec.psrr_min_db)):
+                if value is not None:
+                    _record(key, value, limit)
+    elif chain.gain_measurable:
+        if gm1 > 0 and chain.gd_tail > 0:
+            _record("cmrr_db", eq.cmrr_db(gm1, chain.gd_tail), spec.cmrr_min_db)
+        if gm_out > 0 and chain.gd_output_load > 0:
+            _record("psrr_db", eq.psrr_db_approx(gm_out, chain.gd_output_load),
+                    spec.psrr_min_db)
 
     return metrics, margins

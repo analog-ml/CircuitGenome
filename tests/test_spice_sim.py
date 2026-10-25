@@ -1732,3 +1732,57 @@ def test_wide_current_source_carries_its_planned_current_in_spice():
     op = read_op_operating_point(text, result, tech, spec)
     for ref, s in wide.items():
         assert abs(op[ref]["id"]) == pytest.approx(s.ids_a, rel=0.1)
+
+
+# --- single-ended CMRR / PSRR+ (issue #290) ----------------------------------
+
+@ngspice
+@pytest.mark.parametrize("template,want", [
+    # 5T OTA, NMOS mirror: the pair's drain imbalance, not the tail, sets CMRR
+    # (61 dB measured, 51 dB by the closed form); PSRR+ 88 dB (was 52 dB).
+    ("one_stage_opamp", {"input_pair": "differential_pair_pmos",
+                         "load": "active_load_nmos",
+                         "tail_current": "current_mirror_tail_pmos"}),
+    # 5T OTA, PMOS mirror: VDD reaches the output, PSRR+ 44 dB (was 57 dB).
+    ("one_stage_opamp", {"input_pair": "differential_pair_nmos",
+                         "load": "active_load_pmos",
+                         "tail_current": "current_mirror_tail_nmos"}),
+    # A resistor tail under a mirror load: CMRR 54 dB (was −1 dB).
+    ("two_stage_opamp_single_ended", {"input_pair": "differential_pair_pmos",
+                                      "load": "active_load_nmos",
+                                      "tail_current": "resistor_tail_vdd",
+                                      "compensation": "miller_cap"}),
+    # A resistor load: CMRR is the tail's, gm·R_tail; PSRR+ 45 dB (was 56 dB).
+    ("two_stage_opamp_single_ended", {"input_pair": "differential_pair_nmos",
+                                      "load": "resistor_load_vdd",
+                                      "tail_current": "current_mirror_tail_nmos",
+                                      "compensation": "miller_cap"}),
+])
+def test_se_cmrr_psrr_model_tracks_spice(template, want):
+    """Issue #290: single-ended CMRR and PSRR+ come from a DC nodal solve of
+    the whole sized circuit, which follows each topology's actual common-mode
+    and supply paths.  The closed forms gm1/(2·gd_tail) and gm2/gd_load missed
+    these benches by 10-55 dB; the solve lands within a few dB."""
+    topo = next(t for t in load_topologies() if t.name == template)
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    args = (name, ports, body_dut, rig._Topo(ports), spec.vdd, spec.ibias,
+            spec.cl, spec.vdd / 2)
+    gain, *_, polarity = measure._measure_ac(*args)
+    cmrr = measure._measure_cmrr(*args, polarity=polarity, adm_db=gain)
+    psrr = measure._measure_psrr(*args, polarity=polarity, adm_db=gain)
+    assert cmrr is not None and psrr is not None
+    assert result.metrics["cmrr_db"] == pytest.approx(cmrr, abs=4.0)
+    assert result.metrics["psrr_db"] == pytest.approx(psrr, abs=4.0)

@@ -24,6 +24,7 @@ from circuitgenome.sizer.physics.stage_chain import (
     check_follower_swing,
     cmfb_sense_range,
     output_swing_headroom,
+    _se_rejection_db,
     _source_degeneration_r,
     _tail_current_net,
 )
@@ -854,3 +855,77 @@ def test_body_vth_shift():
     assert eq.body_vth_shift(0.5, 0.7, -0.3) == 0.0          # forward bias clamped
     assert eq.body_vth_shift(0.5, 0.7, 1.0) == pytest.approx(
         0.5 * (math.sqrt(1.7) - math.sqrt(0.7)))
+
+
+# --------------------------------------------------------------------------- #
+# Single-ended CMRR / PSRR+: the DC nodal solve (issue #290)
+# --------------------------------------------------------------------------- #
+def _pair(dtype, d1, d2, tail):
+    return [Device("m1", dtype, {"d": d1, "g": "in1", "s": tail, "b": tail}),
+            Device("m2", dtype, {"d": d2, "g": "in2", "s": tail, "b": tail})]
+
+
+def test_resistor_pair_rejection_is_gm_times_the_tail_resistance():
+    """Resistor loads and a resistor tail, ideal devices.  The bench drives one
+    input, so Adm = gm²·RD/(1/RT + 2gm) and Acm = gm·RD·(1/RT)/(1/RT + 2gm):
+    CMRR is exactly gm·RT, twice the gm/(2·gd_tail) of the closed form.  VDD
+    reaches the output through RD at unity gain, so PSRR+ is Adm itself."""
+    gm, rd, rt = 1e-4, 50e3, 20e3
+    mosfets = _pair("nmos", "d1", "out", "tail")
+    params = {d.ref: (gm, 0.0, 0.0) for d in mosfets}
+    resistors = [("vdd!", "d1", rd), ("vdd!", "out", rd), ("tail", "gnd!", rt)]
+    cmrr, psrr = _se_rejection_db(mosfets, params, resistors, ("in1", "in2"), "out")
+    assert cmrr == pytest.approx(20 * math.log10(gm * rt))
+    assert psrr == pytest.approx(20 * math.log10(gm * gm * rd / (1 / rt + 2 * gm)))
+
+
+# A five-transistor OTA at one-stage #4's ngspice operating point (GF180, the
+# #256 sample): PMOS pair, NMOS mirror, the output held at Vcm.  The pair's
+# drains sit at different levels -- the mirror's diode node and the output --
+# so the two halves' gds differ by 43 %.
+_OTA5 = [*_pair("pmos", "d1", "out", "tail"),
+         Device("m3", "nmos", {"d": "d1", "g": "d1", "s": "gnd!", "b": "gnd!"}),
+         Device("m4", "nmos", {"d": "out", "g": "d1", "s": "gnd!", "b": "gnd!"}),
+         Device("mt", "pmos", {"d": "tail", "g": "gnd!", "s": "vdd!", "b": "vdd!"})]
+
+
+def _ota5_params(gd_tail):
+    return {"m1": (1.94e-4, 4.44e-7, 0.0), "m2": (2.01e-4, 6.34e-7, 0.0),
+            "m3": (0.99e-4, 6.28e-7, 0.0), "m4": (1.02e-4, 4.88e-7, 0.0),
+            "mt": (2.01e-4, gd_tail, 0.0)}
+
+
+def test_mirror_load_cmrr_is_set_by_the_pair_drain_imbalance():
+    """On a mirror load the tail barely matters: the mirror cancels the
+    common-mode current the tail lets through.  What is left is the imbalance.
+    A common-mode input moves the pair's sources, and the halves' unequal gds
+    turn that into output current: CMRR ≈ gm1/|gds2 − gds1|, 60.4 dB here.
+    ngspice measured 61.4 dB, and 61.3 dB with a cascode tail; the closed form
+    gm1/(2·gd_tail) read 50.8 and 107.9 dB for those two tails."""
+    real, _ = _se_rejection_db(_OTA5, _ota5_params(4.55e-7), [], ("in1", "in2"), "out")
+    ideal, _ = _se_rejection_db(_OTA5, _ota5_params(0.0), [], ("in1", "in2"), "out")
+    assert real == pytest.approx(20 * math.log10(1.94e-4 / (6.34e-7 - 4.44e-7)), abs=1.5)
+    assert real == pytest.approx(61.4, abs=1.0)
+    assert ideal == pytest.approx(real, abs=0.5)
+
+
+def test_se_rejection_is_none_without_the_output_or_a_solution():
+    mosfets = _pair("nmos", "d1", "out", "tail")
+    params = {d.ref: (1e-4, 0.0, 0.0) for d in mosfets}
+    assert _se_rejection_db(mosfets, params, [], ("in1", "in2"), "nowhere") == (None, None)
+    # No tail and no loads: nothing ties the nodes down, the network is singular.
+    assert _se_rejection_db(mosfets, params, [], ("in1", "in2"), "out") == (None, None)
+
+
+def test_evaluate_metrics_reports_the_nodal_rejection_when_the_chain_has_it():
+    """A single-ended chain carries the nodal (CMRR, PSRR+); a chain without it
+    (fully differential) keeps the closed forms; a withheld one reports neither."""
+    kw = dict(cc_pf=2.0, gd_tail=1e-7, gd_output_load=1e-6)
+    se = _chain((1e-3, 1e6), (2e-3, 5e5), se_rejection_db=(83.0, 91.0), **kw)
+    m = evaluate_metrics(se, _spec())[0]
+    assert (m["cmrr_db"], m["psrr_db"]) == (83.0, 91.0)
+    fd = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), **kw), _spec())[0]
+    assert fd["cmrr_db"] == pytest.approx(eq.cmrr_db(1e-3, 1e-7))
+    assert fd["psrr_db"] == pytest.approx(eq.psrr_db_approx(2e-3, 1e-6))
+    withheld = evaluate_metrics(se.withheld(), _spec())[0]
+    assert "cmrr_db" not in withheld and "psrr_db" not in withheld

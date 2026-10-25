@@ -108,7 +108,7 @@
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
 
-  <blockquote><p><strong>Main task:</strong> the sizer has chosen every transistor's width, length and current. Read that solved circuit <em>once</em> and write down the handful of small-signal numbers a performance formula actually needs — per-stage <code>gm</code> and <code>Rout</code>, the tail and load conductances, the compensation caps, the branch currents.</p></blockquote>
+  <blockquote><p><strong>Main task:</strong> the sizer has chosen every transistor's width, length and current. Read that solved circuit <em>once</em> and write down the handful of small-signal numbers a performance formula actually needs — per-stage <code>gm</code> and <code>Rout</code>, the tail and load conductances, the compensation caps, the branch currents. On a single-ended op-amp it also writes down CMRR and PSRR<sup>+</sup> directly. No short formula follows where common mode and supply ripple actually travel, so <code>_se_rejection_db</code> solves the node equations of the whole circuit at DC instead (issue #290).</p></blockquote>
 
   <p class="beat">The whole idea in one sentence.</p>
 

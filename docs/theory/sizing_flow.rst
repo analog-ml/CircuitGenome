@@ -621,12 +621,19 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - :func:`~circuitgenome.sizer.physics.equations.slew_rate_vps`
      - actual − spec
    * - CMRR
-     - :math:`CMRR = g_{m1}\,/\,(2\,g_{d,\text{tail}})`, dB
-     - :func:`~circuitgenome.sizer.physics.equations.cmrr_db`
+     - Single-ended: :math:`A_{dm}/A_{cm}` from a DC nodal solve of the whole
+       sized circuit, every device at its own bias with the output at
+       :math:`V_{cm}` -- on a mirror load the pair's drain imbalance, not the
+       tail, sets it.  Fully differential: :math:`g_{m1}\,/\,(2\,g_{d,\text{tail}})`,
+       dB
+     - :func:`~circuitgenome.sizer.physics.stage_chain._se_rejection_db`,
+       :func:`~circuitgenome.sizer.physics.equations.cmrr_db`
      - actual − spec
-   * - PSRR\ :sup:`+` (approx)
-     - :math:`PSRR^+ \approx g_{m2}\,/\,g_{d,\text{bias}}`, dB
-     - :func:`~circuitgenome.sizer.physics.equations.psrr_db_approx`
+   * - PSRR\ :sup:`+`
+     - Single-ended: :math:`A_{dm}/A_{vdd}` from the same nodal solve.
+       Fully differential (approx): :math:`g_{m2}\,/\,g_{d,\text{bias}}`, dB
+     - :func:`~circuitgenome.sizer.physics.stage_chain._se_rejection_db`,
+       :func:`~circuitgenome.sizer.physics.equations.psrr_db_approx`
      - actual − spec
    * - Quiescent power
      - :math:`P = (V_{DD} - V_{SS})\sum|I_{supply}|`
@@ -787,8 +794,14 @@ Assumptions and where they break down
 .. note::
 
    **PSRR approximation.**  :func:`~circuitgenome.sizer.physics.equations.psrr_db_approx`
-   returns a first-order upper bound on PSRR\ :sup:`+`.  Full PSRR — including
-   the path through the compensation capacitor — requires an AC simulation.
+   (fully-differential only) returns a first-order estimate of PSRR\ :sup:`+`.
+   The single-ended CMRR and PSRR\ :sup:`+` come from a DC nodal solve of the
+   whole circuit, so every DC path is in them, but nothing that depends on
+   frequency, such as the path through the compensation capacitor.  On a
+   telescopic cascode load they are an upper bound: the solve places the
+   pair's two drains at exactly the same level, while in the real circuit
+   they differ by ~1 mV, and that difference is what limits the rejection
+   (issue #290).
 
 .. note::
 
