@@ -69,3 +69,81 @@ def test_level1_model_matches_equations():
         assert m.vds_sat(dtype, w, l, ids) == eq.vds_sat(p.mu_cox, w, l, ids)
         assert m.vgs(dtype, w, l, ids) == eq.vgs_from_ids(p.mu_cox, w, l, ids, p.vth)
         assert m.gm_ceiling(dtype, ids, l) == eq.gm_ceiling(ids)
+
+
+# --------------------------------------------------------------------------- #
+# Bias correction tables: gds vs Vds, gmbs/gm vs Vsb (issue #273)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("dtype", ["nmos", "pmos"])
+def test_gds_scale_is_one_at_the_characterisation_point(lut, dtype):
+    """The main table is swept at Vds = Vdd/2 (ptm45: 0.5 V)."""
+    assert lut.gds_scale(dtype, 12.0, 0.09, 0.5) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("dtype", ["nmos", "pmos"])
+def test_gds_rises_toward_the_saturation_knee(lut, dtype):
+    """A device just above its Vdsat -- under a cascode -- has several times
+    the Vdd/2 gds, which the single-point table cannot see."""
+    near, mid, ref = (lut.gds_scale(dtype, 12.0, 0.09, v) for v in (0.12, 0.25, 0.5))
+    assert near > mid > ref
+    assert near > 3.0
+
+
+@pytest.mark.parametrize("dtype", ["nmos", "pmos"])
+def test_gmb_gm_falls_with_reverse_body_bias(lut, dtype):
+    at0, at_half = lut.gmb_gm(dtype, 12.0, 0.09, 0.0), lut.gmb_gm(dtype, 12.0, 0.09, 0.5)
+    assert 0.0 < at_half < at0 < 1.0
+
+
+def test_table_without_bias_axes_reads_single_point(tmp_path):
+    """An older .npz (no vds/vsb tables) keeps the pre-#273 behaviour."""
+    import numpy as np
+    data = np.load(_LUT_PATH)
+    old = tmp_path / "old_gmid.npz"
+    np.savez(old, **{k: data[k] for k in data.files
+                     if not k.endswith(("gds_scale", "gmb_gm", "vds_axis", "vsb_axis"))})
+    lut = GmIdLut(old)
+    assert lut.gds_scale("nmos", 12.0, 0.09, 0.1) == 1.0
+    assert lut.gmb_gm("nmos", 12.0, 0.09, 0.3) == 0.0
+
+
+def test_gmid_model_reads_gds_no_deeper_than_vdsat():
+    """Below Vdsat the device is in triode, where the node-level estimate that
+    supplied ``vds`` (every device saturated) has already failed: the read
+    stops at the knee instead of extrapolating into triode."""
+    from circuitgenome.sizer.physics.device_model import GmIdModel
+    tech = load_tech("ptm45")
+    m = GmIdModel(tech, GmIdLut(tech.gmid_lut))
+    w, l, ids = 2.0, 0.09, 10e-6
+    vdsat = m.vds_sat("nmos", w, l, ids)
+    assert m.gds("nmos", w, l, ids, vds=0.0) == m.gds("nmos", w, l, ids, vds=vdsat)
+    assert m.gds("nmos", w, l, ids, vds=vdsat) > m.gds("nmos", w, l, ids)
+    assert m.gds("nmos", w, l, ids, vds=0.5) == pytest.approx(m.gds("nmos", w, l, ids))
+    assert m.gmb("nmos", w, l, ids, 0.0) > 0.0
+
+
+def test_level1_model_has_no_bias_dependence():
+    """Level-1 λ is Vds-independent and its SPICE card has gamma=0."""
+    tech = load_tech("generic")
+    m = Level1Model(tech)
+    assert m.gds("nmos", 4.0, 0.5, 5e-6, vds=0.1) == eq.gd(tech.nmos.lam, 5e-6)
+    assert m.gmb("nmos", 4.0, 0.5, 5e-6, 1.0) == 0.0
+
+
+def test_gmid_gate_capacitance_follows_the_inversion_level():
+    """Issue #274: a wide PTM45 device in weak inversion carries a fraction of
+    (2/3)·W·L·Cox on its gate; the table's gm/(2π·fT) reads ~34 fF where the
+    Cox estimate says 166 fF.  Narrow, in strong inversion, they converge."""
+    from circuitgenome.sizer.physics.device_model import GmIdModel
+    tech = load_tech("ptm45")
+    m = GmIdModel(tech, GmIdLut(tech.gmid_lut))
+    wide = m.cgg("nmos", 100.0, 0.09, 40e-6)
+    assert wide == pytest.approx(34e-15, rel=0.1)
+    assert wide < 0.3 * m.cgs("nmos", 100.0, 0.09)
+    narrow = m.cgg("nmos", 1.0, 0.18, 40e-6)
+    assert narrow == pytest.approx(m.cgs("nmos", 1.0, 0.18), rel=0.5)
+
+
+def test_level1_gate_capacitance_is_the_cox_estimate():
+    m = Level1Model(load_tech("generic"))
+    assert m.cgg("nmos", 4.0, 0.5, 5e-6) == m.cgs("nmos", 4.0, 0.5)

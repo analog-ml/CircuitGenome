@@ -224,15 +224,22 @@ def open_loop_gain_measurable(
     return gain_db is None or gain_db <= ceiling_db
 
 
-def unity_gain_bw(gm1_a_v: float, cc_f: float) -> float:
-    """Unity-gain bandwidth (GBW) in Hz.
+def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
+    """Unity-gain bandwidth (GBW) in Hz of a single-pole loop.
 
-    GBW = gm1 / (2π·Cc)
+    GBW = gain·gm1 / (2π·Cc)
+
+    ``gain`` is the gain after the integrating stage: a source follower's
+    ``gm/(gm + gmb + g_out)``, ~0.88 for a GF180 NMOS follower (issue #274).
+    Poles near crossover pull the real crossing lower; the multi-stage
+    metrics read it off the full model instead (:func:`two_stage_loop`).
 
     :param gm1_a_v: Input-pair transconductance in A/V.
     :param cc_f: Compensation capacitor in F.
+    :param gain: Gain between the Miller output and the amplifier output,
+        ``1.0`` without an output buffer.
     """
-    return gm1_a_v / (2.0 * math.pi * cc_f)
+    return gain * gm1_a_v / (2.0 * math.pi * cc_f)
 
 
 def phase_margin_single_stage_deg(gbw_hz: float, mirror_pole_hz: float) -> float:
@@ -380,98 +387,321 @@ def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
     return v * v
 
 
+class _Network:
+    """Nodal equations ``(G + s·C)·v = b`` of a small-signal half circuit,
+    assembled one element at a time (``None`` as a node is ground)."""
+
+    def __init__(self):
+        self.n = 0
+        self._g: list[tuple[int, int, float]] = []
+        self._c: list[tuple[int, int, float]] = []
+        self._b: dict[int, float] = {}
+
+    def node(self) -> int:
+        self.n += 1
+        return self.n - 1
+
+    @staticmethod
+    def _stamp(entries, i, j, x):
+        entries.append((i, i, x))
+        if j is not None:
+            entries += [(j, j, x), (i, j, -x), (j, i, -x)]
+
+    def cap(self, i, j, c):
+        """Capacitor ``c`` between nodes ``i`` and ``j``."""
+        self._stamp(self._c, i, j, c)
+
+    def conductance(self, i, j, g):
+        """Conductance ``g`` between nodes ``i`` and ``j``."""
+        self._stamp(self._g, i, j, g)
+
+    def vccs(self, i, ctrl, gm):
+        """Current ``gm·v[ctrl]`` drawn out of node ``i``."""
+        self._g.append((i, ctrl, gm))
+
+    def input_stage(self, gm, g, c) -> int:
+        """The input pair (inverting): ``gm·Vin`` out of a new node, Vin = 1."""
+        v = self.node()
+        self._b[v] = -gm
+        self.conductance(v, None, g)
+        self.cap(v, None, c)
+        return v
+
+    def stage(self, ctrl, gm, g, c, *, inverting=True, mirror_pole_hz=None) -> int:
+        """A gain stage driven by ``ctrl`` into a new node.  A non-inverting
+        stage passes through its current mirror when it has one: an extra
+        node with ``v_m·(1 + s/ωm) = v[ctrl]``."""
+        if mirror_pole_hz:
+            m = self.node()
+            self.vccs(m, ctrl, -1.0)
+            self.conductance(m, None, 1.0)
+            self.cap(m, None, 1.0 / (2.0 * math.pi * mirror_pole_hz))
+            ctrl = m
+        v = self.node()
+        self.vccs(v, ctrl, gm if inverting else -gm)
+        self.conductance(v, None, g)
+        self.cap(v, None, c)
+        return v
+
+    def branch(self, i, j, c, r):
+        """Compensation cap ``c`` from ``i`` to ``j``, through ``r`` when set."""
+        if not r:
+            self.cap(i, j, c)
+            return
+        x = self.node()
+        self.cap(i, x, c)
+        self.conductance(x, j, 1.0 / r)
+
+    def load(self, v, cl_f, buffer) -> int:
+        """``CL`` on ``v``, or on a source-follower buffer's output, which the
+        follower charges with ``gm_f·(v − v_out)``.  Returns the node on CL."""
+        if buffer is None:
+            self.cap(v, None, cl_f)
+            return v
+        gm_f, cgs_f, g_f = buffer
+        out = self.node()
+        self.cap(v, out, cgs_f)
+        self.vccs(out, v, -gm_f)
+        self.conductance(out, None, gm_f + g_f)
+        self.cap(out, None, cl_f)
+        return out
+
+    def matrices(self):
+        """``(G, C, b)`` as numpy arrays."""
+        import numpy as np
+
+        G, C, b = np.zeros((self.n, self.n)), np.zeros((self.n, self.n)), np.zeros(self.n)
+        for m, entries in ((G, self._g), (C, self._c)):
+            for i, j, x in entries:
+                m[i, j] += x
+        for i, x in self._b.items():
+            b[i] = x
+        return G, C, b
+
+
+def _floor_g(*pairs):
+    """Output conductances floored at ``1e-9·gm``: a zero one would make the
+    DC gain infinite, and the floor keeps it finite without moving anything
+    near crossover."""
+    return [max(g, 1e-9 * gm) for g, gm in pairs]
+
+
 def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
                   mirror_pole_hz, buffer, c3_f=0.0, r1_ohm=0.0, r2_ohm=0.0):
     """Nodal equations ``(G + s·C)·v = b`` of the RNMC half circuit (Vin = 1).
 
-    ``v`` holds the node voltages: ``v[0..2]`` the first-, second- and
-    third-stage outputs, then the third-stage mirror node, the buffer's
-    output, and the inner node of each compensation branch with a series
-    resistor (``r1_ohm`` with ``Cc1``, ``r2_ohm`` with ``Cc2``), when present.
-    ``c3_f`` is the third-stage output's capacitance to ground besides ``CL``.
-    Returns ``(G, C, b, out)``, ``out`` being the index of the node that
-    drives ``CL``.
-
-    A zero output conductance would make the DC gain infinite; flooring it at
-    ``1e-9·gm`` keeps the DC gain finite without moving anything near
-    crossover.
+    Both Miller caps hang off the first-stage output: ``Cc1`` to the third
+    stage's output, ``Cc2`` to the second's, each through its series resistor
+    (``r1_ohm``, ``r2_ohm``) when set.  The second stage inverts; the third
+    does not, through its current mirror when it has one.  ``c3_f`` is the
+    third-stage output's capacitance to ground besides ``CL``.  Returns
+    ``(G, C, b, out)``, ``out`` being the index of the node that drives ``CL``.
     """
+    g1, g2, g3 = _floor_g((g1, gm1), (g2, gm2), (g3, gm3))
+    net = _Network()
+    v1 = net.input_stage(gm1, g1, c1_f)
+    v2 = net.stage(v1, gm2, g2, c2_f)
+    v3 = net.stage(v2, gm3, g3, c3_f, inverting=False, mirror_pole_hz=mirror_pole_hz)
+    net.branch(v1, v3, cc1_f, r1_ohm)
+    net.branch(v1, v2, cc2_f, r2_ohm)
+    out = net.load(v3, cl_f, buffer)
+    return (*net.matrices(), out)
+
+
+def _two_stage_half(net, drive, gm2, cc_f, cl_f, c1_f, c2_f, g1, g2, buffer, r_ohm):
+    """One two-stage Miller half circuit in ``net``: the input pair (``drive``
+    = its share of gm1, signed) into an inverting second stage, with ``Cc`` --
+    through ``r_ohm`` when set -- from its input to its output.  ``c2_f`` is
+    the second-stage output's capacitance besides ``CL``.  Returns
+    ``(first-stage node, node on CL)``."""
+    v1 = net.input_stage(drive, g1, c1_f)
+    v2 = net.stage(v1, gm2, g2, c2_f)
+    net.branch(v1, v2, cc_f, r_ohm)
+    return v1, net.load(v2, cl_f, buffer)
+
+
+def _nmc_half(net, drive, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, c3_f, g1, g2, g3,
+              mirror_pole_hz, buffer, r1_ohm, r2_ohm):
+    """One nested-Miller half circuit in ``net``: a non-inverting second stage
+    (through its mirror when it has one), an inverting third, ``Cc1`` from
+    the first-stage output and ``Cc2`` from the second's, both to the third
+    stage's output.  Returns ``(first-stage node, node on CL)``."""
+    v1 = net.input_stage(drive, g1, c1_f)
+    v2 = net.stage(v1, gm2, g2, c2_f, inverting=False, mirror_pole_hz=mirror_pole_hz)
+    v3 = net.stage(v2, gm3, g3, c3_f)
+    net.branch(v1, v3, cc1_f, r1_ohm)
+    net.branch(v2, v3, cc2_f, r2_ohm)
+    return v1, net.load(v3, cl_f, buffer)
+
+
+def _miller_network(half, gm1, halves, cmfb):
+    """Nodal equations ``(G, C, b, out)`` of a two-stage or nested-Miller
+    amplifier (Vin = 1) from its ``half(net, drive, half_args)`` builder.
+
+    One entry in ``halves`` is a single-ended amplifier.  Two are the
+    ``(p, n)`` halves of a fully-differential one, driven by ``±gm1/2`` and
+    read at ``out = (p, n)``, their difference.  Matched halves give exactly
+    the single half's response; when their compensation differs, the halves
+    are coupled through the common mode, which the CMFB feeds back:
+    ``cmfb = (gm_c, pole_hz)`` injects ``gm_c·v_cm`` into each first-stage
+    node, ``v_cm`` the outputs' common mode behind one pole (issue #274).
+    Without it the halves are independent and the output averages them.
+    """
+    net = _Network()
+    if len(halves) == 1:
+        _v1, out = half(net, gm1, halves[0])
+        return (*net.matrices(), out)
+    (v1p, op), (v1n, on) = half(net, gm1 / 2.0, halves[0]), half(net, -gm1 / 2.0, halves[1])
+    if cmfb:
+        gm_c, pole_hz = cmfb
+        m = net.node()
+        net.vccs(m, op, -0.5)
+        net.vccs(m, on, -0.5)
+        net.conductance(m, None, 1.0)
+        if pole_hz:
+            net.cap(m, None, 1.0 / (2.0 * math.pi * pole_hz))
+        net.vccs(v1p, m, -gm_c)
+        net.vccs(v1n, m, -gm_c)
+    return (*net.matrices(), (op, on))
+
+
+#: dB under 0 dB within which a loop gain that comes back up counts as
+#: reaching it.  Past the first crossing a lightly damped pole pair can lift
+#: the gain back toward unity; the model and SPICE agree on that peak to
+#: 0.07-0.45 dB, so a peak at -0.3 dB in the model can read +0.04 dB -- a
+#: second crossing, with ~45° left -- in SPICE (issue #274).
+_NEAR_CROSSING_DB = 0.5
+
+
+def _loop_gbw_pm(G, C, b, out, w_t) -> tuple[float | None, float | None]:
+    """``(GBW Hz, PM°)`` of an open loop (:func:`_sweep`): its first 0 dB
+    crossing, and the worst margin over every crossing and every *return*
+    toward 0 dB.
+
+    A return is the stretch where the gain, having fallen more than
+    ``_NEAR_CROSSING_DB`` under 0 dB past the first crossing, climbs back
+    within it: the model cannot tell such a peak from a crossing, so its
+    phase counts as a margin too.  The margin is ``0.0`` with a
+    right-half-plane pole.  Either value is ``None`` when the gain never
+    reaches 0 dB.
+    """
+    poles = _poles(G, C)
+    crossings = _crossings(G, C, b, out, poles, w_t)
+    if not crossings:
+        return None, None
+    if _has_rhp_pole(poles):
+        return crossings[0][0] / (2.0 * math.pi), 0.0
+    pms = [p for _w, p in crossings]
+    w, mag_db, phase = _sweep(G, C, b, out, poles, w_t)
     import numpy as np
+    past = w > crossings[0][0]
+    dipped = np.cumsum(past & (mag_db < -_NEAR_CROSSING_DB)) > 0
+    near = dipped & (mag_db >= -_NEAR_CROSSING_DB) & (mag_db < 0.0)
+    pms += [float(180.0 + p) for p in phase[near]]
+    return crossings[0][0] / (2.0 * math.pi), min(pms)
 
-    g1, g2, g3 = (max(g, 1e-9 * gm) for g, gm in ((g1, gm1), (g2, gm2), (g3, gm3)))
-    V1, V2, V3 = 0, 1, 2
-    n = 3 + bool(mirror_pole_hz) + bool(buffer) + bool(r1_ohm) + bool(r2_ohm)
-    G, C, b = np.zeros((n, n)), np.zeros((n, n)), np.zeros(n)
-    extra = iter(range(3, n))
 
-    def cap(i, j, c):
-        """Capacitor ``c`` between nodes ``i`` and ``j`` (``j=None``: ground)."""
-        C[i, i] += c
-        if j is not None:
-            C[j, j] += c
-            C[i, j] -= c
-            C[j, i] -= c
+def two_stage_loop(
+    gm1: float, gm2: float, cc_f: float, cl_f: float,
+    *, c1_f: float = 0.0, c2_f: float = 0.0, g1: float = 0.0, g2: float = 0.0,
+    buffer: tuple[float, float, float] | None = None,
+    r_ohm: tuple[float, ...] = (0.0,),
+    cmfb: tuple[float, float | None] | None = None,
+) -> tuple[float | None, float | None]:
+    """``(GBW Hz, phase margin °)`` of a two-stage Miller amp, full model.
 
-    def vccs(i, ctrl, gm):
-        """Current ``gm·v[ctrl]`` drawn out of node ``i``."""
-        G[i, ctrl] += gm
+    Read off the half circuit's open loop, as :func:`phase_margin_rnmc_deg`
+    does for RNMC.  It sees what the closed forms
+    (``gm1/(2π·Cc)``, :func:`phase_margin_two_stage_deg`) leave out: the
+    output pole pulling the 0 dB crossing down (~14 % at 55°), the series
+    resistor's zero cancelling that pole (``R = (Cc+CL)/(gm2·Cc)`` puts it
+    there, which measures ~89° and no pull), and an output follower's gain
+    and pole (issue #274).
 
-    def branch(i, j, c, r):
-        """Compensation cap ``c`` from ``i`` to ``j``, through ``r`` when set."""
-        if not r:
-            cap(i, j, c)
-            return
-        x = next(extra)
-        cap(i, x, c)
-        G[x, x] += 1.0 / r
-        G[j, j] += 1.0 / r
-        G[x, j] -= 1.0 / r
-        G[j, x] -= 1.0 / r
+    :param gm1: Input-pair transconductance seen by the loop, in A/V.
+    :param gm2: Second-stage signal gm in A/V.
+    :param cc_f: Miller cap in F.
+    :param cl_f: Load capacitance in F, on the follower's output when
+        ``buffer`` is given.
+    :param c1_f: Parasitic on the first-stage output in F.
+    :param c2_f: Parasitic on the second-stage output in F besides ``CL``.
+    :param g1: First-stage output conductance in A/V.
+    :param g2: Second-stage output conductance in A/V.
+    :param buffer: ``(gm_f, cgs_f, g_f)`` of a source-follower output buffer,
+        as for :func:`phase_margin_rnmc_deg`, or ``None``.
+    :param r_ohm: Per half, the resistor in series with ``Cc`` in Ω (nulling
+        or indirect compensation), ``0.0`` for a bare cap: one entry
+        single-ended, ``(p, n)`` fully differential, whose halves can differ
+        (:func:`_miller_network`).
+    :param cmfb: ``(gm_c, pole_hz)`` of a fully-differential amplifier's
+        common-mode feedback: the current in A/V it injects into each
+        first-stage node per volt of output common mode, and its pole in Hz
+        (``None``: none); ``None`` without a CMFB.  With mismatched halves it
+        moves the margin ~6° (issue #274).
+    :returns: Either value ``None`` when the gain never reaches 0 dB; the
+        margin ``0.0`` with a right-half-plane pole.
+    """
+    g1, g2 = _floor_g((g1, gm1), (g2, gm2))
 
-    # Stage 1 (inverting): gm1·Vin out of V1.  Both Miller caps hang off V1.
-    b[V1] = -gm1
-    G[V1, V1] += g1
-    cap(V1, None, c1_f)
-    branch(V1, V3, cc1_f, r1_ohm)
-    branch(V1, V2, cc2_f, r2_ohm)
+    def half(net, drive, r):
+        return _two_stage_half(net, drive, gm2, cc_f, cl_f, c1_f, c2_f, g1, g2, buffer, r)
+    return _loop_gbw_pm(*_miller_network(half, gm1, r_ohm, cmfb), gm1 / cc_f)
 
-    # Stage 2 (inverting): gm2·V1 out of V2.
-    vccs(V2, V1, gm2)
-    G[V2, V2] += g2
-    cap(V2, None, c2_f)
 
-    # Stage 3 (non-inverting): gm3·V2 into V3 — through a current mirror when
-    # there is one, an extra node with v_m·(1 + s/ωm) = V2.
-    drive = V2
-    if mirror_pole_hz:
-        m = next(extra)
-        vccs(m, V2, -1.0)
-        G[m, m] += 1.0
-        cap(m, None, 1.0 / (2.0 * math.pi * mirror_pole_hz))
-        drive = m
-    vccs(V3, drive, -gm3)
-    G[V3, V3] += g3
-    cap(V3, None, c3_f)
+def nested_miller_loop(
+    gm1: float, gm2: float, gm3: float,
+    cc1_f: float, cc2_f: float, cl_f: float,
+    *, c1_f: float = 0.0, c2_f: float = 0.0, c3_f: float = 0.0,
+    g1: float = 0.0, g2: float = 0.0, g3: float = 0.0,
+    mirror_pole_hz: float | None = None,
+    buffer: tuple[float, float, float] | None = None,
+    comp_r: tuple[tuple[float, float], ...] = ((0.0, 0.0),),
+    cmfb: tuple[float, float | None] | None = None,
+) -> tuple[float | None, float | None]:
+    """``(GBW Hz, phase margin °)`` of a nested-Miller three-stage amp, full
+    model (see :func:`two_stage_loop`).
 
-    # Load: CL on V3, or on a source-follower buffer's output, which the
-    # follower charges with gm_f·(V3 − v_out).
-    if buffer is None:
-        cap(V3, None, cl_f)
-        return G, C, b, V3
-    gm_f, cgs_f, g_f = buffer
-    out = next(extra)
-    cap(V3, out, cgs_f)
-    vccs(out, V3, -gm_f)
-    G[out, out] += gm_f + g_f
-    cap(out, None, cl_f)
-    return G, C, b, out
+    :func:`phase_margin_three_stage_deg` treats the non-dominant poles as
+    ``gm2/Cc2`` and ``gm3/CL``; behind a buffer the third stage drives only
+    the follower's gate, and the series resistors' zeros move both, so it ran
+    15-35° pessimistic in SPICE and could not place the 0 dB crossing
+    (issue #274).
+
+    :param gm2: Second-stage (non-inverting) signal gm in A/V.
+    :param gm3: Third-stage (inverting) signal gm in A/V.
+    :param cc1_f: Outer cap, first-stage output → third-stage output, in F.
+    :param cc2_f: Inner cap, second-stage output → third-stage output, in F.
+    :param c3_f: Parasitic on the third-stage output in F besides ``CL``.
+    :param mirror_pole_hz: Pole of the second stage's current mirror in Hz,
+        ``None`` when it has none.
+    :param comp_r: Per half, ``(R1, R2)`` in Ω in series with ``Cc1`` and
+        ``Cc2``; halves and ``cmfb`` as in :func:`two_stage_loop`.
+
+    Other parameters as for :func:`two_stage_loop`.
+    """
+    g1, g2, g3 = _floor_g((g1, gm1), (g2, gm2), (g3, gm3))
+
+    def half(net, drive, r):
+        return _nmc_half(net, drive, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, c3_f,
+                         g1, g2, g3, mirror_pole_hz, buffer, *r)
+    return _loop_gbw_pm(*_miller_network(half, gm1, comp_r, cmfb), gm1 / cc1_f)
 
 
 def _poles(G, C):
-    """Roots of ``det(G + s·C) = 0`` in rad/s: the eigenvalues of ``−C⁻¹G``."""
+    """Roots of ``det(G + s·C) = 0`` in rad/s: the eigenvalues of ``−C⁻¹G``.
+
+    A node with no capacitance to ground -- the junction of a compensation
+    cap and its resistor, with no parasitic given -- makes ``C`` singular: a
+    pole at infinity.  A capacitance ``1e-9`` of the largest on every node
+    then places it far past everything else instead.
+    """
     import numpy as np
 
-    return np.linalg.eigvals(-np.linalg.solve(C, G))
+    try:
+        return np.linalg.eigvals(-np.linalg.solve(C, G))
+    except np.linalg.LinAlgError:
+        floor = 1e-9 * np.abs(C).max() * np.eye(len(C))
+        return np.linalg.eigvals(-np.linalg.solve(C + floor, G))
 
 
 def _has_rhp_pole(poles) -> bool:
@@ -487,12 +717,15 @@ def _has_rhp_pole(poles) -> bool:
 
 
 def _open_loop_gain(G, C, b, out, w):
-    """``A(jω) = v[out]`` at each angular frequency ``w``, signed so ``A(0) > 0``."""
+    """``A(jω) = v[out]`` at each angular frequency ``w``, signed so ``A(0) > 0``;
+    ``out = (p, n)`` reads the difference ``v[p] − v[n]``."""
     import numpy as np
 
+    def read(v):
+        return v[..., out[0]] - v[..., out[1]] if isinstance(out, tuple) else v[..., out]
     rhs = np.broadcast_to(b[:, None], (len(w), len(b), 1))
-    v = np.linalg.solve(G + 1j * w[:, None, None] * C, rhs)
-    return v[:, out, 0] * np.sign(np.linalg.solve(G, b)[out])
+    v = np.linalg.solve(G + 1j * w[:, None, None] * C, rhs)[..., 0]
+    return read(v) * np.sign(read(np.linalg.solve(G, b)))
 
 
 def rnmc_pole_damping(
@@ -578,27 +811,65 @@ def phase_margin_rnmc_deg(
         margin to speak of; a pole too slow to resolve does not count, see
         :func:`_has_rhp_pole`); ``None`` when the gain never reaches 0 dB.
     """
-    import numpy as np
-
     G, C, b, out = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
                                  g1, g2, g3, mirror_pole_hz, buffer, c3_f, *comp_r)
     poles = _poles(G, C)
     if _has_rhp_pole(poles):
         return 0.0
-    # Sweep two decades past every pole and the nominal crossover gm1/Cc1.
-    corners = [abs(p) for p in poles if abs(p) > 0] + [gm1 / cc1_f]
+    crossings = _crossings(G, C, b, out, poles, gm1 / cc1_f)
+    if not crossings:
+        return None
+    return min(pm for _w, pm in crossings)
+
+
+def unity_gain_bw_rnmc_hz(
+    gm1: float, gm2: float, gm3: float,
+    cc1_f: float, cc2_f: float, cl_f: float,
+    *, c1_f: float = 0.0, c2_f: float = 0.0,
+    g1: float = 0.0, g2: float = 0.0, g3: float = 0.0,
+    mirror_pole_hz: float | None = None,
+    buffer: tuple[float, float, float] | None = None,
+    c3_f: float = 0.0,
+    comp_r: tuple[float, float] = (0.0, 0.0),
+) -> float | None:
+    """GBW in Hz of a reversed-nested-Miller amp: its first 0 dB crossing.
+
+    Read off the same full model as :func:`phase_margin_rnmc_deg` (arguments
+    as there), so the pole pair near crossover and an output buffer's gain
+    below 1 both pull it under ``gm1/(2π·Cc1)``, by ~20 % on a buffered
+    design (issue #274).  The first crossing is the one the AC bench reports.
+
+    :returns: ``None`` when the gain never reaches 0 dB.
+    """
+    G, C, b, out = _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f,
+                                 g1, g2, g3, mirror_pole_hz, buffer, c3_f, *comp_r)
+    crossings = _crossings(G, C, b, out, _poles(G, C), gm1 / cc1_f)
+    return crossings[0][0] / (2.0 * math.pi) if crossings else None
+
+
+def _sweep(G, C, b, out, poles, w_t):
+    """``(ω, |A| dB, ∠A°)`` of an open loop on a log sweep spanning two
+    decades past every pole and the nominal crossover ``w_t`` (rad/s)."""
+    import numpy as np
+
+    corners = [abs(p) for p in poles if abs(p) > 0] + [w_t]
     w = np.logspace(math.log10(min(corners)) - 2, math.log10(max(corners)) + 2, 4000)
     a = _open_loop_gain(G, C, b, out, w)
-    mag_db = 20.0 * np.log10(np.abs(a))
-    phase = np.degrees(np.unwrap(np.angle(a)))
-    crossings = np.nonzero(np.diff(np.sign(mag_db)))[0]
-    if len(crossings) == 0:
-        return None
-    pms = []
-    for i in crossings:   # interpolate linearly to the exact 0 dB point
+    return w, 20.0 * np.log10(np.abs(a)), np.degrees(np.unwrap(np.angle(a)))
+
+
+def _crossings(G, C, b, out, poles, w_t) -> list[tuple[float, float]]:
+    """``(ω, PM°)`` at every 0 dB crossing of an open loop (:func:`_sweep`),
+    in order, each interpolated linearly in dB."""
+    import numpy as np
+
+    w, mag_db, phase = _sweep(G, C, b, out, poles, w_t)
+    found = []
+    for i in np.nonzero(np.diff(np.sign(mag_db)))[0]:
         t = mag_db[i] / (mag_db[i] - mag_db[i + 1])
-        pms.append(180.0 + phase[i] + t * (phase[i + 1] - phase[i]))
-    return float(min(pms))
+        lw = math.log10(w[i]) + t * (math.log10(w[i + 1]) - math.log10(w[i]))
+        found.append((10.0 ** lw, float(180.0 + phase[i] + t * (phase[i + 1] - phase[i]))))
+    return found
 
 
 def slew_rate_vps(current_a: float, cap_f: float) -> float:

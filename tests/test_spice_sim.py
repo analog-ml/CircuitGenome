@@ -771,6 +771,29 @@ def test_ac_bench_reports_the_worst_zero_db_crossing():
 
 
 @ngspice
+def test_se_power_is_measured_in_unity_feedback():
+    """Issue #271: single-ended power is read where the amplifier runs.
+
+    With both inputs at Vcm and no loop, #418's output rails and drags its
+    internal nodes along; its PMOS second stage then turns the third stage's
+    NMOS input device fully on into a bare diode mirror, which drew ~7.9 mW.
+    In unity feedback every stage carries its planned current (third stage
+    ~100 uA, second ~40 uA): about 1 mW in all.
+    """
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12)
+    result = SizingResult(
+        transistors={ref: TransistorSizing(ref, w, l, 0.0, 0.0, 0.0)
+                     for ref, (w, l) in _RNMC_SE_418_SIZES.items()},
+        resistors=_RNMC_SE_418_R, capacitors=_RNMC_SE_418_C,
+        metrics={}, margins={}, solver_status="GMID")
+    sim = simulate_metrics(_RNMC_SE_418_NETLIST, result, tech, spec)
+    assert sim["power_w"] is not None and 0.7e-3 < sim["power_w"] < 1.5e-3, \
+        sim["power_w"]
+
+
+@ngspice
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the
     sizer's definition), not left None — a None on a constrained spec left
@@ -1349,6 +1372,47 @@ def test_follower_swing_model_tracks_spice(template, follower):
     assert model == pytest.approx(spice, abs=_FOLLOWER_SWING_TOL_V)
 
 
+# --- DDA CMFB sense-range swing (issue #272) ---------------------------------
+
+@ngspice
+@pytest.mark.parametrize("load,cmfb", [
+    ("folded_cascode_load_pmos_input_differential_output",
+     "dda_cmfb_pmos_mirror_inverting"),
+    ("current_source_load_nmos", "dda_cmfb_nmos_mirror_inverting"),
+])
+def test_dda_cmfb_swing_model_tracks_spice(load, cmfb):
+    """A DDA CMFB holds the output CM only while its sense pairs stay
+    unsaturated, so on gf180 the outputs swing ~1.4-1.9 V where the model
+    used to predict ~0.2-3.1 V.  The ``Vocm ± √2·Vdsat`` edges must land
+    within the gate's tolerance of the bench, and the 0.3-3.0 V spec must be
+    flagged by the sizer before SPICE."""
+    from circuitgenome.sizer.physics.stage_chain import _CMFB_SENSE_SWING_TOL_V
+    text, parsed, fbr, topo = _fd_circuit({
+        "input_pair": "differential_pair_pmos", "load": load,
+        "tail_current": "current_mirror_tail_pmos", "cmfb": cmfb})
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      second_stage_current_ratio=2.5, gain_min_db=50,
+                      gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5, power_max_w=2.5e-3,
+                      output_swing_max_v=3.0, output_swing_min_v=0.3)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    assert not result.bias_feasible
+    assert "difference-difference CMFB" in result.warnings[0]
+
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    hi, lo = measure._measure_swing(name, ports, body_dut, rig._Topo(ports),
+                                    spec.vdd, spec.ibias, spec.cl, spec.vdd / 2)
+    if hi is None or lo is None:
+        pytest.skip("swing bench did not complete in this environment")
+    assert hi < 2.2 and lo > 1.1                  # far short of either rail
+    assert result.metrics["output_swing_max_v"] == pytest.approx(
+        hi, abs=_CMFB_SENSE_SWING_TOL_V)
+    assert result.metrics["output_swing_min_v"] == pytest.approx(
+        lo, abs=_CMFB_SENSE_SWING_TOL_V)
+
+
 # --- load capacitance (issue #222) ------------------------------------------
 
 def _active_load_one_stage(tech_name, vdd):
@@ -1399,6 +1463,40 @@ def test_wideswing_one_stage_gbw_and_pm_track_spice(input_pair, load):
     assert sim["phase_margin_deg"] is not None
     assert result.metrics["phase_margin_deg"] == pytest.approx(
         sim["phase_margin_deg"], abs=5.0)
+
+
+@ngspice
+@pytest.mark.parametrize("input_pair,load", [
+    ("differential_pair_pmos", "telescopic_cascode_load_pmos"),
+    ("differential_pair_pmos", "telescopic_cascode_load_wideswing_pmos"),
+    ("differential_pair_nmos", "telescopic_cascode_load_wideswing_nmos"),
+    ("differential_pair_nmos", "folded_cascode_load_nmos_input_single_output"),
+    ("differential_pair_pmos", "folded_cascode_load_pmos_input_single_output"),
+])
+def test_cascode_load_gain_tracks_spice(input_pair, load):
+    """Issue #273: a cascode load's gain read every device at Vds = Vdd/2.
+
+    The device under the cascode sits ~0.1 V above its saturation knee, with
+    4-10x that gds, so the analytical gain ran 7-17 dB above ngspice here
+    (8-20 dB on the prediction-error page).  Read at each device's own Vds
+    and Vsb it lands a few dB above -- never more than the designer gate's
+    3 dB below, which would drop designs SPICE passes.
+    """
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if c.variant_map["load"].name == load
+                and c.variant_map["input_pair"].name == input_pair)
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    fbr = assign_slots(recognize(parsed), topo)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=2e-12, gain_min_db=40)
+    result = size_circuit(parsed, recognize(parsed), fbr, topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+
+    assert sim["gain_db"] is not None
+    assert -3.0 <= result.metrics["gain_db"] - sim["gain_db"] <= 6.0
 
 
 @ngspice

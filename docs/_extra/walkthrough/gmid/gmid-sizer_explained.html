@@ -504,6 +504,8 @@ extra_r = {**extra_r, **level_r}</code></pre>
 
   <p>Two of these steps don't just judge — they <strong>repair</strong>. <code>check_dc_operating_point</code> can turn up gm/Id to un-squash a tail; <code>check_stage_interface</code> can nudge a stage-interface window. The conductor threads the (possibly repaired) <code>sizing</code> through each call, so later steps always see the newest widths. The two resistor steps (<code>size_resistors</code>, <code>tune_bias_levels</code>) contribute extra resistors, merged with <code>{**extra_r, **level_r}</code>.</p>
 
+  <p>Between the checks and the resistors, the conductor can loop back once or twice. Phase 3 planned every <code>gm</code> from closed-form estimates; once there are real widths, a <em>re-plan</em> reads the sized circuit's full small-signal model and asks for more where the estimate fell short &mdash; <code>refine_rnmc_plan</code> for a reversed-nested-Miller inner loop, <code>refine_two_stage_plan</code> for a two-stage amplifier, which raises <code>gm1</code> until the real 0 dB crossing meets GBW and then <code>gm2</code> until the phase margin does (issue #274). The geometry and bias checks re-run against the new targets; a re-size that breaks a sound bias is thrown away.</p>
+
   <p>For our op-amp, Phase 4 reads the LUT to give M1 a width that hits <code>gm1 ≈ 126 µA/V</code> at 10 µA, all three checks pass, and <code>bias_feasible = True</code>.</p>
 </section>
 

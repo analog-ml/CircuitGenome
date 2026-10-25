@@ -18,8 +18,11 @@ from circuitgenome.synthesizer.models import Device
 from circuitgenome.sizer.physics.stage_chain import (
     Stage,
     StageChain,
+    _CMFB_SENSE_SWING_TOL_V,
     _FOLLOWER_SWING_TOL_V,
+    check_cmfb_sense_swing,
     check_follower_swing,
+    cmfb_sense_range,
     output_swing_headroom,
     _source_degeneration_r,
     _tail_current_net,
@@ -84,8 +87,178 @@ def test_gbw_and_slew_need_the_miller_cap():
 
     comp = evaluate_metrics(_chain((1e-3, 1e6, 10e-6), (2e-3, 5e5, 1e-3),
                                    cc_pf=2.0), _spec())[0]
-    assert comp["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12))
+    assert comp["gbw_hz"] == pytest.approx(
+        eq.two_stage_loop(1e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)[0])
     assert comp["slew_rate_vps"] == pytest.approx(eq.slew_rate_vps(10e-6, 2e-12))
+
+
+def _two_stage(gm2, *, resistor, buffer=None):
+    """A 1 mA/V pair over a ``gm2`` second stage, Cc = 2 pF into 20 pF."""
+    return _chain((1e-3, 1e6), (gm2, 5e5), cc_pf=2.0, output_buffer=buffer,
+                  comp_resistors=((resistor, False),))
+
+
+def test_a_bare_miller_cap_pulls_the_crossing_under_its_output_pole():
+    """Issue #274: at a ~55° margin the output pole puts the 0 dB crossing
+    ~14 % under gm1/(2π·Cc) -- SPICE measured −13 % and ~51°."""
+    m, _ = evaluate_metrics(_two_stage(14e-3, resistor=False), _spec())
+    assert 45 < m["phase_margin_deg"] < 60
+    assert 0.8 < m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) < 0.9
+
+
+def test_a_nulling_resistor_cancels_the_output_pole():
+    """Issue #274: R = (Cc+CL)/(gm2·Cc), as size_resistors sizes it, puts the
+    zero on the output pole -- SPICE measured ~89° and no pull on GBW."""
+    m, _ = evaluate_metrics(_two_stage(14e-3, resistor=True), _spec())
+    assert m["phase_margin_deg"] > 85
+    assert m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) == pytest.approx(1.0, abs=0.02)
+
+
+def test_gbw_scales_with_the_output_followers_gain():
+    """Issue #274: a source follower passes gm/(gm + gmb + g_out) of its
+    gate's swing, and the 0 dB crossing moves down with it."""
+    buffer = (0.1, 10e-15, 12.5e-3)              # gain 1/1.125, pole 11x crossover
+    m, _ = evaluate_metrics(_two_stage(14e-3, resistor=False, buffer=buffer), _spec())
+    assert m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) == pytest.approx(1 / 1.125, abs=0.02)
+
+
+def test_nested_miller_recovers_the_textbook_crossing_with_fast_stages():
+    """Stages far faster than the crossover leave gm1/(2π·Cc1) and ~90°."""
+    gbw, pm = eq.nested_miller_loop(1e-3, 1.0, 10.0, 2e-12, 1e-12, 20e-12,
+                                    g1=1e-6, g2=1e-4, g3=1e-3)
+    assert gbw == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12), rel=0.02)
+    assert pm > 85
+
+
+def test_a_return_toward_0_db_counts_as_a_crossing():
+    """Issue #274: GF180 NMC #121 crosses 0 dB at 9 MHz with ~98° left, but
+    its lightly damped inner pair lifts the gain back to -0.3 dB near
+    27 MHz.  SPICE puts that peak at +0.04 dB -- a second crossing, 47° --
+    and the model cannot tell the two apart, so the return sets the margin."""
+    kw = dict(c1_f=5.31e-15, c2_f=103.5e-15, g1=6.98e-9, g2=2.42e-6, g3=5.4e-6,
+              mirror_pole_hz=952.8e6)
+    args = (6e-5, 2.4e-4, 8.4e-4, 1.25e-12, 1.008e-12, 5e-12)
+    gbw, pm = eq.nested_miller_loop(*args, comp_r=((5952.0, 0.0),), **kw)
+    assert gbw == pytest.approx(9.25e6, rel=0.02)
+    assert 40 < pm < 50
+    # A nulling resistor of 1/gm3 leaves no such peak: the first crossing sets it.
+    assert eq.nested_miller_loop(*args, comp_r=((1 / 8.4e-4, 0.0),), **kw)[1] > 75
+
+
+def test_a_mixed_fd_amplifier_averages_its_halves():
+    """Issue #274: a fully-differential amplifier with a bare cap on one half
+    and a nulling resistor on the other reads between the two (51° and 89°
+    halves measure ~65° in SPICE): with no CMFB to couple them, the
+    differential output averages its halves, where the worse half alone
+    would read 51°."""
+    def pm(halves):
+        chain = _chain((1e-3, 1e6), (14e-3, 5e5), cc_pf=2.0, comp_resistors=halves)
+        return evaluate_metrics(chain, _spec())[0]["phase_margin_deg"]
+    bare, nulled = pm(((False, False),)), pm(((True, False),))
+    assert bare + 5 < pm(((False, False), (True, False))) < nulled - 5
+
+
+def test_the_cmfb_couples_mismatched_halves_only():
+    """Issue #274: the CMFB feeds the outputs' common mode back into both
+    first-stage nodes.  Matched halves have none to feed back; mismatched
+    ones are pulled from their average toward the halves' harmonic mean,
+    still above the worse half."""
+    args = (1e-3, 14e-3, 2e-12, 20e-12)
+    kw = dict(g1=1e-6, g2=2e-6)
+    r = eq.compensation_resistor_ohm(2e-12, 20e-12, 14e-3)
+    strong = (10e-3, None)
+    assert eq.two_stage_loop(*args, r_ohm=(0.0, 0.0), cmfb=strong, **kw) == \
+        pytest.approx(eq.two_stage_loop(*args, **kw))
+    free = eq.two_stage_loop(*args, r_ohm=(0.0, r), **kw)[1]
+    worse = eq.two_stage_loop(*args, **kw)[1]
+    for cmfb in ((1e-3, None), strong):
+        assert worse + 5 < eq.two_stage_loop(*args, r_ohm=(0.0, r), cmfb=cmfb, **kw)[1] < free - 3
+
+
+def test_two_stage_replan_raises_gm2_for_the_phase_margin():
+    """Issue #274: the closed-form PM rule ignores the bare Miller cap's
+    right-half-plane zero; the re-plan finds the gm2 the full model needs."""
+    from circuitgenome.sizer.physics.metrics import two_stage_replan
+    chain = _chain((1e-3, 1e6), (8e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    spec = _spec(phase_margin_min_deg=60)
+    assert evaluate_metrics(chain, spec)[0]["phase_margin_deg"] < 60
+    gm1, gm2 = two_stage_replan(chain, spec, lambda gm: 0.0, 1.0, 1.0)
+    assert gm1 is None and gm2 > 8e-3
+    raised = _chain((1e-3, 1e6), (gm2, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    assert evaluate_metrics(raised, spec)[0]["phase_margin_deg"] == pytest.approx(60.5, abs=0.05)
+
+
+def test_two_stage_replan_raises_gm1_for_gbw_first():
+    """GBW is met first, through gm1; the phase margin then through gm2,
+    which only lifts GBW further."""
+    from circuitgenome.sizer.physics.metrics import two_stage_replan
+    chain = _chain((1e-3, 1e6), (14e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    gbw = evaluate_metrics(chain, _spec())[0]["gbw_hz"]
+    spec = _spec(gbw_min_hz=1.2 * gbw, phase_margin_min_deg=50)
+    gm1, gm2 = two_stage_replan(chain, spec, lambda gm: 0.0, 1.0, 1.0)
+    raised = _chain((gm1, 1e6), (gm2 or 14e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    m = evaluate_metrics(raised, spec)[0]
+    assert m["gbw_hz"] >= spec.gbw_min_hz and m["phase_margin_deg"] >= 50
+
+
+def test_two_stage_replan_leaves_an_unreachable_spec():
+    """No gm2 under the ceiling reaches the margin: nothing to re-size."""
+    from circuitgenome.sizer.physics.metrics import two_stage_replan
+    chain = _chain((1e-3, 1e6), (8e-3, 5e5), cc_pf=2.0, node_caps_f=(0.0, 0.0))
+    assert two_stage_replan(chain, _spec(phase_margin_min_deg=89), lambda gm: 0.0,
+                            1.0, 9e-3) == (None, None)
+
+
+class _FollowerModel:
+    """gm/gds/cgs constants; ``gmb`` is ``0.13·gm`` at any reverse body bias
+    and records the ``vsb`` it was read at."""
+
+    def __init__(self):
+        self.vsb = None
+
+    def gm(self, dtype, w, l, ids):
+        return 1e-3
+
+    def gds(self, dtype, w, l, ids, vds=None):
+        return 1e-5
+
+    def cgs(self, dtype, w, l):
+        return 10e-15
+
+    def gmb(self, dtype, w, l, ids, vsb):
+        self.vsb = vsb
+        return 0.13e-3 if vsb > 0 else 0.0
+
+
+def _follower_slot(bulk):
+    """An NMOS follower (gate on the amplifier node) over its bias sink."""
+    fol = Device(ref="m1_os", type="nmos",
+                 terminals={"d": "vdd!", "g": "net_amp", "s": "out", "b": bulk})
+    sink = Device(ref="m2_os", type="nmos",
+                  terminals={"d": "out", "g": "net_bias6", "s": "gnd!", "b": "gnd!"})
+    sizing = {d.ref: TransistorSizing(ref=d.ref, w_um=1.0, l_um=1.0, ids_a=1e-5,
+                                      vgs_v=0.8, vds_sat_v=0.2) for d in (fol, sink)}
+    return {"output_stage": [fol, sink]}, sizing
+
+
+def test_output_buffer_counts_the_followers_body_effect():
+    """Issue #274: a follower whose bulk sits on a rail loses gmb at its
+    output, read at the output's quiescent level spec.vcm."""
+    from circuitgenome.sizer.physics.stage_chain import _output_buffer
+    model = _FollowerModel()
+    slots, sizing = _follower_slot(bulk="gnd!")
+    gm, cgs, g_out = _output_buffer(slots, model, sizing, _spec(vdd=3.3))
+    assert (gm, cgs) == (1e-3, 10e-15)
+    assert g_out == pytest.approx(2 * 1e-5 + 0.13e-3)
+    assert model.vsb == pytest.approx(1.65)
+
+
+def test_output_buffer_has_no_body_effect_with_bulk_on_source():
+    from circuitgenome.sizer.physics.stage_chain import _output_buffer
+    model = _FollowerModel()
+    slots, sizing = _follower_slot(bulk="out")
+    assert _output_buffer(slots, model, sizing, _spec())[2] == pytest.approx(2e-5)
+    assert model.vsb is None
 
 
 # --------------------------------------------------------------------------- #
@@ -156,15 +329,17 @@ def test_k_fs_scales_gbw_but_not_cmrr():
     kw = dict(cc_pf=2.0, gd_tail=1e-7)
     full = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), **kw), _spec())[0]
     half = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), k_fs=0.5, **kw), _spec())[0]
-    assert half["gbw_hz"] == pytest.approx(full["gbw_hz"] / 2.0)
+    assert half["gbw_hz"] == pytest.approx(
+        eq.two_stage_loop(0.5e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)[0])
     assert half["cmrr_db"] == pytest.approx(full["cmrr_db"])
 
 
-def test_three_stage_uses_the_three_stage_phase_margin():
+def test_three_stage_uses_the_nested_miller_model():
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), (3e-3, 2e5), cc_pf=2.0, cc2_pf=0.5)
     m, _ = evaluate_metrics(chain, _spec())
-    assert m["phase_margin_deg"] == pytest.approx(
-        eq.phase_margin_three_stage_deg(1e-3, 2e-3, 3e-3, 2e-12, 0.5e-12, 20e-12))
+    gbw, pm = eq.nested_miller_loop(1e-3, 2e-3, 3e-3, 2e-12, 0.5e-12, 20e-12,
+                                    g1=1e-6, g2=2e-6, g3=5e-6)
+    assert (m["gbw_hz"], m["phase_margin_deg"]) == (pytest.approx(gbw), pytest.approx(pm))
 
 
 # --------------------------------------------------------------------------- #
@@ -277,12 +452,13 @@ def test_single_stage_psrr_takes_the_k_fs_single_ended_penalty():
 
 
 def test_a_miller_cap_still_wins_when_a_mirror_pole_is_present():
-    """Multi-stage chains keep the Miller formulas untouched (issue #221)."""
+    """Multi-stage chains keep the Miller model: the single-stage mirror pole
+    does not enter it (issue #221)."""
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), cc_pf=2.0, mirror_pole_hz=1e8)
     m, _ = evaluate_metrics(chain, _spec())
-    assert m["gbw_hz"] == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12))
-    assert m["phase_margin_deg"] == pytest.approx(
-        eq.phase_margin_two_stage_deg(1e-3, 2e-3, 2e-12, 20e-12))
+    gbw, pm = eq.two_stage_loop(1e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)
+    assert m["gbw_hz"] == pytest.approx(gbw)
+    assert m["phase_margin_deg"] == pytest.approx(pm)
 
 
 # --------------------------------------------------------------------------- #
@@ -497,6 +673,103 @@ def test_follower_swing_gate(follower, spec_kw, feasible):
     assert bool(warnings) is not feasible
     if warnings:
         assert "source-follower" in warnings[0] and "swing spec" in warnings[0]
+
+
+# --------------------------------------------------------------------------- #
+# Output swing headroom: a DDA CMFB's sense range (issue #272)
+# --------------------------------------------------------------------------- #
+# FD second stages driving outp/outn, and the two CMFB forms sensing them.
+_FD_SS = [_dev("mn_ssp", "nmos", "outp", "x1", "gnd!"),
+          _dev("mp_ssp", "pmos", "outp", "net_bias5", "vdd!"),
+          _dev("mn_ssn", "nmos", "outn", "x2", "gnd!"),
+          _dev("mp_ssn", "pmos", "outn", "net_bias5", "vdd!")]
+_FD_SS_SIZING = {r: _sz(r, v) for r, v in (("mn_ssp", 0.10), ("mp_ssp", 0.15),
+                                           ("mn_ssn", 0.10), ("mp_ssn", 0.15))}
+_DDA = [_dev("m1_cmfb", "nmos", "da", "vcm_ref", "t1"),
+        _dev("m2_cmfb", "nmos", "co", "outp", "t1"),
+        _dev("m3_cmfb", "nmos", "da", "vcm_ref", "t2"),
+        _dev("m4_cmfb", "nmos", "co", "outn", "t2"),
+        _dev("m5_cmfb", "pmos", "da", "da", "vdd!"),
+        _dev("m6_cmfb", "pmos", "co", "co", "vdd!"),
+        _dev("m7_cmfb", "nmos", "t1", "net_bias4", "gnd!"),
+        _dev("m8_cmfb", "nmos", "t2", "net_bias4", "gnd!")]
+_RS = [_dev("m1_cmfb", "nmos", "d1", "sense", "t"),
+       _dev("m2_cmfb", "nmos", "co", "vcm_ref", "t"),
+       _dev("m3_cmfb", "pmos", "d1", "d1", "vdd!"),
+       _dev("m4_cmfb", "pmos", "co", "co", "vdd!"),
+       _dev("m5_cmfb", "nmos", "t", "net_bias4", "gnd!")]
+_BIAS_DIODE = [_dev("mn4_bias_gen", "nmos", "net_bias4", "net_bias4", "gnd!")]
+
+
+def _cmfb_sizing(cmfb, sense_vdsat=0.2):
+    return {**_FD_SS_SIZING, **{d.ref: _sz(d.ref, sense_vdsat) for d in cmfb}}
+
+
+def _fd_view(cmfb):
+    slots = {"second_stage_p": _FD_SS[:2], "second_stage_n": _FD_SS[2:],
+             "bias_gen": list(_BIAS_DIODE), "cmfb": list(cmfb)}
+    return CircuitView(
+        slot_transistors=slots,
+        all_transistors={d.ref: (d, sl) for sl, devs in slots.items() for d in devs})
+
+
+def test_dda_sense_range_is_root2_vdsat_of_the_sense_pair():
+    """Each sense pair has steered its whole tail at ±√2·Vov; the vref-side
+    devices, diodes and tails (gated by internal or bias nets) do not count."""
+    sizing = _cmfb_sizing(_DDA)
+    sizing["m1_cmfb"] = _sz("m1_cmfb", 0.05)     # vref side: not a sense device
+    assert cmfb_sense_range(_fd_view(_DDA), sizing) == pytest.approx(
+        math.sqrt(2) * 0.2)
+
+
+def test_dda_sense_range_caps_the_swing_around_mid_rail():
+    """5 V supply, ±0.283 V range: the outputs are CM-regulated over
+    2.217-2.783 V, far inside the second stage's Vdsat limits."""
+    rng = math.sqrt(2) * 0.2
+    hi, lo = output_swing_headroom(_fd_view(_DDA), _cmfb_sizing(_DDA),
+                                   _BodyModel(), _spec())
+    assert hi == pytest.approx(2.5 - rng) and lo == pytest.approx(2.5 - rng)
+
+
+def test_wide_dda_sense_range_leaves_the_stage_limits():
+    hi, lo = output_swing_headroom(_fd_view(_DDA), _cmfb_sizing(_DDA, 2.0),
+                                   _BodyModel(), _spec())
+    assert (hi, lo) == pytest.approx((0.15, 0.10))
+
+
+def test_resistive_sense_cmfb_does_not_limit_the_swing():
+    """Its pair senses the resistor-averaged CM, never an output directly."""
+    view, sizing = _fd_view(_RS), _cmfb_sizing(_RS)
+    assert cmfb_sense_range(view, sizing) is None
+    assert output_swing_headroom(view, sizing, _BodyModel(), _spec()) == \
+        pytest.approx((0.15, 0.10))
+
+
+_DDA_EDGE = math.sqrt(2) * 0.2          # 2.5 ± 0.283 V on a 5 V supply
+
+
+@pytest.mark.parametrize("spec_kw,feasible", [
+    (dict(output_swing_max_v=4.5), False),
+    (dict(output_swing_min_v=0.5), False),
+    (dict(output_swing_max_v=2.5 + _DDA_EDGE + _CMFB_SENSE_SWING_TOL_V - 0.01,
+          output_swing_min_v=2.5 - _DDA_EDGE - _CMFB_SENSE_SWING_TOL_V + 0.01),
+     True),
+    (dict(output_swing_max_v=2.6, output_swing_min_v=2.4), True),
+    (dict(), True),
+])
+def test_cmfb_sense_swing_gate(spec_kw, feasible):
+    warnings, ok = check_cmfb_sense_swing(_fd_view(_DDA), _cmfb_sizing(_DDA),
+                                          _spec(**spec_kw))
+    assert ok is feasible
+    assert bool(warnings) is not feasible
+    if warnings:
+        assert "difference-difference CMFB" in warnings[0]
+
+
+def test_cmfb_sense_swing_gate_passes_resistive_sense():
+    assert check_cmfb_sense_swing(
+        _fd_view(_RS), _cmfb_sizing(_RS),
+        _spec(output_swing_max_v=4.9, output_swing_min_v=0.1)) == ([], True)
 
 
 def test_evaluate_metrics_reads_the_headroom_off_each_rail():

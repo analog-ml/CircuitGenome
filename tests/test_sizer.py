@@ -216,6 +216,8 @@ def test_unity_gain_bw():
     expected = gm1_val / (2 * math.pi * cc_f)
     assert gbw == pytest.approx(expected, rel=1e-6)
     assert gbw > 1e6  # > 1 MHz for these dimensions
+    # A follower behind the Miller stage scales it by its gain (issue #274).
+    assert unity_gain_bw(gm1_val, cc_f, gain=0.88) == pytest.approx(0.88 * gbw)
 
 
 def test_phase_margin_formula():
@@ -433,12 +435,16 @@ def test_size_two_stage_all_specs(two_stage_fbr):
     """
     parsed, sr_result, fbr_result, topology = two_stage_fbr
     tech = _tech()
+    # PM 50°, not 60°: with the second stage at its gm ceiling and Cc at the
+    # slew bound, the bare Miller cap's right-half-plane zero holds the full
+    # model under 58° (SPICE: 59.1° at the old sizing), and the integer W grid
+    # that meets GBW overshoots gm1 by ~15 %, which costs ~5° more (#274).
     spec = SizingSpec(
         vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
         second_stage_current_ratio=2.5,
         gain_min_db=80,
         gbw_min_hz=2.5e6,
-        phase_margin_min_deg=60,
+        phase_margin_min_deg=50,
         slew_rate_min_vps=3.5e6,
         power_max_w=1e-3,
         output_swing_max_v=4.6,
@@ -660,12 +666,13 @@ def test_fd_specs_met(two_stage_fd_fbr):
     ``test_sizer_meets_slew_through_every_stage``)."""
     parsed, sr_result, fbr_result, topology = two_stage_fd_fbr
     tech = _tech()
+    # PM 50°, not 60°: see test_size_two_stage_all_specs (issue #274).
     spec = SizingSpec(
         vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12,
         second_stage_current_ratio=2.5,
         gain_min_db=80,
         gbw_min_hz=2.5e6,
-        phase_margin_min_deg=60,
+        phase_margin_min_deg=50,
         slew_rate_min_vps=3.5e6,
     )
     result = size_circuit(parsed, sr_result, fbr_result, topology, tech, spec)
@@ -1601,3 +1608,51 @@ def test_ptm45_example_three_stage_se_met(three_stage_rnmc_se_fbr):
 def test_ptm45_example_three_stage_fd_met(three_stage_rnmc_fd_fbr):
     _assert_example_ptm45_met(three_stage_rnmc_fd_fbr, "three_stage_fd_specs")
 
+
+
+def test_fd_cmfb_couples_mismatched_compensation_halves():
+    """Issue #274: an FD two-stage with a bare Miller cap on one half and an
+    indirect branch on the other measures ~65.7° on GF180 -- between its
+    halves' independent average (~72°) and the worse half (~51°), because the
+    CMFB feeds the outputs' common mode back into both first-stage nodes.
+    The chain reads that loop off the CMFB devices."""
+    from circuitgenome.sizer.gmid import evaluate as ev
+    from circuitgenome.sizer.physics import equations as eq
+    captured = {}
+    orig = ev.evaluate_metrics
+
+    def capture(chain, spec):
+        captured["chain"] = chain
+        return orig(chain, spec)
+    variants = {"input_pair": "differential_pair_pmos",
+                "load": "current_source_load_nmos",
+                "tail_current": "current_mirror_tail_pmos",
+                "cmfb": "resistive_sense_cmfb_nmos_mirror_inverting",
+                "comp_p": "indirect_compensation", "comp_n": "miller_cap",
+                "second_stage_p": "common_source_nmos",
+                "second_stage_n": "common_source_nmos"}
+    parsed, sr_result, fbr_result, topology = _fbr(
+        "two_stage_opamp_fully_differential", variants)
+    spec = SizingSpec(**{**_GF180_SPEC, "phase_margin_min_deg": 55})
+    ev.evaluate_metrics = capture
+    try:
+        result = size_circuit(parsed, sr_result, fbr_result, topology,
+                              load_tech("gf180mcu"), spec)
+    finally:
+        ev.evaluate_metrics = orig
+    chain = captured["chain"]
+    gm_c, pole_hz = chain.cmfb_coupling
+    gm1 = chain.k_fs * chain.stages[0].gm
+    # Negative feedback (into the inverting first stage), comparable to gm1,
+    # its pole the sense node's, far above the crossover.
+    assert 0.3 * gm1 < gm_c < 3.0 * gm1
+    assert pole_hz > 5 * result.metrics["gbw_hz"]
+    pm = result.metrics["phase_margin_deg"]
+    uncoupled = eq.two_stage_loop(
+        gm1, chain.stages[1].gm, chain.cc_pf * 1e-12, spec.cl,
+        c1_f=chain.node_caps_f[0], c2_f=chain.node_caps_f[1],
+        g1=1 / chain.stages[0].rout, g2=1 / chain.stages[1].rout,
+        r_ohm=tuple(eq.compensation_resistor_ohm(chain.cc_pf * 1e-12, spec.cl,
+                                                 chain.stages[1].gm) if r1 else 0.0
+                    for r1, _r2 in chain.comp_resistors))[1]
+    assert pm < uncoupled - 3

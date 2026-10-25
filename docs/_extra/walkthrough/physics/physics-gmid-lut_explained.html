@@ -224,6 +224,8 @@
 
   <p>Each cell stores <strong>five measured numbers</strong> (the fields): <code>id_w</code> (current per µm of width), <code>gm_gds</code> (intrinsic gain), <code>ft</code> (transition frequency), <code>vdsat</code> (saturation overdrive), and <code>vgs</code> (gate voltage). Each field is a 2-D array shaped <code>(n_L, n_gmid)</code> — one printed sheet per quantity — and there are two full sets, one for <code>nmos</code> and one for <code>pmos</code>.</p>
 
+  <p>All five are measured at a single bias point: <code>Vds = Vdd/2</code> with the bulk tied to the source. Two optional <strong>correction tables</strong> stack more sheets of the same grid along a bias axis, for devices that sit far from it (issue #273): <code>gds_scale</code> over <code>vds_axis</code> (gds at that Vds divided by gds at Vdd/2, compared at equal current density, so exactly 1 at the reference) and <code>gmb_gm</code> over <code>vsb_axis</code> (the body transconductance ratio at that reverse body bias). An older <code>.npz</code> without them reads as <code>gds_scale = 1</code> and <code>gmb_gm = 0</code>.</p>
+
   <figure class="fig">
     <svg viewBox="0 0 540 250" role="img" aria-label="The vdsat field laid out on the gm/Id by L grid">
       <text x="285" y="20" text-anchor="middle" font-size="12" fill="var(--fig-muted)">gm/Id (1/V) →</text>
@@ -477,6 +479,8 @@ right side (g=15):  0.12·0.5 + 0.15·0.5 = 0.135</code></pre>
       <tr><td><code>vgs</code></td><td>gate-source voltage magnitude (V)</td><td><code>vgs</code></td></tr>
     </tbody>
   </table>
+
+  <p>The two correction reads, <code>gds_scale(dtype, gm_id, l_um, vds)</code> and <code>gmb_gm(dtype, gm_id, l_um, vsb)</code>, add one step: the same bilinear blend on every bias sheet at once, then a 1-D interpolation along the bias axis &mdash; in log space for <code>gds_scale</code>, which climbs by decades toward the saturation knee.</p>
 </section>
 
 <!-- ================= PART 6 ================= -->

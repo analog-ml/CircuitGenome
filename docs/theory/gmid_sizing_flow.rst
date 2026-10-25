@@ -78,6 +78,7 @@ Flow at a glance
       │             a. geometry (LUT→W/L, sym, mirror)   (geometry.py)  ◄── core
       │             b. DC bias check + tail repair       (bias.py)
       │                RNMC only: inner-loop re-plan, re-size a–b  (rnmc_refine.py)
+      │                two-stage: full-model GBW/PM re-plan, re-size a–b  (two_stage_refine.py)
       │             c. non-load resistors                (resistors.py) ─► MetricModifiers
       └─ Phase 5  Evaluate         (evaluate.py)  ─► metrics/margins
                     cascode-aware rout, analytical gain/GBW/PM
@@ -488,6 +489,15 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    that breaks the stage-interface bias is undone).  See
    :ref:`the RNMC section of the analytical flow <rnmc-inner-pair>`.
 
+   **Two-stage templates** get the same treatment against the full model the
+   metrics read (issue #274):
+   :func:`~circuitgenome.sizer.gmid.two_stage_refine.refine_two_stage_plan`
+   raises ``gm1`` to the least that meets GBW at the real 0 dB crossing, then
+   ``gm2`` to the least that meets the phase margin (the closed form misses
+   the bare Miller cap's right-half-plane zero and the first-stage node's
+   gate capacitance, which it reads at the device's inversion level), and
+   Phases 4a–4b re-run; a re-size that breaks a sound bias is undone.
+
    On a ``*_buffered_*`` template one more check joins the verdict after the
    resistor phase: the source-follower output stage shifts one edge of the
    output swing a whole ``|Vgs|`` away from its rail, and
@@ -497,6 +507,14 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    0.2 V.  On gf180 at 3.3 V a PMOS follower cannot pull the output below
    ≈ 0.85 V and an NMOS follower cannot lift it above ≈ 2.2 V, so a
    0.3–3.0 V swing spec rules out every buffered candidate before SPICE.
+   A fully-differential design with a difference-difference CMFB gets the
+   same kind of check:
+   :func:`~circuitgenome.sizer.physics.stage_chain.check_cmfb_sense_swing`
+   rejects it (warning *"…difference-difference CMFB holds the output common
+   mode only within ±…"*) when ``Vocm ± √2·Vdsat`` of its sense pairs misses
+   the swing spec by more than 0.15 V.  On gf180 that range is
+   ≈ 1.41–1.89 V, so DDA candidates are ruled out against any swing spec wider
+   than ≈ 1.26–2.04 V (issue #272).
 
 Phase 4c — Size: non-load resistors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -538,6 +556,16 @@ own ``ro`` by ``1 + gm·R`` — the other half of the effect ``gm1_factor``
 derates, and one the modifiers cannot carry because it lands *inside* the
 first stage's parallel combination rather than on top of it.
 
+The first stage's walk reads each device at its **own** bias
+rather than at the lookup table's single sweep point (``Vds = Vdd/2``,
+``Vsb = 0``): :func:`~circuitgenome.sizer.physics.node_levels.estimate_node_levels`
+carries the rails and the input common mode through every device's planned
+``|Vgs|`` and every sized resistor's ``I·R`` to a DC level per net, and the walk
+reads ``gds`` at each device's ``Vds`` and adds ``gmb`` to a cascode's boost when
+its source rides above its bulk.  The device under a cascode sits ~0.1 V above
+its saturation knee, with 4-10x the table's ``gds``; at the single sweep point the
+cascode gain ran 8-20 dB above ngspice (issue #273).
+
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.evaluate import evaluate_circuit
@@ -547,10 +575,10 @@ first stage's parallel combination rather than on top of it.
 
 .. code-block:: text
 
-   {'gain_db': 60.55, 'gbw_hz': 15957948.23, 'phase_margin_deg': 77.44, 'slew_rate_vps': 30000000.0,
+   {'gain_db': 59.63, 'gbw_hz': 15957948.23, 'phase_margin_deg': 77.44, 'slew_rate_vps': 30000000.0,
     'power_w': 0.0, 'cmrr_db': -8.2, 'psrr_db': 49.47}
 
-Gain (60.6 dB) and phase margin (77.4°) clear the spec's 55 dB / 60° targets.  The
+Gain (59.6 dB) and phase margin (77.4°) clear the spec's 55 dB / 60° targets.  The
 poor ``cmrr_db`` traces straight back to Phase 4c: the resistor tail's finite
 conductance (``gd_tail_override``) is a leaky current source, which the CMRR term
 penalises heavily — a concrete example of a Phase-4c modifier shaping a Phase-5

@@ -12,11 +12,15 @@ sizer, as five phases with explicit hand-offs:
    → :class:`~.plan.SizingPlan`.
 4. **Size** — deterministic geometry from the LUT (:mod:`.geometry`), the DC
    operating-point check and tail repair (:mod:`.bias`), an RNMC inner-loop
-   re-plan on the sized circuit (:mod:`.rnmc_refine`), the stage-interface
+   re-plan on the sized circuit (:mod:`.rnmc_refine`), the two-stage
+   phase-margin re-plan (:mod:`.two_stage_refine`), the stage-interface
    window check and repair (:mod:`.stage_interface`), the non-load
    resistor network (:mod:`.resistors`), the constructed-bias level
-   tuning (:mod:`.bias_levels`), and the follower output stage's swing check
-   (:func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing`).
+   tuning (:mod:`.bias_levels`), and the swing checks the sizing cannot fix:
+   a follower output stage's level shift
+   (:func:`~circuitgenome.sizer.physics.stage_chain.check_follower_swing`) and
+   a DDA CMFB's sense range
+   (:func:`~circuitgenome.sizer.physics.stage_chain.check_cmfb_sense_swing`).
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
 
 The model-independent topology math is reused from the
@@ -37,7 +41,7 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 from ..physics import equations as eq
 from ..physics.circuit_view import adoption_warnings
 from ..physics.preprocess import size_compensation_caps
-from ..physics.stage_chain import check_follower_swing
+from ..physics.stage_chain import check_cmfb_sense_swing, check_follower_swing
 from ..models import SizingResult, SizingSpec, TechParams, TransistorSizing
 from .analyze import analyze_circuit
 from .bias import check_dc_operating_point
@@ -49,9 +53,13 @@ from .plan import assign_currents, plan_devices
 from .resistors import size_resistors
 from .rnmc_refine import refine_rnmc_plan
 from .stage_interface import check_stage_interface
+from .two_stage_refine import refine_two_stage_plan
 
 #: Re-plan/re-size rounds for an RNMC inner loop (see :mod:`.rnmc_refine`).
 _RNMC_PASSES = 2
+#: Re-plan/re-size rounds for a two-stage GBW / phase margin (see
+#: :mod:`.two_stage_refine`).
+_TWO_STAGE_PASSES = 2
 
 
 def size_gmid(
@@ -104,6 +112,17 @@ def size_gmid(
             hold_gm2 = True
             continue
         plan, (sizing, size_warnings, bias_feasible) = refined, resized
+    # Two-stage: raise gm1/gm2 to the full-model GBW and phase margin's need
+    # (a second pass settles what the first moved), unless a re-size breaks a
+    # sound bias (the second stage's gate sets the first-stage output level).
+    for _ in range(_TWO_STAGE_PASSES):
+        refined, changed = refine_two_stage_plan(view, currents, plan, sizing, spec)
+        if not changed:
+            break
+        resized = _size(refined)
+        if bias_feasible and not resized[2]:
+            break
+        plan, (sizing, size_warnings, bias_feasible) = refined, resized
     extra_r, modifiers = size_resistors(
         view.blocks, view.slot_resistors, currents.ids_map, sizing,
         plan.model, spec, tech, intent, cc_pf=plan.cc_pf, cc2_pf=plan.cc2_pf,
@@ -113,7 +132,8 @@ def size_gmid(
     extra_r = {**extra_r, **level_r}
     fol_warnings, fol_feasible = check_follower_swing(
         view, sizing, plan.model, spec)
-    bias_feasible = bias_feasible and fol_feasible
+    cm_warnings, cm_feasible = check_cmfb_sense_swing(view, sizing, spec)
+    bias_feasible = bias_feasible and fol_feasible and cm_feasible
 
     # Phase 5 — Evaluate: analytical (ngspice-free) metrics from the sizing.
     metrics, margins, eval_notes = evaluate_circuit(
@@ -131,10 +151,10 @@ def size_gmid(
         bias_feasible=bias_feasible,
         open_loop_gain_measurable=eq.open_loop_gain_measurable(
             metrics.get("gain_db")),
-        # The follower swing verdict leads: it is decisive on its own, and the
+        # The swing verdicts lead: each is decisive on its own, and the
         # designer reports a bias rejection by the first warning.
-        warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
-                  + eval_notes
+        warnings=(fol_warnings + cm_warnings + view.warnings + plan.warnings
+                  + size_warnings + eval_notes
                   + adoption_warnings(view.adopted)),
     )
 
