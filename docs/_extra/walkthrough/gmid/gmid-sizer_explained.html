@@ -533,7 +533,7 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
 
   <p>Notice the <code>return</code> is a <strong>gathering</strong> step. It reaches back into every crate that came down the line — <code>plan.cc_pf</code> / <code>plan.cc2_pf</code> (expanded onto the netlist's capacitor refs by recognised <code>comp*</code> / <code>comp2*</code> slot), <code>currents.load_resistors</code> — and the running <code>bias_feasible</code> flag. The per-device intents in <code>plan.tintents</code> stay on the plan: they drove the geometry but are not part of the result. Because each hand-off was kept as a named object, the final assembly is just picking the right field off each one:</p>
 
-  <p>The <code>open_loop_gain_measurable</code> flag also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155).</p>
+  <p>The <code>open_loop_gain_measurable</code> flag also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155; ceiling 180&nbsp;dB since #287).</p>
 
   <figure class="fig">
     <svg viewBox="0 0 640 230" role="img" aria-label="Assembling the final SizingResult from every upstream crate">

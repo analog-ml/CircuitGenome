@@ -177,8 +177,12 @@ def test_open_loop_gain_measurable_flag():
     # Below the ceiling: a realistic two-stage gain is measurable.
     assert open_loop_gain_measurable(90.0) is True
     assert open_loop_gain_measurable(OPEN_LOOP_GAIN_CEILING_DB) is True
-    # Above the ceiling: an over-estimated three-stage cascade rails (#155).
-    assert open_loop_gain_measurable(178.8) is False
+    # GF180 three-stage designs at 150-165 dB: the bench measures them within
+    # a few dB of the prediction, so they are not flagged (issue #287).
+    assert open_loop_gain_measurable(164.7) is True
+    # Above the ceiling the dominant pole of a 1 MHz-GBW design falls below
+    # the bench's 1 mHz first sweep point, which then no longer reads DC gain.
+    assert open_loop_gain_measurable(185.0) is False
     # No computed gain (single-stage / gated) → no evidence of railing.
     assert open_loop_gain_measurable(None) is True
 

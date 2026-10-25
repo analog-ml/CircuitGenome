@@ -193,15 +193,15 @@ def open_loop_gain_db(stage_gains: list[float]) -> float:
     return 20.0 * math.log10(abs(product)) if product != 0.0 else -math.inf
 
 
-#: Empirical open-loop DC-gain ceiling for the ngspice open-loop AC bench (dB).
-#: The analytical ``gain_db`` is an un-derated cascade product; above this ceiling
-#: the open-loop DC operating point cannot hold the output at mid-rail without
-#: feedback, so the measured open-loop AC gain rails to ~0 dB even when the
-#: per-device DC bias is sound.  Calibrated to observed GF180 behaviour (#155):
-#: measurable two-stage designs top out ~133 dB, whereas three-stage cascades at
-#: ≥175 dB rail on every PVT corner.  150 dB sits safely between the two bands to
-#: minimise false positives.
-OPEN_LOOP_GAIN_CEILING_DB = 150.0
+#: Open-loop DC-gain ceiling for the ngspice open-loop AC bench (dB).
+#: The bench reads the DC gain at its first sweep point, 1 mHz, so the reading
+#: is the DC gain only while the dominant pole ``GBW/A0`` stays above 1 mHz:
+#: up to A0 = 1e9 (180 dB) for a 1 MHz GBW, the lowest GBW the example specs
+#: ask for.  (Its ``Lfb``/``Cfb`` DC loop stays open to ~210 dB.)  On GF180
+#: the bench measures three-stage designs at 145–165 dB within a few dB of
+#: the prediction, and W/L-scaled probes read up to 196 dB without railing
+#: (#287).  The 150 dB of #155 flagged all of them.
+OPEN_LOOP_GAIN_CEILING_DB = 180.0
 
 
 def open_loop_gain_measurable(
@@ -209,17 +209,18 @@ def open_loop_gain_measurable(
 ) -> bool:
     """Whether the analytical open-loop gain is measurable on an open-loop bench.
 
-    ``open_loop_gain_db`` returns an un-derated single-point upper bound; above
-    ``ceiling_db`` the open-loop DC operating point cannot be held at mid-rail,
-    so ngspice's open-loop AC gain rails to ~0 dB even when the DC bias is sound.
-    This is an **advisory** heuristic, not a hard prune — the analytical
-    ``gain_db`` is still reported and SPICE remains the authority.  See
+    Above ``ceiling_db`` the open-loop AC bench's first (1 mHz) point no
+    longer sits below the dominant pole, so the measured gain falls short of
+    the DC gain the model predicts.  This is an **advisory** heuristic, not a
+    hard prune — the analytical ``gain_db`` is still reported and SPICE
+    remains the authority.  See
     :data:`OPEN_LOOP_GAIN_CEILING_DB`.
 
     :param gain_db: Analytical open-loop DC gain in dB, or ``None`` when no gain
         was computed (single-stage / gated).  ``None`` → measurable (no evidence
         of railing).
-    :returns: ``True`` when measurable, ``False`` when predicted to rail.
+    :returns: ``True`` when measurable, ``False`` when the bench cannot read
+        the predicted DC gain.
     """
     return gain_db is None or gain_db <= ceiling_db
 

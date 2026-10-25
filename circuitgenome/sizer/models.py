@@ -278,8 +278,9 @@ class SizingResult:
     :param open_loop_gain_measurable: ``False`` when the predicted ``gain_db``
         exceeds the open-loop-bench ceiling
         (:data:`~circuitgenome.sizer.physics.equations.OPEN_LOOP_GAIN_CEILING_DB`)
-        — the design rails to ~0 dB in an open-loop AC measurement even though
-        the DC bias is sound, so the reported gain/GBW/PM are optimistic. This
+        — the open-loop AC bench cannot read a DC gain that high (its first
+        sweep point no longer sits below the dominant pole), so the measured
+        gain/GBW/PM are not comparable with the prediction. This
         is an **advisory** signal (parallel to ``bias_feasible``): the metrics
         are still reported and SPICE remains the authority — consumers should
         deprioritise, not prune, on it.
