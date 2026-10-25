@@ -860,15 +860,36 @@ def _sweep(G, C, b, out, poles, w_t):
 
 def _crossings(G, C, b, out, poles, w_t) -> list[tuple[float, float]]:
     """``(ω, PM°)`` at every 0 dB crossing of an open loop (:func:`_sweep`),
-    in order, each interpolated linearly in dB."""
+    in order.
+
+    Each is bracketed on the sweep and refined by false position in
+    ``(log ω, dB)``, so it does not depend on the sweep's grid: a pole far
+    past everything else (a node with no capacitance, :func:`_poles`)
+    stretches the sweep and, read off the grid alone, moved the crossing by
+    ~1 ppm.  The phase is read there too, unwrapped from the bracket's start.
+    """
     import numpy as np
+
+    def gain(lw):
+        return _open_loop_gain(G, C, b, out, np.array([10.0 ** lw]))[0]
 
     w, mag_db, phase = _sweep(G, C, b, out, poles, w_t)
     found = []
     for i in np.nonzero(np.diff(np.sign(mag_db)))[0]:
-        t = mag_db[i] / (mag_db[i] - mag_db[i + 1])
-        lw = math.log10(w[i]) + t * (math.log10(w[i + 1]) - math.log10(w[i]))
-        found.append((10.0 ** lw, float(180.0 + phase[i] + t * (phase[i + 1] - phase[i]))))
+        x0, x1 = math.log10(w[i]), math.log10(w[i + 1])
+        d0, d1 = mag_db[i], mag_db[i + 1]
+        for _ in range(3):
+            x = x0 + d0 / (d0 - d1) * (x1 - x0)
+            d = 20.0 * math.log10(abs(gain(x)))
+            if d == 0.0:
+                break
+            if (d > 0.0) == (d0 > 0.0):
+                x0, d0 = x, d
+            else:
+                x1, d1 = x, d
+        lw = x if d == 0.0 else x0 + d0 / (d0 - d1) * (x1 - x0)
+        turn = np.angle(gain(lw) / gain(math.log10(w[i])), deg=True)
+        found.append((10.0 ** lw, float(180.0 + phase[i] + turn)))
     return found
 
 
