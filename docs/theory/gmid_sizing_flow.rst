@@ -566,6 +566,21 @@ its source rides above its bulk.  The device under a cascode sits ~0.1 V above
 its saturation knee, with 4-10x the table's ``gds``; at the single sweep point the
 cascode gain ran 8-20 dB above ngspice (issue #273).
 
+The same levels say how much current a mirror tail really delivers.  It copies
+its diode reference only at the reference's ``Vds``; under a pair whose gates
+sit at the input common mode it has ``Vdd − Vcm − |Vgs|`` instead -- 74 mV on a
+PTM45 PMOS tail, about 1.3 ``Vdsat`` in weak inversion, where it sources ~10 %
+short.  :func:`~circuitgenome.sizer.physics.stage_chain._tail_delivery` reads
+the fraction off the table's ``id_scale`` (drain current against ``Vds`` at a
+fixed gate voltage) at both ``Vds``, re-estimating the tail's ``Vds`` as the
+pair's ``|Vgs|`` shrinks with its current.  A two-stage second stage's
+mirror current source is read the same way
+(:func:`~circuitgenome.sizer.physics.stage_chain._output_source_delivery`),
+with the output at the input common mode where the benches hold it.  GBW,
+phase margin and slew see the short currents; DC gain does not (``gm·ro`` holds as the current falls),
+nor does CMRR.  Unread, GBW ran 17-22 % above ngspice on the PTM45 and sky130
+example two-stage designs (issue #278).
+
 .. code-block:: python
 
    from circuitgenome.sizer.gmid.evaluate import evaluate_circuit

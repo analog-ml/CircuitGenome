@@ -88,6 +88,8 @@ def load_tech(path: Path | str | None = None) -> TechParams:
             phi=float(d.get("phi", 0.7)),
             cox=float(d["cox"]) if "cox" in d else None,
             cdb=float(d["cdb"]) if "cdb" in d else None,
+            cgdo=float(d["cgdo"]) if "cgdo" in d else None,
+            cgso=float(d["cgso"]) if "cgso" in d else None,
         )
 
     def _grid(d: dict, min_key: str = "min", max_key: str = "max") -> GridSpec:

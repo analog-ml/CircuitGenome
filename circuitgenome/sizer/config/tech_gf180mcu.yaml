@@ -35,16 +35,23 @@ gmid_lut: models/gf180mcu_gmid.npz   # gm/Id LUT (drives sizing)
 # cdb (F/µm of width) is ngspice's drain-bulk junction capacitance (capbd) of
 # a saturated nmos_3p3/pmos_3p3 at |Vdb| = 1.65 V (Vdd/2): it scales with W
 # alone (identical at W = 10/100 µm, L = 0.56/1.12 µm) and moves only ±13 %
-# over |Vdb| = 0.8-2.5 V.  Only the RNMC phase-margin model reads it (#266).
+# over |Vdb| = 0.8-2.5 V (#266).  cgdo/cgso are the gate-drain/-source
+# overlaps; tools/extract_tech.py --caps reads all three (gm/Id 20, issue
+# #278).  The full-model GBW/PM put a second stage's cgdo beside the Miller
+# cap, cgso with each gate's load and cdb on each node's drains.
 nmos:
   gamma: 0.3101          # √V   body-effect coefficient γ (issue #106)
   phi: 0.3650            # V    surface potential 2φF
   cox: 4.316e-15         # F/µm² (toxe = 8.0 nm)
+  cgdo: 2.658e-16        # F/µm  gate-drain overlap
+  cgso: 3.295e-16        # F/µm  gate-source overlap
   cdb: 4.13e-16          # F/µm  drain junction capacitance per µm of width
 pmos:
   gamma: 0.5220          # √V   body-effect coefficient γ (issue #106)
   phi: 0.4900            # V    surface potential 2φF
   cox: 4.371e-15         # F/µm² (toxe = 7.9 nm)
+  cgdo: 1.393e-16        # F/µm  gate-drain overlap
+  cgso: 1.639e-16        # F/µm  gate-source overlap
   cdb: 3.64e-16          # F/µm  drain junction capacitance per µm of width
 
 width:

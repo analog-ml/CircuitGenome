@@ -1732,3 +1732,35 @@ def test_wide_current_source_carries_its_planned_current_in_spice():
     op = read_op_operating_point(text, result, tech, spec)
     for ref, s in wide.items():
         assert abs(op[ref]["id"]) == pytest.approx(s.ids_a, rel=0.1)
+
+
+@pytest.mark.spice
+@pytest.mark.skipif(not ngspice_available(), reason="ngspice not on PATH")
+@pytest.mark.parametrize("tech_name,pm_tol", [("ptm45", 2.0), ("sky130", 4.0)])
+def test_two_stage_gbw_tracks_spice_at_a_short_tail(tech_name, pm_tol):
+    """Issue #278: the example two-stage designs' tail sits ~1.3 Vdsat from
+    its rail and sources 10-13 % short, and on PTM45 the 100 µm second
+    stage's overlap Cgd (33 fF) sits beside a 0.5 pF Cc.  Unmodelled, GBW
+    read 22 % (PTM45) and 17 % (sky130) over ngspice; now within a few %.
+
+    sky130's phase margin reads ~3.5° high: its second-stage mirror copies
+    0.94 of its width ratio where the table, characterised at one width,
+    says 0.98 (the PDK's width-binned models), so gm2 runs ~5 % short."""
+    from circuitgenome.sizer import load_spec
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "two_stage_opamp_single_ended")
+    want = {"input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+            "tail_current": "current_mirror_tail_pmos", "second_stage": "common_source_nmos",
+            "compensation": "miller_cap"}
+    circ = next(c for c in enumerate_circuits(topo, mods)
+                if all(c.variant_map.get(k).name == v for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech(tech_name)
+    spec = load_spec(f"examples/two_stage_se_specs/spec_{tech_name}.yaml")
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+    sim = simulate_metrics(text, result, tech, spec)
+    assert result.metrics["gbw_hz"] == pytest.approx(sim["gbw_hz"], rel=0.06)
+    assert result.metrics["phase_margin_deg"] == pytest.approx(sim["phase_margin_deg"],
+                                                               abs=pm_tol)

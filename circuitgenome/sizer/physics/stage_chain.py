@@ -193,13 +193,32 @@ class StageChain:
     :param node_caps_f: capacitance in F on each gain stage's output node,
         input pair first -- two entries on a two-stage chain, three on a
         three-stage one.  The inner entries are the gates of every device
-        gated there; the second-stage output's is mostly the third stage's
-        wide input gate, comparable to ``Cc2``.  The last is the last gain
-        stage's output behind an output buffer -- the follower's gate net,
-        its gates (the follower's own aside: ``output_buffer`` models it) plus
-        the drain junctions on it, nearly all that node carries (issue #266)
-        -- and ``0.0`` without one, where ``CL`` dwarfs it.  The full-model
-        GBW and phase margin read it.
+        gated there, each with its gate-source overlap, plus the drain
+        junctions on the node (issue #278); the second-stage output's is
+        mostly the third stage's wide input gate, comparable to ``Cc2``.  The
+        last is the last gain stage's output -- behind an output buffer the
+        follower's gate net, its gates (the follower's own aside:
+        ``output_buffer`` models it) plus the drain junctions on it, nearly
+        all that node carries (issue #266); without one the drains and gates
+        on the output beside ``CL`` (a 100 µm PTM45 second stage's 44 fF
+        junction, issue #278).  RNMC keeps the model its compensation sizing
+        was validated against: Cox gates without overlap, no drains on the
+        inner nodes, and ``0.0`` on an unbuffered output.  The full-model GBW
+        and phase margin read it.
+    :param tail_delivery: fraction of its planned current the first stage's
+        tail delivers at its own Vds (:func:`_tail_delivery`, issue #278);
+        ``1.0`` unless built ``bias_aware``.  The first stage's ``ids``
+        already carries it; GBW and phase margin scale gm1 by it.  DC gain
+        and CMRR do not: ``gm·ro`` holds as the current falls, and CMRR is
+        calibrated against ngspice at the planned current (issue #273).
+    :param output_delivery: the same for a two-stage chain's second stage,
+        whose mirror current source sets its current with the output at Vcm
+        (:func:`_output_source_delivery`); ``1.0`` on other chains or unless
+        built ``bias_aware``.  The second stage's ``ids`` carries it, GBW and
+        phase margin scale gm2 by it.
+    :param cgd_f: gate-drain overlap capacitance in F of a two-stage chain's
+        second-stage signal device, straight across ``Cc``
+        (:func:`~.equations.two_stage_loop`); ``0.0`` on other chains.
     :param second_stage_mirror_pole_hz: current-mirror node pole of a
         non-inverting second stage (nested Miller) in Hz, ``None`` when it
         has no mirror.
@@ -239,6 +258,9 @@ class StageChain:
     gain_measurable: bool = True
     compensation_scheme: str | None = None
     node_caps_f: tuple[float, ...] = ()
+    tail_delivery: float = 1.0
+    output_delivery: float = 1.0
+    cgd_f: float = 0.0
     second_stage_mirror_pole_hz: float | None = None
     third_stage_mirror_pole_hz: float | None = None
     output_buffer: tuple[float, float, float] | None = None
@@ -799,6 +821,106 @@ def check_cmfb_sense_swing(
             f"resistive-sense CMFB."], False
 
 
+def _mirror_reference_scale(
+    out: Device | None,
+    mosfets: list[Device],
+    sizing: dict[str, TransistorSizing],
+    model: DeviceModel,
+) -> float | None:
+    """:meth:`~.device_model.DeviceModel.id_vds_scale` of mirror output
+    ``out`` at its diode reference's Vds (its ``|Vgs|``) -- the current the
+    output copies is this over the output's own read -- or ``None`` without a
+    diode-connected reference of its type on its gate net."""
+    gate = out.terminals.get("g") if out else None
+    ref = next((d for d in mosfets if gate and d.type == out.type
+                and d.terminals.get("g") == gate == d.terminals.get("d")
+                and sizing.get(d.ref)), None)
+    if ref is None:
+        return None
+    s_out = sizing[out.ref]
+    return model.id_vds_scale(out.type, s_out.w_um, s_out.l_um, s_out.ids_a,
+                              abs(sizing[ref.ref].vgs_v))
+
+
+def _output_source_delivery(
+    stage_devs: list[Device],
+    signal: Device | None,
+    mosfets: list[Device],
+    sizing: dict[str, TransistorSizing],
+    model: DeviceModel,
+    spec: SizingSpec,
+) -> float:
+    """Fraction of its planned current an output stage's mirror current
+    source delivers (issue #278).
+
+    In the benches the output sits at the input common mode -- unity feedback
+    single-ended, the CMFB's target fully differential -- so the source has
+    ``|rail − Vcm|`` across it against its diode reference's ``|Vgs|``, and
+    the signal device carries what it sources: 7 % short on the sky130 example
+    two-stage, 5 % over on GF180's.  ``1.0`` without such a source.
+    """
+    out_net = signal.terminals.get("d") if signal else None
+    src = next((d for d in stage_devs if d is not signal and out_net
+                and d.terminals.get("d") == out_net and sizing.get(d.ref)
+                and d.terminals.get("s") in RAILS), None)
+    ref_scale = _mirror_reference_scale(src, mosfets, sizing, model)
+    if ref_scale is None:
+        return 1.0
+    s = sizing[src.ref]
+    vds = abs(spec.rail_v(src.terminals["s"]) - spec.vcm)
+    return model.id_vds_scale(src.type, s.w_um, s.l_um, s.ids_a, vds) / ref_scale
+
+
+def _tail_delivery(
+    tail_devs: list[Device],
+    tail_current_net: str | None,
+    ip_devs: list[Device],
+    mosfets: list[Device],
+    resistors: list[Device],
+    resistor_ohms: dict[str, float],
+    sizing: dict[str, TransistorSizing],
+    model: DeviceModel,
+    pinned: dict[str, float],
+) -> float:
+    """Fraction of its planned current a mirror tail delivers (issue #278).
+
+    The tail copies its diode reference's current only at the reference's
+    Vds.  Under a pair whose gates sit at Vcm it has ``Vdd − Vcm − |Vgs|``
+    instead -- 74 mV on a PTM45 PMOS tail, ~1.3 Vdsat in weak inversion --
+    and sources ~10 % short, which the pair's gm1, and with it GBW, follows.
+    The ratio of :meth:`~.device_model.DeviceModel.id_vds_scale` at the two
+    Vds sets the fraction.  The pair's ``|Vgs|`` shrinks with its current and
+    hands some headroom back, so the tail's Vds is re-estimated
+    (:func:`~.node_levels.estimate_node_levels`) at the reduced current until
+    the two agree.
+
+    ``1.0`` for a tail the read does not cover: none, one without a
+    diode-connected reference on its gate net (a cascode tail), or one whose
+    drain level the estimate cannot reach.
+    """
+    out = next((d for d in tail_devs if d.terminals.get("d") == tail_current_net
+                and sizing.get(d.ref)), None)
+    ref_scale = _mirror_reference_scale(out, mosfets, sizing, model)
+    if ref_scale is None:
+        return 1.0
+    s_out = sizing[out.ref]
+    pair = [d for d in ip_devs if sizing.get(d.ref)]
+    frac = 1.0
+    for _ in range(4):  # converges in 2-3: |Vgs| moves ~n·Ut per e-fold of current
+        trial = dict(sizing)
+        for d in pair:
+            s = sizing[d.ref]
+            ids = s.ids_a * frac
+            trial[d.ref] = replace(s, ids_a=ids, vgs_v=model.vgs(d.type, s.w_um, s.l_um, ids))
+        levels = estimate_node_levels(mosfets, resistors, resistor_ohms, trial, model, pinned)
+        vd, vs = levels.get(out.terminals.get("d")), levels.get(out.terminals.get("s"))
+        if vd is None or vs is None:
+            return 1.0
+        frac = model.id_vds_scale(out.type, s_out.w_um, s_out.l_um, s_out.ids_a,
+                                  abs(vd - vs)) / ref_scale
+    return frac
+
+
 def build_stage_chain(
     view: CircuitView,
     sizing: dict[str, TransistorSizing],
@@ -842,9 +964,13 @@ def build_stage_chain(
     devices at their own bias moved GF180 three-stage gains 1-3.5 dB under
     SPICE.  The CMRR tail walk keeps it too: read at the tail's own Vds, the
     predicted CMRR fell ~17 dB below ngspice's median on GF180, where the
-    single-point read sits on it.  Off by default, so the requirement-side
-    callers (the RNMC re-plan) keep the single-point model and sizing is
-    unchanged.
+    single-point read sits on it.  Bias-aware, the first stage's current is
+    also the tail's delivered share (:func:`_tail_delivery`, issue #278), and
+    a two-stage second stage's its current source's
+    (:func:`_output_source_delivery`), carried as ``tail_delivery`` and
+    ``output_delivery`` for the dynamic metrics.  Off by default,
+    so the requirement-side callers (the RNMC and two-stage re-plans) keep
+    the single-point model and sizing is unchanged.
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
@@ -861,6 +987,12 @@ def build_stage_chain(
                           for r in rs}.values())
         levels = estimate_node_levels(mosfets, resistors, resistor_ohms or {},
                                       sizing, model, pinned)
+        tail_frac = _tail_delivery(slot_transistors.get("tail_current", []),
+                                   _tail_current_net(tail_net, ip_resistors), ip_devs,
+                                   mosfets, resistors, resistor_ohms or {}, sizing,
+                                   model, pinned)
+    else:
+        tail_frac = 1.0
 
     def _gm(d: Device) -> float:
         s = sizing.get(d.ref)
@@ -904,16 +1036,23 @@ def build_stage_chain(
         out1 = (_single_ended_output_net(slot_transistors.get("load", []),
                                          signal_nets, mosfets)
                 or ip_devs[0].terminals.get("d"))
-    # The pair's two drain currents add up to the tail current.
+    # The pair's two drain currents add up to the tail current -- what the
+    # tail really delivers at its own Vds when bias-aware (issue #278).
     stages = [Stage(gm=_gm(ip_devs[0]) if ip_devs else 0.0,
                     rout=_rout(out1, gd_load_r, levels),
-                    ids=sum(_ids(d) for d in ip_devs if is_signal_device(d)))]
+                    ids=tail_frac * sum(_ids(d) for d in ip_devs if is_signal_device(d)))]
 
     # --- Stages 2 and 3: each numbered gain slot's signal device ---
+    # A two-stage second stage carries what its current source delivers with
+    # the output at Vcm, when bias-aware (issue #278).
+    out_frac = 1.0
+    if bias_aware and len(signal_devs) == 1:
+        out_frac = _output_source_delivery(slot_devs[0], signal_devs[0], mosfets,
+                                           sizing, model, spec)
     for sig in signal_devs:
         stages.append(Stage(gm=_gm(sig) if sig is not None else 0.0,
                             rout=_rout(sig.terminals.get("d") if sig else None),
-                            ids=_ids(sig)))
+                            ids=_ids(sig) * out_frac))
 
     # --- Output-stage load conductance (PSRR) ---
     # Multi-stage: the second stage's current-source load, whose gds is the
@@ -978,6 +1117,7 @@ def build_stage_chain(
     follower = next((d for d in _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
                      if is_signal_device(d)), None)
     node_caps: tuple[float, ...] = ()
+    cgd = 0.0
     ss_mirror_pole = ts_mirror_pole = None
     comp_resistors: tuple[tuple[bool, bool], ...] = ()
     if slot_devs:
@@ -988,23 +1128,36 @@ def build_stage_chain(
                        if net and d.ref in sizing and d.terminals.get(terminal) == net
                        and not (terminal == "g" and d is follower))
 
+        rnmc = view.compensation_scheme == RNMC
+
         def gate(d, sd):
             # RNMC keeps the Cox estimate its compensation sizing was
             # validated against (#266-#270); the others read the gate at its
-            # inversion level, which a weak-inversion second stage needs.
-            if view.compensation_scheme == RNMC:
+            # inversion level, which a weak-inversion second stage needs, plus
+            # its source overlap -- more than the intrinsic gate there (#278).
+            if rnmc:
                 return model.cgs(d.type, sd.w_um, sd.l_um)
-            return model.cgg(d.type, sd.w_um, sd.l_um, sd.ids_a)
+            return model.cgg(d.type, sd.w_um, sd.l_um, sd.ids_a) + model.cgso(d.type, sd.w_um)
 
         def cdb(d, sd):
             return model.cdb(d.type, sd.w_um)
+
+        def inner_node(net: str | None) -> float:
+            return cap_on(net, "g", gate) + (0.0 if rnmc else cap_on(net, "d", cdb))
         # An inner node is the next stage's signal gate (a non-inverting
         # stage's signal device drains into its mirror instead).  Behind a
-        # buffer the last gain stage's output is the follower's gate.
+        # buffer the last gain stage's output is the follower's gate; without
+        # one it is the last signal device's drain.
         inner = [d.terminals.get("g") if d else None for d in signal_devs[1:]]
-        last = follower.terminals.get("g") if follower else None
-        node_caps = (cap_on(out1, "g", gate), *(cap_on(n, "g", gate) for n in inner),
+        if follower:
+            last = follower.terminals.get("g")
+        else:
+            last = None if rnmc or signal_devs[-1] is None else signal_devs[-1].terminals.get("d")
+        node_caps = (inner_node(out1), *(inner_node(n) for n in inner),
                      cap_on(last, "g", gate) + cap_on(last, "d", cdb))
+        out_sig = signal_devs[-1]
+        if len(signal_devs) == 1 and out_sig is not None and out_sig.ref in sizing:
+            cgd = model.cgdo(out_sig.type, sizing[out_sig.ref].w_um)
         ss_mirror_pole = _mirror_pole_hz(slot_devs[0], mosfets, model, sizing)
         if len(slot_devs) > 1:
             ts_mirror_pole = _mirror_pole_hz(slot_devs[1], mosfets, model, sizing)
@@ -1037,6 +1190,9 @@ def build_stage_chain(
         swing_headroom=output_swing_headroom(view, sizing, model, spec),
         compensation_scheme=view.compensation_scheme,
         node_caps_f=node_caps,
+        tail_delivery=tail_frac,
+        output_delivery=out_frac,
+        cgd_f=cgd,
         second_stage_mirror_pole_hz=ss_mirror_pole,
         third_stage_mirror_pole_hz=ts_mirror_pole,
         output_buffer=_output_buffer(slot_transistors, model, sizing, spec),

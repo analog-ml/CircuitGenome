@@ -40,14 +40,25 @@ gmid_lut: models/sky130_gmid.npz   # gm/Id LUT (drives sizing)
 # Cgs = (2/3)·W·L·Cox, which places a single-stage OTA's mirror pole (issue
 # #221).  Cross-checked against the LUT's ft-implied Cgg = gm/(2π·ft) —
 # agreement is within ~10% over most of the L axis.
+# Parasitics per µm of width (F/µm), from tools/extract_tech.py --caps (issue
+# #278): ngspice's cgdo/cgso (gate-drain/-source overlap) and capbd (drain
+# junction) of a saturated device at Vds = Vdd/2, gm/Id 20.  The full-model
+# GBW/PM put a second stage's cgdo beside the Miller cap, cgso with each
+# gate's load and cdb on each node's drains.
 nmos:
   gamma: 0.4625          # √V   body-effect coefficient γ (issue #106)
   phi: 0.9600            # V    surface potential 2φF
   cox: 8.325e-15         # F/µm² (toxe = 4.148 nm)
+  cgdo: 2.463e-16        # F/µm  gate-drain overlap
+  cgso: 2.463e-16        # F/µm  gate-source overlap
+  cdb: 1.401e-16         # F/µm  drain junction
 pmos:
   gamma: 0.4859          # √V   body-effect coefficient γ (issue #106)
   phi: 0.8950            # V    surface potential 2φF
   cox: 8.163e-15         # F/µm² (toxe = 4.23 nm)
+  cgdo: 7.163e-17        # F/µm  gate-drain overlap
+  cgso: 7.402e-17        # F/µm  gate-source overlap
+  cdb: 1.522e-16         # F/µm  drain junction
 
 width:               # bins cover W in [0.36(n)/0.42(p), 100) µm; 0.42 fits both.
   min: 0.42          # max is 99, NOT 100: the model bin wmax=100µm is an

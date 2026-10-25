@@ -135,15 +135,33 @@ def cdb(cdb_f_per_um: float | None, w_um: float) -> float:
     Cdb = W·cdb
 
     The junction scales with the drain's area, which the PDK lays out in
-    proportion to the width, so it is independent of L.  Only the RNMC model
-    reads it (issue #266): behind an output buffer the third stage's drains
-    are most of what its output node carries.
+    proportion to the width, so it is independent of L.  Behind an output
+    buffer the last stage's drains are most of what its output node carries
+    (issue #266); a wide second stage's drain loads the output beside ``CL``
+    (issue #278).
 
     :param cdb_f_per_um: Junction capacitance per µm of width in F/µm, or
         ``None`` for a tech that does not supply one — which returns ``0.0``.
     :param w_um: Gate width in µm (the device's total width).
     """
     return (cdb_f_per_um or 0.0) * w_um
+
+
+def overlap_cap(c_f_per_um: float | None, w_um: float) -> float:
+    """Gate-drain or gate-source overlap capacitance in F.
+
+    C = W·cgdo  (or W·cgso)
+
+    The gate overlaps the source/drain diffusion along its whole width, so the
+    capacitance is independent of L.  In weak inversion it outweighs the
+    intrinsic gate capacitance: a 100 µm PTM45 second stage at gm/Id 23 has
+    33 fF of Cgd and 48 fF of Cgs overlap against 34 fF intrinsic (issue #278).
+
+    :param c_f_per_um: Overlap capacitance per µm of width in F/µm, or
+        ``None`` for a tech that does not supply one — which returns ``0.0``.
+    :param w_um: Gate width in µm (the device's total width).
+    """
+    return (c_f_per_um or 0.0) * w_um
 
 
 def vds_sat(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:
@@ -508,15 +526,18 @@ def _rnmc_network(gm1, gm2, gm3, cc1_f, cc2_f, cl_f, c1_f, c2_f, g1, g2, g3,
     return (*net.matrices(), out)
 
 
-def _two_stage_half(net, drive, gm2, cc_f, cl_f, c1_f, c2_f, g1, g2, buffer, r_ohm):
+def _two_stage_half(net, drive, gm2, cc_f, cl_f, c1_f, c2_f, g1, g2, buffer, r_ohm,
+                    cgd_f=0.0):
     """One two-stage Miller half circuit in ``net``: the input pair (``drive``
     = its share of gm1, signed) into an inverting second stage, with ``Cc`` --
-    through ``r_ohm`` when set -- from its input to its output.  ``c2_f`` is
-    the second-stage output's capacitance besides ``CL``.  Returns
+    through ``r_ohm`` when set -- from its input to its output, and the second
+    stage's own gate-drain capacitance ``cgd_f`` straight across it.  ``c2_f``
+    is the second-stage output's capacitance besides ``CL``.  Returns
     ``(first-stage node, node on CL)``."""
     v1 = net.input_stage(drive, g1, c1_f)
     v2 = net.stage(v1, gm2, g2, c2_f)
     net.branch(v1, v2, cc_f, r_ohm)
+    net.branch(v1, v2, cgd_f, 0.0)
     return v1, net.load(v2, cl_f, buffer)
 
 
@@ -604,6 +625,7 @@ def _loop_gbw_pm(G, C, b, out, w_t) -> tuple[float | None, float | None]:
 def two_stage_loop(
     gm1: float, gm2: float, cc_f: float, cl_f: float,
     *, c1_f: float = 0.0, c2_f: float = 0.0, g1: float = 0.0, g2: float = 0.0,
+    cgd_f: float = 0.0,
     buffer: tuple[float, float, float] | None = None,
     r_ohm: tuple[float, ...] = (0.0,),
     cmfb: tuple[float, float | None] | None = None,
@@ -627,6 +649,10 @@ def two_stage_loop(
     :param c2_f: Parasitic on the second-stage output in F besides ``CL``.
     :param g1: First-stage output conductance in A/V.
     :param g2: Second-stage output conductance in A/V.
+    :param cgd_f: The second stage's gate-drain (overlap) capacitance in F,
+        from its input to its output beside ``Cc`` but never behind its
+        resistor.  A 100 µm PTM45 second stage's 33 fF is 7 % of a 0.5 pF
+        ``Cc``, and GBW follows ``gm1/(Cc + Cgd)`` (issue #278).
     :param buffer: ``(gm_f, cgs_f, g_f)`` of a source-follower output buffer,
         as for :func:`phase_margin_rnmc_deg`, or ``None``.
     :param r_ohm: Per half, the resistor in series with ``Cc`` in Ω (nulling
@@ -644,8 +670,9 @@ def two_stage_loop(
     g1, g2 = _floor_g((g1, gm1), (g2, gm2))
 
     def half(net, drive, r):
-        return _two_stage_half(net, drive, gm2, cc_f, cl_f, c1_f, c2_f, g1, g2, buffer, r)
-    return _loop_gbw_pm(*_miller_network(half, gm1, r_ohm, cmfb), gm1 / cc_f)
+        return _two_stage_half(net, drive, gm2, cc_f, cl_f, c1_f, c2_f, g1, g2, buffer, r,
+                               cgd_f)
+    return _loop_gbw_pm(*_miller_network(half, gm1, r_ohm, cmfb), gm1 / (cc_f + cgd_f))
 
 
 def nested_miller_loop(

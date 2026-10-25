@@ -122,6 +122,21 @@ def test_gbw_scales_with_the_output_followers_gain():
     assert m["gbw_hz"] / eq.unity_gain_bw(1e-3, 2e-12) == pytest.approx(1 / 1.125, abs=0.02)
 
 
+def test_second_stage_cgd_sits_beside_the_miller_cap():
+    """Issue #278: the second stage's gate-drain overlap bridges the same two
+    nodes as Cc, so a nulled loop crosses at gm1/(2π·(Cc + Cgd)) -- on PTM45
+    a 33 fF Cgd beside 0.5 pF moved GBW 7 %."""
+    cc, cgd = 2e-12, 0.2e-12
+    nulled = _chain((1e-3, 1e6), (14e-3, 5e5), cc_pf=2.0, cgd_f=cgd,
+                    comp_resistors=((True, False),))
+    m, _ = evaluate_metrics(nulled, _spec())
+    assert m["gbw_hz"] / eq.unity_gain_bw(1e-3, cc + cgd) == pytest.approx(1.0, abs=0.02)
+    bare, _ = evaluate_metrics(_two_stage(14e-3, resistor=False), _spec())
+    with_cgd, _ = evaluate_metrics(
+        _chain((1e-3, 1e6), (14e-3, 5e5), cc_pf=2.0, cgd_f=cgd), _spec())
+    assert with_cgd["gbw_hz"] < bare["gbw_hz"]
+
+
 def test_nested_miller_recovers_the_textbook_crossing_with_fast_stages():
     """Stages far faster than the crossover leave gm1/(2π·Cc1) and ~90°."""
     gbw, pm = eq.nested_miller_loop(1e-3, 1.0, 10.0, 2e-12, 1e-12, 20e-12,

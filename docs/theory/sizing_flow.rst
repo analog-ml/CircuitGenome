@@ -591,7 +591,9 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - actual − spec
    * - GBW
      - The first 0 dB crossing of the amplifier's full small-signal model:
-       the half circuit's nodal equations, with the node parasitics, the
+       the half circuit's nodal equations, with the node parasitics (gates
+       with their source overlap, drain junctions), a two-stage second
+       stage's gate-drain overlap straight across ``Cc``, the
        compensation branch's series resistor, a non-inverting stage's mirror
        and an output follower (its gain
        :math:`g_{m,f}/(g_{m,f}+g_{mb,f}+g_{out})` and pole).  A

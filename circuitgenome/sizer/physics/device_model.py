@@ -94,6 +94,26 @@ class DeviceModel(Protocol):
         ``cdb`` (see :func:`~.equations.cdb`)."""
         ...
 
+    def cgdo(self, dtype: str, w_um: float) -> float:
+        """Gate-drain overlap capacitance in F, or ``0.0`` when the tech has no
+        ``cgdo`` (see :func:`~.equations.overlap_cap`)."""
+        ...
+
+    def cgso(self, dtype: str, w_um: float) -> float:
+        """Gate-source overlap capacitance in F, or ``0.0`` when the tech has
+        no ``cgso`` (see :func:`~.equations.overlap_cap`)."""
+        ...
+
+    def id_vds_scale(self, dtype: str, w_um: float, l_um: float, ids: float,
+                     vds: float) -> float:
+        """Drain current at ``|vds|`` (V) over the backend's single-point
+        current, at the gate voltage of the ``(W, L, Id)`` operating point.
+
+        Two of these, at a mirror output's Vds and its reference diode's, give
+        the current the output really delivers (issue #278).
+        """
+        ...
+
     def vgs(self, dtype: str, w_um: float, l_um: float, ids: float) -> float:
         """Gate-source voltage in V (signed: +ve NMOS, −ve PMOS)."""
         ...
@@ -174,6 +194,18 @@ class Level1Model:
     def cdb(self, dtype, w_um):
         """``W·cdb`` from the tech's ``cdb`` (:func:`~.equations.cdb`)."""
         return eq.cdb(_params(self.tech, dtype).cdb, w_um)
+
+    def cgdo(self, dtype, w_um):
+        """``W·cgdo`` from the tech's ``cgdo`` (:func:`~.equations.overlap_cap`)."""
+        return eq.overlap_cap(_params(self.tech, dtype).cgdo, w_um)
+
+    def cgso(self, dtype, w_um):
+        """``W·cgso`` from the tech's ``cgso`` (:func:`~.equations.overlap_cap`)."""
+        return eq.overlap_cap(_params(self.tech, dtype).cgso, w_um)
+
+    def id_vds_scale(self, dtype, w_um, l_um, ids, vds):
+        """``1.0``: like :meth:`gds`, the Level-1 model is ``vds``-independent."""
+        return 1.0
 
     def vgs(self, dtype, w_um, l_um, ids):
         """Square-law gate-source voltage (:func:`~.equations.vgs_from_ids`)."""
@@ -331,6 +363,18 @@ class GmIdModel:
     def cdb(self, dtype, w_um):
         """``W·cdb`` from the tech's ``cdb`` (:func:`~.equations.cdb`)."""
         return eq.cdb(_params(self.tech, dtype).cdb, w_um)
+
+    def cgdo(self, dtype, w_um):
+        """``W·cgdo`` from the tech's ``cgdo`` (:func:`~.equations.overlap_cap`)."""
+        return eq.overlap_cap(_params(self.tech, dtype).cgdo, w_um)
+
+    def cgso(self, dtype, w_um):
+        """``W·cgso`` from the tech's ``cgso`` (:func:`~.equations.overlap_cap`)."""
+        return eq.overlap_cap(_params(self.tech, dtype).cgso, w_um)
+
+    def id_vds_scale(self, dtype, w_um, l_um, ids, vds):
+        """:meth:`~.gmid_lut.GmIdLut.id_scale` at the operating gm/Id."""
+        return self.lut.id_scale(dtype, self._gm_id_at(dtype, w_um, l_um, ids), l_um, vds)
 
     def vgs(self, dtype, w_um, l_um, ids):
         """Gate-source voltage from the LUT, signed +ve NMOS / −ve PMOS."""

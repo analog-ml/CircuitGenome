@@ -44,10 +44,16 @@ class MosfetParams:
         Unlike ``mu_cox``, this is required by *neither* sizing path: both the
         Level-1 and gm/Id backends read it only for those capacitances.
     :param cdb: Drain-bulk junction capacitance per µm of gate width in F/µm,
-        at a mid-supply drain voltage. Only the RNMC phase-margin model reads
-        it, for the third stage's output behind an output buffer (issue #266).
+        at a mid-supply drain voltage. The full-model GBW and phase margin
+        load each gain-stage node with the drains on it (issues #266, #278).
         ``None`` when the tech YAML omits it: drain capacitance is then not
         modelled.
+    :param cgdo: Gate-drain overlap capacitance per µm of gate width in F/µm.
+        A two-stage amplifier's second-stage overlap sits beside the Miller
+        cap (issue #278). ``None`` when the tech YAML omits it: not modelled.
+    :param cgso: Gate-source overlap capacitance per µm of gate width in F/µm,
+        added to a gate's load on its node (issue #278). ``None`` when the tech
+        YAML omits it: not modelled.
     """
     vth: float | None = None
     mu_cox: float | None = None
@@ -56,6 +62,8 @@ class MosfetParams:
     phi: float = 0.7
     cox: float | None = None
     cdb: float | None = None
+    cgdo: float | None = None
+    cgso: float | None = None
 
 
 @dataclass

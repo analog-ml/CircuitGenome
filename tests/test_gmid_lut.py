@@ -95,16 +95,44 @@ def test_gmb_gm_falls_with_reverse_body_bias(lut, dtype):
     assert 0.0 < at_half < at0 < 1.0
 
 
+@pytest.mark.parametrize("dtype", ["nmos", "pmos"])
+def test_id_scale_is_one_at_the_characterisation_point(lut, dtype):
+    assert lut.id_scale(dtype, 21.0, 0.18, 0.5) == pytest.approx(1.0)
+
+
+def test_id_scale_falls_off_near_the_rail(lut):
+    """Issue #278: at equal Vgs a weak-inversion PMOS tail at 75 mV (~1.3
+    Vdsat) carries ~12 % less than at Vdd/2 -- ngspice's example tail
+    delivered 0.90 of its diode's current -- and the loss steepens below."""
+    reads = [lut.id_scale("pmos", 21.0, 0.18, v) for v in (0.045, 0.075, 0.15, 0.3)]
+    assert reads == sorted(reads)
+    assert reads[1] == pytest.approx(0.88, abs=0.03)
+
+
 def test_table_without_bias_axes_reads_single_point(tmp_path):
     """An older .npz (no vds/vsb tables) keeps the pre-#273 behaviour."""
     import numpy as np
     data = np.load(_LUT_PATH)
     old = tmp_path / "old_gmid.npz"
     np.savez(old, **{k: data[k] for k in data.files
-                     if not k.endswith(("gds_scale", "gmb_gm", "vds_axis", "vsb_axis"))})
+                     if not k.endswith(("gds_scale", "id_scale", "gmb_gm",
+                                        "vds_axis", "vsb_axis"))})
     lut = GmIdLut(old)
     assert lut.gds_scale("nmos", 12.0, 0.09, 0.1) == 1.0
+    assert lut.id_scale("nmos", 12.0, 0.09, 0.1) == 1.0
     assert lut.gmb_gm("nmos", 12.0, 0.09, 0.3) == 0.0
+
+
+def test_table_without_id_scale_reads_full_current(tmp_path):
+    """A pre-#278 .npz has the Vds axis but no id_scale: the mirror copies
+    its reference's current exactly, as before."""
+    import numpy as np
+    data = np.load(_LUT_PATH)
+    old = tmp_path / "old_gmid.npz"
+    np.savez(old, **{k: data[k] for k in data.files if not k.endswith("id_scale")})
+    lut = GmIdLut(old)
+    assert lut.id_scale("pmos", 21.0, 0.18, 0.075) == 1.0
+    assert lut.gds_scale("pmos", 21.0, 0.18, 0.075) > 1.0
 
 
 def test_gmid_model_reads_gds_no_deeper_than_vdsat():
@@ -147,3 +175,21 @@ def test_gmid_gate_capacitance_follows_the_inversion_level():
 def test_level1_gate_capacitance_is_the_cox_estimate():
     m = Level1Model(load_tech("generic"))
     assert m.cgg("nmos", 4.0, 0.5, 5e-6) == m.cgs("nmos", 4.0, 0.5)
+
+
+def test_overlap_capacitances_scale_with_width():
+    """Issue #278: a 100 µm PTM45 second stage carries ~33 fF of gate-drain
+    and ~48 fF of gate-source overlap in ngspice's .op (cgdo/cgso)."""
+    from circuitgenome.sizer.physics.device_model import GmIdModel
+    tech = load_tech("ptm45")
+    m = GmIdModel(tech, GmIdLut(tech.gmid_lut))
+    assert m.cgdo("nmos", 100.0) == pytest.approx(33e-15, rel=0.15)
+    assert m.cgso("nmos", 100.0) == pytest.approx(48e-15, rel=0.1)
+    assert m.cgdo("nmos", 50.0) == pytest.approx(m.cgdo("nmos", 100.0) / 2)
+
+
+def test_level1_model_has_no_overlap_or_mirror_vds_error():
+    """The generic tech supplies no overlaps, and Level-1 is Vds-independent."""
+    m = Level1Model(load_tech("generic"))
+    assert m.cgdo("nmos", 10.0) == 0.0 and m.cgso("pmos", 10.0) == 0.0
+    assert m.id_vds_scale("pmos", 10.0, 1.0, 10e-6, 0.05) == 1.0

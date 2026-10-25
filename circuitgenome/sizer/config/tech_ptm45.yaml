@@ -17,6 +17,11 @@ gmid_lut: models/ptm45_gmid.npz   # gm/Id LUT for the procedural PTM sizer
 # Cgs runs ~2-4x above the LUT's ft-implied Cgg at L_min (overlap/fringe and
 # short-channel effects dominate there) and converges to within ~10% by
 # L ≈ 0.18 µm, so the single-stage phase margin is pessimistic at short L.
+# Parasitics per µm of width (F/µm), from tools/extract_tech.py --caps (issue
+# #278): ngspice's cgdo/cgso (gate-drain/-source overlap) and capbd (drain
+# junction) of a saturated device at Vds = Vdd/2, gm/Id 20.  The full-model
+# GBW/PM put a second stage's cgdo beside the Miller cap, cgso with each
+# gate's load and cdb on each node's drains.
 nmos:
   mu_cox: 3.501367e-04   # A/V²  (effective µn·Cox)
   vth: 0.3740            # V
@@ -24,6 +29,9 @@ nmos:
   gamma: 0.4188          # √V   body-effect coefficient γ (issue #106)
   phi: 0.7700            # V    surface potential 2φF
   cox: 2.762e-14         # F/µm² (toxe = 1.25 nm)
+  cgdo: 3.738e-16        # F/µm  gate-drain overlap
+  cgso: 4.848e-16        # F/µm  gate-source overlap
+  cdb: 4.374e-16         # F/µm  drain junction
 
 pmos:
   mu_cox: 1.593293e-04   # A/V²  (effective µp·Cox)
@@ -32,6 +40,9 @@ pmos:
   gamma: 0.3646          # √V   body-effect coefficient γ (issue #106)
   phi: 0.7200            # V    surface potential 2φF
   cox: 2.656e-14         # F/µm² (toxe = 1.30 nm)
+  cgdo: 3.985e-16        # F/µm  gate-drain overlap
+  cgso: 4.866e-16        # F/µm  gate-source overlap
+  cdb: 4.374e-16         # F/µm  drain junction
 
 width:
   min: 0.1

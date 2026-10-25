@@ -16,14 +16,16 @@ Fields: ``id_w`` (A/µm), ``gm_gds`` (V/V), ``ft`` (Hz), ``vdsat`` (V),
 ``vgs`` (V, magnitude).  All are characterised at one bias point, ``Vds =
 Vdd/2`` and ``Vsb = 0``.
 
-Two optional correction tables cover devices far from that point (issue
-#273), each a stack of ``(n_L, n_gmid)`` grids over a bias axis:
+Three optional correction tables cover devices far from that point (issues
+#273, #278), each a stack of ``(n_L, n_gmid)`` grids over a bias axis:
     ``gds_scale`` over ``vds_axis``  gds at that Vds over gds at Vdd/2, at equal
                                      current density (1 at the reference)
+    ``id_scale``  over ``vds_axis``  drain current at that Vds over the current
+                                     at Vdd/2, at equal Vgs (1 at the reference)
     ``gmb_gm``    over ``vsb_axis``  body transconductance ``gmbs/gm`` at that
                                      reverse body bias
-A table without them (an older ``.npz``) reads as ``gds_scale = 1`` and
-``gmb_gm = 0``: the single-point behaviour.
+A table without them (an older ``.npz``) reads as ``gds_scale = id_scale = 1``
+and ``gmb_gm = 0``: the single-point behaviour.
 """
 from __future__ import annotations
 
@@ -56,8 +58,9 @@ class GmIdLut:
         self._bias: dict[str, tuple[np.ndarray, dict[str, np.ndarray]]] = {
             field: (data[axis], {dtype: data[f"{dtype}_{field}"]
                                  for dtype in ("nmos", "pmos")})
-            for field, axis in (("gds_scale", "vds_axis"), ("gmb_gm", "vsb_axis"))
-            if axis in data
+            for field, axis in (("gds_scale", "vds_axis"), ("id_scale", "vds_axis"),
+                                ("gmb_gm", "vsb_axis"))
+            if axis in data and f"nmos_{field}" in data
         }
 
     # -- internal helpers ---------------------------------------------------
@@ -121,6 +124,17 @@ class GmIdLut:
         the table has no Vds axis.
         """
         v = self._bias_lookup(dtype, "gds_scale", gm_id, l_um, abs(vds), log=True)
+        return 1.0 if v is None else v
+
+    def id_scale(self, dtype: str, gm_id: float, l_um: float, vds: float) -> float:
+        """Drain current at ``|vds|`` (V) over the table's Vdd/2 current, at the
+        gate voltage of the ``(gm_id, l_um)`` point (issue #278).
+
+        The ratio of two of these is what a current-mirror output delivers
+        against its reference when their Vds differ; it falls off steeply below
+        a few ``Vdsat``.  ``1.0`` when the table has no ``id_scale``.
+        """
+        v = self._bias_lookup(dtype, "id_scale", gm_id, l_um, abs(vds), log=False)
         return 1.0 if v is None else v
 
     def gmb_gm(self, dtype: str, gm_id: float, l_um: float, vsb: float) -> float:

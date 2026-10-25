@@ -266,6 +266,51 @@ def extract_body_effect(node: str) -> dict:
     return be
 
 
+#: gm/Id (1/V) of the operating point the capacitances are read at: weak-to-
+#: moderate inversion, where the signal devices whose overlaps matter (a
+#: second stage's Cgd beside the Miller cap, its Cgs on the first-stage node)
+#: sit -- gm/Id ~11 (GF180) to ~23 (PTM45).  The overlaps fall ~15 % from
+#: gm/Id 15 to 22 on PTM45.
+_CAP_GMID = 20.0
+
+
+def extract_caps(node: str) -> dict:
+    """Per-µm-of-width parasitic capacitances, per polarity (issue #278).
+
+    ``cgdo``/``cgso`` (gate-drain/-source overlap, F/µm) and ``cdb`` (drain
+    junction, F/µm) as ngspice's operating point reports them (``cgdo``,
+    ``cgso``, ``capbd``) for a saturated device at Vds = Vdd/2, the extraction
+    W/L, and the Vgs where its gm/Id is nearest ``_CAP_GMID``.  All three scale
+    with W alone; the overlaps move ~±30 % with Vgd (BSIM4's ``cgdl``/``cgsl``
+    bias-dependent term), the junction with Vdb.
+    """
+    cfg = NODES[node]
+    model = _Model(cfg)
+    vdd, w_um, l_um = cfg["vdd"], cfg["w_ext_um"], cfg["l_ext_um"]
+    w, l = w_um * _UM, l_um * _UM
+    vds, step = vdd / 2.0, vdd / 400.0
+    caps: dict[str, dict] = {}
+    for dev in ("nmos", "pmos"):
+        pre = model.prefix(dev)
+        fields = f"{pre}[id] {pre}[gm] {pre}[cgdo] {pre}[cgso] {pre}[capbd]"
+        if dev == "nmos":
+            src = f"Vd d 0 {vds:.6e}\nVg g 0 0\n{model.inst('nmos', 'd g 0 0', w, l)}\n"
+            sweep = f".dc Vg 0 {vdd} {step:.6e}"
+        else:
+            src = (f"Vs s 0 {vdd}\nVd d 0 {vdd - vds:.6e}\nVg g 0 {vdd}\n"
+                   f"{model.inst('pmos', 'd g s s', w, l)}\n")
+            sweep = f".dc Vg {vdd} 0 {-step:.6e}"
+        deck = (f"* caps {dev}\n{model.include}{src}.save {fields}\n{sweep}\n"
+                f".control\nrun\nwrdata __OUT__ {fields}\n.endc\n.end\n")
+        data = np.abs(_run_ngspice(deck))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            gm_id = data[:, 3] / data[:, 1]
+        k = int(np.nanargmin(np.abs(gm_id - _CAP_GMID)))
+        caps[dev] = dict(cgdo=data[k, 5] / w_um, cgso=data[k, 7] / w_um,
+                         cdb=data[k, 9] / w_um)
+    return caps
+
+
 def inject_body_effect_yaml(node: str, be: dict) -> None:
     """Add/update ``gamma:``/``phi:`` in each nmos/pmos block of the tech YAML.
 
@@ -374,10 +419,11 @@ cap:
 # The gm/Id sizing path drives geometry from a SPICE-characterized table instead
 # of the square law.  For each polarity and channel length we sweep Vgs in
 # saturation (Vds = Vdd/2) at a fixed extraction width and read the BSIM4
-# operating-point parameters, then invert onto a uniform gm/Id axis.  Two
-# correction tables on the same grid then say how gds moves with Vds and how
-# large gmbs is at a reverse body bias, for devices that sit far from that
-# single sweep point (cascode stacks, issue #273).
+# operating-point parameters, then invert onto a uniform gm/Id axis.  Three
+# correction tables on the same grid then say how gds and the drain current
+# move with Vds and how large gmbs is at a reverse body bias, for devices that
+# sit far from that single sweep point (cascode stacks, issue #273; a tail
+# current source near its rail, issue #278).
 
 # Uniform gm/Id axis (1/V): weak inversion (~24) down to strong inversion (~6).
 _GMID_AXIS = np.round(np.arange(6.0, 24.0 + 1e-9, 0.5), 3)
@@ -469,7 +515,7 @@ def _invert_to_axis(gm_id, fields: dict[str, np.ndarray]) -> dict[str, np.ndarra
 def _bias_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float,
                 vds: float, vsb: float):
     """Sweep Vgs at a fixed ``(vds, vsb)``; return per-point
-    ``(id_w, gds/id, gmbs/gm)`` -- all magnitudes, ``vsb`` a reverse bias."""
+    ``(id_w, gds/id, gmbs/gm, vgs)`` -- all magnitudes, ``vsb`` a reverse bias."""
     w, l = w_um * _UM, l_um * _UM
     step = vdd / 400.0
     p = model.prefix(dev)
@@ -487,8 +533,9 @@ def _bias_sweep(model: _Model, dev: str, vdd: float, w_um: float, l_um: float,
     data = _run_ngspice(deck)
     idr, gm = np.abs(data[:, 1]), np.abs(data[:, 3])
     gds, gmbs = np.abs(data[:, 5]), np.abs(data[:, 7])
+    vgs = data[:, 0] if dev == "nmos" else vdd - data[:, 0]
     with np.errstate(divide="ignore", invalid="ignore"):
-        return idr / w_um, gds / idr, gmbs / gm
+        return idr / w_um, gds / idr, gmbs / gm, vgs
 
 
 def _at_density(id_w_row: np.ndarray, id_w: np.ndarray, field: np.ndarray) -> np.ndarray:
@@ -504,30 +551,48 @@ def _at_density(id_w_row: np.ndarray, id_w: np.ndarray, field: np.ndarray) -> np
     return np.interp(np.log(id_w_row), x[order], field[ok][order])
 
 
+def _at_vgs(vgs_row: np.ndarray, vgs: np.ndarray, id_w: np.ndarray) -> np.ndarray:
+    """One sweep's ``id_w`` read at each of ``vgs_row``'s gate voltages
+    (interpolated in ``log Id/W``, which is near-linear in Vgs below threshold)."""
+    ok = id_w > 0
+    order = np.argsort(vgs[ok])
+    return np.exp(np.interp(vgs_row, vgs[ok][order], np.log(id_w[ok][order])))
+
+
 def _bias_tables(model: _Model, dev: str, vdd: float, w_um: float,
-                 l_axis: np.ndarray, id_w: np.ndarray) -> dict[str, np.ndarray]:
-    """The Vds and Vsb correction tables for one polarity (issue #273).
+                 l_axis: np.ndarray, id_w: np.ndarray,
+                 vgs: np.ndarray) -> dict[str, np.ndarray]:
+    """The Vds and Vsb correction tables for one polarity (issues #273, #278).
 
     ``gds_scale`` (``n_vds × n_L × n_gmid``) is gds at each ``vds_axis`` point
     over gds at the main table's Vds = Vdd/2, at equal current density
     (``id_w``, the main table's ``n_L × n_gmid`` grid), so it is exactly 1 at
-    the reference.  ``gmb_gm`` (``n_vsb × n_L × n_gmid``) is ``gmbs/gm`` at
-    each ``vsb_axis`` reverse body bias, Vds = Vdd/2 -- the body
-    transconductance a cascode's source swing adds to its ``gm``.
+    the reference.  ``id_scale`` (same shape) is the drain current at each
+    ``vds_axis`` point over the current at Vdd/2, at equal *gate voltage*
+    (``vgs``, the main table's grid) -- what a current-mirror output delivers
+    when its Vds differs from the reference diode's: it drops off steeply
+    below a few ``Vdsat``, a weak-inversion tail ~1.3 Vdsat from its rail
+    sourcing ~10 % short (issue #278).  ``gmb_gm`` (``n_vsb × n_L × n_gmid``)
+    is ``gmbs/gm`` at each ``vsb_axis`` reverse body bias, Vds = Vdd/2 -- the
+    body transconductance a cascode's source swing adds to its ``gm``.
     """
     vds_axis, vsb_axis = vdd * _VDS_FRACTIONS, vdd * _VSB_FRACTIONS
     scale = np.empty((vds_axis.size,) + id_w.shape)
+    id_scale = np.empty((vds_axis.size,) + id_w.shape)
     gmb = np.empty((vsb_axis.size,) + id_w.shape)
     for j, l_um in enumerate(l_axis):
-        ref_w, ref_gds, _ = _bias_sweep(model, dev, vdd, w_um, float(l_um), vdd / 2, 0.0)
+        ref_w, ref_gds, _, ref_vgs = _bias_sweep(model, dev, vdd, w_um, float(l_um),
+                                                 vdd / 2, 0.0)
         ref = _at_density(id_w[j], ref_w, ref_gds)
+        ref_id = _at_vgs(vgs[j], ref_vgs, ref_w)
         for k, vds in enumerate(vds_axis):
-            sw, sg, _ = _bias_sweep(model, dev, vdd, w_um, float(l_um), float(vds), 0.0)
+            sw, sg, _, sv = _bias_sweep(model, dev, vdd, w_um, float(l_um), float(vds), 0.0)
             scale[k, j] = _at_density(id_w[j], sw, sg) / ref
+            id_scale[k, j] = _at_vgs(vgs[j], sv, sw) / ref_id
         for k, vsb in enumerate(vsb_axis):
-            sw, _, se = _bias_sweep(model, dev, vdd, w_um, float(l_um), vdd / 2, float(vsb))
+            sw, _, se, _ = _bias_sweep(model, dev, vdd, w_um, float(l_um), vdd / 2, float(vsb))
             gmb[k, j] = _at_density(id_w[j], sw, se)
-    return {"gds_scale": scale, "gmb_gm": gmb}
+    return {"gds_scale": scale, "id_scale": id_scale, "gmb_gm": gmb}
 
 
 def extract_gmid(node: str) -> dict:
@@ -554,8 +619,8 @@ def extract_gmid(node: str) -> dict:
                 cube[k].append(row[k])
         for k, rows in cube.items():
             data[f"{dev}_{k}"] = np.asarray(rows)  # shape (n_L, n_gmid)
-        for k, grid in _bias_tables(model, dev, vdd, w, l_axis,
-                                    data[f"{dev}_id_w"]).items():
+        for k, grid in _bias_tables(model, dev, vdd, w, l_axis, data[f"{dev}_id_w"],
+                                    data[f"{dev}_vgs"]).items():
             data[f"{dev}_{k}"] = grid
     return data
 
@@ -601,8 +666,18 @@ def main() -> None:
                     help="Extract γ/2φF from a reverse-body-bias sweep and inject "
                          "gamma:/phi: into the tech YAML (issue #106). Separate pass; "
                          "run after the base extraction.")
+    ap.add_argument("--caps", action="store_true",
+                    help="Print the per-µm overlap (cgdo/cgso) and drain-junction "
+                         "(cdb) capacitances for the tech YAML (issue #278). "
+                         "Separate pass; nothing is written.")
     args = ap.parse_args()
     nodes = [args.node] if args.node else sorted(NODES)
+    if args.caps:
+        for node in nodes:
+            for dev, c in extract_caps(node).items():
+                print(f"{node} {dev}: cgdo: {c['cgdo']:.3e}  cgso: {c['cgso']:.3e}  "
+                      f"cdb: {c['cdb']:.3e}   # F/µm")
+        return
     if args.body_effect:
         for node in nodes:
             be = extract_body_effect(node)

@@ -54,12 +54,15 @@ def refine_two_stage_plan(
         return plan, False
 
     model, (dev, s) = plan.model, ss
-    c_now = model.cgg(dev.type, s.w_um, s.l_um, s.ids_a)
+
+    def gate_cap(w_um: float) -> float:
+        # As the chain loads its node: inversion-level gate plus source overlap.
+        return model.cgg(dev.type, w_um, s.l_um, s.ids_a) + model.cgso(dev.type, w_um)
+    c_now = gate_cap(s.w_um)
 
     def c1_at(gm: float) -> float:
         w_um = model.geometry_for(dev.type, s.ids_a, SIGNAL, gm, l_um=s.l_um).w_um
-        return (chain.node_caps_f[0] - c_now
-                + model.cgg(dev.type, max(w_um, model.tech.width.min), s.l_um, s.ids_a))
+        return chain.node_caps_f[0] - c_now + gate_cap(max(w_um, model.tech.width.min))
 
     ip = next(((d, sizing[ref]) for ref, (d, slot) in view.all_transistors.items()
                if slot == "input_pair" and is_signal_device(d) and ref in sizing), None)

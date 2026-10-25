@@ -1133,6 +1133,29 @@ def test_ptm45_tech_loads_and_sizes(two_stage_fbr):
         assert tech.length.min <= s.l_um <= tech.length.max
 
 
+def test_ptm45_tail_delivers_its_share_at_its_own_vds(two_stage_fbr, monkeypatch):
+    """Issue #278: under a PMOS pair at Vcm = 0.5 V the example's tail has
+    ~70 mV (~1.3 Vdsat) to the rail and ngspice's .op has it delivering 0.90
+    of its diode's current; the bias-aware chain reads the same fraction off
+    the LUT's id_scale, which GBW and phase margin then see -- as they see the
+    second stage's current source's, with the output at Vcm."""
+    from circuitgenome.sizer import load_spec
+    from circuitgenome.sizer.physics import stage_chain
+    fracs, out_fracs = [], []
+    real, real_out = stage_chain._tail_delivery, stage_chain._output_source_delivery
+    monkeypatch.setattr(stage_chain, "_tail_delivery",
+                        lambda *a, **k: fracs.append(real(*a, **k)) or fracs[-1])
+    monkeypatch.setattr(stage_chain, "_output_source_delivery",
+                        lambda *a, **k: out_fracs.append(real_out(*a, **k)) or out_fracs[-1])
+    parsed, sr_result, fbr_result, topology = two_stage_fbr
+    spec = load_spec("examples/two_stage_se_specs/spec_ptm45.yaml")
+    size_circuit(parsed, sr_result, fbr_result, topology, load_tech("ptm45"), spec)
+    assert fracs and fracs[-1] == pytest.approx(0.90, abs=0.03)
+    # The second stage's source has 0.5 V against its diode's 0.65 V: ngspice
+    # has it at 0.98 of its planned 40 µA.
+    assert out_fracs and out_fracs[-1] == pytest.approx(0.98, abs=0.02)
+
+
 def test_first_stage_gain_factor():
     """k_fs is 1.0 for a current-mirror/FD first stage, 0.5 for non-mirror SE."""
     from circuitgenome.sizer.physics.preprocess import _first_stage_gain_factor

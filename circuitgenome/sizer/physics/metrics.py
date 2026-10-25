@@ -56,7 +56,8 @@ def _rnmc_gbw(chain: StageChain, gm1_loop: float, cc_f: float,
 
 
 def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
-                 cc2_f: float | None, cl_f: float) -> tuple[float | None, float | None]:
+                 cc2_f: float | None, cl_f: float,
+                 gm2_ac: float | None = None) -> tuple[float | None, float | None]:
     """``(GBW, PM)`` of a two-stage or nested-Miller chain from its full model
     (:func:`~.equations.two_stage_loop`, :func:`~.equations.nested_miller_loop`):
     one half single-ended, both halves of a fully-differential chain with its
@@ -64,7 +65,9 @@ def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
 
     Each series resistor is the one ``size_resistors`` sizes for these
     schemes, ``(Cc + CL)/(gm_out·Cc)`` against the last gain stage's gm, which
-    puts its zero on the output pole.
+    puts its zero on the output pole.  ``gm2_ac`` is a two-stage second
+    stage's gm at the current it really runs on (issue #278), when it differs
+    from the planned one the resistor was sized against.
     """
     s = chain.stages
     caps = chain.node_caps_f or (0.0,) * len(s)
@@ -82,8 +85,8 @@ def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
             buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
             comp_r=tuple((r(r1, cc_f), r(r2, cc2_f)) for r1, r2 in halves))
     return eq.two_stage_loop(
-        gm1_loop, s[1].gm, cc_f, cl_f, c1_f=caps[0], c2_f=caps[1], g1=g[0], g2=g[1],
-        buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
+        gm1_loop, s[1].gm if gm2_ac is None else gm2_ac, cc_f, cl_f, c1_f=caps[0], c2_f=caps[1], g1=g[0], g2=g[1],
+        cgd_f=chain.cgd_f, buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
         r_ohm=tuple(r(r1, cc_f) for r1, _r2 in halves))
 
 
@@ -221,6 +224,9 @@ def evaluate_metrics(
     # k_fs is the transconductance the Miller loop and the first stage's gain
     # actually see; CMRR uses the raw device gm.
     gm1_loop = k_fs * gm1
+    # The loop also sees the tail's real, short current (issue #278); DC gain
+    # does not -- gm·ro holds as the current falls.
+    gm1_ac = gm1_loop * chain.tail_delivery
     # Stages contribute gain only up to the first one with no finite output
     # resistance — beyond that the cascade product is not defined.
     usable = 0
@@ -259,15 +265,18 @@ def evaluate_metrics(
             gbw = pm = None
             if len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f:
                 if chain.compensation_scheme == RNMC:
-                    pm = _rnmc_phase_margin(chain, gm1_loop, cc_f, cc2_f, spec.cl)
-                    gbw = _rnmc_gbw(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+                    pm = _rnmc_phase_margin(chain, gm1_ac, cc_f, cc2_f, spec.cl)
+                    gbw = _rnmc_gbw(chain, gm1_ac, cc_f, cc2_f, spec.cl)
                 else:
-                    gbw, pm = _miller_loop(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+                    gbw, pm = _miller_loop(chain, gm1_ac, cc_f, cc2_f, spec.cl)
             elif len(stages) == 2 and gm2 > 0:
-                gbw, pm = _miller_loop(chain, gm1_loop, cc_f, None, spec.cl)
+                # The second stage runs on its current source's real current
+                # too (issue #278).
+                gbw, pm = _miller_loop(chain, gm1_ac, cc_f, None, spec.cl,
+                                       gm2_ac=gm2 * chain.output_delivery)
             elif gm2 > 0:   # a three-stage chain with no Cc2 or no third stage
-                pm = eq.phase_margin_two_stage_deg(gm1_loop, gm2, cc_f, spec.cl)
-            _record("gbw_hz", gbw or eq.unity_gain_bw(gm1_loop, cc_f, gain=fol_gain),
+                pm = eq.phase_margin_two_stage_deg(gm1_ac, gm2, cc_f, spec.cl)
+            _record("gbw_hz", gbw or eq.unity_gain_bw(gm1_ac, cc_f, gain=fol_gain),
                     spec.gbw_min_hz)
             if pm is not None:
                 _record("phase_margin_deg", pm, spec.phase_margin_min_deg)
@@ -284,7 +293,7 @@ def evaluate_metrics(
         # the dominant pole.  Phase margin is the exception -- it needs the
         # mirror pole, which the chain reports only when it can be placed.
         if chain.gain_measurable:
-            gbw = eq.unity_gain_bw(gm1_loop, spec.cl)
+            gbw = eq.unity_gain_bw(gm1_ac, spec.cl)
             _record("gbw_hz", gbw, spec.gbw_min_hz)
             if chain.mirror_pole_hz:
                 _record("phase_margin_deg",
