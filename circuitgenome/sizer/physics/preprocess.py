@@ -45,6 +45,7 @@ _NMC_INNER_ZETA = 0.3
 def size_load_resistors(
     slot_resistors: dict[str, list[Device]], spec: SizingSpec, tech: TechParams,
     seed_v: dict[str, float] | None = None,
+    single_stage: bool = False,
 ) -> dict[str, float]:
     """Size resistor-load devices so the first-stage output biases on.
 
@@ -62,6 +63,12 @@ def size_load_resistors(
     device's ``Vgs`` read from the LUT (issue #158); when omitted (Level-1 path),
     it falls back to the analytical ``|vth| + Vov`` estimate.
 
+    ``single_stage`` marks a load that drives no next stage: its node is the
+    amplifier's own output, which feedback holds at the input common mode, so
+    the drop is ``Vcm − Vss`` (gnd) or ``Vdd − Vcm`` (vdd) and ``seed_v`` is
+    unused.  Any other drop leaves the output where the pair can only reach
+    Vcm by steering most of its tail current to one side (issue #284).
+
     Only the ``load`` slot is sized; other resistor roles keep their netlist
     value.  Returns ``{ref: ohms}``.
     """
@@ -73,9 +80,15 @@ def size_load_resistors(
     for r in slot_resistors.get("load", []):
         nets = [str(n).lower() for n in r.terminals.values()]
         if any("gnd" in n or n in ("0", "vss!") for n in nets):
-            v = seed_v["nmos"] if seed_v else tech.nmos.vth + vov
+            if single_stage:
+                v = spec.vcm - spec.vss
+            else:
+                v = seed_v["nmos"] if seed_v else tech.nmos.vth + vov
         elif any("vdd" in n for n in nets):
-            v = seed_v["pmos"] if seed_v else abs(tech.pmos.vth) + vov
+            if single_stage:
+                v = spec.vdd - spec.vcm
+            else:
+                v = seed_v["pmos"] if seed_v else abs(tech.pmos.vth) + vov
         else:
             continue  # not a rail-referenced load resistor
         if v > 0:
