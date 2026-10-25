@@ -7,7 +7,9 @@
 # circuit against the easy targets (as it does some RNMC third stages).  The
 # swing *prediction* does not depend on the target -- the target only decides
 # pass/fail -- so relaxing it lets every template size without changing what is
-# compared.
+# compared.  The exception is a fully-differential design with a
+# difference-difference CMFB, which holds the output CM only within ~±0.24 V of
+# mid-supply (~1.41-1.89 V); the sizer rejects those against these targets.
 
 vdd: 3.3            # V
 vss: 0.0            # V

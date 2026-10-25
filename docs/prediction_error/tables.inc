@@ -15,8 +15,8 @@ Run
 * **Sample:** 100 circuits per template, drawn at
   random (seed 0) from each template's full enumeration;
   a smaller template is taken whole
-* **Run:** commit ``f0e9a76``, ngspice-44.2,
-  2026-10-21
+* **Run:** commit ``7def7c4``, ngspice-46,
+  2026-10-25
 
 Which pairs count
 -----------------
@@ -55,10 +55,10 @@ every circuit-level exclusion:
    * - ``two_stage_opamp_buffered_fully_differential``
      - 100
      - 0
+     - 47
      - 0
      - 0
-     - 0
-     - 100
+     - 53
      - 0
      - 0
    * - ``two_stage_opamp_buffered_single_ended``
@@ -73,10 +73,10 @@ every circuit-level exclusion:
    * - ``two_stage_opamp_fully_differential``
      - 100
      - 0
+     - 55
      - 0
      - 0
-     - 0
-     - 100
+     - 45
      - 0
      - 0
    * - ``two_stage_opamp_single_ended``
@@ -91,12 +91,12 @@ every circuit-level exclusion:
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
      - 100
      - 0
+     - 52
      - 0
      - 0
+     - 48
      - 0
-     - 100
-     - 0
-     - 50
+     - 25
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 100
      - 0
@@ -105,16 +105,16 @@ every circuit-level exclusion:
      - 0
      - 97
      - 0
-     - 51
+     - 49
    * - ``three_stage_opamp_nmc_fully_differential``
      - 100
      - 0
+     - 50
      - 0
      - 0
+     - 50
      - 0
-     - 100
-     - 0
-     - 47
+     - 24
    * - ``three_stage_opamp_nmc_single_ended``
      - 100
      - 0
@@ -123,16 +123,16 @@ every circuit-level exclusion:
      - 0
      - 98
      - 0
-     - 53
+     - 49
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
      - 100
      - 0
+     - 55
      - 0
      - 0
+     - 45
      - 0
-     - 100
-     - 0
-     - 47
+     - 20
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 100
      - 0
@@ -141,16 +141,16 @@ every circuit-level exclusion:
      - 0
      - 100
      - 8
-     - 59
+     - 50
    * - ``three_stage_opamp_rnmc_fully_differential``
      - 100
      - 0
+     - 48
      - 0
      - 0
+     - 52
      - 0
-     - 100
-     - 0
-     - 51
+     - 27
    * - ``three_stage_opamp_rnmc_single_ended``
      - 100
      - 0
@@ -159,16 +159,16 @@ every circuit-level exclusion:
      - 0
      - 100
      - 16
-     - 45
+     - 34
    * - **All templates**
      - **1254**
      - **0**
-     - **0**
+     - **307**
      - **5**
      - **0**
-     - **1249**
+     - **942**
      - **47**
-     - **403**
+     - **278**
 
 Summary
 -------
@@ -189,66 +189,66 @@ p10–p90 is the spread; *worst* is the single largest error, signed.
      - Worst
    * - :ref:`Open-loop gain <pe-gain_db>`
      - dB
-     - 799
-     - -2.7
-     - -18.5
-     - -0.1
-     - -25.7
+     - 617
+     - -0.8
+     - -5.2
+     - +1.4
+     - -15.7
    * - :ref:`GBW <pe-gbw_hz>`
      - %
-     - 799
-     - -11.9
-     - -23.3
+     - 617
+     - -5.3
+     - -9.4
      - -1.0
      - -91.8
    * - :ref:`Phase margin <pe-phase_margin_deg>`
      - °
-     - 787
-     - +5.5
-     - -3.9
-     - +31.6
-     - +34.8
+     - 605
+     - -0.1
+     - -2.5
+     - +1.5
+     - -6.0
    * - :ref:`Slew rate <pe-slew_rate_vps>`
      - %
-     - 1242
-     - +1.8
-     - -8.6
-     - +10.5
-     - +66.2
+     - 935
+     - +1.9
+     - -7.8
+     - +12.6
+     - +70.1
    * - :ref:`Quiescent power <pe-power_w>`
      - %
-     - 1249
-     - -25.9
-     - -54.5
-     - +20.1
-     - +4260.0
+     - 942
+     - -24.4
+     - -45.9
+     - +3.7
+     - -54.0
    * - :ref:`Output swing max <pe-output_swing_max_v>`
      - V
-     - 1195
-     - +0.129
-     - -1.248
-     - +0.234
-     - -1.390
+     - 888
+     - +0.149
+     - +0.063
+     - +0.241
+     - -0.447
    * - :ref:`Output swing min <pe-output_swing_min_v>`
      - V
-     - 1195
-     - -0.139
-     - -0.235
-     - +1.195
-     - +1.439
+     - 888
+     - -0.161
+     - -0.241
+     - -0.053
+     - +0.526
    * - :ref:`CMRR <pe-cmrr_db>`
      - dB
-     - 1202
-     - +33.4
-     - -21.8
-     - +73.9
+     - 895
+     - +35.3
+     - -20.9
+     - +81.3
      - +130.3
    * - :ref:`PSRR+ <pe-psrr_db>`
      - dB
-     - 1202
-     - +19.9
-     - -14.3
-     - +42.1
+     - 895
+     - +21.5
+     - -11.8
+     - +45.6
      - +70.9
 
 .. _pe-gain_db:
@@ -272,88 +272,88 @@ Open-loop gain (dB)
      - Worst
    * - ``one_stage_opamp``
      - 54
-     - -6.6
-     - -15.2
-     - -1.1
-     - -16.1
+     - -3.1
+     - -7.7
+     - -1.0
+     - -15.7
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - -8.7
-     - -20.8
-     - +0.2
-     - -25.7
+     - 53
+     - +1.0
+     - -6.2
+     - +2.6
+     - -7.4
    * - ``two_stage_opamp_buffered_single_ended``
      - 88
-     - -13.9
-     - -21.6
-     - -2.2
-     - -23.3
+     - -3.1
+     - -5.5
+     - -0.6
+     - -6.6
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - -10.1
-     - -20.1
-     - -1.4
-     - -21.5
+     - 45
+     - -0.4
+     - -5.6
+     - +0.9
+     - -6.5
    * - ``two_stage_opamp_single_ended``
      - 89
-     - -8.5
-     - -18.5
      - -0.5
-     - -18.8
-   * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 50
-     - -2.4
-     - -5.5
-     - +0.4
-     - -7.2
-   * - ``three_stage_opamp_nmc_buffered_single_ended``
-     - 46
-     - -2.5
-     - -5.5
-     - -0.7
-     - -7.1
-   * - ``three_stage_opamp_nmc_fully_differential``
-     - 53
-     - -2.0
-     - -2.7
+     - -1.9
      - +0.5
-     - -2.7
+     - +3.0
+   * - ``three_stage_opamp_nmc_buffered_fully_differential``
+     - 23
+     - -0.1
+     - -2.6
+     - +2.0
+     - -4.8
+   * - ``three_stage_opamp_nmc_buffered_single_ended``
+     - 48
+     - -1.8
+     - -4.6
+     - -0.2
+     - -7.0
+   * - ``three_stage_opamp_nmc_fully_differential``
+     - 26
+     - -0.0
+     - -1.7
+     - +1.4
+     - +1.9
    * - ``three_stage_opamp_nmc_single_ended``
-     - 45
-     - -0.9
-     - -2.5
+     - 49
+     - +0.4
+     - -1.7
      - +1.6
      - +3.4
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 53
-     - -3.1
-     - -6.2
-     - -1.0
-     - -6.7
+     - 25
+     - -0.4
+     - -3.3
+     - +2.1
+     - -3.3
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
-     - 33
-     - -2.5
-     - -6.4
-     - +1.3
-     - -6.7
-   * - ``three_stage_opamp_rnmc_fully_differential``
-     - 49
-     - -1.2
-     - -1.8
-     - -0.1
+     - 42
      - -2.0
+     - -10.0
+     - +1.5
+     - -12.4
+   * - ``three_stage_opamp_rnmc_fully_differential``
+     - 25
+     - +0.8
+     - +0.3
+     - +1.4
+     - +1.9
    * - ``three_stage_opamp_rnmc_single_ended``
-     - 39
-     - -0.9
-     - -1.7
+     - 50
+     - +0.5
+     - -7.6
      - +3.3
-     - +4.9
+     - -8.7
    * - **All templates**
-     - **799**
-     - **-2.7**
-     - **-18.5**
-     - **-0.1**
-     - **-25.7**
+     - **617**
+     - **-0.8**
+     - **-5.2**
+     - **+1.4**
+     - **-15.7**
 
 .. _pe-gbw_hz:
 
@@ -381,81 +381,81 @@ GBW (%)
      - -0.6
      - -91.8
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - -15.0
-     - -23.7
-     - -7.5
-     - -28.1
+     - 53
+     - -4.3
+     - -7.7
+     - -1.8
+     - -9.4
    * - ``two_stage_opamp_buffered_single_ended``
      - 88
-     - -17.9
-     - -27.1
-     - -10.3
-     - -33.1
+     - -6.7
+     - -14.7
+     - -3.2
+     - -17.4
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - -9.8
-     - -18.8
-     - -3.3
-     - -21.3
+     - 45
+     - -4.9
+     - -8.1
+     - -1.2
+     - -9.3
    * - ``two_stage_opamp_single_ended``
      - 89
-     - -10.5
-     - -19.7
-     - -3.9
-     - -26.7
+     - -6.7
+     - -13.1
+     - -2.3
+     - +18.5
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 50
-     - -20.4
-     - -27.9
-     - -14.1
-     - -28.7
-   * - ``three_stage_opamp_nmc_buffered_single_ended``
-     - 46
-     - -18.8
-     - -24.1
-     - -5.5
-     - -27.5
-   * - ``three_stage_opamp_nmc_fully_differential``
-     - 53
-     - +0.3
-     - -3.8
-     - +7.0
-     - +11.6
-   * - ``three_stage_opamp_nmc_single_ended``
-     - 45
-     - -1.7
-     - -11.3
-     - +11.2
-     - +15.9
-   * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 53
-     - -21.2
-     - -26.5
-     - -15.1
-     - -27.3
-   * - ``three_stage_opamp_rnmc_buffered_single_ended``
-     - 33
-     - -19.3
-     - -24.5
-     - -9.3
-     - -27.0
-   * - ``three_stage_opamp_rnmc_fully_differential``
-     - 49
+     - 23
      - -4.3
+     - -5.8
+     - -1.1
+     - -7.4
+   * - ``three_stage_opamp_nmc_buffered_single_ended``
+     - 48
+     - -4.0
+     - -7.7
+     - +14.6
+     - +16.5
+   * - ``three_stage_opamp_nmc_fully_differential``
+     - 26
+     - -4.9
+     - -7.1
+     - -1.0
+     - -7.4
+   * - ``three_stage_opamp_nmc_single_ended``
+     - 49
+     - -4.9
+     - -8.0
+     - +12.8
+     - +19.5
+   * - ``three_stage_opamp_rnmc_buffered_fully_differential``
+     - 25
+     - -3.1
      - -5.7
-     - -0.6
-     - -7.0
+     - -0.2
+     - -6.2
+   * - ``three_stage_opamp_rnmc_buffered_single_ended``
+     - 42
+     - -4.5
+     - -8.4
+     - -1.5
+     - +18.6
+   * - ``three_stage_opamp_rnmc_fully_differential``
+     - 25
+     - -4.0
+     - -6.2
+     - -0.4
+     - -6.8
    * - ``three_stage_opamp_rnmc_single_ended``
-     - 39
-     - -4.7
-     - -7.0
-     - -1.4
-     - +19.4
+     - 50
+     - -5.8
+     - -9.2
+     - -2.0
+     - +20.3
    * - **All templates**
-     - **799**
-     - **-11.9**
-     - **-23.3**
+     - **617**
+     - **-5.3**
+     - **-9.4**
      - **-1.0**
      - **-91.8**
 
@@ -485,83 +485,83 @@ Phase margin (°)
      - -0.4
      - -5.1
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - +13.0
-     - +0.1
-     - +32.2
-     - +34.4
+     - 53
+     - +0.5
+     - -0.4
+     - +1.5
+     - +2.5
    * - ``two_stage_opamp_buffered_single_ended``
      - 88
-     - +22.7
-     - -3.7
-     - +33.2
-     - +34.1
+     - -0.2
+     - -1.9
+     - +1.5
+     - +4.1
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - +10.4
-     - +5.4
-     - +32.6
-     - +34.8
+     - 45
+     - -0.1
+     - -1.9
+     - +0.5
+     - -3.5
    * - ``two_stage_opamp_single_ended``
      - 89
-     - +22.5
-     - -4.2
-     - +32.1
-     - +34.5
+     - -1.1
+     - -2.7
+     - +0.8
+     - -4.1
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 50
-     - -3.1
-     - -7.7
-     - +2.6
-     - -13.7
-   * - ``three_stage_opamp_nmc_buffered_single_ended``
-     - 46
-     - -0.8
-     - -12.0
-     - +3.8
-     - -13.1
-   * - ``three_stage_opamp_nmc_fully_differential``
-     - 53
-     - +23.4
-     - +16.3
-     - +34.4
-     - +34.7
-   * - ``three_stage_opamp_nmc_single_ended``
-     - 45
-     - +14.8
-     - +5.9
-     - +33.6
-     - +34.3
-   * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 53
-     - +3.9
+     - 23
      - +1.3
-     - +5.9
-     - +7.1
-   * - ``three_stage_opamp_rnmc_buffered_single_ended``
-     - 33
-     - +2.7
-     - +0.5
-     - +3.9
-     - +4.7
-   * - ``three_stage_opamp_rnmc_fully_differential``
+     - +0.7
+     - +1.9
+     - +2.2
+   * - ``three_stage_opamp_nmc_buffered_single_ended``
+     - 48
+     - +0.8
+     - -1.3
+     - +1.5
+     - -3.2
+   * - ``three_stage_opamp_nmc_fully_differential``
+     - 26
+     - -0.3
+     - -0.5
+     - +0.1
+     - +0.6
+   * - ``three_stage_opamp_nmc_single_ended``
      - 49
-     - +1.0
+     - -0.6
+     - -1.3
+     - +0.3
+     - -2.3
+   * - ``three_stage_opamp_rnmc_buffered_fully_differential``
+     - 25
+     - +1.5
+     - +0.5
+     - +3.6
+     - +4.1
+   * - ``three_stage_opamp_rnmc_buffered_single_ended``
+     - 42
+     - +0.6
+     - -2.3
+     - +1.1
+     - -3.1
+   * - ``three_stage_opamp_rnmc_fully_differential``
+     - 25
+     - +0.9
      - -0.4
      - +2.1
      - +2.9
    * - ``three_stage_opamp_rnmc_single_ended``
-     - 39
-     - -0.4
-     - -0.7
+     - 50
+     - -0.5
+     - -4.8
      - +0.3
-     - -1.9
+     - -6.0
    * - **All templates**
-     - **787**
-     - **+5.5**
-     - **-3.9**
-     - **+31.6**
-     - **+34.8**
+     - **605**
+     - **-0.1**
+     - **-2.5**
+     - **+1.5**
+     - **-6.0**
 
 .. _pe-slew_rate_vps:
 
@@ -584,16 +584,16 @@ Slew rate (%)
      - Worst
    * - ``one_stage_opamp``
      - 47
-     - -3.3
-     - -8.5
-     - +8.4
-     - -50.9
+     - -3.1
+     - -8.4
+     - +8.6
+     - -52.1
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - +2.7
+     - 53
+     - -0.6
      - -1.0
-     - +4.2
-     - -8.0
+     - +3.2
+     - -7.6
    * - ``two_stage_opamp_buffered_single_ended``
      - 100
      - +2.0
@@ -601,23 +601,23 @@ Slew rate (%)
      - +5.6
      - +6.8
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - -6.5
-     - -13.7
-     - +1.9
-     - +20.2
+     - 45
+     - -2.3
+     - -14.8
+     - +6.3
+     - +19.6
    * - ``two_stage_opamp_single_ended``
      - 100
-     - +10.7
+     - +11.7
      - -7.0
-     - +17.5
-     - +20.1
+     - +17.3
+     - +19.3
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 100
-     - +2.8
+     - 48
+     - +2.7
      - -1.0
-     - +4.2
-     - +4.7
+     - +3.2
+     - +3.5
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 97
      - +4.4
@@ -625,47 +625,47 @@ Slew rate (%)
      - +5.6
      - +5.8
    * - ``three_stage_opamp_nmc_fully_differential``
-     - 100
-     - -3.5
-     - -9.2
-     - +4.2
-     - +27.1
+     - 50
+     - -1.2
+     - -7.8
+     - +11.8
+     - +28.4
    * - ``three_stage_opamp_nmc_single_ended``
      - 98
-     - +12.1
-     - -23.5
-     - +29.4
-     - +66.2
+     - +12.0
+     - -24.2
+     - +27.4
+     - +70.1
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 100
-     - +0.5
-     - -0.8
-     - +4.2
-     - +4.3
+     - 45
+     - -0.6
+     - -1.0
+     - +3.0
+     - +3.3
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 100
      - +2.0
      - +1.8
      - +5.6
-     - +6.6
+     - +6.4
    * - ``three_stage_opamp_rnmc_fully_differential``
-     - 100
-     - -4.7
-     - -9.3
-     - +1.2
-     - +24.3
+     - 52
+     - -4.3
+     - -7.8
+     - +3.5
+     - +23.8
    * - ``three_stage_opamp_rnmc_single_ended``
      - 100
-     - -7.0
-     - -11.8
-     - -0.4
-     - -21.0
+     - -6.8
+     - -12.1
+     - -0.3
+     - -24.5
    * - **All templates**
-     - **1242**
-     - **+1.8**
-     - **-8.6**
-     - **+10.5**
-     - **+66.2**
+     - **935**
+     - **+1.9**
+     - **-7.8**
+     - **+12.6**
+     - **+70.1**
 
 .. _pe-power_w:
 
@@ -688,88 +688,88 @@ Quiescent power (%)
      - Worst
    * - ``one_stage_opamp``
      - 54
-     - -50.2
+     - -49.0
      - -53.7
-     - -46.2
+     - -46.1
      - -54.0
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - -24.8
-     - -28.7
-     - -18.3
+     - 53
+     - -26.8
+     - -29.7
+     - -24.6
      - -30.1
    * - ``two_stage_opamp_buffered_single_ended``
      - 100
-     - -44.3
-     - -49.7
-     - -35.4
-     - -50.8
+     - -40.7
+     - -42.2
+     - -30.4
+     - -43.0
    * - ``two_stage_opamp_fully_differential``
-     - 100
+     - 45
+     - -34.3
+     - -36.4
      - -31.6
-     - -35.9
-     - -24.9
      - -37.8
    * - ``two_stage_opamp_single_ended``
      - 100
-     - -44.2
-     - -50.2
-     - -37.4
-     - -57.2
+     - -42.1
+     - -46.8
+     - -34.7
+     - -47.4
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 100
-     - -6.0
-     - -11.0
-     - -0.6
+     - 48
+     - -8.2
+     - -12.2
+     - -2.8
      - -13.6
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 97
-     - -38.7
-     - -60.0
-     - -19.8
-     - -65.3
+     - -24.3
+     - -27.8
+     - -21.7
+     - -28.9
    * - ``three_stage_opamp_nmc_fully_differential``
-     - 100
-     - -11.2
-     - -15.0
-     - -4.8
+     - 50
+     - -11.9
+     - -15.1
+     - -9.1
      - -16.8
    * - ``three_stage_opamp_nmc_single_ended``
      - 98
-     - -40.9
-     - -64.0
-     - -8.7
-     - -69.3
+     - -27.4
+     - -29.9
+     - -24.1
+     - -31.4
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 100
-     - +10.5
-     - +5.5
-     - +18.6
-     - +24.8
+     - 45
+     - +8.4
+     - +5.1
+     - +17.3
+     - +20.0
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 100
-     - +241.3
-     - -56.5
-     - +519.0
-     - +1696.2
+     - -13.1
+     - -17.2
+     - -8.0
+     - -19.4
    * - ``three_stage_opamp_rnmc_fully_differential``
-     - 100
-     - +7.0
-     - +1.2
+     - 52
+     - +5.7
+     - +0.3
+     - +13.7
      - +15.7
-     - +20.9
    * - ``three_stage_opamp_rnmc_single_ended``
      - 100
-     - +328.9
-     - -58.8
-     - +1743.4
-     - +4260.0
+     - -13.0
+     - -17.1
+     - +9.4
+     - -21.1
    * - **All templates**
-     - **1249**
-     - **-25.9**
-     - **-54.5**
-     - **+20.1**
-     - **+4260.0**
+     - **942**
+     - **-24.4**
+     - **-45.9**
+     - **+3.7**
+     - **-54.0**
 
 .. _pe-output_swing_max_v:
 
@@ -797,11 +797,11 @@ Output swing max (V)
      - —
      - —
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - -0.659
-     - -1.292
-     - +0.151
-     - -1.390
+     - 53
+     - +0.142
+     - +0.135
+     - +0.163
+     - +0.188
    * - ``two_stage_opamp_buffered_single_ended``
      - 100
      - +0.142
@@ -809,11 +809,11 @@ Output swing max (V)
      - +0.154
      - +0.164
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - -1.153
-     - -1.289
-     - +0.153
-     - -1.347
+     - 45
+     - +0.139
+     - +0.113
+     - +0.157
+     - +0.158
    * - ``two_stage_opamp_single_ended``
      - 100
      - +0.151
@@ -821,11 +821,11 @@ Output swing max (V)
      - +0.164
      - +0.164
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 100
-     - -0.656
-     - -1.344
-     - +0.146
-     - -1.390
+     - 48
+     - +0.143
+     - +0.111
+     - +0.170
+     - +0.206
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 97
      - +0.154
@@ -833,11 +833,11 @@ Output swing max (V)
      - +0.168
      - -0.447
    * - ``three_stage_opamp_nmc_fully_differential``
-     - 100
-     - -0.431
-     - -1.195
-     - +0.251
-     - -1.270
+     - 50
+     - +0.248
+     - +0.215
+     - +0.253
+     - +0.267
    * - ``three_stage_opamp_nmc_single_ended``
      - 98
      - +0.241
@@ -845,23 +845,23 @@ Output swing max (V)
      - +0.274
      - -0.327
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 100
-     - -0.351
-     - -1.279
-     - +0.212
-     - -1.390
+     - 45
+     - +0.194
+     - +0.137
+     - +0.216
+     - +0.247
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 100
      - +0.153
-     - +0.127
+     - +0.126
      - +0.218
      - +0.218
    * - ``three_stage_opamp_rnmc_fully_differential``
-     - 100
-     - +0.008
-     - -1.359
-     - +0.111
-     - -1.389
+     - 52
+     - +0.099
+     - +0.035
+     - +0.114
+     - +0.144
    * - ``three_stage_opamp_rnmc_single_ended``
      - 100
      - +0.100
@@ -869,11 +869,11 @@ Output swing max (V)
      - +0.154
      - +0.154
    * - **All templates**
-     - **1195**
-     - **+0.129**
-     - **-1.248**
-     - **+0.234**
-     - **-1.390**
+     - **888**
+     - **+0.149**
+     - **+0.063**
+     - **+0.241**
+     - **-0.447**
 
 .. _pe-output_swing_min_v:
 
@@ -901,11 +901,11 @@ Output swing min (V)
      - —
      - —
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - +0.483
-     - -0.143
-     - +1.205
-     - +1.329
+     - 53
+     - -0.144
+     - -0.198
+     - -0.136
+     - -0.232
    * - ``two_stage_opamp_buffered_single_ended``
      - 100
      - -0.165
@@ -913,11 +913,11 @@ Output swing min (V)
      - -0.116
      - -0.170
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - +1.138
-     - -0.163
-     - +1.251
-     - +1.328
+     - 45
+     - -0.155
+     - -0.172
+     - -0.130
+     - -0.173
    * - ``two_stage_opamp_single_ended``
      - 100
      - -0.162
@@ -925,11 +925,11 @@ Output swing min (V)
      - -0.006
      - -0.170
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 100
-     - +0.470
-     - -0.145
-     - +1.233
-     - +1.355
+     - 48
+     - -0.153
+     - -0.177
+     - -0.139
+     - -0.199
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 97
      - -0.155
@@ -937,11 +937,11 @@ Output swing min (V)
      - -0.136
      - +0.526
    * - ``three_stage_opamp_nmc_fully_differential``
-     - 100
-     - +0.418
-     - -0.256
-     - +1.154
-     - +1.258
+     - 50
+     - -0.244
+     - -0.258
+     - -0.241
+     - -0.261
    * - ``three_stage_opamp_nmc_single_ended``
      - 98
      - -0.243
@@ -949,11 +949,11 @@ Output swing min (V)
      - -0.218
      - +0.429
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 100
-     - +0.781
-     - -0.202
-     - +1.200
-     - +1.329
+     - 45
+     - -0.204
+     - -0.223
+     - -0.141
+     - -0.285
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 100
      - -0.170
@@ -961,11 +961,11 @@ Output swing min (V)
      - -0.140
      - -0.205
    * - ``three_stage_opamp_rnmc_fully_differential``
-     - 100
-     - -0.002
-     - -0.132
-     - +1.316
-     - +1.439
+     - 52
+     - -0.039
+     - -0.163
+     - -0.022
+     - -0.164
    * - ``three_stage_opamp_rnmc_single_ended``
      - 100
      - -0.074
@@ -973,11 +973,11 @@ Output swing min (V)
      - -0.025
      - -0.170
    * - **All templates**
-     - **1195**
-     - **-0.139**
-     - **-0.235**
-     - **+1.195**
-     - **+1.439**
+     - **888**
+     - **-0.161**
+     - **-0.241**
+     - **-0.053**
+     - **+0.526**
 
 .. _pe-cmrr_db:
 
@@ -1005,35 +1005,35 @@ CMRR (dB)
      - +73.9
      - +78.6
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - +30.5
-     - -21.8
-     - +41.7
-     - +49.0
+     - 53
+     - +35.3
+     - -15.1
+     - +44.8
+     - +52.8
    * - ``two_stage_opamp_buffered_single_ended``
      - 88
      - +47.8
      - -6.8
-     - +88.1
+     - +87.9
      - +120.2
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - +33.4
-     - -21.9
-     - +42.2
-     - +51.9
+     - 45
+     - +32.3
+     - -19.2
+     - +45.5
+     - +56.1
    * - ``two_stage_opamp_single_ended``
      - 89
-     - +50.4
-     - -7.2
-     - +89.9
+     - +46.7
+     - -7.1
+     - +90.3
      - +130.3
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 100
-     - +33.8
-     - -16.3
-     - +48.9
-     - +51.7
+     - 48
+     - +36.9
+     - -10.7
+     - +52.3
+     - +57.5
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 97
      - +35.7
@@ -1041,11 +1041,11 @@ CMRR (dB)
      - +83.3
      - +97.3
    * - ``three_stage_opamp_nmc_fully_differential``
-     - 100
-     - +26.8
-     - -26.2
-     - +46.1
-     - +52.2
+     - 50
+     - +32.9
+     - -23.4
+     - +50.3
+     - +56.0
    * - ``three_stage_opamp_nmc_single_ended``
      - 98
      - +34.7
@@ -1053,23 +1053,23 @@ CMRR (dB)
      - +85.3
      - +95.6
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 100
-     - +33.4
-     - -16.9
-     - +49.2
-     - +52.0
+     - 45
+     - +32.2
+     - -9.2
+     - +45.7
+     - +56.3
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 92
      - +30.9
      - -23.5
-     - +82.2
+     - +83.9
      - +102.2
    * - ``three_stage_opamp_rnmc_fully_differential``
-     - 100
-     - +33.4
-     - -21.8
-     - +46.4
-     - +51.8
+     - 52
+     - +35.3
+     - -15.1
+     - +49.9
+     - +53.2
    * - ``three_stage_opamp_rnmc_single_ended``
      - 84
      - +40.7
@@ -1077,10 +1077,10 @@ CMRR (dB)
      - +85.2
      - +95.4
    * - **All templates**
-     - **1202**
-     - **+33.4**
-     - **-21.8**
-     - **+73.9**
+     - **895**
+     - **+35.3**
+     - **-20.9**
+     - **+81.3**
      - **+130.3**
 
 .. _pe-psrr_db:
@@ -1104,28 +1104,28 @@ PSRR+ (dB)
      - Worst
    * - ``one_stage_opamp``
      - 54
-     - -12.8
-     - -24.5
+     - -10.6
+     - -16.8
      - +18.1
      - +57.3
    * - ``two_stage_opamp_buffered_fully_differential``
-     - 100
-     - +19.5
-     - -19.3
-     - +29.0
-     - +30.6
+     - 53
+     - +24.3
+     - -3.8
+     - +33.5
+     - +35.3
    * - ``two_stage_opamp_buffered_single_ended``
      - 88
      - +27.2
-     - -1.0
+     - -1.7
      - +62.3
      - +64.3
    * - ``two_stage_opamp_fully_differential``
-     - 100
-     - +20.0
-     - -18.8
-     - +27.6
-     - +31.1
+     - 45
+     - +24.4
+     - +10.8
+     - +30.9
+     - +32.7
    * - ``two_stage_opamp_single_ended``
      - 89
      - +26.1
@@ -1133,11 +1133,11 @@ PSRR+ (dB)
      - +60.8
      - +61.6
    * - ``three_stage_opamp_nmc_buffered_fully_differential``
-     - 100
-     - +22.4
-     - -10.9
-     - +27.9
-     - +34.8
+     - 48
+     - +22.6
+     - +3.7
+     - +32.4
+     - +38.4
    * - ``three_stage_opamp_nmc_buffered_single_ended``
      - 97
      - +25.5
@@ -1145,11 +1145,11 @@ PSRR+ (dB)
      - +49.1
      - +60.4
    * - ``three_stage_opamp_nmc_fully_differential``
-     - 100
-     - +22.3
-     - +13.1
-     - +30.2
-     - +34.8
+     - 50
+     - +25.7
+     - +17.4
+     - +34.3
+     - +38.7
    * - ``three_stage_opamp_nmc_single_ended``
      - 98
      - +22.6
@@ -1157,23 +1157,23 @@ PSRR+ (dB)
      - +48.8
      - +70.9
    * - ``three_stage_opamp_rnmc_buffered_fully_differential``
-     - 100
-     - +12.9
-     - -24.4
-     - +22.7
-     - -32.4
+     - 45
+     - +16.0
+     - -16.7
+     - +26.5
+     - +31.1
    * - ``three_stage_opamp_rnmc_buffered_single_ended``
      - 92
-     - +16.6
+     - +16.8
      - -11.6
      - +43.6
-     - +53.6
+     - +61.4
    * - ``three_stage_opamp_rnmc_fully_differential``
-     - 100
-     - +13.7
-     - -25.6
-     - +24.6
-     - -31.5
+     - 52
+     - +17.6
+     - -21.8
+     - +27.3
+     - +31.4
    * - ``three_stage_opamp_rnmc_single_ended``
      - 84
      - +17.6
@@ -1181,8 +1181,8 @@ PSRR+ (dB)
      - +27.1
      - +53.5
    * - **All templates**
-     - **1202**
-     - **+19.9**
-     - **-14.3**
-     - **+42.1**
+     - **895**
+     - **+21.5**
+     - **-11.8**
+     - **+45.6**
      - **+70.9**
