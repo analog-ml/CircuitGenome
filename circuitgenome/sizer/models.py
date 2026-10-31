@@ -277,7 +277,7 @@ class SizingResult:
         metrics are optimistic. Always ``True`` for the Level-1 path.
     :param open_loop_gain_measurable: ``False`` when the predicted ``gain_db``
         exceeds the open-loop-bench ceiling, ``20·log10(GBW / 1 mHz)`` of the
-        predicted GBW (see
+        predicted GBW capped at the bench's ≈ 212 dB DC-loop limit (see
         :func:`~circuitgenome.sizer.physics.equations.open_loop_gain_measurable`)
         — the open-loop AC bench cannot read a DC gain that high (its first
         sweep point no longer sits below the dominant pole), so the measured

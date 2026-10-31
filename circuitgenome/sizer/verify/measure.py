@@ -40,6 +40,14 @@ _RH = "1e9"   # FD input-anchor resistors (zero DC drop into MOS gates)
 #: (:func:`~circuitgenome.sizer.physics.equations.open_loop_gain_measurable`).
 AC_START_HZ = 1e-3
 
+#: Open-loop gain (dB) at which the single-ended bench's DC feedback loop
+#: closes at :data:`AC_START_HZ`.  ``Lfb`` and ``Cfb`` feed back a fraction
+#: ``β = 1/(ω²·Lfb·Cfb)`` of the output there (2.5e-11 at 1 mHz), so the loop
+#: gain ``A0·β`` reaches 1 at ``A0 = ω²·Lfb·Cfb``: ≈ 212 dB.  The sizer caps its
+#: measurability ceiling here.
+AC_LOOP_LIMIT_DB = float(20.0 * np.log10(
+    (2.0 * np.pi * AC_START_HZ) ** 2 * float(_LH) * float(_CH)))
+
 
 def _pols(polarity):
     """Polarities to try, the AC-detected one first.

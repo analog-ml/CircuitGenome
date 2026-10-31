@@ -195,6 +195,9 @@ def test_open_loop_gain_ceiling_follows_predicted_gbw():
     assert open_loop_gain_measurable(165.0, gbw_hz=1e6) is True
     assert open_loop_gain_measurable(159.0, gbw_hz=1e5) is True
     assert open_loop_gain_measurable(185.0, gbw_hz=1e7) is True
+    # A high GBW cannot lift the ceiling past the single-ended bench's DC
+    # feedback loop (Lfb/Cfb), whose loop gain reaches 1 at 1 mHz near 212 dB.
+    assert open_loop_gain_measurable(215.0, gbw_hz=1e8) is False
     # Unknown GBW falls back to the fixed ceiling.
     assert open_loop_gain_measurable(185.0, gbw_hz=None) is False
 
