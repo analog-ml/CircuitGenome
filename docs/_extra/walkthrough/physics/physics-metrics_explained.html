@@ -243,11 +243,9 @@ second stage : 40e-6 / (5e-12 + 1.25e-12) = 6.4 V/µs   ← slowest, so SR = 6.4
   <blockquote><p><strong>Main task:</strong> finish the report card — how much power it burns, how far the output can swing, and how well it rejects common-mode and supply noise.</p></blockquote>
 
   <h3>Power — add up every leg's current</h3>
-  <p>Quiescent power is simply the supply voltage times the total current drawn. The code assembles the supply-current list one leg at a time — the tail, the second (and third) stage scaled by how many slots it fills, plus a bias-generator approximation:</p>
-  <pre class="code"><code>supply_currents = [spec.ibias]                        <span class="tok-com"># tail</span>
-<span class="tok-kw">if</span> has_second_stage: supply_currents.append(ids_2 * n_ss)
-<span class="tok-kw">if</span> is_three_stage:   supply_currents.append(ids_3 * n_ts)
-supply_currents.append(spec.ibias * <span class="tok-fn">max</span>(n_bias_legs, <span class="tok-num">1</span>))  <span class="tok-com"># bias gen approx</span>
+  <p>Quiescent power is simply the supply voltage times the total current drawn. The chain gets that current by KCL at the positive rail (<code>vdd_supply_currents</code>, issue #285): every transistor with its source or drain on <code>vdd!</code> adds its planned current, and a resistor tied to <code>vdd!</code> adds the current of the transistors on its other end. Each branch counts once, whatever slot it sits in. A bias leg is one branch even though it is two transistors, and the CMFB and an output follower count too. The external reference current is not drawn from <code>vdd!</code>, so it is left out, just as on the SPICE bench:</p>
+  <pre class="code"><code>supply_currents = [ids(d) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets <span class="tok-kw">if</span> <span class="tok-str">"vdd!"</span> <span class="tok-kw">in</span> (d.drain, d.source)]
+supply_currents += [ids_on(far_node(r)) <span class="tok-kw">for</span> r <span class="tok-kw">in</span> resistors <span class="tok-kw">if</span> <span class="tok-str">"vdd!"</span> <span class="tok-kw">in</span> r.ends]
 power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, supply_currents)</code></pre>
 
   <figure class="fig">

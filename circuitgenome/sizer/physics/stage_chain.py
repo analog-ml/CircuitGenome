@@ -176,7 +176,8 @@ class StageChain:
         at the output and ignores this one.
     :param cc_pf: Miller compensation cap, ``None`` when uncompensated.
     :param cc2_pf: second compensation cap (three-stage), ``None`` otherwise.
-    :param supply_currents: per-branch quiescent currents in A (power).
+    :param supply_currents: quiescent current in A of each element drawing
+        from ``vdd!`` (power; :func:`vdd_supply_currents`).
     :param swing_headroom: ``(below_vdd, above_vss)`` in V -- how close the
         output can get to each rail (output swing), either entry ``None`` when
         it cannot be placed.  The second stage's ``Vdsat`` per polarity, or,
@@ -333,6 +334,55 @@ def _tail_current_net(pair_source: str | None,
         if t2 == pair_source and t1:
             return t1
     return pair_source
+
+
+def vdd_supply_currents(view: CircuitView,
+                        sizing: dict[str, TransistorSizing]) -> tuple[float, ...]:
+    """Planned quiescent current of each element drawing from ``vdd!``, in A.
+
+    KCL at the positive rail: every MOSFET with its source or drain on
+    ``vdd!`` contributes its planned ``|IDS|``, and every resistor tied to
+    ``vdd!`` the planned current of the MOSFET channels ending on its other
+    node (a load or bias-leg resistor feeding one device).  A node no channel
+    ends on is a resistor junction, crossed to the resistors' far ends: a
+    resistor tail feeds a degenerated pair's sources through its degeneration
+    resistors.  Each branch is therefore counted once, whatever slot it sits
+    in -- a bias leg's NMOS/PMOS pair, a diode shared by two slots, the CMFB,
+    a follower, both branches of a non-inverting stage.  The external
+    reference current is not part of it: the bench
+    injects ``Iref`` into an NMOS reference diode from ground, so the supply
+    current the bench reads (``i(Vsup)``) is this sum too (issue #285).
+    """
+    mosfets = [d for d, _slot in view.all_transistors.values()]
+
+    def ids(d: Device) -> float:
+        s = sizing.get(d.ref)
+        return abs(s.ids_a) if s is not None else 0.0
+
+    def channel(d: Device) -> tuple[str | None, str | None]:
+        return d.terminals.get("d"), d.terminals.get("s")
+
+    resistors = {r.ref: r for rs in view.slot_resistors.values() for r in rs}
+
+    def far_end(r: Device, net: str) -> str | None:
+        t1, t2 = r.terminals.get("t1"), r.terminals.get("t2")
+        return t2 if t1 == net else t1
+
+    def fed(net: str | None, via: Device, seen: set[str]) -> float:
+        """Current a resistor ``via`` delivers into ``net``."""
+        seen.add(via.ref)
+        i = sum(ids(d) for d in mosfets if net in channel(d))
+        if i or net in RAILS:
+            return i
+        return sum(fed(far_end(r, net), r, seen) for r in resistors.values()
+                   if r.ref not in seen and net in (r.terminals.get("t1"),
+                                                    r.terminals.get("t2")))
+
+    currents = [ids(d) for d in mosfets if "vdd!" in channel(d)]
+    for r in resistors.values():
+        if "vdd!" in (r.terminals.get("t1"), r.terminals.get("t2")):
+            currents.append(fed(far_end(r, "vdd!"), r, set()))
+    return tuple(currents)
 
 
 def _signal_path_nets(ip_devs: list[Device],
@@ -1010,18 +1060,6 @@ def build_stage_chain(
         r_tail = node_rout(tail_current_net, mosfets, model, sizing, frozenset())
         gd_tail = 1.0 / r_tail if r_tail and r_tail != float("inf") else 0.0
 
-    # --- Power: tail + each gain-stage branch + the bias generator ---
-    n_bias = len([d for d in slot_transistors.get("bias_gen", [])
-                  if d.type in ("nmos", "pmos")])
-    supply = [spec.ibias]
-    if len(stages) > 1:
-        n_ss = sum(1 for s in SECOND_STAGE_SLOTS if s in slot_transistors)
-        supply.append(spec.ibias * spec.second_stage_current_ratio * n_ss)
-    if len(stages) > 2:
-        n_ts = sum(1 for s in THIRD_STAGE_SLOTS if s in slot_transistors)
-        supply.append(spec.ibias * spec.third_stage_current_ratio * n_ts)
-    supply.append(spec.ibias * max(n_bias, 1))
-
     # --- Multi-stage: the parasitics the full-model GBW and PM need ---
     follower = next((d for d in _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
                      if is_signal_device(d)), None)
@@ -1080,7 +1118,7 @@ def build_stage_chain(
             slot_transistors.get("load", []), mosfets, model, sizing),
         cc_pf=cc_pf,
         cc2_pf=cc2_pf,
-        supply_currents=tuple(supply),
+        supply_currents=vdd_supply_currents(view, sizing),
         swing_headroom=output_swing_headroom(view, sizing, model, spec),
         compensation_scheme=view.compensation_scheme,
         node_caps_f=node_caps,
