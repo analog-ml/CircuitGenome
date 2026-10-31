@@ -21,19 +21,26 @@ linking every step back to the design idea behind it.
 | 0 | [Orientation](00_orientation.md) | `docs/modules/sizer.rst`, `sizer_explained.html`: the big picture, no code | 30 min |
 | 1 | [Contracts](01_contracts.md) | `models.py`, `loader.py`, tech + spec YAML, `test_loader.py` | 1 h |
 | 2 | [Dispatcher](02_dispatcher.md) | `sizer.py`, `__init__.py` | 20 min |
-| 3 | [`physics/`](03_physics.md) | taxonomy → equations → gmid_lut → device_model → node_levels → circuit_view → preprocess → rnmc → stage_chain → metrics | 6–8 h |
-| 4 | [`gmid/`](04_gmid.md) | gmid_sizer (the map) → analyze → intent → plan → geometry → bias → rnmc_refine → two_stage_refine → stage_interface → resistors → bias_levels → evaluate | 6–8 h |
+| 3 | [`physics/`](03_physics.md) | taxonomy → equations → gmid_lut → device_model → circuit_view → rnmc → preprocess → node_levels → stage_chain → metrics | 6–8 h |
+| 4 | [`gmid/`](04_gmid.md) | gmid_sizer (the map) → analyze → intent → plan → geometry → bias → stage_interface → rnmc_refine → two_stage_refine → resistors → bias_levels → evaluate | 6–8 h |
 | 5 | [`analytical/`](05_analytical.md) | constraints → level1 | 1 h |
 | 6 | [`verify/`](06_verify.md) | simulate → deck → rig → measure → op | 2–3 h |
 | 7 | [Run it end to end](07_end_to_end.md) | synthesize, size, compare analytical vs SPICE, run tests | 1 h |
 
-Two files are new since the #250 checklist was written. They are placed by
-their imports:
+The order differs from the #250 checklist in four places. Each was checked
+against the files' actual imports and the order `size_gmid` runs them:
 
-- `physics/node_levels.py`, Stop 3 after `device_model.py`. It only needs
-  `device_model` and `taxonomy`, and `stage_chain` uses it.
-- `gmid/two_stage_refine.py`, Stop 4 next to `rnmc_refine.py`. Both are
-  "re-plan on the sized circuit" loops in Phase 4.
+- `physics/rnmc.py` moves **before** `preprocess.py`, because `preprocess`
+  imports it (`compute_requirements` calls `design_rnmc`). The checklist order
+  had it after.
+- `physics/node_levels.py` (new since the checklist) sits right **before**
+  `stage_chain.py`, its only caller, so you read it and then see it used. It
+  needs only `device_model` and `taxonomy`.
+- `gmid/stage_interface.py` moves **before** the two refine files. `_size` runs
+  geometry → bias → stage interface first, and the refine loops re-run that
+  trio and refer back to the stage-interface window.
+- `gmid/two_stage_refine.py` (new since the checklist) sits next to
+  `rnmc_refine.py`. Both are "re-plan on the sized circuit" loops.
 
 ---
 

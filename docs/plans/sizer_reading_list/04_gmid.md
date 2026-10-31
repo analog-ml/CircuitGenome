@@ -10,9 +10,9 @@
 | 4.4 | [`plan.py`](../../../circuitgenome/sizer/gmid/plan.py) | 137 |
 | 4.5 | [`geometry.py`](../../../circuitgenome/sizer/gmid/geometry.py) | 332 |
 | 4.6 | [`bias.py`](../../../circuitgenome/sizer/gmid/bias.py) | 267 |
-| 4.7 | [`rnmc_refine.py`](../../../circuitgenome/sizer/gmid/rnmc_refine.py) | 156 |
-| 4.8 | [`two_stage_refine.py`](../../../circuitgenome/sizer/gmid/two_stage_refine.py) | 83 |
-| 4.9 | [`stage_interface.py`](../../../circuitgenome/sizer/gmid/stage_interface.py) | 390 |
+| 4.7 | [`stage_interface.py`](../../../circuitgenome/sizer/gmid/stage_interface.py) | 390 |
+| 4.8 | [`rnmc_refine.py`](../../../circuitgenome/sizer/gmid/rnmc_refine.py) | 156 |
+| 4.9 | [`two_stage_refine.py`](../../../circuitgenome/sizer/gmid/two_stage_refine.py) | 83 |
 | 4.10 | [`resistors.py`](../../../circuitgenome/sizer/gmid/resistors.py) | 308 |
 | 4.11 | [`bias_levels.py`](../../../circuitgenome/sizer/gmid/bias_levels.py) | 236 |
 | 4.12 | [`evaluate.py`](../../../circuitgenome/sizer/gmid/evaluate.py) | 122 |
@@ -292,12 +292,12 @@ output into the next, and pack everything into one `SizingResult`.
    gm2 breaks a bias that was sound, that round is thrown away and the next
    round runs with `hold_gm2=True`, so Cc2 and gm3 do the damping instead. This
    is the [RNMC](00_background.md#nested-miller) rule "raise gm2, then Cc2,
-   cap gm3 last", applied to the *sized* circuit. Details in 4.7.
+   cap gm3 last", applied to the *sized* circuit. Details in 4.8.
 8. [`gmid_sizer.py:151-158`](../../../circuitgenome/sizer/gmid/gmid_sizer.py#L151)
    The two-stage loop, up to `_TWO_STAGE_PASSES` = 2 rounds. It raises gm1/gm2
    to what the full loop model needs for GBW and PM (issue #274). If a re-size
    breaks a sound bias, the loop stops and keeps the previous sizing. Details
-   in 4.8.
+   in 4.9.
 9. [`gmid_sizer.py:159-169`](../../../circuitgenome/sizer/gmid/gmid_sizer.py#L159)
    The rest of Phase 4: resistors (4.10), bias levels (4.11), then two swing
    checks the sizing cannot fix. Their flags are AND-ed into `bias_feasible`
@@ -977,7 +977,7 @@ does not fit, use thinner boxes: first a thinner tail, then a thinner pair.
    resistors sit between the pair and the tail.
 
 What it does *not* check: second-stage headroom, the stage-interface level
-(that is `stage_interface.py`, 4.9), or anything SPICE would find. It is a
+(that is `stage_interface.py`, 4.7), or anything SPICE would find. It is a
 fast pre-check; `verify/op.py` gives the final DC verdict (Stop 6).
 
 **Running example.** For `circuit_0010` (PMOS pair, PMOS tail, Vdd 3.3 V):
@@ -1039,7 +1039,127 @@ PMOS pair over a PMOS tail at 10 µA / 20 µA)
 
 ---
 
-## 4.7 `gmid/rnmc_refine.py` (156 lines)
+## 4.7 `gmid/stage_interface.py` (390 lines)
+
+**Job in one sentence.** Check that the DC level the second stage pins on
+the first-stage output fits what the first-stage load needs. If it does not,
+try to fix it by moving devices to another gm/Id, and reject the circuit
+honestly if nothing works.
+
+**Design knowledge it encodes.**
+
+- [Stage interface](00_background.md#stage-interface): the downstream pipe
+  sets the pressure at the junction, and the upstream regulator works only in
+  a band.
+- [Vdsat and headroom](00_background.md#vdsat): every device in a
+  [cascode](00_background.md#cascode) stack needs its Vdsat. The stack therefore
+  demands that the node sit above (NMOS) or below (PMOS) a level.
+- [Inversion level](00_background.md#inversion): moving a device toward weak
+  inversion (higher gm/Id) lowers its `Vgs` and Vdsat. That is the repair knob.
+- [CMFB](00_background.md#cmfb) for the FD branch: a CMFB that senses a node
+  pins its level at mid-rail.
+
+**Two shapes of the same check.**
+
+| | Single-ended (#124) | Fully differential (#161) |
+|---|---|---|
+| Constraint | a **window**: `lo ≤ pin ≤ hi` with 50 mV slack | an **equality**: `pin ≈ CMFB target` within 50 mV |
+| Applies to | cascode loads only ([L308](../../../circuitgenome/sizer/gmid/stage_interface.py#L308)) | a CMFB that senses the interface nets ([L191](../../../circuitgenome/sizer/gmid/stage_interface.py#L191)) |
+| Repair knobs | load mirror groups and the second-stage device | the second-stage *pair*, both sides at one gm/Id |
+
+**Walkthrough (single-ended, the main path).**
+
+1. [L306–L315](../../../circuitgenome/sizer/gmid/stage_interface.py#L306):
+   FD goes to `_check_fd_interface`. A non-cascode SE load returns at once
+   ("enough headroom for the window never to bind"). It also needs the
+   first-stage output net, the load, and the pinning device.
+2. **The pin.** `_pin_level`
+   ([L141](../../../circuitgenome/sizer/gmid/stage_interface.py#L141)): a
+   common-source second stage holds its gate one `|Vgs|` from its source rail.
+   A follower holds it at mid-supply ± `|Vgs|`.
+3. **The window.** `_stack_bound`
+   ([L84](../../../circuitgenome/sizer/gmid/stage_interface.py#L84)) walks from
+   the node down (NMOS) or up (PMOS) through the load stack and adds each
+   device's Vdsat until it reaches a known level. That anchor is a rail, a
+   cascode whose gate is set by diode drops (`_diode_level`,
+   [L66](../../../circuitgenome/sizer/gmid/stage_interface.py#L66)), or the
+   input pair (source at Vcm ∓ `|Vgs|`). The NMOS walk gives `lo`, the PMOS
+   walk gives `hi`.
+4. [L329–L332](../../../circuitgenome/sizer/gmid/stage_interface.py#L329): if
+   the slack is at least `_MARGIN_V` (50 mV, [L63](../../../circuitgenome/sizer/gmid/stage_interface.py#L63)),
+   it is done.
+5. **Repair scan**
+   ([L335–L370](../../../circuitgenome/sizer/gmid/stage_interface.py#L335)):
+   a double loop over gm/Id candidates.
+   - The outer loop tries the violated side's **mirror group** (the load devices
+     sharing a gate with a diode) at each table gm/Id. Mirror devices have no
+     `gm` requirement, so this knob is always spec-safe. Re-sizing the whole
+     group at one gm/Id keeps the [mirror ratios](00_background.md#current-mirror).
+   - The inner loop tries the **second-stage device** at each gm/Id that still
+     meets its `gm` requirement.
+   - The first candidate with ≥ 50 mV slack wins
+     ([L368](../../../circuitgenome/sizer/gmid/stage_interface.py#L368)).
+6. **Verdict.** If the best candidate clears the raw bounds (slack ≥ 0) but not
+   the margin, it is kept and SPICE decides
+   ([L372](../../../circuitgenome/sizer/gmid/stage_interface.py#L372)).
+   Otherwise the original sizing comes back with a `"stage interface cannot
+   bias"` warning and `feasible=False`
+   ([L377–L390](../../../circuitgenome/sizer/gmid/stage_interface.py#L377)).
+
+**FD branch.** `_check_fd_interface`
+([L218](../../../circuitgenome/sizer/gmid/stage_interface.py#L218)) asks
+whether the CMFB touches the interface nets. If yes, the target is mid-rail.
+It scans the second-stage pair's gm/Id, keeping both sides equal. Within
+50 mV it is fine, within 100 mV it keeps the closest, and beyond that it
+rejects. Note that since #165 the shipped FD templates' CMFBs sense the
+*outputs*, so this branch returns early for them (see
+[test_sizer.py:1481](../../../tests/test_sizer.py#L1481)). The machinery stays
+for a future interface-sensing CMFB.
+
+**Running example.** `circuit_0010` has a current-mirror load, not a cascode:
+`blocks.has_cascode_load()` is False, so the check returns `(sizing, [], True)`
+at L309 on every call. The telescopic contrast below is the case the file
+exists for. It is traced in the debugger pass at the end of this stop.
+
+| Call | Pin (`mn1_second_stage` Vgs) | NMOS floor `lo` | Repair | Slack after |
+|---|---|---|---|---|
+| 1st `_size` | 0.887 V | 1.008 V (pin 121 mV *below* it) | `mn1–mn4_load` to gm/Id 15.5 → floor 0.836 V | 51 mV |
+| 2nd `_size` (after the two-stage refine raised `gm2`) | 0.833 V | 1.008 V | same group to gm/Id 18.0 | 58 mV |
+
+**Test to read.**
+
+- [test_sizer.py:1354](../../../tests/test_sizer.py#L1354)
+  `test_stage_interface_repairs_telescopic_cs` (still present). It asserts the
+  result is feasible, has no stage-interface warning, and
+  `Vgs(mn3 diode) + Vdsat(mn2 cascode) + 49 mV ≤ pin`.
+- [test_sizer.py:1393](../../../tests/test_sizer.py#L1393)
+  `test_stage_interface_rejects_unclosable_gap`: at 1.5 V no assignment
+  closes the gap, giving `bias_feasible=False` and the warning.
+- [test_sizer.py:1406](../../../tests/test_sizer.py#L1406)
+  `…_leaves_fitting_candidates_alone`; FD exemptions at
+  [L1481](../../../tests/test_sizer.py#L1481),
+  [L1499](../../../tests/test_sizer.py#L1499),
+  [L1512](../../../tests/test_sizer.py#L1512).
+
+**Check yourself.**
+
+1. Why is the mirror group a "spec-safe" knob, but the second-stage device not?
+2. Why are non-cascode single-ended loads skipped?
+3. In FD, why is the constraint an equality and not a window?
+
+<details><summary>Answers</summary>
+
+1. Mirror devices have no `gm` requirement, so any gm/Id is allowed as long as
+   the whole group moves together. The second-stage device must keep
+   `gm/Id · Id ≥ gm_req`, which limits how far it can move.
+2. One device per side leaves plenty of headroom, so the window never binds
+   (module docstring, "Scope, single-ended").
+3. A CMFB sensing the node holds it at mid-rail. The second stage cannot pull
+   it anywhere, so its `|Vgs|` must *match* that level or its output rails.
+
+</details>
+
+## 4.8 `gmid/rnmc_refine.py` (156 lines)
 
 **Job in one sentence.** After the first geometry pass, re-run the
 three-stage compensation design on the *sized* circuit's real numbers and, if
@@ -1056,7 +1176,7 @@ re-size against.
   guess. After geometry it is known.
 - [gm/Id](00_background.md#gmid): the table has a floor and a ceiling. The
   sized device can deliver a lot more `gm` than Phase 3 asked for (see the
-  running example in 4.8: `circuit_0010`'s input pair delivers 60 µS against a
+  running example in 4.9: `circuit_0010`'s input pair delivers 60 µS against a
   15.7 µS request). The loop's real crossing then moves.
 
 **Why estimates drift (plain words).** Phase 3 plans on a sketch, the
@@ -1197,9 +1317,7 @@ wrapping `gmid_sizer.refine_rnmc_plan` with a print.)
 
 </details>
 
----
-
-## 4.8 `gmid/two_stage_refine.py` (83 lines)
+## 4.9 `gmid/two_stage_refine.py` (83 lines)
 
 New since the #250 checklist (#274, PR #279).
 
@@ -1289,7 +1407,7 @@ To watch it work, tighten the spec (same circuit, one field changed):
 
 | Spec change | What the refine does | Final result |
 |---|---|---|
-| `gbw_min_hz: 8e6` | raises `gm1` request to 69.5 µS and `gm2` request to 593.5 µS; `m1_input_pair` 3.07 → 4.08 µm, `mn1_second_stage` 17.86 → 19.46 µm | GBW 8.07 MHz, PM 60.55° |
+| `gbw_min_hz: 8e6` | raises `gm1` request to 69.5 µS and `gm2` request to 593.5 µS; `m1_input_pair` 3.07 → 4.9 µm, `mn1_second_stage` 17.86 → 19.46 µm | GBW 8.07 MHz, PM 60.55° |
 | `phase_margin_min_deg: 70` | **nothing** (`changed=False`) | PM 65.97°, short of 70°, and **no warning** |
 
 The second row is worth understanding. With the extra gate cap counted, PM as a
@@ -1335,130 +1453,6 @@ No test calls `refine_two_stage_plan` itself.
    The PM or GBW shortfall then stays.
 
 </details>
-
----
-
-## 4.9 `gmid/stage_interface.py` (390 lines)
-
-**Job in one sentence.** Check that the DC level the second stage pins on
-the first-stage output fits what the first-stage load needs. If it does not,
-try to fix it by moving devices to another gm/Id, and reject the circuit
-honestly if nothing works.
-
-**Design knowledge it encodes.**
-
-- [Stage interface](00_background.md#stage-interface): the downstream pipe
-  sets the pressure at the junction, and the upstream regulator works only in
-  a band.
-- [Vdsat and headroom](00_background.md#vdsat): every device in a
-  [cascode](00_background.md#cascode) stack needs its Vdsat. The stack therefore
-  demands that the node sit above (NMOS) or below (PMOS) a level.
-- [Inversion level](00_background.md#inversion): moving a device toward weak
-  inversion (higher gm/Id) lowers its `Vgs` and Vdsat. That is the repair knob.
-- [CMFB](00_background.md#cmfb) for the FD branch: a CMFB that senses a node
-  pins its level at mid-rail.
-
-**Two shapes of the same check.**
-
-| | Single-ended (#124) | Fully differential (#161) |
-|---|---|---|
-| Constraint | a **window**: `lo ≤ pin ≤ hi` with 50 mV slack | an **equality**: `pin ≈ CMFB target` within 50 mV |
-| Applies to | cascode loads only ([L308](../../../circuitgenome/sizer/gmid/stage_interface.py#L308)) | a CMFB that senses the interface nets ([L191](../../../circuitgenome/sizer/gmid/stage_interface.py#L191)) |
-| Repair knobs | load mirror groups and the second-stage device | the second-stage *pair*, both sides at one gm/Id |
-
-**Walkthrough (single-ended, the main path).**
-
-1. [L306–L315](../../../circuitgenome/sizer/gmid/stage_interface.py#L306):
-   FD goes to `_check_fd_interface`. A non-cascode SE load returns at once
-   ("enough headroom for the window never to bind"). It also needs the
-   first-stage output net, the load, and the pinning device.
-2. **The pin.** `_pin_level`
-   ([L141](../../../circuitgenome/sizer/gmid/stage_interface.py#L141)): a
-   common-source second stage holds its gate one `|Vgs|` from its source rail.
-   A follower holds it at mid-supply ± `|Vgs|`.
-3. **The window.** `_stack_bound`
-   ([L84](../../../circuitgenome/sizer/gmid/stage_interface.py#L84)) walks from
-   the node down (NMOS) or up (PMOS) through the load stack and adds each
-   device's Vdsat until it reaches a known level. That anchor is a rail, a
-   cascode whose gate is set by diode drops (`_diode_level`,
-   [L66](../../../circuitgenome/sizer/gmid/stage_interface.py#L66)), or the
-   input pair (source at Vcm ∓ `|Vgs|`). The NMOS walk gives `lo`, the PMOS
-   walk gives `hi`.
-4. [L329–L332](../../../circuitgenome/sizer/gmid/stage_interface.py#L329): if
-   the slack is at least `_MARGIN_V` (50 mV, [L63](../../../circuitgenome/sizer/gmid/stage_interface.py#L63)),
-   it is done.
-5. **Repair scan**
-   ([L335–L370](../../../circuitgenome/sizer/gmid/stage_interface.py#L335)):
-   a double loop over gm/Id candidates.
-   - The outer loop tries the violated side's **mirror group** (the load devices
-     sharing a gate with a diode) at each table gm/Id. Mirror devices have no
-     `gm` requirement, so this knob is always spec-safe. Re-sizing the whole
-     group at one gm/Id keeps the [mirror ratios](00_background.md#current-mirror).
-   - The inner loop tries the **second-stage device** at each gm/Id that still
-     meets its `gm` requirement.
-   - The first candidate with ≥ 50 mV slack wins
-     ([L368](../../../circuitgenome/sizer/gmid/stage_interface.py#L368)).
-6. **Verdict.** If the best candidate clears the raw bounds (slack ≥ 0) but not
-   the margin, it is kept and SPICE decides
-   ([L372](../../../circuitgenome/sizer/gmid/stage_interface.py#L372)).
-   Otherwise the original sizing comes back with a `"stage interface cannot
-   bias"` warning and `feasible=False`
-   ([L377–L390](../../../circuitgenome/sizer/gmid/stage_interface.py#L377)).
-
-**FD branch.** `_check_fd_interface`
-([L218](../../../circuitgenome/sizer/gmid/stage_interface.py#L218)) asks
-whether the CMFB touches the interface nets. If yes, the target is mid-rail.
-It scans the second-stage pair's gm/Id, keeping both sides equal. Within
-50 mV it is fine, within 100 mV it keeps the closest, and beyond that it
-rejects. Note that since #165 the shipped FD templates' CMFBs sense the
-*outputs*, so this branch returns early for them (see
-[test_sizer.py:1481](../../../tests/test_sizer.py#L1481)). The machinery stays
-for a future interface-sensing CMFB.
-
-**Running example.** `circuit_0010` has a current-mirror load, not a cascode:
-`blocks.has_cascode_load()` is False, so the check returns `(sizing, [], True)`
-at L309 on every call. The telescopic contrast below is the case the file
-exists for. It is traced in the debugger pass at the end of this stop.
-
-| Call | Pin (`mn1_second_stage` Vgs) | NMOS floor `lo` | Repair | Slack after |
-|---|---|---|---|---|
-| 1st `_size` | 0.887 V | 1.008 V (pin 121 mV *below* it) | `mn1–mn4_load` to gm/Id 15.5 → floor 0.836 V | 51 mV |
-| 2nd `_size` (after the two-stage refine raised `gm2`) | 0.833 V | 1.008 V | same group to gm/Id 18.0 | 58 mV |
-
-**Test to read.**
-
-- [test_sizer.py:1354](../../../tests/test_sizer.py#L1354)
-  `test_stage_interface_repairs_telescopic_cs` (still present). It asserts the
-  result is feasible, has no stage-interface warning, and
-  `Vgs(mn3 diode) + Vdsat(mn2 cascode) + 49 mV ≤ pin`.
-- [test_sizer.py:1393](../../../tests/test_sizer.py#L1393)
-  `test_stage_interface_rejects_unclosable_gap`: at 1.5 V no assignment
-  closes the gap, giving `bias_feasible=False` and the warning.
-- [test_sizer.py:1406](../../../tests/test_sizer.py#L1406)
-  `…_leaves_fitting_candidates_alone`; FD exemptions at
-  [L1481](../../../tests/test_sizer.py#L1481),
-  [L1499](../../../tests/test_sizer.py#L1499),
-  [L1512](../../../tests/test_sizer.py#L1512).
-
-**Check yourself.**
-
-1. Why is the mirror group a "spec-safe" knob, but the second-stage device not?
-2. Why are non-cascode single-ended loads skipped?
-3. In FD, why is the constraint an equality and not a window?
-
-<details><summary>Answers</summary>
-
-1. Mirror devices have no `gm` requirement, so any gm/Id is allowed as long as
-   the whole group moves together. The second-stage device must keep
-   `gm/Id · Id ≥ gm_req`, which limits how far it can move.
-2. One device per side leaves plenty of headroom, so the window never binds
-   (module docstring, "Scope, single-ended").
-3. A CMFB sensing the node holds it at mid-rail. The second stage cannot pull
-   it anywhere, so its `|Vgs|` must *match* that level or its output rails.
-
-</details>
-
----
 
 ## 4.10 `gmid/resistors.py` (308 lines)
 
@@ -1523,7 +1517,7 @@ envelope with three numbers. Phase 4 writes it here, and Phase 5 opens it in
   second effect, because it lands inside a parallel combination
   ([evaluate.py:104–L108](../../../circuitgenome/sizer/gmid/evaluate.py#L104)).
 
-Also note the ordering. The two refine loops (4.7, 4.8) run *before* this
+Also note the ordering. The two refine loops (4.8, 4.9) run *before* this
 file, so their re-plans see neither the modifiers nor the resistor values.
 
 **Running example.** `circuit_0010` has no resistors at all, so
@@ -1756,7 +1750,7 @@ functional blocks**
 | [L67–L85](../../../docs/theory/gmid_sizing_flow.rst#L67) flow chart; [L87–L90](../../../docs/theory/gmid_sizing_flow.rst#L87) | Phase 4 = geometry, bias, (RNMC/two-stage re-plan), resistors; "one explicit repair (the tail re-size)" | Phase 4 also runs `check_stage_interface` inside every `_size`, `tune_bias_levels`, and the follower/CMFB-sense swing checks; the CMRR target wraps Phases 3–5 in a re-size loop (`lift_nodal_cmrr`, #296). Several repairs, not one. |
 | [L240](../../../docs/theory/gmid_sizing_flow.rst#L240) | `view.blocks.n_stages` | `AttributeError`: `OpAmpBlocks` has no `n_stages` |
 | [L282](../../../docs/theory/gmid_sizing_flow.rst#L282) | `assign_currents(view, spec, tech)` | `TypeError`: `intent` is now required ([plan.py:83](../../../circuitgenome/sizer/gmid/plan.py#L83)) |
-| [L477–L478](../../../docs/theory/gmid_sizing_flow.rst#L477) | the pre-check "does not yet check, e.g., second-stage headroom" | the stage-interface check (4.9) now covers the inter-stage window for cascode loads |
+| [L477–L478](../../../docs/theory/gmid_sizing_flow.rst#L477) | the pre-check "does not yet check, e.g., second-stage headroom" | the stage-interface check (4.7) now covers the inter-stage window for cascode loads |
 | [L583–L590](../../../docs/theory/gmid_sizing_flow.rst#L583) | GBW 15.96 MHz, PM 77.44°, slew 30 V/µs, CMRR −8.2 dB, PSRR 49.47 dB; "the poor `cmrr_db` traces back to the resistor tail" | GBW 15.08 MHz, PM 74.63°, slew 15 V/µs, **CMRR 38.39 dB**, PSRR 38.50 dB; the −8 dB story no longer holds (nodal CMRR, #290/#296) |
 | [L600](../../../docs/theory/gmid_sizing_flow.rst#L600) | warnings = topology + ceiling + geometry + DC | also swing verdicts, stage interface, RNMC advisories, evaluate notes, adoption warnings ([gmid_sizer.py:189](../../../circuitgenome/sizer/gmid/gmid_sizer.py#L189)) |
 | [L228](../../../docs/theory/gmid_sizing_flow.rst#L228) | `analyze.CircuitView` | the class is `GmIdCircuitView` (`CircuitView` is its base, imported there) |
@@ -1772,7 +1766,7 @@ Still accurate: Phase 2 and 3 printed values, the final
 | File | Pins |
 |---|---|
 | [test_loader.py](../../../tests/test_loader.py) | tech/spec YAML → `TechParams`/`SizingSpec` (Stop 1, the inputs) |
-| [test_stage_chain.py](../../../tests/test_stage_chain.py) | the chain Phase 5 grades, `two_stage_replan` (4.8) |
+| [test_stage_chain.py](../../../tests/test_stage_chain.py) | the chain Phase 5 grades, `two_stage_replan` (4.9) |
 | [test_gmid_lut.py](../../../tests/test_gmid_lut.py) | the gm/Id table every phase reads |
 | [test_headroom.py](../../../tests/test_headroom.py) | tail headroom repair and cascode budget (`bias.py`) |
 | [test_gmid_geometry.py](../../../tests/test_gmid_geometry.py) | LUT → W/L, mirrors, fingers (`geometry.py`) |
@@ -1954,7 +1948,7 @@ On current code the flag is combined in **four places**, not one.
   flag at all. A bias leg that cannot reach its level just falls back
   silently.
 - The Phase-3 ceiling advisories are warnings only.
-- The two refine modules' "spec unreachable" outcomes (4.8 returns
+- The two refine modules' "spec unreachable" outcomes (4.9 returns
   `changed=False`) set no flag.
 - The Phase-5 resistor-load check
   ([evaluate.py:118–L120](../../../circuitgenome/sizer/gmid/evaluate.py#L118))

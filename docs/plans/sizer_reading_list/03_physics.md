@@ -8,17 +8,17 @@
 | [`physics/equations.py`](../../../circuitgenome/sizer/physics/equations.py) | 974 | 3.2 |
 | [`physics/gmid_lut.py`](../../../circuitgenome/sizer/physics/gmid_lut.py) | 161 | 3.3 |
 | [`physics/device_model.py`](../../../circuitgenome/sizer/physics/device_model.py) | 403 | 3.4 |
-| [`physics/node_levels.py`](../../../circuitgenome/sizer/physics/node_levels.py) | 141 | 3.5 |
-| [`physics/circuit_view.py`](../../../circuitgenome/sizer/physics/circuit_view.py) | 216 | 3.6 |
+| [`physics/circuit_view.py`](../../../circuitgenome/sizer/physics/circuit_view.py) | 216 | 3.5 |
+| [`physics/rnmc.py`](../../../circuitgenome/sizer/physics/rnmc.py) | 277 | 3.6 |
 | [`physics/preprocess.py`](../../../circuitgenome/sizer/physics/preprocess.py) | 706 | 3.7 |
-| [`physics/rnmc.py`](../../../circuitgenome/sizer/physics/rnmc.py) | 277 | 3.8 |
+| [`physics/node_levels.py`](../../../circuitgenome/sizer/physics/node_levels.py) | 141 | 3.8 |
 | [`physics/stage_chain.py`](../../../circuitgenome/sizer/physics/stage_chain.py) | 1318 | 3.9 |
 | [`physics/metrics.py`](../../../circuitgenome/sizer/physics/metrics.py) | 334 | 3.10 |
 
 (4,584 lines, plus an 18-line [`__init__.py`](../../../circuitgenome/sizer/physics/__init__.py)
 whose docstring is the map of this package.)
 
-**Time**: 6–8 h (about 3 h for 3.1–3.5, the rest for 3.6–3.10).
+**Time**: 6–8 h (about 3 h for 3.1–3.4, the rest for 3.5–3.10).
 
 **The stop's promise**, from [`__init__.py:17`](../../../circuitgenome/sizer/physics/__init__.py#L17):
 
@@ -37,7 +37,7 @@ in `verify/` (Stop 6).
 - run the gm/Id forward recipe (gm target → gm/Id → LUT → W) by hand for any
   device of `circuit_0010`, and say why the input pair ends up at gm/Id = 6;
 - explain how the sized circuit becomes a small-signal chain, and how that
-  chain becomes the eight predicted metrics (3.6–3.10).
+  chain becomes the eight predicted metrics (3.5–3.10).
 
 ---
 
@@ -219,7 +219,7 @@ net names are rails or bias nets.
    `BIAS_NETS` (supplies and `ibias`) and
    [`:35`](../../../circuitgenome/sizer/physics/taxonomy.py#L35) `RAILS`
    (supplies and `"0"`). `RAILS` is where an output-resistance walk stops (AC
-   ground) and which nets [`node_levels`](#35-node_levelspy-141-lines)
+   ground) and which nets [`node_levels`](#38-node_levelspy-141-lines)
    pins first.
 6. [`taxonomy.py:38`](../../../circuitgenome/sizer/physics/taxonomy.py#L38)
    `is_signal_device(device)`: True when the gate is **not** a bias net, not
@@ -263,7 +263,7 @@ function really means "gate not on a bias net".
 a gate on `in1` is signal; a gate on `net_bias1` or `vdd!` is not. There is no
 `test_taxonomy.py`; the groups are exercised through `assign_ids` and the
 topology-mismatch guard in [`circuit_view.py:137`](../../../circuitgenome/sizer/physics/circuit_view.py#L137)
-(3.6).
+(3.5).
 
 **Check yourself.**
 
@@ -428,7 +428,7 @@ reader knows what a pole pair is; a link to the RNMC section would do.
   `gm3 < gm2·(1 + CL/Cc1)`.
 
 Think of `rnmc_min_gm2` as the fast first guess, and the full model
-(`rnmc_pole_damping`, family E) as the check. `rnmc.py` (3.8) uses both.
+(`rnmc_pole_damping`, family E) as the check. `rnmc.py` (3.6) uses both.
 
 **Docstring check.** Accurate but written for a control engineer. `rnmc_min_gm2`
 says "positive root of the quadratic" without saying in words *what* is being
@@ -894,7 +894,7 @@ holds the gm/Id **forward recipe**, `geometry_for`.
    - [`gm`](../../../circuitgenome/sizer/physics/device_model.py#L280) = gm/Id × Id;
    - [`gds`](../../../circuitgenome/sizer/physics/device_model.py#L284) = gm ÷
      LUT `gm_gds`. When the caller knows the device's own `Vds`
-     (from [node levels](#35-node_levelspy-141-lines)), it multiplies by
+     (from [node levels](#38-node_levelspy-141-lines)), it multiplies by
      `gds_scale(vds)`. `vds` is first raised to at least `Vdsat`: below it the
      device would be in [triode](00_background.md#regions), meaning the level
      estimate itself has failed, so the code reads at the knee instead of
@@ -949,7 +949,7 @@ holds the gm/Id **forward recipe**, `geometry_for`.
 
 | Device | Type | Id | Role | gm target | L | gm/Id used | Id/W (µA/µm) | W (µm) |
 |---|---|---|---|---|---|---|---|---|
-| `m1/m2_input_pair` | PMOS | 10 µA | signal | 15.7 µS | 0.56 | **6.0** (floor) | 3.256 | 3.07 |
+| `m1/m2_input_pair` | PMOS | 10 µA | signal | 15.7 µS | 0.56 | **6.0** (floor) | 3.256 | 3.7 |
 | `m1/m2_load` | NMOS | 10 µA | signal | none | 0.56 | 10 | 4.012 | 2.49 |
 | `m1/m2_tail_current` | PMOS | 20 µA | current source | — | 1.12 | 10 | 0.475 | 42.09 |
 | `mn1_second_stage` | NMOS | 50 µA | signal | 416 µS, then 575 µS | 0.56 | **11.5** (swing floor) | 2.800 | 17.86 |
@@ -957,7 +957,7 @@ holds the gm/Id **forward recipe**, `geometry_for`.
 | bias gen NMOS ×3 | NMOS | 20 µA | current source | — | 1.12 | 10 | 2.049 | 9.76 |
 | `mp5_bias_gen` | PMOS | 20 µA | current source | — | 1.12 | 10 | 0.475 | 42.09 |
 
-The widths match the README table after snapping (3.07, 2.495, 42.085,
+The widths match the README table after snapping (3.7, 2.495, 42.085,
 17.855, 105.21).
 
 The input pair is the instructive row. The GBW spec asks for
@@ -977,7 +977,7 @@ the reported analytical `output_swing_min_v` of 0.14 V. The later re-plan
 (Stop 4) re-solves the device at 575 µS, the gm it already has, so nothing
 moves.
 
-Two more reads on the sized `m1_input_pair` (W = 3.07, L = 0.56, 10 µA):
+Two more reads on the sized `m1_input_pair` (W = 3.7, L = 0.56, 10 µA):
 `cgg` = 5.37 fF (from `ft`) against `cgs` = 5.01 fF (from `Cox`). In strong
 inversion and narrow, the two estimates agree, as the primer says they
 should.
@@ -1031,10 +1031,416 @@ it falls to `_role_gm_id`, the *current-source* value 10, at the *signal* L.
 
 ---
 
-## 3.5 `node_levels.py` (141 lines)
+## 3.5 `circuit_view.py` (216 lines)
 
-New since the #250 checklist. It sits here because it imports only
-`device_model` and `taxonomy`, and `stage_chain.py` (3.9) is its only caller.
+**Job in one sentence.** Turn the functional-block recognizer's (FBR) slot
+assignments into one read-only `CircuitView`: which transistors, resistors and
+capacitors sit in which slot, each transistor listed once, plus warnings.
+
+**Design knowledge it encodes.**
+- The sizer trusts the FBR slots and the naming conventions
+  ([pipeline layers](00_background.md#pipeline-layers)). It never re-discovers
+  structure from scratch.
+- A device can belong to two blocks. In `circuit_0010` the tail mirror's diode
+  `m1_tail_current` is both the [current mirror](00_background.md#current-mirror)
+  reference of the tail and a leg of the
+  [bias generator](00_background.md#bias-generator). It must still get exactly
+  one current and one size.
+
+**Walkthrough.**
+1. [`CircuitView`](../../../circuitgenome/sizer/physics/circuit_view.py#L23):
+   a plain dataclass. `slot_transistors` / `slot_resistors` / `slot_capacitors`
+   map slot name → devices. `all_transistors` maps `ref → (device, owning slot)`.
+   `compensation_scheme` is copied from the template (`"nested_miller"`,
+   `"reversed_nested_miller"` or `None`).
+2. [`analyze_circuit`](../../../circuitgenome/sizer/physics/circuit_view.py#L198)
+   is the only public entry point. It runs the steps below in a fixed order, so
+   no caller can assemble them wrongly.
+3. [`_extract_slot_transistors`](../../../circuitgenome/sizer/physics/circuit_view.py#L85)
+   (and the resistor/capacitor twins at
+   [L97](../../../circuitgenome/sizer/physics/circuit_view.py#L97) and
+   [L109](../../../circuitgenome/sizer/physics/circuit_view.py#L109)) filter
+   each FBR slot's devices by type.
+4. **Orphan adoption**,
+   [`_adopt_orphan_mosfets`](../../../circuitgenome/sizer/physics/circuit_view.py#L51).
+   Pattern matching sometimes leaves a MOSFET in no slot (two identical
+   diodes on one net, say). Such a device would be **unsized**: ngspice would
+   simulate it at a default W/L. Synthesized netlists name every device
+   `{ref}_{slot}`, so the code matches the ref's suffix against the slot names,
+   longest first ([L72](../../../circuitgenome/sizer/physics/circuit_view.py#L72),
+   so `second_stage_p` wins over `second_stage`). Each adoption is returned in
+   `adopted`, and
+   [`adoption_warnings`](../../../circuitgenome/sizer/physics/circuit_view.py#L174)
+   turns the list into one advisory. Both sizers append it to
+   `SizingResult.warnings`. Analogy: a lost parcel delivered by the address
+   label because the sorting machine could not read the barcode. It arrives,
+   but someone should fix the machine.
+5. **Deduplication**,
+   [`_deduplicate_devices`](../../../circuitgenome/sizer/physics/circuit_view.py#L148).
+   Slots are visited in a fixed priority
+   ([L158](../../../circuitgenome/sizer/physics/circuit_view.py#L158):
+   `input_pair`, `load`, `tail_current`, the stage slots, `output_stage*`,
+   `bias_gen`; anything else last), and the first slot seen owns the device.
+   This is what keeps `m1_tail_current` a tail device rather than a bias-gen
+   device.
+6. **Topology mismatch**,
+   [`_check_topology_match`](../../../circuitgenome/sizer/physics/circuit_view.py#L125).
+   Every gain-stage slot of a real circuit holds one *signal* transistor
+   (`is_signal_device`, from Stop 3.1). If a stage slot holds only bias devices,
+   the netlist was probably sized against the wrong `--topology` (single-ended
+   netlist, fully-differential template). Without this warning the gain, PM and
+   PSRR metrics would just silently disappear.
+
+The gm/Id sizer wraps this view in its own richer one:
+[`gmid/analyze.py::analyze_circuit`](../../../circuitgenome/sizer/gmid/analyze.py#L172)
+calls this function first, then adds typed blocks and cascode refs (Stop 4).
+
+**Running example.** For `circuit_0010`: five slots (`input_pair`, `load`,
+`tail_current`, `bias_gen`, `second_stage`), and `bias_gen` lists five MOSFETs
+because it includes `m1_tail_current`. After deduplication `all_transistors`
+has 12 entries and `m1_tail_current` is owned by `tail_current`.
+`adopted = []`, `warnings = []`, `compensation_scheme = None` (two-stage).
+
+**Test to read.**
+- [`test_circuit_view.py`](../../../tests/test_circuit_view.py#L10)
+  `test_adoption_warning_names_every_device_and_its_slot` and
+  `test_adoption_warning_groups_by_slot`: the advisory names every adopted ref,
+  sorted, grouped by slot. That is the only direct test of this file; adoption,
+  dedup priority and the mismatch check are only covered end to end.
+
+**Check yourself.**
+1. Why is an orphan MOSFET dangerous if nobody adopts it?
+2. A device sits in both `tail_current` and `bias_gen`. Which current will
+   `assign_ids` give it, and why?
+3. What does the mismatch check look for, and what would you lose without it?
+
+<details><summary>Answers</summary>
+
+1. Nobody gives it a W/L, so the deck keeps the simulator's default size and
+   the circuit is simulated with a random-sized device in it.
+2. The `tail_current` one: `_deduplicate_devices` visits `tail_current` before
+   `bias_gen`, so that slot owns the ref, and `assign_ids` reads the owning slot.
+   Both slots happen to be in `FULL_BIAS_SLOTS` (`ibias`), so the answer is the
+   same here, but ownership also decides gm requirements.
+3. A stage slot with no signal device. Without it, sizing a netlist against the
+   wrong template would silently drop gain, PM and PSRR instead of saying why.
+
+</details>
+
+## 3.6 `rnmc.py` (277 lines)
+
+**Job in one sentence.** Pick `(gm2, Cc2, gm3)` for a three-stage
+reversed-nested-Miller amplifier so its inner pole pair is well damped and its
+phase margin meets the spec.
+
+**Design knowledge it encodes.**
+- [RNMC](00_background.md#nested-miller): both caps start at the first-stage
+  output. The two non-dominant poles become a *pair* that can ring, with
+  damping ζ. The pair is only stable while `gm3 < gm2 · (1 + CL/Cc1)`.
+- [Phase margin](00_background.md#phase-margin) read off a full nodal model,
+  worst over every 0 dB crossing.
+- The [nulling resistor](00_background.md#rhp-zero) in series with a
+  compensation cap.
+
+You have a pending review of PR #249, which introduced this file. The long
+explanation (transfer functions, what ζ means, how the sizer builds
+`(G + sC)·v = b` and finds the poles) is
+[`docs/theory/rnmc_stability.rst`](../../../docs/theory/rnmc_stability.rst);
+read it next to this section. Its sibling
+[`rnmc_buffered_oscillation.rst`](../../../docs/theory/rnmc_buffered_oscillation.rst)
+covers the buffered variant (#266).
+
+**Walkthrough.**
+1. Constants ([L45–L61](../../../circuitgenome/sizer/physics/rnmc.py#L45)):
+   `ZETA_TARGET = 0.7` ("roughly critical": one smooth settle),
+   `ZETA_FLOOR = 0.5` (still settles, ~16 % overshoot), the Cc2 multipliers
+   `(1, 1.5, 2, 3, 4)` capped at Cc1, gm2 rising ×1.15 per step, gm3 falling
+   ×0.85 per step.
+2. [`design_rnmc`](../../../circuitgenome/sizer/physics/rnmc.py#L84). Analogy:
+   tuning a car's suspension with three knobs, cheapest first.
+   - `score(gm2, cc2, gm3)` ([L146](../../../circuitgenome/sizer/physics/rnmc.py#L146))
+     asks the full model for ζ and PM and marks the choice `met` when
+     `ζ ≥ 0.7` and `PM ≥ spec`.
+   - If the starting point already meets both, it is returned unchanged
+     ([L156](../../../circuitgenome/sizer/physics/rnmc.py#L156)).
+   - Otherwise the loops at [L173–L189](../../../circuitgenome/sizer/physics/rnmc.py#L173)
+     fix the **knob order**: for each gm3 (starting value first, then lower),
+     for each Cc2 (starting value first, then larger), raise gm2 from the
+     closed-form damping floor (`eq.rnmc_min_gm2`) up to its ceiling. The first
+     `met` choice wins. So gm2 moves first, Cc2 second, and gm3 (which costs
+     DC gain) only when nothing else works.
+   - Nothing met: prefer the phase margin (which SPICE verifies) over the
+     damping heuristic, among choices with `ζ ≥ 0.5`
+     ([L191–L197](../../../circuitgenome/sizer/physics/rnmc.py#L191)).
+3. [`comp_resistances`](../../../circuitgenome/sizer/physics/rnmc.py#L200):
+   the series resistors `(R1, R2)` each half would get, sized like
+   `size_resistors` sizes them (`eq.compensation_resistor_ohm`, against gm3).
+   Returns one entry per *distinct* half; a bare cap gets 0 Ω.
+4. [`worst_half`](../../../circuitgenome/sizer/physics/rnmc.py#L220): ζ and PM
+   of the least stable half. A fully-differential amp whose `_p` and `_n`
+   halves are compensated differently is only as stable as its worse half
+   (issues #266, #269).
+5. Helpers: [`signal_cgs_estimate`](../../../circuitgenome/sizer/physics/rnmc.py#L236)
+   (gate cap of a device before it has a width, used for the third stage's
+   gate on the second-stage output);
+   [`design_warnings`](../../../circuitgenome/sizer/physics/rnmc.py#L257)
+   (plain-language advisories for what the design had to change).
+
+Who calls it: the Level-1 sizer inside `compute_requirements` (3.7 step 9) on
+estimates, and the gm/Id sizer in
+[`gmid/rnmc_refine.py:119`](../../../circuitgenome/sizer/gmid/rnmc_refine.py#L119)
+on the sized circuit. `metrics.py` reuses `comp_resistances` and `worst_half`
+to *report* the RNMC phase margin.
+
+**Running example.** `circuit_0010` is two-stage, so nothing here touches it.
+The test suite's single-ended RNMC fixture
+[`three_stage_rnmc_se_fbr`](../../../tests/test_sizer.py#L803) is the
+`three_stage_opamp_rnmc_single_ended` template with a PMOS input pair, a folded
+cascode load, a common-source NMOS second stage (`mn1_second_stage`, output
+`net_mid2`), a non-inverting PMOS third stage (`mp1_third_stage` driving an
+NMOS mirror onto `out`), `c1_comp1` from `net_mid1` to `out` (Cc1) and
+`c1_comp2` from `net_mid1` to `net_mid2` (Cc2). Sized on the `generic` tech
+with `_THREE_STAGE_SPEC` (`ibias = 10 µA`, `CL = 20 pF`, `SR ≥ 3.5 V/µs`,
+`PM ≥ 60°`), `compute_requirements` hands `design_rnmc`:
+
+| | Start | After `design_rnmc` |
+|---|---|---|
+| gm2 | 41.9 µS | **516 µS** (ceiling 625 µS) |
+| Cc2 | 0.714 pF (Cc1/4) | **2.86 pF** (= Cc1, the last step) |
+| gm3 | 1.17 mS | **0.997 mS** (capped, on `mp1_third_stage` only) |
+| ζ | **−0.22**: the pair is in the right half plane | 0.708 |
+| PM | — | 65.5° (`met = True`) |
+
+(Cc1 = 2.86 pF is the slew bound `10 µA / 3.5 V/µs`, below `0.25·CL = 5 pF`.)
+The start violates the stability rule: `gm2·(1 + CL/Cc1) = 41.9 µS · 8 = 0.34 mS`
+is far below `gm3 = 1.17 mS`. The search raised gm2 to its ceiling at every
+Cc2 with the original gm3 and never reached ζ = 0.7, then stepped gm3 down
+once (×0.85) and succeeded at the largest Cc2. The design also emits a
+"third-stage gm capped" advisory.
+
+**Test to read.** [`tests/test_rnmc.py`](../../../tests/test_rnmc.py) uses
+numbers from a frozen ptm45 FD fixture (module docstring).
+- [`test_design_raises_gm2_first`](../../../tests/test_rnmc.py#L156): with room
+  on gm2, only gm2 moves.
+- [`test_design_caps_gm3_only_when_gm2_and_cc2_run_out`](../../../tests/test_rnmc.py#L172):
+  at a 0.9 mS gm2 ceiling the design ends with gm2 at the ceiling and a lower
+  gm3, still stable.
+- [`test_stability_boundary_is_one_plus_cl_over_cc1`](../../../tests/test_rnmc.py#L42):
+  ζ changes sign exactly at `gm3 = gm2·(1 + CL/Cc1)`.
+- [`test_metrics_report_the_worse_half`](../../../tests/test_rnmc.py#L280):
+  the reported PM is the worse half's.
+- [`test_sizer.py:951`](../../../tests/test_sizer.py#L951)
+  `test_rnmc_requirements_damp_the_inner_pole_pair`: the running example above,
+  asserted.
+
+**Check yourself.**
+1. Why is "cap gm3" the last knob?
+2. What does a negative ζ mean physically?
+3. Why does the gm/Id sizer not use the RNMC re-plan inside
+   `compute_requirements`?
+
+<details><summary>Answers</summary>
+
+1. The DC gain is the product of the stages' gains, so a lower gm3 means lower
+   gain. Raising gm2 or Cc2 costs current or area but keeps the gain.
+2. The pole pair sits in the right half plane: every bounce grows, so the
+   amplifier oscillates.
+3. Its geometry step (bias repair) moves gm1 far from the estimate, and the
+   third stage's real gate capacitance is only known after sizing. So it runs
+   `design_rnmc` on the sized circuit (`gmid/rnmc_refine.py`).
+
+</details>
+
+## 3.7 `preprocess.py` (706 lines)
+
+**Job in one sentence.** Do the "pencil and paper" part of sizing that needs no
+geometry: give every transistor its DC current, size load resistors and
+compensation caps, and turn the spec into **gm targets** per device. It also
+hosts the one requirement that is found on the sized circuit instead
+(`lift_nodal_cmrr`).
+
+**Design knowledge it encodes.**
+- [KCL](00_background.md#kcl): currents at every node must balance, so the
+  per-device currents follow from `ibias` and the stage ratios.
+- [GBW](00_background.md#gbw) `= gm1 / (2π·Cc)`, turned around: `gm1 ≥ 2π·GBW·Cc`.
+- [Miller compensation](00_background.md#miller): `Cc ≈ 0.25·CL` as the
+  pole-split floor; [slew](00_background.md#slew) `I/Cc` only caps Cc from above.
+- [Phase margin](00_background.md#phase-margin) closed form, turned around:
+  `gm2 ≥ gm1·CL / (Cc·tan(90° − PM))`.
+- Gain `A0 = k_fs·gm1·Rout1·gm2·Rout2` ([stages](00_background.md#stages),
+  [rout](00_background.md#rout)).
+- The weak-inversion ceiling `gm ≤ ~25·Id` ([gm](00_background.md#gm),
+  [inversion](00_background.md#inversion)).
+- [Nested Miller / RNMC](00_background.md#nested-miller) for three stages.
+- [CMRR](00_background.md#cmrr) as a gm1 floor.
+
+**Walkthrough.** Read the functions in the order the sizers call them.
+
+1. **Currents**: [`assign_ids`](../../../circuitgenome/sizer/physics/preprocess.py#L220).
+   One loop over `all_transistors`, one rule per slot family (the families come
+   from [taxonomy](../../../circuitgenome/sizer/physics/taxonomy.py#L17)):
+   `input_pair` / `load` → `ibias / n` per same-type device (a pair splits the
+   tail current); `tail_current` / `bias_gen` → `ibias`; second stage →
+   `ibias · second_stage_current_ratio`; third stage → its own ratio; anything
+   else → `ibias`. Two structures need real KCL instead of a rule:
+   - [`_cascode_load_current_plan`](../../../circuitgenome/sizer/physics/preprocess.py#L132):
+     in a *folded* [cascode](00_background.md#cascode) the bottom "folding"
+     devices carry the pair's branch current **plus** the cascode branch's, or
+     the pair's current has nowhere to go and the load rails.
+   - [`_cmfb_current_plan`](../../../circuitgenome/sizer/physics/preprocess.py#L175):
+     inside the [CMFB](00_background.md#cmfb) amp, tails get `ibias`, pair
+     devices split their tail, and the rest are found by a small fixed-point
+     loop (sum of currents into a drain net, or copy of the diode it mirrors).
+2. **Load resistors**:
+   [`size_load_resistors`](../../../circuitgenome/sizer/physics/preprocess.py#L51).
+   Only rail-referenced resistors in the `load` slot. Each carries `ibias/2`, and
+   `R = V_drop / (ibias/2)`, where `V_drop` is the turn-on gate voltage of the
+   next stage's input device (the [stage interface](00_background.md#stage-interface)):
+   the gm/Id path passes the LUT `Vgs` (`seed_v`, issue #158), Level-1 falls back
+   to `|Vth| + 0.15 V`
+   ([`_RESISTOR_LOAD_OVERDRIVE`](../../../circuitgenome/sizer/physics/preprocess.py#L34)).
+   A one-stage amp drops to `Vcm` instead, because feedback holds its output
+   there (issue #284). This is the "spring stiffness" of a
+   [resistor load](00_background.md#loads), limited by headroom.
+3. **Requirements**:
+   [`compute_requirements`](../../../circuitgenome/sizer/physics/preprocess.py#L305),
+   the heart of the file (~340 lines). It returns
+   `(gm_req_map, vod_max_map, cc_pf, cc2_pf, warnings)`. Step by step:
+   1. *Estimate output resistances before any geometry exists*
+      ([L357–L394](../../../circuitgenome/sizer/physics/preprocess.py#L357)):
+      `model.gds_estimate(type, Id, role)`, combined in parallel with
+      `eq.rout`. A resistor load adds its `1/R` to the first stage.
+   2. *The first-stage factor* `k_fs`
+      ([`_first_stage_gain_factor`](../../../circuitgenome/sizer/physics/preprocess.py#L281)):
+      a pair tapped on one side only delivers half its gm, unless a
+      current-mirror load folds the other half back in
+      ([`_mirror_reference`](../../../circuitgenome/sizer/physics/preprocess.py#L251)
+      finds the diode). So `k_fs = 1.0` for a mirror load or a fully-differential
+      output, `0.5` otherwise.
+   3. *CMRR floor* ([L400–L405](../../../circuitgenome/sizer/physics/preprocess.py#L400)):
+      `gm1 ≥ CMRR · 2 · gd_tail`, the closed form `CMRR = gm1/(2·gd_tail)`
+      turned around. Skipped when the caller passes `cmrr_gm1` (step 5 below).
+   4. *Cc* ([L410–L422](../../../circuitgenome/sizer/physics/preprocess.py#L410)):
+      the **smallest** stable cap, `max(cap.min, min(0.25·CL, ibias/SR_min))`
+      ([`_CC_STABILITY_RATIO`](../../../circuitgenome/sizer/physics/preprocess.py#L39)).
+      Every extra pF raises the gm1 that GBW needs (issue #108).
+   5. *gm1 from GBW* ([L433–L434](../../../circuitgenome/sizer/physics/preprocess.py#L433)):
+      ```python
+      gm1_req = max(gm1_req, 2.0 * math.pi * spec.gbw_min_hz * cc_f / k_fs)
+      ```
+      If CMRR already pushed gm1 higher, Cc is raised to keep GBW on the spec
+      ([L437](../../../circuitgenome/sizer/physics/preprocess.py#L437)). A
+      `cmrr_gm1` floor from the sized circuit is applied *after* this, so it
+      keeps the GBW-planned Cc ([L446](../../../circuitgenome/sizer/physics/preprocess.py#L446)).
+   6. *Two-stage gm2* ([L489–L516](../../../circuitgenome/sizer/physics/preprocess.py#L489)):
+      the larger of "gain" (`A0 / (k_fs·gm1·Rout1·Rout2)`) and "phase margin"
+      (`k_fs·gm1_eff·CL / (Cc·tan(90° − PM))`). `gm1_eff` is
+      `model.realized_gm`: the gm1 the pair will *really* have, which can be
+      more than asked for.
+   7. *Three-stage* ([L449–L487](../../../circuitgenome/sizer/physics/preprocess.py#L449)):
+      `Cc2 = Cc1/4` by default (NMC: sized for a damping ζ = 0.3 with
+      `gm3 ≥ 3.5·gm2`), phase budget split between the two non-dominant poles,
+      and gm3 solved from the gain target.
+   8. *Clamp to the ceiling* ([L535–L558](../../../circuitgenome/sizer/physics/preprocess.py#L535)):
+      any gm above `model.gm_ceiling(Id)` is clamped, with a warning ("the spec
+      needs more current than the device can give").
+   9. *RNMC re-plan* ([L563–L578](../../../circuitgenome/sizer/physics/preprocess.py#L563)):
+      only when the caller asks for `"reversed_nested_miller"` (the Level-1
+      sizer). Calls `rnmc.design_rnmc` (3.6). The gm/Id sizer passes `None`
+      here ([plan.py:127](../../../circuitgenome/sizer/gmid/plan.py#L127)) and
+      re-plans RNMC after geometry instead (Stop 4, `rnmc_refine.py`).
+   10. *Per-device map* ([L584–L602](../../../circuitgenome/sizer/physics/preprocess.py#L584)):
+       gm1 on both pair devices, gm2/gm3 on each stage's signal device only;
+       everything else gets no gm target (a current source is sized for
+       headroom, not gm).
+   11. *Vdsat caps from swing* ([L604–L644](../../../circuitgenome/sizer/physics/preprocess.py#L604)):
+       `Vdsat ≤ Vdd − swing_max` for load and stage PMOS, `Vdsat ≤ swing_min − Vss`
+       for stage NMOS ([swing](00_background.md#swing)).
+4. **Caps onto devices**:
+   [`size_compensation_caps`](../../../circuitgenome/sizer/physics/preprocess.py#L105)
+   writes `cc_pf` onto every `comp*` capacitor and `cc2_pf` onto `comp2*` ones,
+   in farads.
+5. **CMRR on the sized circuit**:
+   [`lift_nodal_cmrr`](../../../circuitgenome/sizer/physics/preprocess.py#L649)
+   (issue #296). For a single-ended chain the *reported* CMRR is the nodal one
+   (3.9), and on a mirror load it follows the pair's drain imbalance, not the
+   tail: `CMRR ≈ gm1/|gds1 − gds2|`. Raising gm1 against `2·gd_tail` can even
+   lower it. So: size once with no CMRR floor; while the reported CMRR is
+   short, raise gm1 by the shortfall (`gm1 · 10^(short/20)`, capped at the
+   widest device and the ceiling) and re-size, at most twice
+   ([`_CMRR_PASSES`](../../../circuitgenome/sizer/physics/preprocess.py#L48)).
+   [`_lifts_cmrr`](../../../circuitgenome/sizer/physics/preprocess.py#L697)
+   keeps a re-size only if CMRR went up, bias stayed feasible, and no other spec
+   got worse. Both sizers call it only when there is a CMRR target and
+   `reports_nodal_rejection` is true
+   ([gmid_sizer.py:94](../../../circuitgenome/sizer/gmid/gmid_sizer.py#L94),
+   [level1.py:69](../../../circuitgenome/sizer/analytical/level1.py#L69)).
+   Analogy: a thermostat that is allowed two nudges and must not make any
+   other room colder.
+
+**Running example.** What `circuit_0010` gets (gf180, spec
+`ibias = 20 µA`, `CL = 5 pF`, `GBW ≥ 2 MHz`, `PM ≥ 60°`, `SR ≥ 0.3 V/µs`):
+
+| Step | Result |
+|---|---|
+| `assign_ids` | pair and load devices 10 µA each, tail and bias-gen devices 20 µA, `mn1/mp1_second_stage` 50 µA (2.5 × 20 µA) |
+| `size_load_resistors` | `{}`: no resistor load |
+| `k_fs` | 1.0: `m1_load` is a diode, so the load is a mirror |
+| Cc | `min(0.25 · 5 pF, 20 µA / 0.3 V/µs = 66.7 pF)` = **1.25 pF** |
+| gm1 (GBW) | `2π · 2 MHz · 1.25 pF` = **15.7 µS** |
+| `realized_gm` | **60 µS**: the gf180 LUT cannot go below gm/Id = 6 at 10 µA, so a 15.7 µS ask is delivered at 60 µS (this is why GBW ends at ~7 MHz, not 2 MHz) |
+| gm2 (gain, 60 dB) | 250 µS |
+| gm2 (PM) | `60 µS · 5 pF / (1.25 pF · tan 30°)` = **415.7 µS** (wins) |
+| `vod_max_map` | 0.3 V on `m1/m2_load`, `mp1_second_stage` (Vdd − 3.0 V) and `mn1_second_stage` (0.3 V − 0) |
+| `lift_nodal_cmrr` | not called: the spec has no `cmrr_min_db` |
+
+The second stage ends up at 575 µS, not 415.7 µS; the geometry and
+stage-interface steps of Stop 4 explain that.
+
+**Test to read.**
+- [`test_sizer.py:533`](../../../tests/test_sizer.py#L533)
+  `test_size_two_stage_cc_stability_floor`: a loose slew spec leaves Cc on
+  `0.25·CL`, not on the slew bound.
+- [`test_sizer.py:1254`](../../../tests/test_sizer.py#L1254)
+  `test_folded_cascode_load_current_plan` (and the four after it): the folding
+  sinks carry 20 µA, every other load device 10 µA; telescopic loads carry the
+  pair current all the way up.
+- [`test_sizer.py:209`](../../../tests/test_sizer.py#L209)
+  `test_compensation_caps_*`: `comp2*` gets Cc2, falls back to Cc1, and nothing
+  without a Cc.
+- [`test_sizer.py:1741`](../../../tests/test_sizer.py#L1741) to
+  [L1811](../../../tests/test_sizer.py#L1811): the `lift_nodal_cmrr` family. A
+  met target changes nothing; a short one raises the pair's width (but not to
+  the maximum); an unreachable one costs no other spec; FD and telescopic
+  designs still use the tail-only floor; a lift that costs PM is refused.
+
+**Check yourself.**
+1. Why does the code choose the *smallest* stable Cc instead of the largest the
+   slew spec allows?
+2. `k_fs = 0.5` for a resistor load. Which formulas does it enter, and which
+   one deliberately not?
+3. Why is the CMRR target handled by re-sizing (`lift_nodal_cmrr`) and not by a
+   floor inside `compute_requirements` for single-ended amps?
+
+<details><summary>Answers</summary>
+
+1. GBW needs `gm1 = 2π·GBW·Cc/k_fs`. A bigger Cc demands a bigger gm1, which
+   pushes the input pair toward its weak-inversion ceiling (issue #108). The
+   slew spec only says "Cc must not be larger than ibias/SR".
+2. The first-stage gain (`k_fs·gm1·Rout1`) and gm1's role in GBW and PM
+   (`k_fs·gm1`). Not the raw gm1 used for CMRR.
+3. On a mirror-loaded single-ended pair the reported (nodal) CMRR is set by the
+   drain imbalance `|gds1 − gds2|`, which only exists once devices have sizes
+   and bias levels. The closed-form floor follows the wrong path and can lower
+   the real CMRR (issue #296).
+
+</details>
+
+## 3.8 `node_levels.py` (141 lines)
+
+New since the #250 checklist. It needs only `device_model` and `taxonomy`,
+but it sits here, right before `stage_chain.py` (3.9), because that file is
+its only caller: read it, then see it used.
 
 **Job in one sentence.** It estimates the DC voltage on every net of a sized
 circuit, without solving the circuit, so that each device can be read from the
@@ -1186,419 +1592,6 @@ checked by hand:
 
 ---
 
----
-
-## 3.6 `circuit_view.py` (216 lines)
-
-**Job in one sentence.** Turn the functional-block recognizer's (FBR) slot
-assignments into one read-only `CircuitView`: which transistors, resistors and
-capacitors sit in which slot, each transistor listed once, plus warnings.
-
-**Design knowledge it encodes.**
-- The sizer trusts the FBR slots and the naming conventions
-  ([pipeline layers](00_background.md#pipeline-layers)). It never re-discovers
-  structure from scratch.
-- A device can belong to two blocks. In `circuit_0010` the tail mirror's diode
-  `m1_tail_current` is both the [current mirror](00_background.md#current-mirror)
-  reference of the tail and a leg of the
-  [bias generator](00_background.md#bias-generator). It must still get exactly
-  one current and one size.
-
-**Walkthrough.**
-1. [`CircuitView`](../../../circuitgenome/sizer/physics/circuit_view.py#L23):
-   a plain dataclass. `slot_transistors` / `slot_resistors` / `slot_capacitors`
-   map slot name → devices. `all_transistors` maps `ref → (device, owning slot)`.
-   `compensation_scheme` is copied from the template (`"nested_miller"`,
-   `"reversed_nested_miller"` or `None`).
-2. [`analyze_circuit`](../../../circuitgenome/sizer/physics/circuit_view.py#L198)
-   is the only public entry point. It runs the steps below in a fixed order, so
-   no caller can assemble them wrongly.
-3. [`_extract_slot_transistors`](../../../circuitgenome/sizer/physics/circuit_view.py#L85)
-   (and the resistor/capacitor twins at
-   [L97](../../../circuitgenome/sizer/physics/circuit_view.py#L97) and
-   [L109](../../../circuitgenome/sizer/physics/circuit_view.py#L109)) filter
-   each FBR slot's devices by type.
-4. **Orphan adoption**,
-   [`_adopt_orphan_mosfets`](../../../circuitgenome/sizer/physics/circuit_view.py#L51).
-   Pattern matching sometimes leaves a MOSFET in no slot (two identical
-   diodes on one net, say). Such a device would be **unsized**: ngspice would
-   simulate it at a default W/L. Synthesized netlists name every device
-   `{ref}_{slot}`, so the code matches the ref's suffix against the slot names,
-   longest first ([L72](../../../circuitgenome/sizer/physics/circuit_view.py#L72),
-   so `second_stage_p` wins over `second_stage`). Each adoption is returned in
-   `adopted`, and
-   [`adoption_warnings`](../../../circuitgenome/sizer/physics/circuit_view.py#L174)
-   turns the list into one advisory. Both sizers append it to
-   `SizingResult.warnings`. Analogy: a lost parcel delivered by the address
-   label because the sorting machine could not read the barcode. It arrives,
-   but someone should fix the machine.
-5. **Deduplication**,
-   [`_deduplicate_devices`](../../../circuitgenome/sizer/physics/circuit_view.py#L148).
-   Slots are visited in a fixed priority
-   ([L158](../../../circuitgenome/sizer/physics/circuit_view.py#L158):
-   `input_pair`, `load`, `tail_current`, the stage slots, `output_stage*`,
-   `bias_gen`; anything else last), and the first slot seen owns the device.
-   This is what keeps `m1_tail_current` a tail device rather than a bias-gen
-   device.
-6. **Topology mismatch**,
-   [`_check_topology_match`](../../../circuitgenome/sizer/physics/circuit_view.py#L125).
-   Every gain-stage slot of a real circuit holds one *signal* transistor
-   (`is_signal_device`, from Stop 3.1). If a stage slot holds only bias devices,
-   the netlist was probably sized against the wrong `--topology` (single-ended
-   netlist, fully-differential template). Without this warning the gain, PM and
-   PSRR metrics would just silently disappear.
-
-The gm/Id sizer wraps this view in its own richer one:
-[`gmid/analyze.py::analyze_circuit`](../../../circuitgenome/sizer/gmid/analyze.py#L172)
-calls this function first, then adds typed blocks and cascode refs (Stop 4).
-
-**Running example.** For `circuit_0010`: five slots (`input_pair`, `load`,
-`tail_current`, `bias_gen`, `second_stage`), and `bias_gen` lists five MOSFETs
-because it includes `m1_tail_current`. After deduplication `all_transistors`
-has 12 entries and `m1_tail_current` is owned by `tail_current`.
-`adopted = []`, `warnings = []`, `compensation_scheme = None` (two-stage).
-
-**Test to read.**
-- [`test_circuit_view.py`](../../../tests/test_circuit_view.py#L10)
-  `test_adoption_warning_names_every_device_and_its_slot` and
-  `test_adoption_warning_groups_by_slot`: the advisory names every adopted ref,
-  sorted, grouped by slot. That is the only direct test of this file; adoption,
-  dedup priority and the mismatch check are only covered end to end.
-
-**Check yourself.**
-1. Why is an orphan MOSFET dangerous if nobody adopts it?
-2. A device sits in both `tail_current` and `bias_gen`. Which current will
-   `assign_ids` give it, and why?
-3. What does the mismatch check look for, and what would you lose without it?
-
-<details><summary>Answers</summary>
-
-1. Nobody gives it a W/L, so the deck keeps the simulator's default size and
-   the circuit is simulated with a random-sized device in it.
-2. The `tail_current` one: `_deduplicate_devices` visits `tail_current` before
-   `bias_gen`, so that slot owns the ref, and `assign_ids` reads the owning slot.
-   Both slots happen to be in `FULL_BIAS_SLOTS` (`ibias`), so the answer is the
-   same here, but ownership also decides gm requirements.
-3. A stage slot with no signal device. Without it, sizing a netlist against the
-   wrong template would silently drop gain, PM and PSRR instead of saying why.
-
-</details>
-
----
-
-## 3.7 `preprocess.py` (706 lines)
-
-**Job in one sentence.** Do the "pencil and paper" part of sizing that needs no
-geometry: give every transistor its DC current, size load resistors and
-compensation caps, and turn the spec into **gm targets** per device. It also
-hosts the one requirement that is found on the sized circuit instead
-(`lift_nodal_cmrr`).
-
-**Design knowledge it encodes.**
-- [KCL](00_background.md#kcl): currents at every node must balance, so the
-  per-device currents follow from `ibias` and the stage ratios.
-- [GBW](00_background.md#gbw) `= gm1 / (2π·Cc)`, turned around: `gm1 ≥ 2π·GBW·Cc`.
-- [Miller compensation](00_background.md#miller): `Cc ≈ 0.25·CL` as the
-  pole-split floor; [slew](00_background.md#slew) `I/Cc` only caps Cc from above.
-- [Phase margin](00_background.md#phase-margin) closed form, turned around:
-  `gm2 ≥ gm1·CL / (Cc·tan(90° − PM))`.
-- Gain `A0 = k_fs·gm1·Rout1·gm2·Rout2` ([stages](00_background.md#stages),
-  [rout](00_background.md#rout)).
-- The weak-inversion ceiling `gm ≤ ~25·Id` ([gm](00_background.md#gm),
-  [inversion](00_background.md#inversion)).
-- [Nested Miller / RNMC](00_background.md#nested-miller) for three stages.
-- [CMRR](00_background.md#cmrr) as a gm1 floor.
-
-**Walkthrough.** Read the functions in the order the sizers call them.
-
-1. **Currents**: [`assign_ids`](../../../circuitgenome/sizer/physics/preprocess.py#L220).
-   One loop over `all_transistors`, one rule per slot family (the families come
-   from [taxonomy](../../../circuitgenome/sizer/physics/taxonomy.py#L17)):
-   `input_pair` / `load` → `ibias / n` per same-type device (a pair splits the
-   tail current); `tail_current` / `bias_gen` → `ibias`; second stage →
-   `ibias · second_stage_current_ratio`; third stage → its own ratio; anything
-   else → `ibias`. Two structures need real KCL instead of a rule:
-   - [`_cascode_load_current_plan`](../../../circuitgenome/sizer/physics/preprocess.py#L132):
-     in a *folded* [cascode](00_background.md#cascode) the bottom "folding"
-     devices carry the pair's branch current **plus** the cascode branch's, or
-     the pair's current has nowhere to go and the load rails.
-   - [`_cmfb_current_plan`](../../../circuitgenome/sizer/physics/preprocess.py#L175):
-     inside the [CMFB](00_background.md#cmfb) amp, tails get `ibias`, pair
-     devices split their tail, and the rest are found by a small fixed-point
-     loop (sum of currents into a drain net, or copy of the diode it mirrors).
-2. **Load resistors**:
-   [`size_load_resistors`](../../../circuitgenome/sizer/physics/preprocess.py#L51).
-   Only rail-referenced resistors in the `load` slot. Each carries `ibias/2`, and
-   `R = V_drop / (ibias/2)`, where `V_drop` is the turn-on gate voltage of the
-   next stage's input device (the [stage interface](00_background.md#stage-interface)):
-   the gm/Id path passes the LUT `Vgs` (`seed_v`, issue #158), Level-1 falls back
-   to `|Vth| + 0.15 V`
-   ([`_RESISTOR_LOAD_OVERDRIVE`](../../../circuitgenome/sizer/physics/preprocess.py#L34)).
-   A one-stage amp drops to `Vcm` instead, because feedback holds its output
-   there (issue #284). This is the "spring stiffness" of a
-   [resistor load](00_background.md#loads), limited by headroom.
-3. **Requirements**:
-   [`compute_requirements`](../../../circuitgenome/sizer/physics/preprocess.py#L305),
-   the heart of the file (~340 lines). It returns
-   `(gm_req_map, vod_max_map, cc_pf, cc2_pf, warnings)`. Step by step:
-   1. *Estimate output resistances before any geometry exists*
-      ([L357–L394](../../../circuitgenome/sizer/physics/preprocess.py#L357)):
-      `model.gds_estimate(type, Id, role)`, combined in parallel with
-      `eq.rout`. A resistor load adds its `1/R` to the first stage.
-   2. *The first-stage factor* `k_fs`
-      ([`_first_stage_gain_factor`](../../../circuitgenome/sizer/physics/preprocess.py#L281)):
-      a pair tapped on one side only delivers half its gm, unless a
-      current-mirror load folds the other half back in
-      ([`_mirror_reference`](../../../circuitgenome/sizer/physics/preprocess.py#L251)
-      finds the diode). So `k_fs = 1.0` for a mirror load or a fully-differential
-      output, `0.5` otherwise.
-   3. *CMRR floor* ([L400–L405](../../../circuitgenome/sizer/physics/preprocess.py#L400)):
-      `gm1 ≥ CMRR · 2 · gd_tail`, the closed form `CMRR = gm1/(2·gd_tail)`
-      turned around. Skipped when the caller passes `cmrr_gm1` (step 5 below).
-   4. *Cc* ([L410–L422](../../../circuitgenome/sizer/physics/preprocess.py#L410)):
-      the **smallest** stable cap, `max(cap.min, min(0.25·CL, ibias/SR_min))`
-      ([`_CC_STABILITY_RATIO`](../../../circuitgenome/sizer/physics/preprocess.py#L39)).
-      Every extra pF raises the gm1 that GBW needs (issue #108).
-   5. *gm1 from GBW* ([L433–L434](../../../circuitgenome/sizer/physics/preprocess.py#L433)):
-      ```python
-      gm1_req = max(gm1_req, 2.0 * math.pi * spec.gbw_min_hz * cc_f / k_fs)
-      ```
-      If CMRR already pushed gm1 higher, Cc is raised to keep GBW on the spec
-      ([L437](../../../circuitgenome/sizer/physics/preprocess.py#L437)). A
-      `cmrr_gm1` floor from the sized circuit is applied *after* this, so it
-      keeps the GBW-planned Cc ([L446](../../../circuitgenome/sizer/physics/preprocess.py#L446)).
-   6. *Two-stage gm2* ([L489–L516](../../../circuitgenome/sizer/physics/preprocess.py#L489)):
-      the larger of "gain" (`A0 / (k_fs·gm1·Rout1·Rout2)`) and "phase margin"
-      (`k_fs·gm1_eff·CL / (Cc·tan(90° − PM))`). `gm1_eff` is
-      `model.realized_gm`: the gm1 the pair will *really* have, which can be
-      more than asked for.
-   7. *Three-stage* ([L449–L487](../../../circuitgenome/sizer/physics/preprocess.py#L449)):
-      `Cc2 = Cc1/4` by default (NMC: sized for a damping ζ = 0.3 with
-      `gm3 ≥ 3.5·gm2`), phase budget split between the two non-dominant poles,
-      and gm3 solved from the gain target.
-   8. *Clamp to the ceiling* ([L535–L558](../../../circuitgenome/sizer/physics/preprocess.py#L535)):
-      any gm above `model.gm_ceiling(Id)` is clamped, with a warning ("the spec
-      needs more current than the device can give").
-   9. *RNMC re-plan* ([L563–L578](../../../circuitgenome/sizer/physics/preprocess.py#L563)):
-      only when the caller asks for `"reversed_nested_miller"` (the Level-1
-      sizer). Calls `rnmc.design_rnmc` (3.8). The gm/Id sizer passes `None`
-      here ([plan.py:127](../../../circuitgenome/sizer/gmid/plan.py#L127)) and
-      re-plans RNMC after geometry instead (Stop 4, `rnmc_refine.py`).
-   10. *Per-device map* ([L584–L602](../../../circuitgenome/sizer/physics/preprocess.py#L584)):
-       gm1 on both pair devices, gm2/gm3 on each stage's signal device only;
-       everything else gets no gm target (a current source is sized for
-       headroom, not gm).
-   11. *Vdsat caps from swing* ([L604–L644](../../../circuitgenome/sizer/physics/preprocess.py#L604)):
-       `Vdsat ≤ Vdd − swing_max` for load and stage PMOS, `Vdsat ≤ swing_min − Vss`
-       for stage NMOS ([swing](00_background.md#swing)).
-4. **Caps onto devices**:
-   [`size_compensation_caps`](../../../circuitgenome/sizer/physics/preprocess.py#L105)
-   writes `cc_pf` onto every `comp*` capacitor and `cc2_pf` onto `comp2*` ones,
-   in farads.
-5. **CMRR on the sized circuit**:
-   [`lift_nodal_cmrr`](../../../circuitgenome/sizer/physics/preprocess.py#L649)
-   (issue #296). For a single-ended chain the *reported* CMRR is the nodal one
-   (3.9), and on a mirror load it follows the pair's drain imbalance, not the
-   tail: `CMRR ≈ gm1/|gds1 − gds2|`. Raising gm1 against `2·gd_tail` can even
-   lower it. So: size once with no CMRR floor; while the reported CMRR is
-   short, raise gm1 by the shortfall (`gm1 · 10^(short/20)`, capped at the
-   widest device and the ceiling) and re-size, at most twice
-   ([`_CMRR_PASSES`](../../../circuitgenome/sizer/physics/preprocess.py#L48)).
-   [`_lifts_cmrr`](../../../circuitgenome/sizer/physics/preprocess.py#L697)
-   keeps a re-size only if CMRR went up, bias stayed feasible, and no other spec
-   got worse. Both sizers call it only when there is a CMRR target and
-   `reports_nodal_rejection` is true
-   ([gmid_sizer.py:94](../../../circuitgenome/sizer/gmid/gmid_sizer.py#L94),
-   [level1.py:69](../../../circuitgenome/sizer/analytical/level1.py#L69)).
-   Analogy: a thermostat that is allowed two nudges and must not make any
-   other room colder.
-
-**Running example.** What `circuit_0010` gets (gf180, spec
-`ibias = 20 µA`, `CL = 5 pF`, `GBW ≥ 2 MHz`, `PM ≥ 60°`, `SR ≥ 0.3 V/µs`):
-
-| Step | Result |
-|---|---|
-| `assign_ids` | pair and load devices 10 µA each, tail and bias-gen devices 20 µA, `mn1/mp1_second_stage` 50 µA (2.5 × 20 µA) |
-| `size_load_resistors` | `{}`: no resistor load |
-| `k_fs` | 1.0: `m1_load` is a diode, so the load is a mirror |
-| Cc | `min(0.25 · 5 pF, 20 µA / 0.3 V/µs = 66.7 pF)` = **1.25 pF** |
-| gm1 (GBW) | `2π · 2 MHz · 1.25 pF` = **15.7 µS** |
-| `realized_gm` | **60 µS**: the gf180 LUT cannot go below gm/Id = 6 at 10 µA, so a 15.7 µS ask is delivered at 60 µS (this is why GBW ends at ~7 MHz, not 2 MHz) |
-| gm2 (gain, 60 dB) | 250 µS |
-| gm2 (PM) | `60 µS · 5 pF / (1.25 pF · tan 30°)` = **415.7 µS** (wins) |
-| `vod_max_map` | 0.3 V on `m1/m2_load`, `mp1_second_stage` (Vdd − 3.0 V) and `mn1_second_stage` (0.3 V − 0) |
-| `lift_nodal_cmrr` | not called: the spec has no `cmrr_min_db` |
-
-The second stage ends up at 575 µS, not 415.7 µS; the geometry and
-stage-interface steps of Stop 4 explain that.
-
-**Test to read.**
-- [`test_sizer.py:533`](../../../tests/test_sizer.py#L533)
-  `test_size_two_stage_cc_stability_floor`: a loose slew spec leaves Cc on
-  `0.25·CL`, not on the slew bound.
-- [`test_sizer.py:1254`](../../../tests/test_sizer.py#L1254)
-  `test_folded_cascode_load_current_plan` (and the four after it): the folding
-  sinks carry 20 µA, every other load device 10 µA; telescopic loads carry the
-  pair current all the way up.
-- [`test_sizer.py:209`](../../../tests/test_sizer.py#L209)
-  `test_compensation_caps_*`: `comp2*` gets Cc2, falls back to Cc1, and nothing
-  without a Cc.
-- [`test_sizer.py:1741`](../../../tests/test_sizer.py#L1741) to
-  [L1811](../../../tests/test_sizer.py#L1811): the `lift_nodal_cmrr` family. A
-  met target changes nothing; a short one raises the pair's width (but not to
-  the maximum); an unreachable one costs no other spec; FD and telescopic
-  designs still use the tail-only floor; a lift that costs PM is refused.
-
-**Check yourself.**
-1. Why does the code choose the *smallest* stable Cc instead of the largest the
-   slew spec allows?
-2. `k_fs = 0.5` for a resistor load. Which formulas does it enter, and which
-   one deliberately not?
-3. Why is the CMRR target handled by re-sizing (`lift_nodal_cmrr`) and not by a
-   floor inside `compute_requirements` for single-ended amps?
-
-<details><summary>Answers</summary>
-
-1. GBW needs `gm1 = 2π·GBW·Cc/k_fs`. A bigger Cc demands a bigger gm1, which
-   pushes the input pair toward its weak-inversion ceiling (issue #108). The
-   slew spec only says "Cc must not be larger than ibias/SR".
-2. The first-stage gain (`k_fs·gm1·Rout1`) and gm1's role in GBW and PM
-   (`k_fs·gm1`). Not the raw gm1 used for CMRR.
-3. On a mirror-loaded single-ended pair the reported (nodal) CMRR is set by the
-   drain imbalance `|gds1 − gds2|`, which only exists once devices have sizes
-   and bias levels. The closed-form floor follows the wrong path and can lower
-   the real CMRR (issue #296).
-
-</details>
-
----
-
-## 3.8 `rnmc.py` (277 lines)
-
-**Job in one sentence.** Pick `(gm2, Cc2, gm3)` for a three-stage
-reversed-nested-Miller amplifier so its inner pole pair is well damped and its
-phase margin meets the spec.
-
-**Design knowledge it encodes.**
-- [RNMC](00_background.md#nested-miller): both caps start at the first-stage
-  output. The two non-dominant poles become a *pair* that can ring, with
-  damping ζ. The pair is only stable while `gm3 < gm2 · (1 + CL/Cc1)`.
-- [Phase margin](00_background.md#phase-margin) read off a full nodal model,
-  worst over every 0 dB crossing.
-- The [nulling resistor](00_background.md#rhp-zero) in series with a
-  compensation cap.
-
-You have a pending review of PR #249, which introduced this file. The long
-explanation (transfer functions, what ζ means, how the sizer builds
-`(G + sC)·v = b` and finds the poles) is
-[`docs/theory/rnmc_stability.rst`](../../../docs/theory/rnmc_stability.rst);
-read it next to this section. Its sibling
-[`rnmc_buffered_oscillation.rst`](../../../docs/theory/rnmc_buffered_oscillation.rst)
-covers the buffered variant (#266).
-
-**Walkthrough.**
-1. Constants ([L45–L61](../../../circuitgenome/sizer/physics/rnmc.py#L45)):
-   `ZETA_TARGET = 0.7` ("roughly critical": one smooth settle),
-   `ZETA_FLOOR = 0.5` (still settles, ~16 % overshoot), the Cc2 multipliers
-   `(1, 1.5, 2, 3, 4)` capped at Cc1, gm2 rising ×1.15 per step, gm3 falling
-   ×0.85 per step.
-2. [`design_rnmc`](../../../circuitgenome/sizer/physics/rnmc.py#L84). Analogy:
-   tuning a car's suspension with three knobs, cheapest first.
-   - `score(gm2, cc2, gm3)` ([L146](../../../circuitgenome/sizer/physics/rnmc.py#L146))
-     asks the full model for ζ and PM and marks the choice `met` when
-     `ζ ≥ 0.7` and `PM ≥ spec`.
-   - If the starting point already meets both, it is returned unchanged
-     ([L156](../../../circuitgenome/sizer/physics/rnmc.py#L156)).
-   - Otherwise the loops at [L173–L189](../../../circuitgenome/sizer/physics/rnmc.py#L173)
-     fix the **knob order**: for each gm3 (starting value first, then lower),
-     for each Cc2 (starting value first, then larger), raise gm2 from the
-     closed-form damping floor (`eq.rnmc_min_gm2`) up to its ceiling. The first
-     `met` choice wins. So gm2 moves first, Cc2 second, and gm3 (which costs
-     DC gain) only when nothing else works.
-   - Nothing met: prefer the phase margin (which SPICE verifies) over the
-     damping heuristic, among choices with `ζ ≥ 0.5`
-     ([L191–L197](../../../circuitgenome/sizer/physics/rnmc.py#L191)).
-3. [`comp_resistances`](../../../circuitgenome/sizer/physics/rnmc.py#L200):
-   the series resistors `(R1, R2)` each half would get, sized like
-   `size_resistors` sizes them (`eq.compensation_resistor_ohm`, against gm3).
-   Returns one entry per *distinct* half; a bare cap gets 0 Ω.
-4. [`worst_half`](../../../circuitgenome/sizer/physics/rnmc.py#L220): ζ and PM
-   of the least stable half. A fully-differential amp whose `_p` and `_n`
-   halves are compensated differently is only as stable as its worse half
-   (issues #266, #269).
-5. Helpers: [`signal_cgs_estimate`](../../../circuitgenome/sizer/physics/rnmc.py#L236)
-   (gate cap of a device before it has a width, used for the third stage's
-   gate on the second-stage output);
-   [`design_warnings`](../../../circuitgenome/sizer/physics/rnmc.py#L257)
-   (plain-language advisories for what the design had to change).
-
-Who calls it: the Level-1 sizer inside `compute_requirements` (3.7 step 9) on
-estimates, and the gm/Id sizer in
-[`gmid/rnmc_refine.py:119`](../../../circuitgenome/sizer/gmid/rnmc_refine.py#L119)
-on the sized circuit. `metrics.py` reuses `comp_resistances` and `worst_half`
-to *report* the RNMC phase margin.
-
-**Running example.** `circuit_0010` is two-stage, so nothing here touches it.
-The test suite's single-ended RNMC fixture
-[`three_stage_rnmc_se_fbr`](../../../tests/test_sizer.py#L803) is the
-`three_stage_opamp_rnmc_single_ended` template with a PMOS input pair, a folded
-cascode load, a common-source NMOS second stage (`mn1_second_stage`, output
-`net_mid2`), a non-inverting PMOS third stage (`mp1_third_stage` driving an
-NMOS mirror onto `out`), `c1_comp1` from `net_mid1` to `out` (Cc1) and
-`c1_comp2` from `net_mid1` to `net_mid2` (Cc2). Sized on the `generic` tech
-with `_THREE_STAGE_SPEC` (`ibias = 10 µA`, `CL = 20 pF`, `SR ≥ 3.5 V/µs`,
-`PM ≥ 60°`), `compute_requirements` hands `design_rnmc`:
-
-| | Start | After `design_rnmc` |
-|---|---|---|
-| gm2 | 41.9 µS | **516 µS** (ceiling 625 µS) |
-| Cc2 | 0.714 pF (Cc1/4) | **2.86 pF** (= Cc1, the last step) |
-| gm3 | 1.17 mS | **0.997 mS** (capped, on `mp1_third_stage` only) |
-| ζ | **−0.22**: the pair is in the right half plane | 0.708 |
-| PM | — | 65.5° (`met = True`) |
-
-(Cc1 = 2.86 pF is the slew bound `10 µA / 3.5 V/µs`, below `0.25·CL = 5 pF`.)
-The start violates the stability rule: `gm2·(1 + CL/Cc1) = 41.9 µS · 8 = 0.34 mS`
-is far below `gm3 = 1.17 mS`. The search raised gm2 to its ceiling at every
-Cc2 with the original gm3 and never reached ζ = 0.7, then stepped gm3 down
-once (×0.85) and succeeded at the largest Cc2. The design also emits a
-"third-stage gm capped" advisory.
-
-**Test to read.** [`tests/test_rnmc.py`](../../../tests/test_rnmc.py) uses
-numbers from a frozen ptm45 FD fixture (module docstring).
-- [`test_design_raises_gm2_first`](../../../tests/test_rnmc.py#L156): with room
-  on gm2, only gm2 moves.
-- [`test_design_caps_gm3_only_when_gm2_and_cc2_run_out`](../../../tests/test_rnmc.py#L172):
-  at a 0.9 mS gm2 ceiling the design ends with gm2 at the ceiling and a lower
-  gm3, still stable.
-- [`test_stability_boundary_is_one_plus_cl_over_cc1`](../../../tests/test_rnmc.py#L42):
-  ζ changes sign exactly at `gm3 = gm2·(1 + CL/Cc1)`.
-- [`test_metrics_report_the_worse_half`](../../../tests/test_rnmc.py#L280):
-  the reported PM is the worse half's.
-- [`test_sizer.py:951`](../../../tests/test_sizer.py#L951)
-  `test_rnmc_requirements_damp_the_inner_pole_pair`: the running example above,
-  asserted.
-
-**Check yourself.**
-1. Why is "cap gm3" the last knob?
-2. What does a negative ζ mean physically?
-3. Why does the gm/Id sizer not use the RNMC re-plan inside
-   `compute_requirements`?
-
-<details><summary>Answers</summary>
-
-1. The DC gain is the product of the stages' gains, so a lower gm3 means lower
-   gain. Raising gm2 or Cc2 costs current or area but keeps the gain.
-2. The pole pair sits in the right half plane: every bounce grows, so the
-   amplifier oscillates.
-3. Its geometry step (bias repair) moves gm1 far from the estimate, and the
-   third stage's real gate capacitance is only known after sizing. So it runs
-   `design_rnmc` on the sized circuit (`gmid/rnmc_refine.py`).
-
-</details>
-
----
-
 ## 3.9 `stage_chain.py` (1318 lines)
 
 **Job in one sentence.** Read a fully sized circuit and boil it down to a small
@@ -1616,7 +1609,7 @@ This is the densest file of the stop. It is easiest read in five parts:
   [degeneration](00_background.md#degeneration); [nodal analysis](00_background.md#nodal-analysis);
   [CMRR](00_background.md#cmrr); [PSRR](00_background.md#psrr); [power](00_background.md#power);
   [swing](00_background.md#swing); [source follower](00_background.md#source-follower).
-- **Node levels** (Stop 3.5): `estimate_node_levels` guesses the DC voltage of
+- **Node levels** (Stop 3.8): `estimate_node_levels` guesses the DC voltage of
   every net from the rails, the input common mode and each device's `Vgs`;
   `device_bias(device, levels)` returns that device's `(Vds, Vsb)`.
 - **Looking-in resistance.** "The resistance looking into a drain" means: hold
@@ -2029,7 +2022,7 @@ and the margin convention: positive means the spec is met.
      always from a **full model** (#274). RNMC →
      [`_rnmc_phase_margin`](../../../circuitgenome/sizer/physics/metrics.py#L36)
      / [`_rnmc_gbw`](../../../circuitgenome/sizer/physics/metrics.py#L47) (worst
-     half, 3.8); two-stage and NMC →
+     half, 3.6); two-stage and NMC →
      [`_miller_loop`](../../../circuitgenome/sizer/physics/metrics.py#L58),
      which calls `eq.two_stage_loop` or `eq.nested_miller_loop` with the
      chain's gms, `1/rout`, `node_caps_f`, buffer, CMFB coupling and series
@@ -2228,9 +2221,9 @@ the slowest of every current-limited node, not just `I_tail/Cc`.
 
 ## Simplification notes
 
-### 3.1–3.5
+### 3.1–3.4 and 3.8 (taxonomy, equations, gmid_lut, device_model, node_levels)
 
-Logged while writing 3.1–3.5. Not fixed.
+Logged while writing these sections. Not fixed.
 
 | Location | Observation |
 |---|---|
@@ -2251,7 +2244,7 @@ Logged while writing 3.1–3.5. Not fixed.
 | [`taxonomy.py:16`](../../../circuitgenome/sizer/physics/taxonomy.py#L16) | Comment says `HALF_BIAS_SLOTS` carry `iBias/2`; `assign_ids` actually gives `ibias / n` (n same-polarity devices in the slot), which is `ibias/2` only for a plain pair. |
 | [`__init__.py:1–18`](../../../circuitgenome/sizer/physics/__init__.py#L1) | The package docstring's module map omits `node_levels` and `rnmc` (and lists `equations` / `gmid_lut` only as `device_model`'s backends). |
 
-### 3.6–3.10
+### 3.5–3.7, 3.9–3.10 (circuit_view, rnmc, preprocess, stage_chain, metrics)
 
 | Location | Observation |
 |---|---|
