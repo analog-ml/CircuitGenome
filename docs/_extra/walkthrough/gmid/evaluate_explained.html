@@ -404,24 +404,25 @@ miss factor = 10 MΩ / 100 kΩ = 100×   →   20·log₁₀(100) = 40 dB of gai
   <p>It scans the downstream stage slots for a signal device, and returns it <em>only if its source sits on a rail</em> — the signature of a common-source stage. A common-source stage is fragile precisely because its gate voltage must land in a narrow window; that's why it's the one we must protect.</p>
 
   <h3><code>_resistor_load_bias()</code> — the collision test</h3>
-  <p>Here is the physics. A fixed load resistor holds the first-stage output at <code>I·R</code> volts from its reference rail. But the driven common-source stage needs its gate exactly <code>|Vgs|</code> from that <em>same</em> rail to carry its quiescent current. Since #158 both voltages trace to the <em>same</em> LUT <code>Vgs</code>: <code>R</code> is seeded from the driven signal device's <code>Vgs</code> read from the LUT at the nominal corner, so the two normally <strong>agree</strong>. They diverge only in the off-nominal case — when the driven device operates far from the seed's nominal gm/Id — and then can disagree by more than its own <code>Vdsat</code>.</p>
+  <p>Here is the physics. A fixed load resistor holds the first-stage output at <code>I·R</code> volts from its reference rail. But the driven common-source stage needs its gate exactly <code>|Vgs|</code> from that <em>same</em> rail to carry its quiescent current. Since #158 both voltages trace to the <em>same</em> LUT <code>Vgs</code>: <code>R</code> is seeded from the driven signal device's <code>Vgs</code> read from the LUT at the nominal corner, so the two normally <strong>agree</strong>. They diverge only in the off-nominal case: the driven device ends up far from the seed's nominal gm/Id, for example pushed to the weak-inversion ceiling, where its <code>|Vgs|</code> drops by about 0.1&nbsp;V.</p>
+  <p>A small gap is harmless. Every op-amp runs inside a DC feedback loop, and so does the SPICE bench. The loop sets the driven gate to exactly <code>|Vgs|</code>, and the input pair shifts its current split so that the load branch carries <code>|Vgs|/R</code> instead of <code>ibias/2</code>. That costs a few millivolts of input offset, not a railed output. The only thing the pair cannot do is give the load branch more than the whole tail current <code>ibias</code>.</p>
 
   <pre class="code"><code>    v_off = (spec.ibias / <span class="tok-num">2.0</span>) / currents.gd_load_r   <span class="tok-com"># the I·R drop across the load</span>
-    mismatch = <span class="tok-fn">abs</span>(v_off - <span class="tok-fn">abs</span>(s.vgs_v))
-    <span class="tok-kw">if</span> mismatch > s.vds_sat_v:
+    <span class="tok-kw">if</span> <span class="tok-fn">abs</span>(s.vgs_v) >= <span class="tok-num">2.0</span> * v_off:   <span class="tok-com"># |Vgs|/R ≥ ibias: needs the whole tail</span>
         ... <span class="tok-kw">return</span> <span class="tok-kw">True</span>, [<span class="tok-com"># invalid: gain metrics gated</span> ...]
     <span class="tok-kw">return</span> <span class="tok-kw">False</span>, [fragility]</code></pre>
 
-  <p>The rule: <span class="keyline">if the two voltages disagree by more than the driven device's own Vdsat, it's pushed out of saturation.</span> Below Vdsat of slack the stage still bends but survives; beyond it, the high-impedance output rails to a supply and the small-signal <code>gm·Rout</code> gain is a fiction sitting on an operating point that doesn't exist.</p>
+  <p>The rule: <span class="keyline">if the load branch would need the whole tail current to reach the driven gate's |Vgs|, i.e. |Vgs| ≥ 2·I·R, the operating point does not exist.</span> Short of that bound the pair absorbs the gap and the stage keeps amplifying. Beyond it the output rails to a supply, and the small-signal <code>gm·Rout</code> gain would be a fiction. (An earlier rule compared the gap with the driven device's <code>Vdsat</code>. That threshold is tightest in weak inversion and withheld the gain of designs that SPICE measures without trouble, issue&nbsp;#286.)</p>
 
   <h3>Trace it with real numbers</h3>
-  <p>Take <code>ibias/2 = 6&nbsp;µA</code>, load conductance <code>gd_load_r = 20&nbsp;µS</code> (so <code>R = 50&nbsp;kΩ</code>), a driven device with <code>|Vgs| = 0.60&nbsp;V</code> and <code>Vdsat = 0.15&nbsp;V</code>:</p>
+  <p>Take <code>ibias/2 = 6&nbsp;µA</code>, load conductance <code>gd_load_r = 20&nbsp;µS</code> (so <code>R = 50&nbsp;kΩ</code>), a driven device with <code>|Vgs| = 0.60&nbsp;V</code>:</p>
   <pre class="code"><code>v_off    = 6 µA / 20 µS      = 0.30 V     (what the resistor holds)
-mismatch = |0.30 − 0.60|     = 0.30 V     (what the gate actually needs)
-0.30 V   >  Vdsat 0.15 V     → INVALID    → drop gain/GBW/PM/CMRR/PSRR</code></pre>
+needed   = 0.60 V / 50 kΩ    = 12 µA      (load-branch current at the gate's |Vgs|)
+12 µA   ≥  tail 12 µA        → INVALID    → drop gain/GBW/PM/CMRR/PSRR</code></pre>
+  <p>Compare the gf180 case from issue&nbsp;#286. The load holds 0.76&nbsp;V, and the weak-inversion driven device needs 0.68&nbsp;V. That is 8.9&nbsp;µA out of a 20&nbsp;µA tail, so the gate stands down. SPICE measures 52&nbsp;dB, as predicted.</p>
 
   <figure class="fig">
-    <svg viewBox="0 0 520 220" role="img" aria-label="The resistor holds the output 0.30 V from the rail but the gate needs 0.60 V, a mismatch larger than Vdsat">
+    <svg viewBox="0 0 520 220" role="img" aria-label="The resistor holds the output 0.30 V from the rail but the gate needs 0.60 V, twice the drop, so the load branch would need the whole tail current">
       <!-- rail at top -->
       <line x1="60" y1="30" x2="300" y2="30" stroke="var(--fig-stroke)" stroke-width="3"/>
       <text x="306" y="34" font-size="11" fill="var(--fig-muted)">reference rail</text>
@@ -441,18 +442,18 @@ mismatch = |0.30 − 0.60|     = 0.30 V     (what the gate actually needs)
       <rect x="60" y="90" width="40" height="60" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
       <text x="80" y="176" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">gap</text>
       <text x="80" y="192" text-anchor="middle" font-size="10.5" fill="var(--fig-bad)">0.30 V</text>
-      <text x="330" y="200" text-anchor="middle" font-size="11.5" fill="var(--fig-bad)" font-weight="600">gap 0.30 V &gt; Vdsat 0.15 V → stage rails ✗</text>
+      <text x="330" y="200" text-anchor="middle" font-size="11.5" fill="var(--fig-bad)" font-weight="600">|Vgs| ≥ 2·I·R → needs the whole tail, rails ✗</text>
     </svg>
-    <figcaption>The resistor pins the output 0.30 V from the rail; the driven gate needs 0.60 V. The 0.30 V gap dwarfs the 0.15 V Vdsat, so the stage falls out of saturation.</figcaption>
+    <figcaption>The resistor holds the output 0.30&nbsp;V from the rail, and the driven gate needs 0.60&nbsp;V. Reaching it would push 12&nbsp;µA through the 50&nbsp;kΩ load, the whole tail current, so no operating point exists.</figcaption>
   </figure>
 
   <h3>The two return shapes</h3>
   <p>The function returns <code>(invalid, notes)</code>. Even on the healthy branch it <em>always</em> appends a <code>fragility</code> advisory, because a fixed resistor cannot track <code>Vth</code> across PVT corners the way an active load can — the bias is honest today but corner-fragile. And it only engages at all for <strong>single-ended</strong> resistor loads feeding a common-source stage; a fully-differential node is held by CMFB, not by a driven gate, so it bails early.</p>
 
   <figure class="fig">
-    <svg viewBox="0 0 460 180" role="img" aria-label="Decision branch: mismatch greater than Vdsat gives invalid, otherwise valid with a fragility note">
+    <svg viewBox="0 0 460 180" role="img" aria-label="Decision branch: Vgs at least twice I·R gives invalid, otherwise valid with a fragility note">
       <polygon points="230,15 320,55 230,95 140,55" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="230" y="52" text-anchor="middle" font-size="12">mismatch &gt; Vdsat?</text>
+      <text x="230" y="52" text-anchor="middle" font-size="12">|Vgs| ≥ 2·I·R?</text>
       <g stroke="var(--fig-stroke)" stroke-width="2">
         <line x1="160" y1="80" x2="90"  y2="120" marker-end="url(#ar)"/>
         <line x1="300" y1="80" x2="370" y2="120" marker-end="url(#ar)"/>

@@ -270,7 +270,9 @@ chosen.  It walks the bias current (``spec.ibias``) and the per-stage current
 ratios to give every device its ``Id``
 (:func:`~circuitgenome.sizer.physics.preprocess.assign_ids`), and sets
 rail-referenced load resistors so the first-stage output biases correctly
-(:func:`~circuitgenome.sizer.physics.preprocess.size_load_resistors`).  This is
+(:func:`~circuitgenome.sizer.physics.preprocess.size_load_resistors`): one
+``|Vgs|`` of the driven second-stage device from its rail or, on a single
+stage, where that node is the amplifier output, at the input common mode.  This is
 what makes the rest deterministic: with ``Id`` fixed, the LUT turns a chosen
 gm/Id straight into geometry.
 
