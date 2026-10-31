@@ -624,14 +624,16 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - Single-ended: :math:`A_{dm}/A_{cm}` from a DC nodal solve of the whole
        sized circuit, every device at its own bias with the output at
        :math:`V_{cm}` -- on a mirror load the pair's drain imbalance, not the
-       tail, sets it.  Fully differential: :math:`g_{m1}\,/\,(2\,g_{d,\text{tail}})`,
-       dB
+       tail, sets it.  Fully differential, and single-ended telescopic cascode
+       loads (kept on the closed form, see the follow-up in issue #290):
+       :math:`g_{m1}\,/\,(2\,g_{d,\text{tail}})`, dB
      - :func:`~circuitgenome.sizer.physics.stage_chain._se_rejection_db`,
        :func:`~circuitgenome.sizer.physics.equations.cmrr_db`
      - actual − spec
    * - PSRR\ :sup:`+`
      - Single-ended: :math:`A_{dm}/A_{vdd}` from the same nodal solve.
-       Fully differential (approx): :math:`g_{m2}\,/\,g_{d,\text{bias}}`, dB
+       Fully differential and telescopic cascode loads (approx):
+       :math:`g_{m2}\,/\,g_{d,\text{bias}}`, dB
      - :func:`~circuitgenome.sizer.physics.stage_chain._se_rejection_db`,
        :func:`~circuitgenome.sizer.physics.equations.psrr_db_approx`
      - actual − spec
@@ -794,14 +796,16 @@ Assumptions and where they break down
 .. note::
 
    **PSRR approximation.**  :func:`~circuitgenome.sizer.physics.equations.psrr_db_approx`
-   (fully-differential only) returns a first-order estimate of PSRR\ :sup:`+`.
-   The single-ended CMRR and PSRR\ :sup:`+` come from a DC nodal solve of the
-   whole circuit, so every DC path is in them, but nothing that depends on
-   frequency, such as the path through the compensation capacitor.  On a
-   telescopic cascode load they are an upper bound: the solve places the
-   pair's two drains at exactly the same level, while in the real circuit
-   they differ by ~1 mV, and that difference is what limits the rejection
-   (issue #290).
+   (fully differential and telescopic cascode loads) returns a first-order
+   estimate of PSRR\ :sup:`+`.  The other single-ended CMRR and PSRR\ :sup:`+`
+   come from a DC nodal solve of the whole circuit, so every DC path is in
+   them, but nothing that depends on frequency, such as the path through the
+   compensation capacitor.  A telescopic cascode load is kept on the closed
+   form, see the follow-up in issue #290.  The solve places the pair's two
+   drains at exactly the same level; in the real circuit they differ by
+   ~1 mV, and that difference limits the rejection.  So the solve would
+   over-predict it (CMRR +47 dB median on GF180), where the closed form
+   under-predicts.
 
 .. note::
 

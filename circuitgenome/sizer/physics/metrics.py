@@ -313,8 +313,10 @@ def evaluate_metrics(
     # --- CMRR and PSRR ---
     # Single-ended: the DC nodal solve of the whole circuit the chain carries,
     # which follows each topology's own common-mode and supply paths (#290).
-    # Fully differential: closed forms.  CMRR is the raw pair gm against the
-    # tail's finite conductance; PSRR+ the second stage's gm against its load's.
+    # Fully differential, and telescopic cascode loads (kept on the closed
+    # form until the level estimate can see their drain imbalance, #290):
+    # closed forms.  CMRR is the raw pair gm against the tail's finite
+    # conductance; PSRR+ the output-driving stage's gm against its load's.
     gm_out = stages[1].gm if len(stages) > 1 else gm1_loop
     if chain.se_rejection_db is not None:
         if chain.gain_measurable:

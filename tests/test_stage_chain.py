@@ -26,6 +26,7 @@ from circuitgenome.sizer.physics.stage_chain import (
     output_swing_headroom,
     _se_rejection_db,
     _source_degeneration_r,
+    _telescopic_cascode_load,
     _tail_current_net,
 )
 
@@ -929,3 +930,72 @@ def test_evaluate_metrics_reports_the_nodal_rejection_when_the_chain_has_it():
     assert fd["psrr_db"] == pytest.approx(eq.psrr_db_approx(2e-3, 1e-6))
     withheld = evaluate_metrics(se.withheld(), _spec())[0]
     assert "cmrr_db" not in withheld and "psrr_db" not in withheld
+
+
+# A telescopic cascode stacks a same-type cascode on each pair drain; a folded
+# one hangs an opposite-type cascode there; a mirror sources from the rail.
+_NPAIR = _pair("nmos", "d1", "d2", "tail")
+_TELESCOPIC = [Device("mc1", "nmos", {"d": "x1", "g": "b1", "s": "d1", "b": "gnd!"}),
+               Device("mc2", "nmos", {"d": "out", "g": "b1", "s": "d2", "b": "gnd!"})]
+_FOLDED = [Device("mc1", "pmos", {"d": "x1", "g": "b1", "s": "d1", "b": "vdd!"}),
+           Device("mc2", "pmos", {"d": "out", "g": "b1", "s": "d2", "b": "vdd!"})]
+_MIRROR = [Device("ml1", "pmos", {"d": "d1", "g": "d1", "s": "vdd!", "b": "vdd!"}),
+           Device("ml2", "pmos", {"d": "d2", "g": "d1", "s": "vdd!", "b": "vdd!"})]
+
+
+@pytest.mark.parametrize("load,telescopic", [
+    (_TELESCOPIC, True), (_FOLDED, False), (_MIRROR, False), ([], False)])
+def test_telescopic_cascode_load_is_a_same_type_cascode_on_the_pair_drain(load, telescopic):
+    assert _telescopic_cascode_load(_NPAIR, load) is telescopic
+
+
+def _sized_chain(monkeypatch, template, variants):
+    """``(metrics, chain)`` of a GF180 sizing, the chain the evaluator built."""
+    import circuitgenome.sizer.gmid.evaluate as evaluate
+    from circuitgenome.recognizer import assign_slots, parse, recognize
+    from circuitgenome.sizer import load_tech, size_circuit
+    from circuitgenome.synthesizer.loader import load_modules, load_topologies
+    from circuitgenome.synthesizer.netlist import to_flat_spice
+    from circuitgenome.synthesizer.synthesizer import enumerate_circuits
+
+    built = []
+    real = evaluate.build_stage_chain
+    monkeypatch.setattr(evaluate, "build_stage_chain",
+                        lambda *a, **kw: built.append(real(*a, **kw)) or built[-1])
+    topo = next(t for t in load_topologies() if t.name == template)
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in variants.items()))
+    parsed = parse(to_flat_spice(circ))
+    sr = recognize(parsed)
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=50,
+                      gbw_min_hz=1e6, phase_margin_min_deg=55)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo,
+                          load_tech("gf180mcu"), spec)
+    return result.metrics, built[-1]
+
+
+@pytest.mark.parametrize("template,load", [
+    ("one_stage_opamp", "telescopic_cascode_load_pmos"),
+    ("one_stage_opamp", "telescopic_cascode_load_wideswing_nmos"),
+    ("two_stage_opamp_single_ended", "telescopic_cascode_load_wideswing_pmos"),
+])
+def test_telescopic_load_keeps_the_closed_forms(monkeypatch, template, load):
+    """The nodal solve cannot see the ~1 mV drain imbalance that sets a
+    telescopic cascode's rejection floor and over-predicts it (CMRR +47 dB,
+    PSRR+ +19 dB median on GF180), so these keep the under-predicting closed
+    forms until the level estimate can (issue #290)."""
+    m, chain = _sized_chain(monkeypatch, template, {"load": load})
+    assert chain.se_rejection_db is None
+    gm1 = chain.stages[0].gm
+    gm_out = chain.stages[1].gm if len(chain.stages) > 1 else chain.k_fs * gm1
+    assert m["cmrr_db"] == pytest.approx(eq.cmrr_db(gm1, chain.gd_tail))
+    assert m["psrr_db"] == pytest.approx(eq.psrr_db_approx(gm_out, chain.gd_output_load))
+
+
+def test_mirror_load_gets_the_nodal_rejection(monkeypatch):
+    m, chain = _sized_chain(monkeypatch, "one_stage_opamp", {
+        "input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+        "tail_current": "current_mirror_tail_pmos"})
+    assert chain.se_rejection_db is not None
+    assert (m["cmrr_db"], m["psrr_db"]) == chain.se_rejection_db
