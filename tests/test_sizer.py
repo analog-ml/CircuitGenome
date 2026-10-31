@@ -177,10 +177,29 @@ def test_open_loop_gain_measurable_flag():
     # Below the ceiling: a realistic two-stage gain is measurable.
     assert open_loop_gain_measurable(90.0) is True
     assert open_loop_gain_measurable(OPEN_LOOP_GAIN_CEILING_DB) is True
-    # Above the ceiling: an over-estimated three-stage cascade rails (#155).
-    assert open_loop_gain_measurable(178.8) is False
+    # GF180 three-stage designs at 150-165 dB: the bench measures them within
+    # a few dB of the prediction, so they are not flagged (issue #287).
+    assert open_loop_gain_measurable(164.7) is True
+    # Above the ceiling the dominant pole of a 1 MHz-GBW design falls below
+    # the bench's 1 mHz first sweep point, which then no longer reads DC gain.
+    assert open_loop_gain_measurable(185.0) is False
     # No computed gain (single-stage / gated) → no evidence of railing.
     assert open_loop_gain_measurable(None) is True
+
+
+def test_open_loop_gain_ceiling_follows_predicted_gbw():
+    """The bench reads DC gain at its 1 mHz first sweep point, valid while the
+    dominant pole GBW/A0 stays above it: the ceiling is 20·log10(GBW/1 mHz),
+    160 dB at 100 kHz and 180 dB at 1 MHz (issue #287)."""
+    assert open_loop_gain_measurable(165.0, gbw_hz=1e5) is False
+    assert open_loop_gain_measurable(165.0, gbw_hz=1e6) is True
+    assert open_loop_gain_measurable(159.0, gbw_hz=1e5) is True
+    assert open_loop_gain_measurable(185.0, gbw_hz=1e7) is True
+    # A high GBW cannot lift the ceiling past the single-ended bench's DC
+    # feedback loop (Lfb/Cfb), whose loop gain reaches 1 at 1 mHz near 212 dB.
+    assert open_loop_gain_measurable(215.0, gbw_hz=1e8) is False
+    # Unknown GBW falls back to the fixed ceiling.
+    assert open_loop_gain_measurable(185.0, gbw_hz=None) is False
 
 
 def _cap(ref: str) -> Device:
