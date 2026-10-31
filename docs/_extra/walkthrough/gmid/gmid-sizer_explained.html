@@ -375,7 +375,7 @@ currents = <span class="tok-fn">assign_currents</span>(view, spec, tech, intent)
   <blockquote><p><strong>The one job:</strong> turn the spec and the currents into per-device <em>targets</em> — how much gm each signal device must deliver, what compensation caps are needed, and each device's design intent — without yet choosing a single width.</p></blockquote>
 
   <pre class="code"><code><span class="tok-com"># Phase 3 — Plan: gm requirements + compensation caps + per-device intent.</span>
-plan = <span class="tok-fn">plan_devices</span>(view, currents, spec, tech, intent)</code></pre>
+plan = <span class="tok-fn">plan_devices</span>(view, currents, spec, tech, intent, cmrr_gm1=cmrr_gm1)</code></pre>
 
   <p>Analogy: the current plan told us <em>how much water</em> flows in each pipe. Phase 3 is the <strong>architect's spec sheet</strong>: it says how <em>strong</em> each amplifying device has to be to hit the customer's requirements, and reads each device's role-specific intent (its L, its inversion region) from the functional-block registry.</p>
 
@@ -505,6 +505,14 @@ extra_r = {**extra_r, **level_r}</code></pre>
   <p>Two of these steps don't just judge — they <strong>repair</strong>. <code>check_dc_operating_point</code> can turn up gm/Id to un-squash a tail; <code>check_stage_interface</code> can nudge a stage-interface window. The conductor threads the (possibly repaired) <code>sizing</code> through each call, so later steps always see the newest widths. The two resistor steps (<code>size_resistors</code>, <code>tune_bias_levels</code>) contribute extra resistors, merged with <code>{**extra_r, **level_r}</code>.</p>
 
   <p>Between the checks and the resistors, the conductor can loop back once or twice. Phase 3 planned every <code>gm</code> from closed-form estimates; once there are real widths, a <em>re-plan</em> reads the sized circuit's full small-signal model and asks for more where the estimate fell short &mdash; <code>refine_rnmc_plan</code> for a reversed-nested-Miller inner loop, <code>refine_two_stage_plan</code> for a two-stage amplifier, which raises <code>gm1</code> until the real 0 dB crossing meets GBW and then <code>gm2</code> until the phase margin does (issue #274). The geometry and bias checks re-run against the new targets; a re-size that breaks a sound bias is thrown away.</p>
+
+  <p>One spec loops back further, around Phases 3&ndash;5 together. A single-ended chain reports CMRR from a DC solve of the whole finished circuit (issue #290), so a CMRR target can only be judged once everything is sized and evaluated. Phases 3&ndash;5 therefore live in one helper, <code>_size_planned(…, cmrr_gm1)</code>, and <code>size_gmid</code> hands it to <code>lift_nodal_cmrr</code> when the spec sets <code>cmrr_min_db</code> on such a chain:</p>
+  <pre class="code"><code><span class="tok-kw">if not</span> (spec.cmrr_min_db <span class="tok-kw">and</span> <span class="tok-fn">reports_nodal_rejection</span>(view.slot_transistors)):
+    <span class="tok-kw">return</span> <span class="tok-fn">_size_planned</span>(view, currents, spec, tech, intent)
+<span class="tok-kw">return</span> <span class="tok-fn">lift_nodal_cmrr</span>(
+    <span class="tok-kw">lambda</span> gm1: <span class="tok-fn">_size_planned</span>(view, currents, spec, tech, intent, cmrr_gm1=gm1),
+    view.all_transistors, <span class="tok-fn">_model_for</span>(tech, intent), spec)</code></pre>
+  <p>The first run takes no CMRR floor. If the reported CMRR is short, the input pair's gm is raised by the shortfall and the line runs again, at most twice; a run is kept only when its CMRR rose and no other spec was lost or got worse (issue #296). Fully-differential and telescopic-cascode chains report the tail-only closed form, so Phase&nbsp;3 sizes them against it directly, and without a CMRR target the line runs once, exactly as before.</p>
 
   <p>For our op-amp, Phase 4 reads the LUT to give M1 a width that hits <code>gm1 ≈ 126 µA/V</code> at 10 µA, all three checks pass, and <code>bias_feasible = True</code>.</p>
 </section>

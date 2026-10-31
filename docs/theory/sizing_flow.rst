@@ -49,6 +49,8 @@ derives performance requirements in this order:
    * - 1
      - ``cmrr_min_db``
      - :math:`g_{m1}` lower bound — only constraint independent of :math:`C_c`
+       (fully-differential and telescopic-cascode chains; other single-ended
+       chains find it on the sized circuit, see `CMRR re-size (single-ended)`_)
    * - 2
      - ``slew_rate_min_vps``
      - :math:`C_c` initial upper bound
@@ -215,6 +217,13 @@ Inverting for the minimum :math:`g_{m1}`:
    g_{m1} \;\geq\; \text{CMRR}_{\text{lin}} \cdot 2\,\lambda_{\text{tail}}\,I_{bias}
 
 where :math:`\text{CMRR}_{\text{lin}} = 10^{\,\text{CMRR}_{\text{dB}}/20}`.
+
+This is the CMRR a fully-differential chain, or a single-ended one with a
+telescopic cascode load, reports, so those are sized against it.  Every
+other single-ended chain reports CMRR from a DC nodal solve of the sized
+circuit (issue #290), where the tail barely matters on a mirror load.  For
+those the step takes no closed-form floor; the floor is found on the sized
+circuit instead (`CMRR re-size (single-ended)`_, issue #296).
 
 **Intuition:** The tail current source has finite output resistance
 :math:`1/g_{d,\text{tail}}`.  A common-mode input shift modulates the tail
@@ -565,6 +574,47 @@ metric reports the shortfall.  The Level-1 sizer re-solves CP-SAT with the
 raised requirements, the gm/Id sizer re-sizes
 (:mod:`~circuitgenome.sizer.gmid.two_stage_refine`); a second pass re-plans
 against what the first delivered.
+
+CMRR re-size (single-ended)
+---------------------------
+
+A single-ended chain that reports the nodal CMRR
+(:func:`~circuitgenome.sizer.physics.stage_chain.reports_nodal_rejection`:
+any pair whose load is not a telescopic cascode) is sized for
+``cmrr_min_db`` against that same CMRR
+(:func:`~circuitgenome.sizer.physics.preprocess.lift_nodal_cmrr`,
+issue #296).  On a mirror load the tail's common-mode current is cancelled,
+and the pair's drain imbalance sets the rejection,
+
+.. math::
+
+   \text{CMRR} \approx \frac{g_{m1}}{|g_{ds2} - g_{ds1}|},
+
+so the Step 1 floor :math:`\text{CMRR}\cdot 2\,g_{d,\text{tail}}` follows the
+wrong path.  On GF180 it can even lower the reported CMRR: it ran one
+buffered two-stage design's input pair to the widest device and took its
+CMRR from 121 to 82 dB.
+
+1. The circuit is sized with no CMRR floor, exactly as without a target.
+2. If the CMRR it reports is short by :math:`\Delta` dB, :math:`g_{m1}` is
+   raised by :math:`10^{\Delta/20}` (to first order the nodal CMRR is
+   proportional to :math:`g_{m1}`), up to the widest single device or the
+   weak-inversion ceiling, and the whole circuit is re-sized.  The raised
+   value joins :math:`g_{m1}` after :math:`C_c` is planned, so :math:`C_c`
+   stays where GBW and stability put it, and the phase-margin and gain rules
+   for :math:`g_{m2}`/:math:`g_{m3}` follow the raised value.  Re-planning
+   :math:`C_c` for it, as Step 3 does for the closed form, would pin GBW onto
+   the spec's closed form, which the full model reads under: on GF180 that
+   took designs from 6.5 MHz to just under a 1 MHz spec.
+3. The re-size is kept only if it reports a higher CMRR without losing its
+   bias, losing another spec it met, or pushing one it already missed
+   further short.  A wider pair moves the levels that set
+   the drain imbalance, so the CMRR is not monotone in :math:`g_{m1}`, and a
+   larger :math:`g_{m1}` at the same :math:`C_c` lifts GBW and costs phase
+   margin.  At most two re-sizes are tried.
+
+A target that is still short is reported by its negative ``cmrr_db`` margin.
+Without a CMRR target, sizing is unchanged.
 
 Post-sizing performance metrics
 --------------------------------

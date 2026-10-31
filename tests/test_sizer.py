@@ -1701,3 +1701,138 @@ def test_fd_cmfb_couples_mismatched_compensation_halves():
                                                  chain.stages[1].gm) if r1 else 0.0
                     for r1, _r2 in chain.comp_resistors))[1]
     assert pm < uncoupled - 3
+
+
+# ---------------------------------------------------------------------------
+# A CMRR target is sized against the CMRR the result reports (issue #296)
+# ---------------------------------------------------------------------------
+
+# examples/gf180_difficulty_specs/spec_01_easy.yaml with the output swing
+# relaxed, as on the prediction-error page (docs/prediction_error/spec.yaml).
+_EASY_GF180 = dict(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=50,
+                   gbw_min_hz=1e6, phase_margin_min_deg=55, slew_rate_min_vps=2e5,
+                   power_max_w=2.5e-3, output_swing_max_v=2.0, output_swing_min_v=1.1)
+_PMOS_MIRROR_BUFFERED = ("two_stage_opamp_buffered_single_ended", {
+    "input_pair": "differential_pair_nmos", "load": "active_load_pmos",
+    "tail_current": "current_mirror_tail_nmos",
+    "compensation": "miller_cap_with_nulling_resistor",
+    "second_stage": "common_source_pmos", "output_stage": "common_drain_nmos"})
+_NMC_MIRROR = ("three_stage_opamp_nmc_single_ended", {
+    "input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+    "tail_current": "cascode_current_mirror_tail_pmos",
+    "second_stage": "noninverting_stage_nmos", "third_stage": "common_source_nmos",
+    "comp1": "miller_cap", "comp2": "indirect_compensation"})
+_RESISTOR_LOAD = ("two_stage_opamp_single_ended", {
+    "input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+    "tail_current": "current_mirror_tail_pmos", "compensation": "miller_cap",
+    "second_stage": "common_source_nmos"})
+
+
+def _gf180_sized(template, variants, **spec_kw):
+    parsed, sr_result, fbr_result, topology = _fbr(template, variants)
+    return size_circuit(parsed, sr_result, fbr_result, topology,
+                        load_tech("gf180mcu"), SizingSpec(**{**_EASY_GF180, **spec_kw}))
+
+
+def _failing(result):
+    return {k for k, m in result.margins.items() if m < 0}
+
+
+def test_a_cmrr_target_the_design_meets_leaves_its_sizing_alone():
+    """A mirror-loaded pair's CMRR is gm1/|gds1 - gds2|, which the tail barely
+    touches.  This design already reports more than the target, so the target
+    must not move it; the tail-only closed form instead pushed gm1 to the
+    widest device, and the reported CMRR fell from 121 to 82 dB."""
+    free = _gf180_sized(*_PMOS_MIRROR_BUFFERED)
+    sized = _gf180_sized(*_PMOS_MIRROR_BUFFERED, cmrr_min_db=100)
+    assert free.metrics["cmrr_db"] > 100
+    assert sized.transistors == free.transistors
+    assert sized.metrics == free.metrics
+    assert sized.margins["cmrr_db"] >= 0
+
+
+def test_a_short_nodal_cmrr_is_lifted_by_the_input_pair_gm():
+    """At a fixed |gds1 - gds2| the nodal CMRR rises with gm1: a design short of
+    its target gets the gm1 that closes the gap, judged on the CMRR it reports,
+    without running the pair to the widest device or costing another spec."""
+    free = _gf180_sized(*_NMC_MIRROR)
+    target = free.metrics["cmrr_db"] + 4
+    sized = _gf180_sized(*_NMC_MIRROR, cmrr_min_db=target)
+    assert sized.margins["cmrr_db"] >= 0
+    assert _failing(sized) <= _failing(free)
+    w_max = load_tech("gf180mcu").width.max
+    for ref, s in sized.transistors.items():
+        if "input_pair" in ref:
+            assert free.transistors[ref].w_um < s.w_um < w_max
+
+
+def test_an_unreachable_cmrr_target_costs_no_other_spec():
+    """A target no gm1 reaches is reported unmet (negative margin) and never
+    traded for another spec: the closed-form raise to 80 dB cost this
+    resistor-loaded design its GBW."""
+    free = _gf180_sized(*_RESISTOR_LOAD)
+    sized = _gf180_sized(*_RESISTOR_LOAD, cmrr_min_db=80)
+    assert sized.margins["cmrr_db"] < 0
+    assert sized.metrics["cmrr_db"] >= free.metrics["cmrr_db"]
+    assert _failing(sized) - {"cmrr_db"} <= _failing(free)
+
+
+@pytest.mark.parametrize("template,variants", [
+    ("one_stage_opamp", {"load": "telescopic_cascode_load_pmos"}),
+    ("two_stage_opamp_fully_differential", None),
+])
+def test_closed_form_cmrr_designs_keep_the_tail_only_gm1_floor(template, variants):
+    """Fully-differential and telescopic-cascode designs report the closed form
+    gm1/(2·gd_tail), so their CMRR target still sizes gm1 against it."""
+    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+    from circuitgenome.sizer.physics.device_model import Level1Model
+    from circuitgenome.sizer.physics.preprocess import assign_ids, compute_requirements
+
+    _parsed, _sr, fbr_result, topology = _fbr(template, variants)
+    tech = _tech()
+    view = analyze_circuit(fbr_result, topology)
+
+    def gm1(cmrr):
+        spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12, cmrr_min_db=cmrr)
+        ids = assign_ids(view.slot_transistors, view.all_transistors, spec)
+        gm = compute_requirements(view.slot_transistors, view.all_transistors, ids,
+                                  tech, spec, Level1Model(tech))[0]
+        return max(gm[d.ref] for d in view.slot_transistors["input_pair"])
+
+    assert gm1(None) == 0.0
+    assert gm1(50) > 0.0
+
+
+@pytest.mark.parametrize("pm_margin,lifted", [
+    (lambda w: 5.0, True),             # PM untouched: the lift is kept
+    (lambda w: 5.0 - w, False),        # a met PM is lost
+    (lambda w: -1.0 - w / 100, False),  # a missed PM falls further short
+])
+def test_a_cmrr_lift_is_kept_only_when_it_costs_no_other_spec(pm_margin, lifted):
+    """Raising gm1 at the same Cc lifts GBW and costs phase margin, so a
+    re-size is kept only when no other spec is lost or worsened -- a design
+    already short of its phase margin must not be pushed toward instability."""
+    from types import SimpleNamespace
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    from circuitgenome.sizer.physics.preprocess import lift_nodal_cmrr
+
+    ref = "m1_input_pair"
+    pair = Device(ref, "nmos", {"d": "x", "g": "inp", "s": "tail", "b": "gnd!"})
+    # gm = 10 µS per µm of width; the nodal CMRR rises with gm1.
+    model = SimpleNamespace(tech=SimpleNamespace(width=SimpleNamespace(max=100.0)),
+                            gm=lambda t, w, l, ids: 1e-5 * w,
+                            gm_ceiling=lambda t, ids, l: 1.0)
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, cmrr_min_db=70)
+
+    def size(gm1):
+        w = max(gm1 / 1e-5, 1.0)
+        cmrr = 50 + 20 * math.log10(w)
+        return SizingResult(
+            transistors={ref: TransistorSizing(ref, w, 1.0, 1e-5, 0.8, 0.2)},
+            resistors={}, capacitors={}, metrics={"cmrr_db": cmrr},
+            margins={"cmrr_db": cmrr - 70, "phase_margin_deg": pm_margin(w)},
+            solver_status="GMID")
+
+    result = lift_nodal_cmrr(size, {ref: (pair, "input_pair")}, model, spec)
+    assert (result.metrics["cmrr_db"] >= 70) is lifted
+    assert (result.transistors[ref].w_um == 1.0) is not lifted

@@ -721,6 +721,19 @@ def _telescopic_cascode_load(ip_devs: list[Device], load_devs: list[Device]) -> 
     return any(d.terminals.get("s") in drains and d.type in types for d in load_devs)
 
 
+def reports_nodal_rejection(slot_transistors: dict[str, list[Device]]) -> bool:
+    """Whether the chain reports CMRR/PSRR+ from the DC nodal solve
+    (:attr:`StageChain.se_rejection_db`) rather than the closed forms.
+
+    That is a single-ended two-device pair whose load is not a telescopic
+    cascode (:func:`_telescopic_cascode_load`).  A sizer sizes a CMRR target
+    against the same model (issue #296).
+    """
+    ip_devs = slot_transistors.get("input_pair", [])
+    return (not _is_fully_differential(slot_transistors) and len(ip_devs) == 2
+            and not _telescopic_cascode_load(ip_devs, slot_transistors.get("load", [])))
+
+
 def _circuit_rejection_db(view: CircuitView, mosfets: list[Device],
                           ip_devs: list[Device], sizing, model, spec: SizingSpec,
                           resistor_ohms: dict[str, float],
@@ -1106,9 +1119,11 @@ def build_stage_chain(
 
     A single-ended chain's nodal CMRR and PSRR+ always read every device at
     its own bias, with the output pinned at Vcm (:func:`_circuit_rejection_db`):
-    they feed no sizing decision, and the output-side drain's level is what
-    sets a mirror-loaded pair's rejection (issue #290).  A telescopic cascode
-    load is kept on the closed forms (:func:`_telescopic_cascode_load`).
+    the only sizing decision they feed is a CMRR target's, which judges each
+    re-size on this same reported CMRR (:func:`~.preprocess.lift_nodal_cmrr`,
+    issue #296), and the output-side drain's level is what sets a
+    mirror-loaded pair's rejection (issue #290).  A telescopic cascode load is
+    kept on the closed forms (:func:`reports_nodal_rejection`).
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
@@ -1281,10 +1296,9 @@ def build_stage_chain(
         gd_tail=gd_tail,
         gd_output_load=gd_output_load,
         se_rejection_db=(
-            None if (fully_differential or len(ip_devs) != 2 or _telescopic_cascode_load(
-                ip_devs, slot_transistors.get("load", [])))
-            else _circuit_rejection_db(view, mosfets, ip_devs, sizing, model, spec,
-                                       resistor_ohms or {}, gd_load_r)),
+            _circuit_rejection_db(view, mosfets, ip_devs, sizing, model, spec,
+                                  resistor_ohms or {}, gd_load_r)
+            if reports_nodal_rejection(slot_transistors) else None),
         mirror_pole_hz=_mirror_pole_hz(
             slot_transistors.get("load", []), mosfets, model, sizing),
         cc_pf=cc_pf,

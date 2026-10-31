@@ -1,7 +1,9 @@
 """Model-independent pre-sizing: IDS assignment from KCL + ``spec.ibias``,
 load-resistor sizing, and the gm/VDS_sat requirements derived from the
 performance spec.  The circuit's *structure* comes from
-:mod:`~circuitgenome.sizer.physics.circuit_view`.
+:mod:`~circuitgenome.sizer.physics.circuit_view`.  One requirement is found on
+the sized circuit instead: a single-ended CMRR target's gm1 floor
+(:func:`lift_nodal_cmrr`).
 
 Shared by both the Level-1 analytical sizer and the gm/Id pipeline.  Output
 conductances come through a :class:`~.device_model.DeviceModel`, so the gm/Id
@@ -10,6 +12,7 @@ path gets LUT-accurate ``gds`` while Level-1 reproduces ``λ·Id`` exactly.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 from circuitgenome.synthesizer.models import Device
 
@@ -17,7 +20,7 @@ from . import equations as eq
 from . import rnmc
 from .rnmc import RNMC
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel
-from ..models import SizingSpec, TechParams
+from ..models import SizingResult, SizingSpec, TechParams
 from .taxonomy import (
     FULL_BIAS_SLOTS,
     HALF_BIAS_SLOTS,
@@ -40,6 +43,9 @@ _CC_STABILITY_RATIO = 0.25
 # rings at gm3/gm2 ≈ 2 for any Cc2, and at ζ ≲ 0.2 even with gm3/gm2 ≈ 3.8.
 _NMC_GM3_OVER_GM2 = 3.5
 _NMC_INNER_ZETA = 0.3
+
+# Re-sizes that lift a nodal CMRR short of its target (see lift_nodal_cmrr).
+_CMRR_PASSES = 2
 
 
 def size_load_resistors(
@@ -305,6 +311,7 @@ def compute_requirements(
     model: DeviceModel,
     gd_load_r: float = 0.0,
     compensation_scheme: str | None = None,
+    cmrr_gm1: float | None = None,
 ) -> tuple[dict[str, float], dict[str, float], float | None, float | None, list[str]]:
     """Compute required gm and max VDS_sat per transistor; also Cc1 and Cc2.
 
@@ -313,6 +320,14 @@ def compute_requirements(
     ceiling (the spec cannot be met at this bias current).  Output conductances
     come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
     model reproduces the geometry-free ``λ·Id`` exactly.
+
+    ``spec.cmrr_min_db`` sets a gm1 floor.  By default it is the tail-only
+    closed form ``CMRR·2·gd_tail``, the CMRR a fully-differential or
+    telescopic-cascode chain reports, and Cc is re-planned to keep GBW on the
+    spec under it.  ``cmrr_gm1`` replaces it with a floor in A/V found on the
+    sized circuit (``0.0`` for none), which keeps the GBW-planned Cc: a chain
+    that reports the nodal CMRR is sized against that
+    (:func:`lift_nodal_cmrr`, issue #296).  Ignored without a CMRR target.
 
     ``compensation_scheme`` is the template's three-stage compensation
     (``topology.config["compensation_scheme"]``):
@@ -382,7 +397,7 @@ def compute_requirements(
     gm1_req = 0.0
     gm2_req = 0.0
     gm3_req = 0.0
-    if spec.cmrr_min_db:
+    if spec.cmrr_min_db and cmrr_gm1 is None:
         tc_devices = slot_transistors.get("tail_current", [])
         if tc_devices:
             gd_tail = _gds_est(tc_devices[0], spec.ibias)
@@ -422,6 +437,14 @@ def compute_requirements(
         if spec.gbw_min_hz and gm1_req > 0.0:
             cc_f = max(cc_f, k_fs * gm1_req / (2.0 * math.pi * spec.gbw_min_hz))
             cc_f = min(cc_f, cc_max_f)
+
+        # A floor found on the sized circuit (lift_nodal_cmrr) raises gm1 on a
+        # design whose Cc already meets GBW, so it keeps that Cc.  Re-planning
+        # Cc for it, as above, would pin GBW onto the spec's closed form, which
+        # the full model reads under.  The gm2/gm3 rules below follow the
+        # raised gm1.
+        if spec.cmrr_min_db and cmrr_gm1:
+            gm1_req = max(gm1_req, cmrr_gm1)
 
         if is_three_stage:
             # Inner cap = Cc1/4, except NMC: its non-dominant poles form a pair
@@ -495,7 +518,9 @@ def compute_requirements(
         cc_pf = cc_f * 1e12
 
     else:
-        # One-stage: gain = k_fs·gm1·Rout1
+        # One-stage: gain = k_fs·gm1·Rout1 (and any CMRR floor, as above)
+        if spec.cmrr_min_db and cmrr_gm1:
+            gm1_req = max(gm1_req, cmrr_gm1)
         if spec.gain_min_db and rout1 < float("inf"):
             A0 = 10.0 ** (spec.gain_min_db / 20.0)
             gm1_req = max(gm1_req, A0 / (k_fs * rout1))
@@ -619,3 +644,63 @@ def compute_requirements(
                         )
 
     return gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings
+
+
+def lift_nodal_cmrr(
+    size: Callable[[float], SizingResult],
+    all_transistors: dict[str, tuple[Device, str]],
+    model: DeviceModel,
+    spec: SizingSpec,
+) -> SizingResult:
+    """Size a chain that reports the nodal CMRR for ``spec.cmrr_min_db``.
+
+    ``size(cmrr_gm1)`` runs the sizer with that gm1 floor in place of the
+    tail-only closed form (:func:`compute_requirements`), which follows the
+    wrong path on these chains: a mirror load cancels the common-mode current
+    the tail lets through, and the pair's drain imbalance sets the CMRR
+    instead, ``≈ gm1/|gds1 − gds2|`` (issue #290).  Raising gm1 against
+    ``2·gd_tail`` can even lower that CMRR (issue #296).
+
+    So the first sizing takes no CMRR floor.  While the CMRR it reports is
+    short, the input pair's gm is raised by the shortfall -- to first order
+    the nodal CMRR is proportional to gm1 -- up to the widest single device
+    or the weak-inversion ceiling, and the circuit is re-sized, at most
+    ``_CMRR_PASSES`` times.  A re-size is kept only when it reports a higher
+    CMRR, keeps its bias, and loses or worsens no other spec: a wider pair
+    moves the levels that set the drain imbalance, so the CMRR is not
+    monotone in gm1, and a larger gm1 at the same Cc lifts GBW and costs
+    phase margin.  A target left short shows as a negative ``cmrr_db``
+    margin.
+    """
+    best = size(0.0)
+    ref, (device, _slot) = next(
+        (ref, entry) for ref, entry in all_transistors.items()
+        if entry[1] == "input_pair" and is_signal_device(entry[0]))
+    for _ in range(_CMRR_PASSES):
+        cmrr = best.metrics.get("cmrr_db")
+        if cmrr is None or cmrr >= spec.cmrr_min_db:
+            break
+        s = best.transistors[ref]
+        ceiling = model.gm_ceiling(device.type, s.ids_a, s.l_um)
+        gm1 = min(model.gm(device.type, s.w_um, s.l_um, s.ids_a), ceiling)
+        gm1_max = min(model.gm(device.type, model.tech.width.max, s.l_um, s.ids_a),
+                      ceiling)
+        if gm1 >= gm1_max:
+            break
+        trial = size(min(gm1 * 10.0 ** ((spec.cmrr_min_db - cmrr) / 20.0), gm1_max))
+        if not _lifts_cmrr(trial, best):
+            break
+        best = trial
+    return best
+
+
+def _lifts_cmrr(trial: SizingResult, best: SizingResult) -> bool:
+    """Whether ``trial`` reports a higher CMRR than ``best`` at no cost to its
+    bias or any other spec: none ``best`` met is lost, and none it missed
+    falls further short."""
+    if trial.metrics.get("cmrr_db", -math.inf) <= best.metrics["cmrr_db"]:
+        return False
+    if best.bias_feasible and not trial.bias_feasible:
+        return False
+    return all(trial.margins.get(key, -math.inf) >= min(margin, 0.0)
+               for key, margin in best.margins.items() if key != "cmrr_db")

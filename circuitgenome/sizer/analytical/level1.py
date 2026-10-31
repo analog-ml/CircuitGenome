@@ -20,14 +20,15 @@ from ..physics import equations as eq
 from ..physics.device_model import Level1Model
 from ..physics.metrics import evaluate_metrics, two_stage_replan
 from ..models import SizingResult, SizingSpec, TechParams, TransistorSizing
-from ..physics.circuit_view import adoption_warnings, analyze_circuit
+from ..physics.circuit_view import CircuitView, adoption_warnings, analyze_circuit
 from ..physics.preprocess import (
     assign_ids,
     compute_requirements,
+    lift_nodal_cmrr,
     size_compensation_caps,
     size_load_resistors,
 )
-from ..physics.stage_chain import build_stage_chain
+from ..physics.stage_chain import build_stage_chain, reports_nodal_rejection
 from ..physics.taxonomy import SECOND_STAGE_SLOTS, is_signal_device
 from .constraints import build_model
 
@@ -46,11 +47,15 @@ def size_level1(
     *,
     time_limit_s: float = 30.0,
 ) -> SizingResult:
-    """Size a circuit with the Level-1 square-law model + CP-SAT geometry search."""
+    """Size a circuit with the Level-1 square-law model + CP-SAT geometry search.
+
+    A CMRR target on a chain that reports the nodal CMRR is sized against
+    that CMRR by re-solving (:func:`~..physics.preprocess.lift_nodal_cmrr`,
+    issue #296); any other chain takes it in the gm requirements.
+    """
     view = analyze_circuit(fbr_result, topology)
     slot_transistors = view.slot_transistors
     all_transistors = view.all_transistors
-    topology_warnings = view.warnings
     ids_map = assign_ids(slot_transistors, all_transistors, spec)
     # Size resistor loads (deterministic) and model them in the first-stage Rout.
     single_stage = not any(s in slot_transistors for s in SECOND_STAGE_SLOTS)
@@ -60,11 +65,34 @@ def size_level1(
 
     # Level-1 square-law model; discrete W/L via CP-SAT.
     dev_model = Level1Model(tech)
+    args = (view, ids_map, resistors, gd_load_r, dev_model, tech, spec, time_limit_s)
+    if not (spec.cmrr_min_db and reports_nodal_rejection(slot_transistors)):
+        return _size_planned(*args)
+    return lift_nodal_cmrr(lambda gm1: _size_planned(*args, cmrr_gm1=gm1),
+                           all_transistors, dev_model, spec)
+
+
+def _size_planned(
+    view: CircuitView,
+    ids_map: dict[str, float],
+    resistors: dict[str, float],
+    gd_load_r: float,
+    dev_model: Level1Model,
+    tech: TechParams,
+    spec: SizingSpec,
+    time_limit_s: float,
+    cmrr_gm1: float | None = None,
+) -> SizingResult:
+    """gm requirements, the CP-SAT geometry and its two-stage re-solve, and
+    the metrics; ``cmrr_gm1`` replaces the CMRR target's tail-only gm1 floor
+    (:func:`~..physics.preprocess.compute_requirements`)."""
+    slot_transistors = view.slot_transistors
+    all_transistors = view.all_transistors
     gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = compute_requirements(
         slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r,
-        compensation_scheme=view.compensation_scheme,
+        compensation_scheme=view.compensation_scheme, cmrr_gm1=cmrr_gm1,
     )
-    all_warnings = (topology_warnings + gm_ceiling_warnings
+    all_warnings = (view.warnings + gm_ceiling_warnings
                     + adoption_warnings(view.adopted))
     capacitors = size_compensation_caps(view.slot_capacitors, cc_pf, cc2_pf)
 

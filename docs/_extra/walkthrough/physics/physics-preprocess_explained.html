@@ -390,7 +390,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
   <table>
     <thead><tr><th>Spec</th><th>Demands</th><th>Formula (simplified)</th></tr></thead>
     <tbody>
-      <tr><td>CMRR</td><td>gm1</td><td><code>cmrr_lin · 2 · g<sub>ds,tail</sub></code></td></tr>
+      <tr><td>CMRR</td><td>gm1</td><td><code>cmrr_lin · 2 · g<sub>ds,tail</sub></code> (fully differential, telescopic cascode); <code>cmrr_gm1</code> from the sized circuit otherwise</td></tr>
       <tr><td>GBW</td><td>gm1</td><td><code>2π · GBW · Cc / k_fs</code></td></tr>
       <tr><td>Phase margin</td><td>gm2 (gm2,gm3 in 3-stage)</td><td><code>k_fs·gm1·CL / (Cc·tan(90°−PM))</code></td></tr>
       <tr><td>Gain</td><td>gm2 (or gm3)</td><td><code>A₀ / (k_fs·gm1·Rout1·Rout2)</code></td></tr>
@@ -408,6 +408,17 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
   <p>Say <code>CMRR = 60 dB</code> (linear <code>1000</code>) and the tail's <code>g<sub>ds,tail</sub> = 0.2 µS</code>:</p>
   <pre class="code"><code>gm1 ≥ 1000 · 2 · 0.2 µS = 400 µS</code></pre>
   <p>So <code>gm1 = max(62.8, 400) = 400 µS</code> — here CMRR dominates GBW. The <code>max()</code> found the binding constraint automatically.</p>
+
+  <h3>…but only where that formula is the CMRR reported</h3>
+  <p><code>cmrr_lin · 2 · g<sub>ds,tail</sub></code> is the CMRR a fully-differential chain, or a single-ended one with a telescopic cascode load, <em>reports</em>. Every other single-ended chain reports CMRR from a DC solve of the whole sized circuit (issue #290). On a mirror load the tail barely matters there: the mirror cancels the common-mode current the tail lets through, and the pair's two drains sitting at different voltages set <code>CMRR ≈ gm1 / |gds1 − gds2|</code>. Sizing against the tail formula then chases the wrong number. On GF180 it ran one buffered two-stage design's pair to the widest device and <em>lowered</em> its reported CMRR from 121 to 82&nbsp;dB (issue #296).</p>
+  <p>So for those chains the caller passes <code>cmrr_gm1</code>, a gm1 floor found on the sized circuit. The tail formula is skipped, and the floor joins gm1 only <em>after</em> Cc is planned:</p>
+  <pre class="code"><code><span class="tok-kw">if</span> spec.cmrr_min_db <span class="tok-kw">and</span> cmrr_gm1 <span class="tok-kw">is</span> <span class="tok-kw">None</span>:
+    ...  <span class="tok-com"># the tail-only closed form above</span>
+...      <span class="tok-com"># GBW → gm1, then Cc re-planned for that gm1</span>
+<span class="tok-kw">if</span> spec.cmrr_min_db <span class="tok-kw">and</span> cmrr_gm1:
+    gm1_req = <span class="tok-fn">max</span>(gm1_req, cmrr_gm1)   <span class="tok-com"># keeps the GBW-planned Cc</span></code></pre>
+  <p>Why after? The closed-form floor re-plans Cc so that <code>gm1/(2π·Cc)</code> lands exactly on the GBW spec. The full model reads a little under that closed form, so a design with GBW to spare (6.5&nbsp;MHz against 1&nbsp;MHz on GF180) came back just short of the spec. Keeping its Cc lets GBW rise with gm1 instead, and the gm2/gm3 phase-margin rules that follow see the raised gm1.</p>
+  <p><code>lift_nodal_cmrr()</code> finds that floor. It sizes the circuit with <code>cmrr_gm1 = 0</code>, exactly as without a target. If the CMRR it reports is short by Δ&nbsp;dB, it raises gm1 by <code>10^(Δ/20)</code> (capped at the widest single device and the weak-inversion ceiling) and sizes again, at most twice. A re-size is kept only if it reports a higher CMRR, keeps its bias, and loses no other spec or pushes one it already missed further short. A target still out of reach shows as a negative <code>cmrr_db</code> margin.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 540 210" role="img" aria-label="Several spec-driven gm demands funnel into a max, then get clamped by the weak-inversion ceiling">
@@ -512,6 +523,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li>It never picks a <em>geometry</em> — no W or L is chosen here. It only sets currents and targets; the sizers turn those into widths.</li>
+    <li>One target cannot be set before sizing: a single-ended CMRR target is judged on the sized circuit, so <code>lift_nodal_cmrr</code> re-runs the sizer it is handed instead of deciding it up front.</li>
     <li><code>size_load_resistors</code> only touches rail-referenced <code>load</code> resistors; anything else keeps its netlist value.</li>
     <li>The gm ceiling clamp doesn't rescue an infeasible spec — it caps the demand and <em>warns</em>, leaving the shortfall visible in the margins.</li>
     <li>It assumes the structure it is handed is right. Slots, dedup and the topology check all happen upstream in <a href="physics-circuit-view_explained.html"><code>circuit_view.py</code></a>.</li>
