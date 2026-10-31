@@ -234,7 +234,9 @@ Measurement is **best-effort**, not sign-off.  Gain/GBW/PM come from an open-loo
 AC-coupled-feedback testbench; power from the DC operating point (single-ended: in
 unity feedback, with the output settled at Vcm); slew rate from a
 unity-gain pulse centred on Vcm (the min of the rising and falling edges, each read
-within 10–90 % of its swing); output swing from an
+within 10–90 % of its swing, with the pulse re-run at a width fitted to the
+first reading; none when the output oscillates instead of settling after a
+step); output swing from an
 inverting −1 DC sweep (fully-differential designs: a differential-only −1 rig,
 both per output); CMRR and PSRR+ from the same feedback loop with the AC
 stimulus riding on the input common mode / the positive supply.  A

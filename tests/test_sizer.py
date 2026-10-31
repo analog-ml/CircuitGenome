@@ -177,10 +177,29 @@ def test_open_loop_gain_measurable_flag():
     # Below the ceiling: a realistic two-stage gain is measurable.
     assert open_loop_gain_measurable(90.0) is True
     assert open_loop_gain_measurable(OPEN_LOOP_GAIN_CEILING_DB) is True
-    # Above the ceiling: an over-estimated three-stage cascade rails (#155).
-    assert open_loop_gain_measurable(178.8) is False
+    # GF180 three-stage designs at 150-165 dB: the bench measures them within
+    # a few dB of the prediction, so they are not flagged (issue #287).
+    assert open_loop_gain_measurable(164.7) is True
+    # Above the ceiling the dominant pole of a 1 MHz-GBW design falls below
+    # the bench's 1 mHz first sweep point, which then no longer reads DC gain.
+    assert open_loop_gain_measurable(185.0) is False
     # No computed gain (single-stage / gated) → no evidence of railing.
     assert open_loop_gain_measurable(None) is True
+
+
+def test_open_loop_gain_ceiling_follows_predicted_gbw():
+    """The bench reads DC gain at its 1 mHz first sweep point, valid while the
+    dominant pole GBW/A0 stays above it: the ceiling is 20·log10(GBW/1 mHz),
+    160 dB at 100 kHz and 180 dB at 1 MHz (issue #287)."""
+    assert open_loop_gain_measurable(165.0, gbw_hz=1e5) is False
+    assert open_loop_gain_measurable(165.0, gbw_hz=1e6) is True
+    assert open_loop_gain_measurable(159.0, gbw_hz=1e5) is True
+    assert open_loop_gain_measurable(185.0, gbw_hz=1e7) is True
+    # A high GBW cannot lift the ceiling past the single-ended bench's DC
+    # feedback loop (Lfb/Cfb), whose loop gain reaches 1 at 1 mHz near 212 dB.
+    assert open_loop_gain_measurable(215.0, gbw_hz=1e8) is False
+    # Unknown GBW falls back to the fixed ceiling.
+    assert open_loop_gain_measurable(185.0, gbw_hz=None) is False
 
 
 def _cap(ref: str) -> Device:
@@ -1521,11 +1540,14 @@ def test_resistor_load_lut_seed_biases_interstage():
     assert any("corner-fragile" in w for w in result.warnings)
 
 
-def test_resistor_load_bias_gate_fires_on_mismatch():
-    """The #148 gate itself: when the first-stage output I·R misses the driven
-    stage's |Vgs| by more than its Vdsat, the operating point is invalid and the
-    gain-derived metrics must be gated (issue #148). Exercised directly since the
-    LUT seed (#158) prevents the mismatch through the normal sizing pipeline."""
+def test_resistor_load_bias_gate_fires_when_tail_cannot_feed_load():
+    """The #148 gate itself.  Under the DC feedback every op-amp (and the SPICE
+    bench) runs in, the driven stage's gate settles at its |Vgs| and the input
+    pair shifts its current split so the load branch carries |Vgs|/R.  The
+    operating point exists only while that fits in the tail current
+    (|Vgs| < 2·I·R, issue #286).  When it does not fit, the gain-derived
+    metrics must be gated.  The function is exercised directly because the
+    LUT seed (#158) keeps real designs well inside the bound."""
     from types import SimpleNamespace
     from circuitgenome.sizer.gmid.evaluate import _resistor_load_bias
 
@@ -1540,18 +1562,41 @@ def test_resistor_load_bias_gate_fires_on_mismatch():
                 {"m2_second_stage": SimpleNamespace(vgs_v=vgs, vds_sat_v=vdsat)},
                 SimpleNamespace(ibias=40e-6))
 
-    # branch = 20 µA. v_off = 20 µA / gd_load_r.
-    # Mismatch: v_off = 0.85 V, driven |Vgs| = 0.60 V, Vdsat = 0.10 V → gate fires.
-    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.85, 0.60, 0.10))
+    # branch = 20 µA, tail = 40 µA. v_off = 20 µA / gd_load_r.
+    # |Vgs| = 0.60 V needs 0.60 V / 15 kΩ = 40 µA, the whole tail → gate fires.
+    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.30, 0.60, 0.10))
     assert invalid and any("issue #148" in n for n in notes)
-    # Consistent: v_off = 0.62 V within Vdsat of 0.60 V → gate stands down.
+    # Consistent: v_off = 0.62 V vs |Vgs| = 0.60 V → gate stands down.
     invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.62, 0.60, 0.10))
     assert not invalid and any("corner-fragile" in n for n in notes)
+    # The #286 false positive: a weak-inversion driven device (Vdsat 0.074 V)
+    # 0.082 V below the seed.  The pair absorbs it (load branch 17.8 of 40 µA).
+    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.760, 0.678, 0.074))
+    assert not invalid and any("corner-fragile" in n for n in notes)
+    # Far apart, still inside the tail: v_off = 0.85 V, |Vgs| = 0.60 V.
+    invalid, _ = _resistor_load_bias(*_inputs(20e-6 / 0.85, 0.60, 0.10))
+    assert not invalid
+
+
+def test_resistor_load_gate_spares_weak_inversion_second_stage():
+    """gf180 at the default second_stage_current_ratio (2.0): the gain spec
+    pushes the NMOS common-source stage to the weak-inversion ceiling.  Its
+    |Vgs| (0.68 V) then sits 0.08 V under the 0.76 V I·R seed, which is more
+    than its 0.074 V Vdsat.  SPICE still biases this design and measures
+    52 dB against 52 dB predicted, so the gain must be reported (issue #286)."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "resistor_load_gnd",
+        "second_stage": "common_source_nmos"}, second_stage_current_ratio=2.0)
+    assert any("weak-inversion ceiling" in w for w in result.warnings)
+    assert result.metrics.get("gain_db") is not None
+    assert not any("issue #148" in w for w in result.warnings)
 
 
 def test_resistor_load_keeps_gain_when_interstage_biases():
-    """The consistent twin: I·R lands within the driven stage's Vdsat of its
-    |Vgs|, so the operating point is valid and the gain is still reported — only
+    """The consistent twin: I·R lands close to the driven stage's |Vgs|, well
+    inside the tail current's reach, so the operating point is valid and the
+    gain is still reported — only
     the corner-fragility advisory (a fixed resistor cannot track Vth) is added."""
     result = _size_gf180({
         "input_pair": "differential_pair_nmos",
@@ -1656,3 +1701,138 @@ def test_fd_cmfb_couples_mismatched_compensation_halves():
                                                  chain.stages[1].gm) if r1 else 0.0
                     for r1, _r2 in chain.comp_resistors))[1]
     assert pm < uncoupled - 3
+
+
+# ---------------------------------------------------------------------------
+# A CMRR target is sized against the CMRR the result reports (issue #296)
+# ---------------------------------------------------------------------------
+
+# examples/gf180_difficulty_specs/spec_01_easy.yaml with the output swing
+# relaxed, as on the prediction-error page (docs/prediction_error/spec.yaml).
+_EASY_GF180 = dict(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=50,
+                   gbw_min_hz=1e6, phase_margin_min_deg=55, slew_rate_min_vps=2e5,
+                   power_max_w=2.5e-3, output_swing_max_v=2.0, output_swing_min_v=1.1)
+_PMOS_MIRROR_BUFFERED = ("two_stage_opamp_buffered_single_ended", {
+    "input_pair": "differential_pair_nmos", "load": "active_load_pmos",
+    "tail_current": "current_mirror_tail_nmos",
+    "compensation": "miller_cap_with_nulling_resistor",
+    "second_stage": "common_source_pmos", "output_stage": "common_drain_nmos"})
+_NMC_MIRROR = ("three_stage_opamp_nmc_single_ended", {
+    "input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+    "tail_current": "cascode_current_mirror_tail_pmos",
+    "second_stage": "noninverting_stage_nmos", "third_stage": "common_source_nmos",
+    "comp1": "miller_cap", "comp2": "indirect_compensation"})
+_RESISTOR_LOAD = ("two_stage_opamp_single_ended", {
+    "input_pair": "differential_pair_pmos", "load": "resistor_load_gnd",
+    "tail_current": "current_mirror_tail_pmos", "compensation": "miller_cap",
+    "second_stage": "common_source_nmos"})
+
+
+def _gf180_sized(template, variants, **spec_kw):
+    parsed, sr_result, fbr_result, topology = _fbr(template, variants)
+    return size_circuit(parsed, sr_result, fbr_result, topology,
+                        load_tech("gf180mcu"), SizingSpec(**{**_EASY_GF180, **spec_kw}))
+
+
+def _failing(result):
+    return {k for k, m in result.margins.items() if m < 0}
+
+
+def test_a_cmrr_target_the_design_meets_leaves_its_sizing_alone():
+    """A mirror-loaded pair's CMRR is gm1/|gds1 - gds2|, which the tail barely
+    touches.  This design already reports more than the target, so the target
+    must not move it; the tail-only closed form instead pushed gm1 to the
+    widest device, and the reported CMRR fell from 121 to 82 dB."""
+    free = _gf180_sized(*_PMOS_MIRROR_BUFFERED)
+    sized = _gf180_sized(*_PMOS_MIRROR_BUFFERED, cmrr_min_db=100)
+    assert free.metrics["cmrr_db"] > 100
+    assert sized.transistors == free.transistors
+    assert sized.metrics == free.metrics
+    assert sized.margins["cmrr_db"] >= 0
+
+
+def test_a_short_nodal_cmrr_is_lifted_by_the_input_pair_gm():
+    """At a fixed |gds1 - gds2| the nodal CMRR rises with gm1: a design short of
+    its target gets the gm1 that closes the gap, judged on the CMRR it reports,
+    without running the pair to the widest device or costing another spec."""
+    free = _gf180_sized(*_NMC_MIRROR)
+    target = free.metrics["cmrr_db"] + 4
+    sized = _gf180_sized(*_NMC_MIRROR, cmrr_min_db=target)
+    assert sized.margins["cmrr_db"] >= 0
+    assert _failing(sized) <= _failing(free)
+    w_max = load_tech("gf180mcu").width.max
+    for ref, s in sized.transistors.items():
+        if "input_pair" in ref:
+            assert free.transistors[ref].w_um < s.w_um < w_max
+
+
+def test_an_unreachable_cmrr_target_costs_no_other_spec():
+    """A target no gm1 reaches is reported unmet (negative margin) and never
+    traded for another spec: the closed-form raise to 80 dB cost this
+    resistor-loaded design its GBW."""
+    free = _gf180_sized(*_RESISTOR_LOAD)
+    sized = _gf180_sized(*_RESISTOR_LOAD, cmrr_min_db=80)
+    assert sized.margins["cmrr_db"] < 0
+    assert sized.metrics["cmrr_db"] >= free.metrics["cmrr_db"]
+    assert _failing(sized) - {"cmrr_db"} <= _failing(free)
+
+
+@pytest.mark.parametrize("template,variants", [
+    ("one_stage_opamp", {"load": "telescopic_cascode_load_pmos"}),
+    ("two_stage_opamp_fully_differential", None),
+])
+def test_closed_form_cmrr_designs_keep_the_tail_only_gm1_floor(template, variants):
+    """Fully-differential and telescopic-cascode designs report the closed form
+    gm1/(2·gd_tail), so their CMRR target still sizes gm1 against it."""
+    from circuitgenome.sizer.physics.circuit_view import analyze_circuit
+    from circuitgenome.sizer.physics.device_model import Level1Model
+    from circuitgenome.sizer.physics.preprocess import assign_ids, compute_requirements
+
+    _parsed, _sr, fbr_result, topology = _fbr(template, variants)
+    tech = _tech()
+    view = analyze_circuit(fbr_result, topology)
+
+    def gm1(cmrr):
+        spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12, cmrr_min_db=cmrr)
+        ids = assign_ids(view.slot_transistors, view.all_transistors, spec)
+        gm = compute_requirements(view.slot_transistors, view.all_transistors, ids,
+                                  tech, spec, Level1Model(tech))[0]
+        return max(gm[d.ref] for d in view.slot_transistors["input_pair"])
+
+    assert gm1(None) == 0.0
+    assert gm1(50) > 0.0
+
+
+@pytest.mark.parametrize("pm_margin,lifted", [
+    (lambda w: 5.0, True),             # PM untouched: the lift is kept
+    (lambda w: 5.0 - w, False),        # a met PM is lost
+    (lambda w: -1.0 - w / 100, False),  # a missed PM falls further short
+])
+def test_a_cmrr_lift_is_kept_only_when_it_costs_no_other_spec(pm_margin, lifted):
+    """Raising gm1 at the same Cc lifts GBW and costs phase margin, so a
+    re-size is kept only when no other spec is lost or worsened -- a design
+    already short of its phase margin must not be pushed toward instability."""
+    from types import SimpleNamespace
+    from circuitgenome.sizer.models import SizingResult, TransistorSizing
+    from circuitgenome.sizer.physics.preprocess import lift_nodal_cmrr
+
+    ref = "m1_input_pair"
+    pair = Device(ref, "nmos", {"d": "x", "g": "inp", "s": "tail", "b": "gnd!"})
+    # gm = 10 µS per µm of width; the nodal CMRR rises with gm1.
+    model = SimpleNamespace(tech=SimpleNamespace(width=SimpleNamespace(max=100.0)),
+                            gm=lambda t, w, l, ids: 1e-5 * w,
+                            gm_ceiling=lambda t, ids, l: 1.0)
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, cmrr_min_db=70)
+
+    def size(gm1):
+        w = max(gm1 / 1e-5, 1.0)
+        cmrr = 50 + 20 * math.log10(w)
+        return SizingResult(
+            transistors={ref: TransistorSizing(ref, w, 1.0, 1e-5, 0.8, 0.2)},
+            resistors={}, capacitors={}, metrics={"cmrr_db": cmrr},
+            margins={"cmrr_db": cmrr - 70, "phase_margin_deg": pm_margin(w)},
+            solver_status="GMID")
+
+    result = lift_nodal_cmrr(size, {ref: (pair, "input_pair")}, model, spec)
+    assert (result.metrics["cmrr_db"] >= 70) is lifted
+    assert (result.transistors[ref].w_um == 1.0) is not lifted

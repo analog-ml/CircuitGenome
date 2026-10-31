@@ -23,6 +23,10 @@ sizer, as five phases with explicit hand-offs:
    (:func:`~circuitgenome.sizer.physics.stage_chain.check_cmfb_sense_swing`).
 5. **Evaluate** (:mod:`.evaluate`) — cascode-aware analytical metrics.
 
+A CMRR target on a chain that reports the nodal CMRR re-runs phases 3-5 with
+a raised gm1 floor while the evaluated CMRR is short
+(:func:`~circuitgenome.sizer.physics.preprocess.lift_nodal_cmrr`).
+
 The model-independent topology math is reused from the
 ``circuitgenome.sizer.physics`` package rather than duplicated.
 """
@@ -40,16 +44,20 @@ from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..physics import equations as eq
 from ..physics.circuit_view import adoption_warnings
-from ..physics.preprocess import size_compensation_caps
-from ..physics.stage_chain import check_cmfb_sense_swing, check_follower_swing
+from ..physics.preprocess import lift_nodal_cmrr, size_compensation_caps
+from ..physics.stage_chain import (
+    check_cmfb_sense_swing,
+    check_follower_swing,
+    reports_nodal_rejection,
+)
 from ..models import SizingResult, SizingSpec, TechParams, TransistorSizing
-from .analyze import analyze_circuit
+from .analyze import GmIdCircuitView, analyze_circuit
 from .bias import check_dc_operating_point
 from .bias_levels import tune_bias_levels
 from .evaluate import evaluate_circuit
 from .geometry import assign_geometry_gmid
 from .intent import DEFAULT_INTENT, GmIdIntent
-from .plan import assign_currents, plan_devices
+from .plan import CurrentPlan, _model_for, assign_currents, plan_devices
 from .resistors import size_resistors
 from .rnmc_refine import refine_rnmc_plan
 from .stage_interface import check_stage_interface
@@ -71,15 +79,40 @@ def size_gmid(
     spec: SizingSpec,
     intent: GmIdIntent = DEFAULT_INTENT,
 ) -> SizingResult:
-    """Size a circuit via the gm/Id pipeline.  Requires ``tech.gmid_lut``."""
+    """Size a circuit via the gm/Id pipeline.  Requires ``tech.gmid_lut``.
+
+    A CMRR target on a chain that reports the nodal CMRR is sized against
+    that CMRR by re-sizing (:func:`~..physics.preprocess.lift_nodal_cmrr`,
+    issue #296); any other chain takes it at plan time.
+    """
     # Phase 1 — Analyze: structural view of the recognised circuit.
     view = analyze_circuit(fbr_result, topology)
 
     # Phase 2 — Bias currents: IDS from KCL, rail-referenced load resistors.
     currents = assign_currents(view, spec, tech, intent)
 
+    if not (spec.cmrr_min_db and reports_nodal_rejection(view.slot_transistors)):
+        return _size_planned(view, currents, spec, tech, intent)
+    return lift_nodal_cmrr(
+        lambda gm1: _size_planned(view, currents, spec, tech, intent, cmrr_gm1=gm1),
+        view.all_transistors, _model_for(tech, intent), spec)
+
+
+def _size_planned(
+    view: GmIdCircuitView,
+    currents: CurrentPlan,
+    spec: SizingSpec,
+    tech: TechParams,
+    intent: GmIdIntent,
+    cmrr_gm1: float | None = None,
+) -> SizingResult:
+    """Phases 3-5 on the analysed circuit and its bias currents.
+
+    ``cmrr_gm1`` replaces the CMRR target's tail-only gm1 floor
+    (:func:`~.plan.plan_devices`).
+    """
     # Phase 3 — Plan: gm requirements + compensation caps + per-device intent.
-    plan = plan_devices(view, currents, spec, tech, intent)
+    plan = plan_devices(view, currents, spec, tech, intent, cmrr_gm1=cmrr_gm1)
 
     # Phase 4 — Size: LUT geometry, DC bias check/repair, resistor network.
     def _size(plan):
@@ -150,7 +183,7 @@ def size_gmid(
         solver_status="GMID",
         bias_feasible=bias_feasible,
         open_loop_gain_measurable=eq.open_loop_gain_measurable(
-            metrics.get("gain_db")),
+            metrics.get("gain_db"), gbw_hz=metrics.get("gbw_hz")),
         # The swing verdicts lead: each is decisive on its own, and the
         # designer reports a bias rejection by the first warning.
         warnings=(fol_warnings + cm_warnings + view.warnings + plan.warnings

@@ -168,7 +168,7 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
 
   <p>One honest edge case: the whole block is guarded by <code>all(g &gt; 0)</code>. If any stage gain is zero or negative (a device that never got sized, an <code>inf</code> resistance producing a degenerate product), the gain is simply <em>not reported</em> rather than reporting a garbage number. Silence beats a lie.</p>
 
-  <p>Even when it <em>is</em> reported, <code>gain_db</code> is an un-derated cascade product — a single-point upper bound. Above the open-loop ceiling callers receive an advisory <code>open_loop_gain_measurable = False</code> flag (#155), because a bench that can't hold mid-rail will measure ~0 dB no matter how healthy the DC bias looks.</p>
+  <p>Even when it <em>is</em> reported, <code>gain_db</code> is an un-derated cascade product — a single-point upper bound. Above the open-loop ceiling callers receive an advisory <code>open_loop_gain_measurable = False</code> flag (#155). The ceiling is <code>20·log10(GBW / 1&nbsp;mHz)</code> of the predicted GBW (160&nbsp;dB at 100&nbsp;kHz, 180&nbsp;dB at 1&nbsp;MHz; a fixed 180&nbsp;dB without one), capped at ≈&nbsp;212&nbsp;dB, where the bench's <code>Lfb</code>/<code>Cfb</code> DC feedback loop closes at 1&nbsp;mHz. Above it the dominant pole sits below the bench's first sweep point (1&nbsp;mHz), so SPICE can no longer read the DC gain the model predicts (#287).</p>
 </section>
 
 <section class="part" id="part-3">
@@ -243,11 +243,9 @@ second stage : 40e-6 / (5e-12 + 1.25e-12) = 6.4 V/µs   ← slowest, so SR = 6.4
   <blockquote><p><strong>Main task:</strong> finish the report card — how much power it burns, how far the output can swing, and how well it rejects common-mode and supply noise.</p></blockquote>
 
   <h3>Power — add up every leg's current</h3>
-  <p>Quiescent power is simply the supply voltage times the total current drawn. The code assembles the supply-current list one leg at a time — the tail, the second (and third) stage scaled by how many slots it fills, plus a bias-generator approximation:</p>
-  <pre class="code"><code>supply_currents = [spec.ibias]                        <span class="tok-com"># tail</span>
-<span class="tok-kw">if</span> has_second_stage: supply_currents.append(ids_2 * n_ss)
-<span class="tok-kw">if</span> is_three_stage:   supply_currents.append(ids_3 * n_ts)
-supply_currents.append(spec.ibias * <span class="tok-fn">max</span>(n_bias_legs, <span class="tok-num">1</span>))  <span class="tok-com"># bias gen approx</span>
+  <p>Quiescent power is simply the supply voltage times the total current drawn. The chain gets that current by KCL at the positive rail (<code>vdd_supply_currents</code>, issue #285): every transistor with its source or drain on <code>vdd!</code> adds its planned current, and a resistor tied to <code>vdd!</code> adds the current of the transistors on its other end. Each branch counts once, whatever slot it sits in. A bias leg is one branch even though it is two transistors, and the CMFB and an output follower count too. The external reference current is not drawn from <code>vdd!</code>, so it is left out, just as on the SPICE bench:</p>
+  <pre class="code"><code>supply_currents = [ids(d) <span class="tok-kw">for</span> d <span class="tok-kw">in</span> mosfets <span class="tok-kw">if</span> <span class="tok-str">"vdd!"</span> <span class="tok-kw">in</span> (d.drain, d.source)]
+supply_currents += [ids_on(far_node(r)) <span class="tok-kw">for</span> r <span class="tok-kw">in</span> resistors <span class="tok-kw">if</span> <span class="tok-str">"vdd!"</span> <span class="tok-kw">in</span> r.ends]
 power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, supply_currents)</code></pre>
 
   <figure class="fig">
@@ -275,17 +273,20 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
   <p>A buffered op-amp adds a source follower after the last gain stage, and a follower's output sits a whole <code>|Vgs|</code> away from its input. So one headroom grows by that much: a PMOS follower cannot pull the output lower than <code>Vds_sat(driver) + |Vgs|</code> above <code>Vss</code> (≈ 0.85 V on gf180), an NMOS follower cannot lift it higher than <code>Vds_sat(driver) + Vgs</code> below <code>Vdd</code>. <code>output_swing_headroom</code> in <code>stage_chain.py</code> works this out; the metric code does not change.</p>
   <p>A buffered fully-differential op-amp adds one more rule. Its CMFB keeps the two outputs centred on mid-supply, so they move as mirror images: when one output is at its highest, the other is at its lowest. Whichever side runs out of room first therefore stops both. With <code>Vdd = 3.3 V</code> and headrooms of <code>1.10 V</code> (an NMOS follower's top) and <code>0.17 V</code> (the bottom), both edges get <code>1.10 V</code>: <code>2.20 V</code> and <code>1.10 V</code>, not <code>2.20 V</code> and <code>0.17 V</code>.</p>
 
-  <h3>CMRR — rejecting common-mode noise</h3>
-  <p>A differential pair is only as good at ignoring common-mode input as its tail current source is stiff. A leaky tail (large <code>gd_tail</code>) lets common-mode signal through:</p>
+  <h3>CMRR and PSRR — single-ended: read off the chain's nodal solve</h3>
+  <p>CMRR asks how little the output moves when both inputs move together; PSRR<sup>+</sup> how little it moves when VDD wobbles. Both are ratios against the differential gain, and on a single-ended op-amp no one formula follows where those disturbances actually go. On a current-mirror load, for instance, the mirror cancels the common-mode current the tail lets through, so the tail hardly matters. What is left is a small built-in imbalance: the pair's two drains sit at different voltages (the mirror's diode node and the output), so the two halves leak slightly different currents when their sources move. And supply ripple reaches the output through whichever bias nodes do <em>not</em> follow VDD.</p>
+  <p>So <code>stage_chain.py</code> does what a simulator would at DC. It writes the node equations for every transistor and resistor in the circuit, using the sizer's own <code>gm</code>/<code>gds</code>/<code>gmb</code>, each read at that device's own bias with the output held at mid-supply. It solves them three times — one input driven, both inputs driven, VDD driven — and hands this file the two ratios as <code>se_rejection_db</code>:</p>
+  <pre class="code"><code>CMRR = 20·log10( Adm / Acm )      PSRR+ = 20·log10( Adm / Avdd )
+<span class="tok-com"># 5T OTA on GF180: gm1 ≈ 2e-4, pair gds 4.4e-7 vs 6.3e-7 → CMRR ≈ gm1/Δgds ≈ 61 dB</span></code></pre>
+  <p>Here the metric code only copies the numbers, behind the same <code>gain_measurable</code> guard as gain. Telescopic cascode loads are the exception. Their cascodes hold the pair's drains within about a millivolt of each other, and that millivolt sets the rejection. The solve places both drains at exactly the same level, so it cannot see it, and on GF180 it would over-promise CMRR by a median 47 dB. So a telescopic cascode load is kept on the closed form below, which errs low instead; see the follow-up in issue #290.</p>
+
+  <h3>CMRR and PSRR — fully differential and telescopic loads: closed forms</h3>
+  <p>A perfectly matched fully-differential amplifier turns neither common mode nor supply ripple into a differential output, so a nodal solve of it would say "infinite". Its SPICE bench measures rejection under random device mismatch instead. For these chains, and for the telescopic loads above, the chain carries no <code>se_rejection_db</code>, and the two first-order formulas remain:</p>
   <div class="eq-center"><span class="boxed-eq">CMRR&nbsp;≈&nbsp;20·log<sub>10</sub>(&nbsp;g<sub>m1</sub>&nbsp;/&nbsp;(2·g<sub>d,tail</sub>)&nbsp;)</span></div>
   <pre class="code"><code>CMRR = 20·log10( 1e-3 / (2 × 0.2e-6) ) = 20·log10(2500) ≈ 68 dB</code></pre>
-  <p>This is the reason Part 4 bothered to grab the tail device's <code>gds</code> even though it is not a gain stage — it is the denominator here. And the guard <code>gd_tail &gt; 0</code> means a resistor-degenerated or ideal tail (zero conductance) simply skips CMRR rather than dividing by zero.</p>
-
-  <h3>PSRR — rejecting supply noise (approximate)</h3>
-  <p>The last metric reuses the second-stage load conductance <code>ss_load_gd</code> gathered back in Part 4:</p>
   <div class="eq-center"><span class="boxed-eq">PSRR<sup>+</sup>&nbsp;≈&nbsp;20·log<sub>10</sub>(&nbsp;g<sub>m2</sub>&nbsp;/&nbsp;g<sub>d,load</sub>&nbsp;)</span></div>
   <pre class="code"><code>PSRR = 20·log10( 4e-3 / 4e-6 ) = 20·log10(1000) = 60 dB</code></pre>
-  <p>The name of the function is honest about its status — <code>psrr_db_approx</code>. It is a first-order estimate; accurate PSRR needs a simulator, which brings us to the limits.</p>
+  <p>The guard <code>gd_tail &gt; 0</code> means an ideal tail (zero conductance) simply skips CMRR rather than dividing by zero. Neither formula models mismatch, so they do not predict the bench; the name <code>psrr_db_approx</code> is honest about that.</p>
 </section>
 
 <section class="part" id="part-5">
@@ -316,9 +317,9 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li>Every formula here is <strong>analytical</strong> — a dominant-pole, first-order model. It is fast enough to guide a search over thousands of candidate sizings, but it is not the truth.</li>
-    <li><code>PSRR</code> is explicitly labelled <code>_approx</code>; phase margin neglects the internal mirror pole; CMRR is first-order. The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
+    <li>Fully-differential <code>PSRR</code> is explicitly labelled <code>_approx</code>, and its CMRR is first-order and mismatch-free. Single-ended CMRR/PSRR come from a DC nodal solve, except on telescopic cascode loads, which are kept on the closed form (see the follow-up in issue #290). The ground truth is an <strong>ngspice</strong> simulation run downstream on the winning candidate.</li>
     <li>Metrics that cannot be computed (missing stage, zero <code>gm</code>, zero tail conductance) are <em>omitted</em>, never faked. A missing key is more honest than a wrong number.</li>
-    <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling the bench cannot hold the output at mid-rail, so callers get an advisory <code>SizingResult.open_loop_gain_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
+    <li>The reported <code>gain_db</code> is an <strong>un-derated cascade product</strong> — a single-point upper bound that over-estimates multi-stage DC gain. Above the open-loop ceiling, <code>20·log10(GBW / 1&nbsp;mHz)</code> of the predicted GBW (at most ≈&nbsp;212&nbsp;dB, the bench's DC-loop limit), the bench's 1&nbsp;mHz first point no longer reads the DC gain, so callers get an advisory <code>SizingResult.open_loop_gain_measurable = False</code> flag (#155); the analytical number is still reported, but SPICE stays the authority.</li>
   </ul>
 
   <h3>Why it's elegant</h3>

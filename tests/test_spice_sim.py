@@ -794,6 +794,26 @@ def test_se_power_is_measured_in_unity_feedback():
 
 
 @ngspice
+@pytest.mark.parametrize("build", [
+    lambda: _active_load_one_stage("gf180mcu", 3.3),
+    _gf180_fd_nmos_mirror,
+], ids=["one_stage", "two_stage_fd_cmfb"])
+def test_predicted_power_matches_the_supply_current(build):
+    """Issue #285: the predicted power is the current the planned devices draw
+    from vdd!, which is what the bench's ``i(Vsup)`` reads.  It used to count
+    one ``ibias`` per bias-generator transistor (both devices of a leg, the
+    tail diode twice, and the off-chip reference) and to miss the CMFB:
+    +93 % on the one-stage OTA, +44 % on the FD two-stage."""
+    text, result, tech, spec = build()
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    measured = measure._measure_power(name, ports, body_dut, rig._Topo(ports),
+                                      spec.vdd, spec.ibias, spec.cl, spec.vdd / 2)
+    assert measured is not None
+    assert result.metrics["power_w"] == pytest.approx(measured, rel=0.1)
+
+
+@ngspice
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the
     sizer's definition), not left None — a None on a constrained spec left
@@ -1703,6 +1723,73 @@ def test_se_slew_is_not_limited_by_the_input_common_mode():
     assert measured == pytest.approx(result.metrics["slew_rate_vps"], rel=0.15)
 
 
+def test_slew_bench_flags_a_pulse_half_that_ends_oscillating():
+    """A pulse half whose output still swings back and forth at its end has no
+    final level to read an edge against: a large step can kick a loop that is
+    stable at small signal into a sustained oscillation.  An edge still
+    creeping one way (a slow design whose window ends early) is not one."""
+    import numpy as np
+    step = 1.0
+    t = np.linspace(0.0, 1.0, 1000)
+    settled = 1.0 + step * (1.0 - np.exp(-t / 0.05))
+    ringing = settled + 0.4 * np.sin(2 * np.pi * 40 * t)
+    creeping = 1.0 + step * (1.0 - np.exp(-t / 0.5))
+    assert not measure._oscillates(settled, step)
+    assert measure._oscillates(ringing, step)
+    assert not measure._oscillates(creeping, step)
+
+
+def _nmc_se_slew(variants: dict) -> tuple[float, float | None]:
+    """(predicted, measured) slew rate of one GF180 single-ended nested-Miller
+    design, sized against the prediction-error page's spec."""
+    topo = next(t for t in load_topologies()
+                if t.name == "three_stage_opamp_nmc_single_ended")
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in variants.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+    measured = simulate_metrics(text, result, tech, spec)["slew_rate_vps"]
+    return result.metrics["slew_rate_vps"], measured
+
+
+@ngspice
+def test_slew_bench_resolves_a_fast_three_stage_edge():
+    """The pulse is sized for the spec's 0.2 V/µs floor (a ~15 µs window, read
+    at 15 ns steps), but this design slews ~14 V/µs: its 1 V edge took only a
+    handful of samples, and the readout's 20 %-of-swing secant read 20 V/µs
+    off them where a finely stepped transient reads 15.9 V/µs."""
+    predicted, measured = _nmc_se_slew({
+        "input_pair": "differential_pair_pmos_degenerated",
+        "load": "active_load_nmos", "tail_current": "current_mirror_tail_pmos",
+        "second_stage": "noninverting_stage_nmos",
+        "third_stage": "common_source_nmos",
+        "comp1": "indirect_compensation", "comp2": "miller_cap"})
+    assert measured == pytest.approx(predicted, rel=0.2)
+
+
+@ngspice
+def test_slew_bench_rejects_an_output_that_oscillates_after_the_step():
+    """This design settles after a small step at either step level, but the
+    large falling step kicks it into a sustained ~0.7 V oscillation.  An edge
+    read against wherever the oscillation happens to be at the end of the pulse
+    is no slew rate (it read +66 %), so the bench reports none."""
+    _, measured = _nmc_se_slew({
+        "input_pair": "differential_pair_pmos",
+        "load": "folded_cascode_load_pmos_input_single_output",
+        "tail_current": "cascode_current_mirror_tail_pmos",
+        "second_stage": "noninverting_stage_nmos",
+        "third_stage": "common_source_pmos",
+        "comp1": "miller_cap_with_nulling_resistor", "comp2": "miller_cap"})
+    assert measured is None
+
+
 @pytest.mark.spice
 @pytest.mark.skipif(not ngspice_available(), reason="ngspice not on PATH")
 def test_wide_current_source_carries_its_planned_current_in_spice():
@@ -1732,3 +1819,57 @@ def test_wide_current_source_carries_its_planned_current_in_spice():
     op = read_op_operating_point(text, result, tech, spec)
     for ref, s in wide.items():
         assert abs(op[ref]["id"]) == pytest.approx(s.ids_a, rel=0.1)
+
+
+# --- single-ended CMRR / PSRR+ (issue #290) ----------------------------------
+
+@ngspice
+@pytest.mark.parametrize("template,want", [
+    # 5T OTA, NMOS mirror: the pair's drain imbalance, not the tail, sets CMRR
+    # (61 dB measured, 51 dB by the closed form); PSRR+ 88 dB (was 52 dB).
+    ("one_stage_opamp", {"input_pair": "differential_pair_pmos",
+                         "load": "active_load_nmos",
+                         "tail_current": "current_mirror_tail_pmos"}),
+    # 5T OTA, PMOS mirror: VDD reaches the output, PSRR+ 44 dB (was 57 dB).
+    ("one_stage_opamp", {"input_pair": "differential_pair_nmos",
+                         "load": "active_load_pmos",
+                         "tail_current": "current_mirror_tail_nmos"}),
+    # A resistor tail under a mirror load: CMRR 54 dB (was −1 dB).
+    ("two_stage_opamp_single_ended", {"input_pair": "differential_pair_pmos",
+                                      "load": "active_load_nmos",
+                                      "tail_current": "resistor_tail_vdd",
+                                      "compensation": "miller_cap"}),
+    # A resistor load: CMRR is the tail's, gm·R_tail; PSRR+ 45 dB (was 56 dB).
+    ("two_stage_opamp_single_ended", {"input_pair": "differential_pair_nmos",
+                                      "load": "resistor_load_vdd",
+                                      "tail_current": "current_mirror_tail_nmos",
+                                      "compensation": "miller_cap"}),
+])
+def test_se_cmrr_psrr_model_tracks_spice(template, want):
+    """Issue #290: single-ended CMRR and PSRR+ come from a DC nodal solve of
+    the whole sized circuit, which follows each topology's actual common-mode
+    and supply paths.  The closed forms gm1/(2·gd_tail) and gm2/gd_load missed
+    these benches by 10-55 dB; the solve lands within a few dB."""
+    topo = next(t for t in load_topologies() if t.name == template)
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in want.items()))
+    text = to_flat_spice(circ, name="dut")
+    parsed = parse(text)
+    sr = recognize(parsed)
+    tech = load_tech("gf180mcu")
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12,
+                      gain_min_db=50, gbw_min_hz=1e6, phase_margin_min_deg=55,
+                      slew_rate_min_vps=2e5)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo, tech, spec)
+
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    args = (name, ports, body_dut, rig._Topo(ports), spec.vdd, spec.ibias,
+            spec.cl, spec.vdd / 2)
+    gain, *_, polarity = measure._measure_ac(*args)
+    cmrr = measure._measure_cmrr(*args, polarity=polarity, adm_db=gain)
+    psrr = measure._measure_psrr(*args, polarity=polarity, adm_db=gain)
+    assert cmrr is not None and psrr is not None
+    assert result.metrics["cmrr_db"] == pytest.approx(cmrr, abs=4.0)
+    assert result.metrics["psrr_db"] == pytest.approx(psrr, abs=4.0)

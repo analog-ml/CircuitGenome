@@ -20,6 +20,7 @@ from ..physics.gmid_lut import GmIdLut
 from ..models import SizingSpec, TechParams
 from ..physics.preprocess import assign_ids, compute_requirements, size_load_resistors
 from ..physics.rnmc import RNMC
+from ..physics.taxonomy import SECOND_STAGE_SLOTS
 from .analyze import GmIdCircuitView
 from .intent import GmIdIntent, TransistorIntent, resolve_transistor_intents
 
@@ -83,8 +84,9 @@ def assign_currents(view: GmIdCircuitView, spec: SizingSpec, tech: TechParams,
                     intent: GmIdIntent) -> CurrentPlan:
     """Assign per-device quiescent currents and size the load resistors."""
     ids_map = assign_ids(view.slot_transistors, view.all_transistors, spec)
+    single_stage = not any(s in view.slot_transistors for s in SECOND_STAGE_SLOTS)
     load_resistors = size_load_resistors(view.slot_resistors, spec, tech,
-                                         _load_seed_v(tech, intent))
+                                         _load_seed_v(tech, intent), single_stage)
     gd_load_r = (1.0 / min(load_resistors.values())) if load_resistors else 0.0
     return CurrentPlan(ids_map=ids_map, load_resistors=load_resistors,
                        gd_load_r=gd_load_r)
@@ -109,6 +111,7 @@ def plan_devices(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
+    cmrr_gm1: float | None = None,
 ) -> SizingPlan:
     """Derive gm requirements, compensation caps and per-device intent.
 
@@ -117,12 +120,15 @@ def plan_devices(
     RNMC template is planned with the default rules here and re-planned on
     the sized circuit (:mod:`.rnmc_refine`): its requirement-time gm1 and
     third-stage gate capacitance are estimates the geometry moves far from.
+    ``cmrr_gm1`` is the CMRR target's gm1 floor found on the sized circuit,
+    in place of the tail-only closed form (see ``compute_requirements``).
     """
     model = _model_for(tech, intent)
     scheme = None if view.compensation_scheme == RNMC else view.compensation_scheme
     gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
         view.slot_transistors, view.all_transistors, currents.ids_map,
         tech, spec, model, currents.gd_load_r, compensation_scheme=scheme,
+        cmrr_gm1=cmrr_gm1,
     )
     tintents = resolve_transistor_intents(
         view.all_transistors, view.cascode_refs, intent.block_intents)

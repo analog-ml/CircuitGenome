@@ -299,7 +299,6 @@
   <pre class="code"><code>view = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)   <span class="tok-com"># slots, dedup, warnings</span>
 slot_transistors = view.slot_transistors
 all_transistors = view.all_transistors
-topology_warnings = view.warnings
 ids_map = <span class="tok-fn">assign_ids</span>(slot_transistors, all_transistors, spec)
 
 <span class="tok-com"># Size resistor loads (deterministic) and fold them into first-stage Rout.</span>
@@ -307,11 +306,12 @@ resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors,
 gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(resistors.values())) <span class="tok-kw">if</span> resistors <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
 
 dev_model = <span class="tok-fn">Level1Model</span>(tech)
+<span class="tok-com"># … then, inside _size_planned(…, cmrr_gm1):</span>
 gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = <span class="tok-fn">compute_requirements</span>(
     slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r,
-    compensation_scheme=view.compensation_scheme,
+    compensation_scheme=view.compensation_scheme, cmrr_gm1=cmrr_gm1,
 )
-all_warnings = (topology_warnings + gm_ceiling_warnings
+all_warnings = (view.warnings + gm_ceiling_warnings
                 + <span class="tok-fn">adoption_warnings</span>(view.adopted))
 capacitors = <span class="tok-fn">size_compensation_caps</span>(view.slot_capacitors, cc_pf, cc2_pf)</code></pre>
 
@@ -332,6 +332,9 @@ capacitors = <span class="tok-fn">size_compensation_caps</span>(view.slot_capaci
 
   <h3>Why <code>Level1Model(tech)</code> matters here</h3>
   <p>Notice <code>compute_requirements</code> is handed a <code>dev_model</code>. This is the one spot in prep where the square-law choice leaks in: the requirements are computed <em>through</em> the Level-1 formulas from Part&nbsp;2. Swap in the gm/Id model and the same function computes the same-shaped maps a different way. That is precisely why the surrounding code can be shared — the model is a plug-in.</p>
+
+  <h3>Why the requirements sit in <code>_size_planned</code></h3>
+  <p>Everything from <code>compute_requirements</code> to the returned <code>SizingResult</code> lives in one helper, <code>_size_planned(…, cmrr_gm1)</code>, so it can run more than once. A single-ended chain reports CMRR from a DC solve of the whole sized circuit (issue #290), so a CMRR target there can only be judged after the solve. <code>size_level1</code> then hands the helper to <code>lift_nodal_cmrr</code>, which re-solves with a raised <code>cmrr_gm1</code> floor while the reported CMRR is short, keeping a re-solve only when no other spec was lost or got worse (issue #296). Every other chain, and every spec without a CMRR target, runs the helper once with <code>cmrr_gm1=None</code>: the tail-only CMRR formula, exactly as before.</p>
 
   <blockquote><p><strong>Looking ahead:</strong> now we have per-device targets. Part&nbsp;4 is the heart — turning those targets into a discrete W/L pick with CP-SAT.</p></blockquote>
 </section>
@@ -491,7 +494,8 @@ metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
 <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
     transistors=transistor_sizing, resistors=resistors, capacitors=capacitors,
     metrics=metrics, margins=margins, solver_status=status_name,
-    open_loop_gain_measurable=eq.open_loop_gain_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    open_loop_gain_measurable=eq.open_loop_gain_measurable(
+        metrics.get(<span class="tok-str">"gain_db"</span>), gbw_hz=metrics.get(<span class="tok-str">"gbw_hz"</span>)),
     warnings=all_warnings,
 )</code></pre>
 
