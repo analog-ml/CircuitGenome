@@ -134,7 +134,8 @@ def test_resistor_load_psrr_follows_the_rail_the_load_hangs_from(one_stage_by_lo
     unity gain, so PSRR+ is the stage's own gain.  Hung from ground, it sees
     VDD only through the tail -- rejected like a common-mode input -- and
     PSRR+ sits well above the gain.  ngspice, one-stage #16 and #1 of the #256
-    sample: 11.9 dB at 11.7 dB gain, and 28.0 dB at 4.4 dB gain (issue #290).
+    sample, measured before #284 re-biased these loads: 11.9 dB at 11.7 dB
+    gain, and 28.0 dB at 4.4 dB gain (issue #290).
     """
     vdd = one_stage_by_load["resistor_load_vdd"].metrics
     assert vdd["psrr_db"] == pytest.approx(vdd["gain_db"], abs=1.0)
@@ -199,3 +200,34 @@ def test_wideswing_loads_are_credited_as_mirrors(one_stage_by_load):
         wide = one_stage_by_load[f"telescopic_cascode_load_wideswing_{polarity}"]
         assert wide.metrics["gbw_hz"] == pytest.approx(
             plain.metrics["gbw_hz"], rel=0.25)
+
+
+def test_single_stage_resistor_load_holds_the_output_at_vcm(one_stage_by_load):
+    """A one-stage resistor load drops the output to the input common mode.
+
+    The resistor-loaded node is the amplifier's own output, which any feedback
+    loop (and the SPICE bench's unity-feedback DC loop) holds at Vcm.  Sized
+    instead for a second-stage gate's ``|Vgs|`` (~0.76 V on gf180), the output
+    could reach Vcm only by unbalancing the input pair, and GBW measured up to
+    92 % below the prediction (issue #284).
+    """
+    branch_i = _SPEC.ibias / 2.0
+    drops = {"resistor_load_gnd": _SPEC.vcm - _SPEC.vss,
+             "resistor_load_vdd": _SPEC.vdd - _SPEC.vcm}
+    for name, drop in drops.items():
+        r = one_stage_by_load[name].resistors
+        assert r["r1_load"] * branch_i == pytest.approx(drop), name
+        assert r["r2_load"] == pytest.approx(r["r1_load"]), name
+
+
+def test_level1_single_stage_resistor_load_holds_the_output_at_vcm():
+    """The Level-1 sizer (card-less ``generic`` tech) applies the same rule."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    c = next(c for c in enumerate_circuits(topo, mods)
+             if c.variant_map["load"].name == "resistor_load_gnd")
+    parsed = parse(to_flat_spice(c))
+    sr = recognize(parsed)
+    r = size_circuit(parsed, sr, assign_slots(sr, topo), topo,
+                     load_tech("generic"), _SPEC)
+    assert r.resistors["r1_load"] * _SPEC.ibias / 2.0 == pytest.approx(_SPEC.vcm)

@@ -53,7 +53,9 @@ def size_level1(
     topology_warnings = view.warnings
     ids_map = assign_ids(slot_transistors, all_transistors, spec)
     # Size resistor loads (deterministic) and model them in the first-stage Rout.
-    resistors = size_load_resistors(view.slot_resistors, spec, tech)
+    single_stage = not any(s in slot_transistors for s in SECOND_STAGE_SLOTS)
+    resistors = size_load_resistors(view.slot_resistors, spec, tech,
+                                    single_stage=single_stage)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
 
     # Level-1 square-law model; discrete W/L via CP-SAT.

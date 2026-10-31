@@ -1117,11 +1117,15 @@ Fully-differential three-stage
 
 For FD topologies, the sizer applies the same equations to each output path
 independently (using ``second_stage_p``/``third_stage_p`` as the representative
-path).  Power is computed as:
+path).  Power needs no special case: like every topology's, it is the
+current the planned devices draw from ``vdd!``, by KCL at the rail
+(:func:`~circuitgenome.sizer.physics.stage_chain.vdd_supply_currents`), so
+both output paths, both branches of a non-inverting stage, the CMFB and each
+bias leg count once (issue #285):
 
 .. math::
 
-   P = V_{DD} \times \bigl(I_{bias} + 2\,I_{D2} + 2\,I_{D3} + I_{bias,gen}\bigr)
+   P = (V_{DD} - V_{SS}) \sum_{\text{devices on } V_{DD}} |I_{DS}|
 
 Cross-slot symmetry constraints (``second_stage_p`` ↔ ``second_stage_n``
 and ``third_stage_p`` ↔ ``third_stage_n``) force identical W/L on both

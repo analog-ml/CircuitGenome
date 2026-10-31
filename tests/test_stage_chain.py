@@ -25,6 +25,7 @@ from circuitgenome.sizer.physics.stage_chain import (
     cmfb_sense_range,
     output_swing_headroom,
     _se_rejection_db,
+    vdd_supply_currents,
     _source_degeneration_r,
     _telescopic_cascode_load,
     _tail_current_net,
@@ -999,3 +1000,75 @@ def test_mirror_load_gets_the_nodal_rejection(monkeypatch):
         "tail_current": "current_mirror_tail_pmos"})
     assert chain.se_rejection_db is not None
     assert (m["cmrr_db"], m["psrr_db"]) == chain.se_rejection_db
+
+
+# --------------------------------------------------------------------------- #
+# Quiescent supply current: KCL at the positive rail (issue #285)
+# --------------------------------------------------------------------------- #
+def _ids(ref, ids):
+    return TransistorSizing(ref=ref, w_um=1.0, l_um=1.0, ids_a=ids,
+                            vgs_v=0.8, vds_sat_v=0.2)
+
+
+def _supply_view(slots, resistors=None):
+    return CircuitView(
+        slot_transistors=slots, slot_resistors=resistors or {},
+        all_transistors={d.ref: (d, sl) for sl, devs in slots.items() for d in devs})
+
+
+def test_a_bias_leg_is_one_branch_and_the_reference_stays_off_chip():
+    """An NMOS+PMOS leg carries one current, even when its PMOS diode is the
+    tail mirror's and so sits in two slots; the reference diode is fed by the
+    external Iref, not by vdd!."""
+    tail_diode = _dev("m1_tail", "pmos", "net_bias7", "net_bias7", "vdd!")
+    slots = {
+        "tail_current": [tail_diode,
+                         _dev("m2_tail", "pmos", "net_tail", "net_bias7", "vdd!")],
+        "bias_gen": [_dev("mnref", "nmos", "ibias", "ibias", "gnd!"),
+                     _dev("mn7", "nmos", "net_bias7", "ibias", "gnd!"),
+                     tail_diode],
+    }
+    sizing = {r: _ids(r, 20e-6) for r in ("m1_tail", "m2_tail", "mnref", "mn7")}
+    assert sum(vdd_supply_currents(_supply_view(slots), sizing)) == pytest.approx(40e-6)
+
+
+def test_every_branch_into_vdd_counts_whatever_its_slot():
+    """Both branches of a non-inverting stage, a CMFB device draining on
+    vdd!, and an NMOS follower's drain all draw from the positive rail."""
+    slots = {
+        "third_stage": [_dev("mn1", "nmos", "nmir", "mid", "gnd!"),
+                        _dev("mp1", "pmos", "nmir", "nmir", "vdd!"),
+                        _dev("mp2", "pmos", "out", "nmir", "vdd!"),
+                        _dev("mn2", "nmos", "out", "net_bias6", "gnd!")],
+        "cmfb": [_dev("m2_cmfb", "nmos", "vdd!", "sense", "cmfb_tail")],
+        "output_stage": [_dev("mn_f", "nmos", "vdd!", "amp", "out2")],
+    }
+    sizing = {"mn1": _ids("mn1", 100e-6), "mp1": _ids("mp1", 100e-6),
+              "mp2": _ids("mp2", -100e-6), "mn2": _ids("mn2", 100e-6),
+              "m2_cmfb": _ids("m2_cmfb", 10e-6), "mn_f": _ids("mn_f", 20e-6)}
+    assert sum(vdd_supply_currents(_supply_view(slots), sizing)) == pytest.approx(230e-6)
+
+
+def test_a_resistor_on_vdd_carries_the_channels_on_its_far_node():
+    """A resistor tail on vdd! feeds both pair sources; a load resistor to
+    gnd! draws nothing from vdd!."""
+    slots = {"input_pair": [_dev("m1", "pmos", "o1", "in1", "net_tail"),
+                            _dev("m2", "pmos", "o2", "in2", "net_tail")]}
+    resistors = {"tail_current": [_res("r_tail", "vdd!", "net_tail")],
+                 "load": [_res("r1", "o1", "gnd!"), _res("r2", "o2", "gnd!")]}
+    sizing = {"m1": _ids("m1", 10e-6), "m2": _ids("m2", 10e-6)}
+    currents = vdd_supply_currents(_supply_view(slots, resistors), sizing)
+    assert sum(currents) == pytest.approx(20e-6)
+
+
+def test_a_resistor_tail_reaches_a_degenerated_pair_through_its_resistors():
+    """No channel ends on a degenerated pair's tail node: the tail resistor's
+    current is that of the devices beyond the degeneration resistors."""
+    slots = {"input_pair": [_dev("m1", "pmos", "o1", "in1", "s1"),
+                            _dev("m2", "pmos", "o2", "in2", "s2")]}
+    resistors = {"input_pair": [_res("rd1", "s1", "net_tail"),
+                                _res("rd2", "net_tail", "s2")],
+                 "tail_current": [_res("r_tail", "vdd!", "net_tail")]}
+    sizing = {"m1": _ids("m1", 10e-6), "m2": _ids("m2", 10e-6)}
+    currents = vdd_supply_currents(_supply_view(slots, resistors), sizing)
+    assert sum(currents) == pytest.approx(20e-6)

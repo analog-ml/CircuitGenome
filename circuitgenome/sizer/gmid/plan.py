@@ -20,6 +20,7 @@ from ..physics.gmid_lut import GmIdLut
 from ..models import SizingSpec, TechParams
 from ..physics.preprocess import assign_ids, compute_requirements, size_load_resistors
 from ..physics.rnmc import RNMC
+from ..physics.taxonomy import SECOND_STAGE_SLOTS
 from .analyze import GmIdCircuitView
 from .intent import GmIdIntent, TransistorIntent, resolve_transistor_intents
 
@@ -83,8 +84,9 @@ def assign_currents(view: GmIdCircuitView, spec: SizingSpec, tech: TechParams,
                     intent: GmIdIntent) -> CurrentPlan:
     """Assign per-device quiescent currents and size the load resistors."""
     ids_map = assign_ids(view.slot_transistors, view.all_transistors, spec)
+    single_stage = not any(s in view.slot_transistors for s in SECOND_STAGE_SLOTS)
     load_resistors = size_load_resistors(view.slot_resistors, spec, tech,
-                                         _load_seed_v(tech, intent))
+                                         _load_seed_v(tech, intent), single_stage)
     gd_load_r = (1.0 / min(load_resistors.values())) if load_resistors else 0.0
     return CurrentPlan(ids_map=ids_map, load_resistors=load_resistors,
                        gd_load_r=gd_load_r)

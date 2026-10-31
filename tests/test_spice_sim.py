@@ -794,6 +794,26 @@ def test_se_power_is_measured_in_unity_feedback():
 
 
 @ngspice
+@pytest.mark.parametrize("build", [
+    lambda: _active_load_one_stage("gf180mcu", 3.3),
+    _gf180_fd_nmos_mirror,
+], ids=["one_stage", "two_stage_fd_cmfb"])
+def test_predicted_power_matches_the_supply_current(build):
+    """Issue #285: the predicted power is the current the planned devices draw
+    from vdd!, which is what the bench's ``i(Vsup)`` reads.  It used to count
+    one ``ibias`` per bias-generator transistor (both devices of a leg, the
+    tail diode twice, and the off-chip reference) and to miss the CMFB:
+    +93 % on the one-stage OTA, +44 % on the FD two-stage."""
+    text, result, tech, spec = build()
+    name, ports, body = deck._parse_subckt(text)
+    body_dut = deck._dut(tech, name, deck._inject_sizes(body, result))
+    measured = measure._measure_power(name, ports, body_dut, rig._Topo(ports),
+                                      spec.vdd, spec.ibias, spec.cl, spec.vdd / 2)
+    assert measured is not None
+    assert result.metrics["power_w"] == pytest.approx(measured, rel=0.1)
+
+
+@ngspice
 def test_fd_swing_and_slew_measured():
     """Issue #208: FD output swing and slew rate are measured per output (the
     sizer's definition), not left None — a None on a constrained spec left
