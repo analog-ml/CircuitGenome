@@ -1521,11 +1521,14 @@ def test_resistor_load_lut_seed_biases_interstage():
     assert any("corner-fragile" in w for w in result.warnings)
 
 
-def test_resistor_load_bias_gate_fires_on_mismatch():
-    """The #148 gate itself: when the first-stage output I·R misses the driven
-    stage's |Vgs| by more than its Vdsat, the operating point is invalid and the
-    gain-derived metrics must be gated (issue #148). Exercised directly since the
-    LUT seed (#158) prevents the mismatch through the normal sizing pipeline."""
+def test_resistor_load_bias_gate_fires_when_tail_cannot_feed_load():
+    """The #148 gate itself.  Under the DC feedback every op-amp (and the SPICE
+    bench) runs in, the driven stage's gate settles at its |Vgs| and the input
+    pair shifts its current split so the load branch carries |Vgs|/R.  The
+    operating point exists only while that fits in the tail current
+    (|Vgs| < 2·I·R, issue #286).  When it does not fit, the gain-derived
+    metrics must be gated.  The function is exercised directly because the
+    LUT seed (#158) keeps real designs well inside the bound."""
     from types import SimpleNamespace
     from circuitgenome.sizer.gmid.evaluate import _resistor_load_bias
 
@@ -1540,18 +1543,41 @@ def test_resistor_load_bias_gate_fires_on_mismatch():
                 {"m2_second_stage": SimpleNamespace(vgs_v=vgs, vds_sat_v=vdsat)},
                 SimpleNamespace(ibias=40e-6))
 
-    # branch = 20 µA. v_off = 20 µA / gd_load_r.
-    # Mismatch: v_off = 0.85 V, driven |Vgs| = 0.60 V, Vdsat = 0.10 V → gate fires.
-    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.85, 0.60, 0.10))
+    # branch = 20 µA, tail = 40 µA. v_off = 20 µA / gd_load_r.
+    # |Vgs| = 0.60 V needs 0.60 V / 15 kΩ = 40 µA, the whole tail → gate fires.
+    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.30, 0.60, 0.10))
     assert invalid and any("issue #148" in n for n in notes)
-    # Consistent: v_off = 0.62 V within Vdsat of 0.60 V → gate stands down.
+    # Consistent: v_off = 0.62 V vs |Vgs| = 0.60 V → gate stands down.
     invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.62, 0.60, 0.10))
     assert not invalid and any("corner-fragile" in n for n in notes)
+    # The #286 false positive: a weak-inversion driven device (Vdsat 0.074 V)
+    # 0.082 V below the seed.  The pair absorbs it (load branch 17.8 of 40 µA).
+    invalid, notes = _resistor_load_bias(*_inputs(20e-6 / 0.760, 0.678, 0.074))
+    assert not invalid and any("corner-fragile" in n for n in notes)
+    # Far apart, still inside the tail: v_off = 0.85 V, |Vgs| = 0.60 V.
+    invalid, _ = _resistor_load_bias(*_inputs(20e-6 / 0.85, 0.60, 0.10))
+    assert not invalid
+
+
+def test_resistor_load_gate_spares_weak_inversion_second_stage():
+    """gf180 at the default second_stage_current_ratio (2.0): the gain spec
+    pushes the NMOS common-source stage to the weak-inversion ceiling.  Its
+    |Vgs| (0.68 V) then sits 0.08 V under the 0.76 V I·R seed, which is more
+    than its 0.074 V Vdsat.  SPICE still biases this design and measures
+    52 dB against 52 dB predicted, so the gain must be reported (issue #286)."""
+    result = _size_gf180({
+        "input_pair": "differential_pair_pmos",
+        "load": "resistor_load_gnd",
+        "second_stage": "common_source_nmos"}, second_stage_current_ratio=2.0)
+    assert any("weak-inversion ceiling" in w for w in result.warnings)
+    assert result.metrics.get("gain_db") is not None
+    assert not any("issue #148" in w for w in result.warnings)
 
 
 def test_resistor_load_keeps_gain_when_interstage_biases():
-    """The consistent twin: I·R lands within the driven stage's Vdsat of its
-    |Vgs|, so the operating point is valid and the gain is still reported — only
+    """The consistent twin: I·R lands close to the driven stage's |Vgs|, well
+    inside the tail current's reach, so the operating point is valid and the
+    gain is still reported — only
     the corner-fragility advisory (a fixed resistor cannot track Vth) is added."""
     result = _size_gf180({
         "input_pair": "differential_pair_nmos",
