@@ -69,9 +69,10 @@ METRICS: dict[str, tuple[str, str, str]] = {
     "psrr_db": ("PSRR+", "dB", "abs"),
 }
 
-# A design whose predicted gain exceeds the open-loop bench ceiling rails to
-# ~0 dB in that bench, so these measurements are a bench artefact, not a model
-# error -- they are left out of the statistics for such circuits.
+# A design whose predicted gain exceeds the open-loop bench ceiling (where its
+# dominant pole drops below the bench's first 1 mHz point) cannot be read by
+# that bench, so these measurements are a bench artefact, not a model error --
+# they are left out of the statistics for such circuits.
 OPEN_LOOP_METRICS = {"gain_db", "gbw_hz", "phase_margin_deg"}
 
 # Per-circuit outcome; only "simulated" rows carry measured metrics.
@@ -347,8 +348,9 @@ def render_tables(rows: list[dict], info: dict, fig_rel: str) -> str:
         "A circuit contributes only when it sized, its bias point is sound both",
         "in the sizer's DC check and in a SPICE ``.op``, and ngspice measured",
         "the metric.  Gain, GBW and phase margin additionally skip designs",
-        "whose predicted gain is above the open-loop bench ceiling — those rail",
-        "to ~0 dB in that bench, an artefact rather than a model error.",
+        "whose predicted gain is above the open-loop bench ceiling (#292: where",
+        "the dominant pole drops below the bench's first 1 mHz point) — that",
+        "bench cannot read them, an artefact rather than a model error.",
         "Fully-differential CMRR and PSRR are measured from PDK device",
         "mismatch draws (#261), so they count too.  The coverage table counts",
         "every circuit-level exclusion:",
