@@ -2,7 +2,9 @@
 
 Between "here is a circuit with W/L on every device" and "here is its gain and
 phase margin" sits one small vocabulary: per-stage transconductance and output
-resistance, plus the handful of node conductances CMRR/PSRR need.  This module
+resistance, plus what CMRR/PSRR need -- a nodal solve of the whole circuit
+for most single-ended amplifiers, a pair of node conductances for the rest.
+This module
 owns that vocabulary (:class:`StageChain`) and the extraction that produces it
 from a solved sizing (:func:`build_stage_chain`), so
 :mod:`~circuitgenome.sizer.physics.metrics` can be pure algebra over the chain.
@@ -161,12 +163,22 @@ class StageChain:
         single-ended tap without a mirror load, else ``1.0``.  Applies to the
         first stage's gain and to its role in GBW/PM, **not** to the raw ``gm``
         CMRR uses.
-    :param gd_tail: tail-source output conductance in A/V (CMRR).
+    :param gd_tail: tail-source output conductance in A/V (CMRR of a chain
+        without ``se_rejection_db``).
     :param gd_output_load: output conductance in A/V of the load branch on the
-        output-driving stage's output node (PSRR) — the second stage's load on
-        a multi-stage chain, the first stage's own load on a single-stage one.
-        Cascode-aware on a single stage, and ``1/R`` for a resistor load, so
-        every load family reports it (issue #228).
+        output-driving stage's output node (PSRR of a chain without
+        ``se_rejection_db``) — the second stage's load on a multi-stage chain,
+        the first stage's own load on a single-stage one.  Cascode-aware on a
+        single stage, and ``1/R`` for a resistor load, so every load family
+        reports it (issue #228).
+    :param se_rejection_db: a single-ended amplifier's ``(cmrr_db, psrr_db)``
+        from a DC nodal solve of the whole circuit (:func:`_se_rejection_db`),
+        either entry ``None`` when the solve has none.  ``None`` keeps the
+        ``gd_tail``/``gd_output_load`` closed forms: on a fully-differential
+        chain, whose rejection is set by device mismatch, and on a telescopic
+        cascode load (:func:`_telescopic_cascode_load`), kept on the closed
+        form until the level estimate can see its drain imbalance -- see the
+        follow-up in issue #290.
     :param mirror_pole_hz: current-mirror node pole in Hz, ``None`` when the
         chain has no mirror load or the tech supplies no ``cox`` — see
         :func:`_mirror_pole_hz` for the single-stage load family (resistor
@@ -232,6 +244,7 @@ class StageChain:
     k_fs: float = 1.0
     gd_tail: float = 0.0
     gd_output_load: float = 0.0
+    se_rejection_db: tuple[float | None, float | None] | None = None
     mirror_pole_hz: float | None = None
     cc_pf: float | None = None
     cc2_pf: float | None = None
@@ -598,6 +611,156 @@ def _cmfb_coupling(view: CircuitView, mosfets: list[Device], model, sizing,
     return -gm_load * v_out, (min(poles) / (2.0 * math.pi) if poles else None)
 
 
+#: A single-ended amplifier's output port (cf. :data:`_FD_OUTPUTS`).
+_SE_OUTPUT = "out"
+_SPICE_SCALE = {"t": 1e12, "g": 1e9, "meg": 1e6, "k": 1e3, "m": 1e-3,
+                "u": 1e-6, "n": 1e-9, "p": 1e-12, "f": 1e-15}
+
+
+def _netlist_ohms(r: Device) -> float | None:
+    """The value a resistor's netlist line carries (``1k`` -> 1000.0), or
+    ``None`` when it has none: what ngspice simulates for a resistor the
+    sizer left at its placeholder."""
+    text = r.params.get("value", "").lower()
+    for suffix in sorted(_SPICE_SCALE, key=len, reverse=True):
+        if text.endswith(suffix):
+            text, scale = text[:-len(suffix)], _SPICE_SCALE[suffix]
+            break
+    else:
+        scale = 1.0
+    try:
+        return float(text) * scale
+    except ValueError:
+        return None
+
+
+def _se_rejection_db(
+    mosfets: list[Device],
+    params: dict[str, tuple[float, float, float]],
+    resistors: list[tuple[str, str, float]],
+    inputs: tuple[str, str],
+    output: str,
+) -> tuple[float | None, float | None]:
+    """Single-ended ``(cmrr_db, psrr_db)`` from a DC nodal solve (issue #290).
+
+    The network is every MOSFET -- ``params[ref] = (gm, gds, gmb)``, drain
+    current ``gm·vgs + gds·vds + gmb·vbs`` -- and every ``(net, net, Ω)``
+    resistor; capacitors are open at DC, and the bias generator's
+    reference-current pin floats on its ideal source.  The rails and both
+    ``inputs`` are driven, as the SPICE benches drive them: ``inputs[0]``
+    alone (Adm), both together (Acm), and ``vdd!`` (Avdd), each 1 V.  CMRR is
+    ``Adm/Acm`` and PSRR+ ``Adm/Avdd`` at ``output``.
+
+    No closed form follows every topology's common-mode and supply paths: a
+    mirror load cancels the common-mode current the tail lets through, so
+    the pair's two halves' unequal ``gds`` -- their drains sit at the diode
+    node and at the output -- set CMRR instead; and supply ripple reaches the
+    output through whichever bias nodes do not follow VDD.  Each entry is
+    ``None`` when ``output`` is not in the network, the network is singular,
+    or its gain is zero.
+    """
+    import numpy as np
+
+    driven = set(RAILS) | set(inputs)
+    nets = sorted({n for d in mosfets if d.ref in params
+                   for n in (d.terminals.get(t) for t in "dgsb")}
+                  | {n for a, b, _ in resistors for n in (a, b)})
+    nodes = [n for n in nets if n not in driven]
+    if output not in nodes:
+        return None, None
+    idx = {n: i for i, n in enumerate(nodes)}
+    stimuli = ({inputs[0]: 1.0}, {inputs[0]: 1.0, inputs[1]: 1.0}, {"vdd!": 1.0})
+    G = np.zeros((len(nodes), len(nodes)))
+    rhs = np.zeros((len(nodes), len(stimuli)))
+
+    def add(row, col, x):
+        """Current ``x·v[col]`` leaving ``row``."""
+        if row not in idx:
+            return
+        if col in idx:
+            G[idx[row], idx[col]] += x
+        else:
+            rhs[idx[row]] -= [x * s.get(col, 0.0) for s in stimuli]
+
+    for d in mosfets:
+        if d.ref not in params:
+            continue
+        dn, gn, sn, bn = (d.terminals.get(t) for t in "dgsb")
+        for x, ctrl in zip(params[d.ref], (gn, dn, bn)):
+            for row, sign in ((dn, 1.0), (sn, -1.0)):   # i_ds leaves d, enters s
+                add(row, ctrl, sign * x)
+                add(row, sn, -sign * x)
+    for a, b, ohms in resistors:
+        for x, y in ((a, b), (b, a)):
+            add(x, x, 1.0 / ohms)
+            add(x, y, -1.0 / ohms)
+    try:
+        v = np.linalg.solve(G, rhs)[idx[output]]
+    except np.linalg.LinAlgError:
+        return None, None
+    adm, acm, avdd = (abs(x) for x in v)
+    if adm == 0.0:
+        return None, None
+    return tuple(20.0 * math.log10(adm / a) if a > 0.0 else None
+                 for a in (acm, avdd))
+
+
+def _telescopic_cascode_load(ip_devs: list[Device], load_devs: list[Device]) -> bool:
+    """Whether the load stacks a cascode of the pair's own type on a pair drain.
+
+    That is a telescopic cascode (wide-swing or not); a folded cascode hangs
+    an opposite-type device there, and a mirror or current source sits on a
+    rail.  Such a load keeps the closed-form CMRR/PSRR: its cascodes hold the
+    pair's drains within ~1 mV of each other, an imbalance the level estimate
+    cannot see, so :func:`_se_rejection_db` over-predicts it (CMRR +47 dB,
+    PSRR+ +19 dB median on GF180) where the closed forms under-predict
+    (issue #290).
+    """
+    drains = {d.terminals.get("d") for d in ip_devs}
+    types = {d.type for d in ip_devs}
+    return any(d.terminals.get("s") in drains and d.type in types for d in load_devs)
+
+
+def _circuit_rejection_db(view: CircuitView, mosfets: list[Device],
+                          ip_devs: list[Device], sizing, model, spec: SizingSpec,
+                          resistor_ohms: dict[str, float],
+                          gd_load_r: float) -> tuple[float | None, float | None]:
+    """:func:`_se_rejection_db` of the whole sized circuit.
+
+    Each MOSFET is read at its own quiescent bias (:mod:`~.node_levels`), with
+    the output pinned at Vcm as the benches' DC loop holds it -- the level that
+    sets how far the pair's output-side drain sits from its diode-side one.
+    Resistors take their sized value; the load resistors theirs from
+    ``gd_load_r``, and an unsized one the netlist value it is simulated at.
+    """
+    pinned = {net: spec.rail_v(net) for net in RAILS}
+    pinned.update({d.terminals.get("g"): spec.vcm for d in ip_devs})
+    pinned[_SE_OUTPUT] = spec.vcm
+    by_ref = {r.ref: (slot, r) for slot, rs in view.slot_resistors.items() for r in rs}
+    levels = estimate_node_levels(mosfets, [r for _, r in by_ref.values()],
+                                  resistor_ohms, sizing, model, pinned)
+    params = {}
+    for d in mosfets:
+        s = sizing.get(d.ref)
+        if s is None:
+            continue
+        vds, vsb = device_bias(d, levels)
+        gmb = (model.gmb(d.type, s.w_um, s.l_um, s.ids_a, vsb or 0.0)
+               if d.terminals.get("b") != d.terminals.get("s") else 0.0)
+        params[d.ref] = (min(model.gm(d.type, s.w_um, s.l_um, s.ids_a),
+                             model.gm_ceiling(d.type, s.ids_a, s.l_um)),
+                         model.gds(d.type, s.w_um, s.l_um, s.ids_a, vds=vds), gmb)
+    resistors = []
+    for ref, (slot, r) in by_ref.items():
+        ohms = (resistor_ohms.get(ref)
+                or (1.0 / gd_load_r if slot == "load" and gd_load_r else None)
+                or _netlist_ohms(r))
+        if ohms:
+            resistors.append((r.terminals.get("t1"), r.terminals.get("t2"), ohms))
+    inputs = tuple(d.terminals.get("g") for d in ip_devs)
+    return _se_rejection_db(mosfets, params, resistors, inputs, _SE_OUTPUT)
+
+
 def _source_degeneration_r(ip_devs: list[Device], ip_resistors: list[Device],
                            resistor_ohms: dict[str, float]) -> dict[str, float]:
     """``{input-pair source net: series R (Ω) down to the tail}``.
@@ -921,15 +1084,14 @@ def build_stage_chain(
     ``ro`` rather than a tail-degenerated cascode — or ``ro·(1+gm·R)`` when it
     reaches that ground through a degeneration resistor.  That net is the tail
     node only for a plain pair; a source-degenerated one reaches its tail
-    through a resistor, which :func:`_tail_current_net` hops for the CMRR
-    conductance (issue #224).  The first stage's output is the *next* stage's
-    signal gate, not the pair's drain: on a folded cascode those are different
-    nets.  With no next stage the output node is resolved structurally
+    through a resistor, which :func:`_tail_current_net` hops for the
+    closed-form CMRR conductance (issue #224).  The first stage's
+    output is the *next* stage's signal gate, not the pair's drain: on a
+    folded cascode those are different nets.  With no next stage the output node is resolved structurally
     instead — again not the pair's drain, for the same reason (issue #228).
 
     ``bias_aware`` reads the first stage's output-resistance walk (its
-    ``rout`` and, single-stage, the PSRR load) at each device's own quiescent
-    ``Vds`` and ``Vsb``, estimated by
+    ``rout``) at each device's own quiescent ``Vds`` and ``Vsb``, estimated by
     :func:`~.node_levels.estimate_node_levels` from the rails and the input
     common mode (issue #273).  That is where the cascode stacks are.  The
     amplifier output is deliberately left unpinned: a device draining onto it
@@ -938,11 +1100,15 @@ def build_stage_chain(
     ``rout`` is taken at the signal device's drain, which on a non-inverting
     stage is its mirror's diode node rather than its output, and reading those
     devices at their own bias moved GF180 three-stage gains 1-3.5 dB under
-    SPICE.  The CMRR tail walk keeps it too: read at the tail's own Vds, the
-    predicted CMRR fell ~17 dB below ngspice's median on GF180, where the
-    single-point read sits on it.  Off by default, so the requirement-side
-    callers (the RNMC re-plan) keep the single-point model and sizing is
-    unchanged.
+    SPICE.  The closed-form CMRR tail walk keeps it too.  Off by
+    default, so the requirement-side callers (the RNMC re-plan) keep the
+    single-point model and sizing is unchanged.
+
+    A single-ended chain's nodal CMRR and PSRR+ always read every device at
+    its own bias, with the output pinned at Vcm (:func:`_circuit_rejection_db`):
+    they feed no sizing decision, and the output-side drain's level is what
+    sets a mirror-loaded pair's rejection (issue #290).  A telescopic cascode
+    load is kept on the closed forms (:func:`_telescopic_cascode_load`).
     """
     slot_transistors = view.slot_transistors
     mosfets = [d for d, _slot in view.all_transistors.values()]
@@ -1013,7 +1179,7 @@ def build_stage_chain(
                             rout=_rout(sig.terminals.get("d") if sig else None),
                             ids=_ids(sig)))
 
-    # --- Output-stage load conductance (PSRR) ---
+    # --- Output-stage load conductance (closed-form PSRR) ---
     # Multi-stage: the second stage's current-source load, whose gds is the
     # path supply ripple takes to the output node.  Single-stage: the output
     # node *is* the first stage's, so the same role is played by the load slot
@@ -1048,7 +1214,7 @@ def build_stage_chain(
         if gd_output_load == 0.0:
             gd_output_load = gd_load_r
 
-    # --- Tail conductance (CMRR): the full stack down to the rail ---
+    # --- Tail conductance (closed-form CMRR): the full stack down to the rail ---
     # Resolved from the pair's source *through* any degeneration resistor, so
     # the walk starts on the net the tail device's drain is really on (#224).
     # Deliberately not reused for ``stop`` above: that set wants the pair's own
@@ -1114,6 +1280,11 @@ def build_stage_chain(
         k_fs=k_fs,
         gd_tail=gd_tail,
         gd_output_load=gd_output_load,
+        se_rejection_db=(
+            None if (fully_differential or len(ip_devs) != 2 or _telescopic_cascode_load(
+                ip_devs, slot_transistors.get("load", [])))
+            else _circuit_rejection_db(view, mosfets, ip_devs, sizing, model, spec,
+                                       resistor_ohms or {}, gd_load_r)),
         mirror_pole_hz=_mirror_pole_hz(
             slot_transistors.get("load", []), mosfets, model, sizing),
         cc_pf=cc_pf,

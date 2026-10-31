@@ -17,6 +17,11 @@ from circuitgenome.synthesizer.synthesizer import enumerate_circuits
 _TOPO = "two_stage_opamp_single_ended"
 _BASE = dict(load="active_load_nmos", tail_current="current_mirror_tail_pmos",
              second_stage="common_source_nmos", compensation="miller_cap")
+_FD_TOPO = "two_stage_opamp_fully_differential"
+_FD_BASE = dict(load="current_source_load_nmos", tail_current="current_mirror_tail_pmos",
+                cmfb="resistive_sense_cmfb_nmos_mirror_inverting",
+                second_stage_p="common_source_nmos", second_stage_n="common_source_nmos",
+                comp_p="miller_cap", comp_n="miller_cap")
 
 
 def _spec(gain=40):
@@ -26,10 +31,10 @@ def _spec(gain=40):
                       output_swing_max_v=0.8, output_swing_min_v=0.2)
 
 
-def _size(**variant):
+def _size(_topo=_TOPO, _base=_BASE, **variant):
     mods = load_modules()
-    topo = next(t for t in load_topologies() if t.name == _TOPO)
-    want = {**_BASE, **variant}
+    topo = next(t for t in load_topologies() if t.name == _topo)
+    want = {**_base, **variant}
     c = next(c for c in enumerate_circuits(topo, mods)
              if all(c.variant_map.get(k) and c.variant_map.get(k).name == v
                     for k, v in want.items()))
@@ -176,10 +181,13 @@ def test_degeneration_costs_cmrr_only_the_gm_derate():
 
     Pins that the resistor hop resolves to the *same* node the plain pair
     uses: any error in the resolved node would move `gd_tail` and show up
-    here as a delta other than the 1/(1+gm*R) gm derate.
+    here as a delta other than the 1/(1+gm*R) gm derate.  Fully differential:
+    only that CMRR still reads `gd_tail`; a single-ended one comes from the
+    nodal solve, which models the resistors themselves (issue #290).
     """
-    plain = _size(input_pair="differential_pair_pmos").metrics["cmrr_db"]
-    degen = _size(input_pair="differential_pair_pmos_degenerated").metrics["cmrr_db"]
+    plain = _size(_FD_TOPO, _FD_BASE, input_pair="differential_pair_pmos")
+    degen = _size(_FD_TOPO, _FD_BASE, input_pair="differential_pair_pmos_degenerated")
+    plain, degen = plain.metrics["cmrr_db"], degen.metrics["cmrr_db"]
     assert plain - degen == pytest.approx(20 * math.log10(1.5), abs=0.2)
 
 

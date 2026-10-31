@@ -24,8 +24,10 @@ from circuitgenome.sizer.physics.stage_chain import (
     check_follower_swing,
     cmfb_sense_range,
     output_swing_headroom,
+    _se_rejection_db,
     vdd_supply_currents,
     _source_degeneration_r,
+    _telescopic_cascode_load,
     _tail_current_net,
 )
 
@@ -855,6 +857,149 @@ def test_body_vth_shift():
     assert eq.body_vth_shift(0.5, 0.7, -0.3) == 0.0          # forward bias clamped
     assert eq.body_vth_shift(0.5, 0.7, 1.0) == pytest.approx(
         0.5 * (math.sqrt(1.7) - math.sqrt(0.7)))
+
+
+# --------------------------------------------------------------------------- #
+# Single-ended CMRR / PSRR+: the DC nodal solve (issue #290)
+# --------------------------------------------------------------------------- #
+def _pair(dtype, d1, d2, tail):
+    return [Device("m1", dtype, {"d": d1, "g": "in1", "s": tail, "b": tail}),
+            Device("m2", dtype, {"d": d2, "g": "in2", "s": tail, "b": tail})]
+
+
+def test_resistor_pair_rejection_is_gm_times_the_tail_resistance():
+    """Resistor loads and a resistor tail, ideal devices.  The bench drives one
+    input, so Adm = gm²·RD/(1/RT + 2gm) and Acm = gm·RD·(1/RT)/(1/RT + 2gm):
+    CMRR is exactly gm·RT, twice the gm/(2·gd_tail) of the closed form.  VDD
+    reaches the output through RD at unity gain, so PSRR+ is Adm itself."""
+    gm, rd, rt = 1e-4, 50e3, 20e3
+    mosfets = _pair("nmos", "d1", "out", "tail")
+    params = {d.ref: (gm, 0.0, 0.0) for d in mosfets}
+    resistors = [("vdd!", "d1", rd), ("vdd!", "out", rd), ("tail", "gnd!", rt)]
+    cmrr, psrr = _se_rejection_db(mosfets, params, resistors, ("in1", "in2"), "out")
+    assert cmrr == pytest.approx(20 * math.log10(gm * rt))
+    assert psrr == pytest.approx(20 * math.log10(gm * gm * rd / (1 / rt + 2 * gm)))
+
+
+# A five-transistor OTA at one-stage #4's ngspice operating point (GF180, the
+# #256 sample): PMOS pair, NMOS mirror, the output held at Vcm.  The pair's
+# drains sit at different levels -- the mirror's diode node and the output --
+# so the two halves' gds differ by 43 %.
+_OTA5 = [*_pair("pmos", "d1", "out", "tail"),
+         Device("m3", "nmos", {"d": "d1", "g": "d1", "s": "gnd!", "b": "gnd!"}),
+         Device("m4", "nmos", {"d": "out", "g": "d1", "s": "gnd!", "b": "gnd!"}),
+         Device("mt", "pmos", {"d": "tail", "g": "gnd!", "s": "vdd!", "b": "vdd!"})]
+
+
+def _ota5_params(gd_tail):
+    return {"m1": (1.94e-4, 4.44e-7, 0.0), "m2": (2.01e-4, 6.34e-7, 0.0),
+            "m3": (0.99e-4, 6.28e-7, 0.0), "m4": (1.02e-4, 4.88e-7, 0.0),
+            "mt": (2.01e-4, gd_tail, 0.0)}
+
+
+def test_mirror_load_cmrr_is_set_by_the_pair_drain_imbalance():
+    """On a mirror load the tail barely matters: the mirror cancels the
+    common-mode current the tail lets through.  What is left is the imbalance.
+    A common-mode input moves the pair's sources, and the halves' unequal gds
+    turn that into output current: CMRR ≈ gm1/|gds2 − gds1|, 60.4 dB here.
+    ngspice measured 61.4 dB, and 61.3 dB with a cascode tail; the closed form
+    gm1/(2·gd_tail) read 50.8 and 107.9 dB for those two tails."""
+    real, _ = _se_rejection_db(_OTA5, _ota5_params(4.55e-7), [], ("in1", "in2"), "out")
+    ideal, _ = _se_rejection_db(_OTA5, _ota5_params(0.0), [], ("in1", "in2"), "out")
+    assert real == pytest.approx(20 * math.log10(1.94e-4 / (6.34e-7 - 4.44e-7)), abs=1.5)
+    assert real == pytest.approx(61.4, abs=1.0)
+    assert ideal == pytest.approx(real, abs=0.5)
+
+
+def test_se_rejection_is_none_without_the_output_or_a_solution():
+    mosfets = _pair("nmos", "d1", "out", "tail")
+    params = {d.ref: (1e-4, 0.0, 0.0) for d in mosfets}
+    assert _se_rejection_db(mosfets, params, [], ("in1", "in2"), "nowhere") == (None, None)
+    # No tail and no loads: nothing ties the nodes down, the network is singular.
+    assert _se_rejection_db(mosfets, params, [], ("in1", "in2"), "out") == (None, None)
+
+
+def test_evaluate_metrics_reports_the_nodal_rejection_when_the_chain_has_it():
+    """A single-ended chain carries the nodal (CMRR, PSRR+); a chain without it
+    (fully differential) keeps the closed forms; a withheld one reports neither."""
+    kw = dict(cc_pf=2.0, gd_tail=1e-7, gd_output_load=1e-6)
+    se = _chain((1e-3, 1e6), (2e-3, 5e5), se_rejection_db=(83.0, 91.0), **kw)
+    m = evaluate_metrics(se, _spec())[0]
+    assert (m["cmrr_db"], m["psrr_db"]) == (83.0, 91.0)
+    fd = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), **kw), _spec())[0]
+    assert fd["cmrr_db"] == pytest.approx(eq.cmrr_db(1e-3, 1e-7))
+    assert fd["psrr_db"] == pytest.approx(eq.psrr_db_approx(2e-3, 1e-6))
+    withheld = evaluate_metrics(se.withheld(), _spec())[0]
+    assert "cmrr_db" not in withheld and "psrr_db" not in withheld
+
+
+# A telescopic cascode stacks a same-type cascode on each pair drain; a folded
+# one hangs an opposite-type cascode there; a mirror sources from the rail.
+_NPAIR = _pair("nmos", "d1", "d2", "tail")
+_TELESCOPIC = [Device("mc1", "nmos", {"d": "x1", "g": "b1", "s": "d1", "b": "gnd!"}),
+               Device("mc2", "nmos", {"d": "out", "g": "b1", "s": "d2", "b": "gnd!"})]
+_FOLDED = [Device("mc1", "pmos", {"d": "x1", "g": "b1", "s": "d1", "b": "vdd!"}),
+           Device("mc2", "pmos", {"d": "out", "g": "b1", "s": "d2", "b": "vdd!"})]
+_MIRROR = [Device("ml1", "pmos", {"d": "d1", "g": "d1", "s": "vdd!", "b": "vdd!"}),
+           Device("ml2", "pmos", {"d": "d2", "g": "d1", "s": "vdd!", "b": "vdd!"})]
+
+
+@pytest.mark.parametrize("load,telescopic", [
+    (_TELESCOPIC, True), (_FOLDED, False), (_MIRROR, False), ([], False)])
+def test_telescopic_cascode_load_is_a_same_type_cascode_on_the_pair_drain(load, telescopic):
+    assert _telescopic_cascode_load(_NPAIR, load) is telescopic
+
+
+def _sized_chain(monkeypatch, template, variants):
+    """``(metrics, chain)`` of a GF180 sizing, the chain the evaluator built."""
+    import circuitgenome.sizer.gmid.evaluate as evaluate
+    from circuitgenome.recognizer import assign_slots, parse, recognize
+    from circuitgenome.sizer import load_tech, size_circuit
+    from circuitgenome.synthesizer.loader import load_modules, load_topologies
+    from circuitgenome.synthesizer.netlist import to_flat_spice
+    from circuitgenome.synthesizer.synthesizer import enumerate_circuits
+
+    built = []
+    real = evaluate.build_stage_chain
+    monkeypatch.setattr(evaluate, "build_stage_chain",
+                        lambda *a, **kw: built.append(real(*a, **kw)) or built[-1])
+    topo = next(t for t in load_topologies() if t.name == template)
+    circ = next(c for c in enumerate_circuits(topo, load_modules())
+                if all(c.variant_map.get(k) and c.variant_map[k].name == v
+                       for k, v in variants.items()))
+    parsed = parse(to_flat_spice(circ))
+    sr = recognize(parsed)
+    spec = SizingSpec(vdd=3.3, vss=0.0, ibias=20e-6, cl=5e-12, gain_min_db=50,
+                      gbw_min_hz=1e6, phase_margin_min_deg=55)
+    result = size_circuit(parsed, sr, assign_slots(sr, topo), topo,
+                          load_tech("gf180mcu"), spec)
+    return result.metrics, built[-1]
+
+
+@pytest.mark.parametrize("template,load", [
+    ("one_stage_opamp", "telescopic_cascode_load_pmos"),
+    ("one_stage_opamp", "telescopic_cascode_load_wideswing_nmos"),
+    ("two_stage_opamp_single_ended", "telescopic_cascode_load_wideswing_pmos"),
+])
+def test_telescopic_load_keeps_the_closed_forms(monkeypatch, template, load):
+    """The nodal solve cannot see the ~1 mV drain imbalance that sets a
+    telescopic cascode's rejection floor and over-predicts it (CMRR +47 dB,
+    PSRR+ +19 dB median on GF180), so these keep the under-predicting closed
+    forms until the level estimate can (issue #290)."""
+    m, chain = _sized_chain(monkeypatch, template, {"load": load})
+    assert chain.se_rejection_db is None
+    gm1 = chain.stages[0].gm
+    gm_out = chain.stages[1].gm if len(chain.stages) > 1 else chain.k_fs * gm1
+    assert m["cmrr_db"] == pytest.approx(eq.cmrr_db(gm1, chain.gd_tail))
+    assert m["psrr_db"] == pytest.approx(eq.psrr_db_approx(gm_out, chain.gd_output_load))
+
+
+def test_mirror_load_gets_the_nodal_rejection(monkeypatch):
+    m, chain = _sized_chain(monkeypatch, "one_stage_opamp", {
+        "input_pair": "differential_pair_pmos", "load": "active_load_nmos",
+        "tail_current": "current_mirror_tail_pmos"})
+    assert chain.se_rejection_db is not None
+    assert (m["cmrr_db"], m["psrr_db"]) == chain.se_rejection_db
 
 
 # --------------------------------------------------------------------------- #
