@@ -527,13 +527,14 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
     metrics=metrics, margins=margins,
     solver_status=<span class="tok-str">"GMID"</span>,
     bias_feasible=bias_feasible,
-    open_loop_gain_measurable=eq.open_loop_gain_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    open_loop_gain_measurable=eq.open_loop_gain_measurable(
+        metrics.get(<span class="tok-str">"gain_db"</span>), gbw_hz=metrics.get(<span class="tok-str">"gbw_hz"</span>)),
     warnings=(fol_warnings + view.warnings + plan.warnings + size_warnings
               + eval_notes + adoption_warnings(view.adopted)))</code></pre>
 
   <p>Notice the <code>return</code> is a <strong>gathering</strong> step. It reaches back into every crate that came down the line — <code>plan.cc_pf</code> / <code>plan.cc2_pf</code> (expanded onto the netlist's capacitor refs by recognised <code>comp*</code> / <code>comp2*</code> slot), <code>currents.load_resistors</code> — and the running <code>bias_feasible</code> flag. The per-device intents in <code>plan.tintents</code> stay on the plan: they drove the geometry but are not part of the result. Because each hand-off was kept as a named object, the final assembly is just picking the right field off each one:</p>
 
-  <p>The <code>open_loop_gain_measurable</code> flag also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155).</p>
+  <p>The <code>open_loop_gain_measurable</code> flag also records whether Phase 5's analytical open-loop gain was actually measurable — it flags designs whose analytical gain is so high the open-loop response can't be resolved, so a downstream reader knows the gain figure came from a measurable point rather than a saturated one (#155). Since #287 the ceiling follows the predicted GBW: <code>20·log10(GBW / 1&nbsp;mHz)</code>, the gain at which the dominant pole reaches the bench's first sweep point, capped at ≈&nbsp;212&nbsp;dB, where the bench's DC feedback loop closes.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 640 230" role="img" aria-label="Assembling the final SizingResult from every upstream crate">

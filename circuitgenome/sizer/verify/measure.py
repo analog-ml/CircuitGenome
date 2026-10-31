@@ -35,6 +35,19 @@ from .rig import _POLARITIES, _deck, _fb_netmap
 _LH, _CH = "1e12", "1e3"
 _RH = "1e9"   # FD input-anchor resistors (zero DC drop into MOS gates)
 
+#: First point of the open-loop AC sweep (Hz), where the gain bench reads DC
+#: gain.  The sizer's open-loop-measurability ceiling derives from it
+#: (:func:`~circuitgenome.sizer.physics.equations.open_loop_gain_measurable`).
+AC_START_HZ = 1e-3
+
+#: Open-loop gain (dB) at which the single-ended bench's DC feedback loop
+#: closes at :data:`AC_START_HZ`.  ``Lfb`` and ``Cfb`` feed back a fraction
+#: ``β = 1/(ω²·Lfb·Cfb)`` of the output there (2.5e-11 at 1 mHz), so the loop
+#: gain ``A0·β`` reaches 1 at ``A0 = ω²·Lfb·Cfb``: ≈ 212 dB.  The sizer caps its
+#: measurability ceiling here.
+AC_LOOP_LIMIT_DB = float(20.0 * np.log10(
+    (2.0 * np.pi * AC_START_HZ) ** 2 * float(_LH) * float(_CH)))
+
 
 def _pols(polarity):
     """Polarities to try, the AC-detected one first.
@@ -54,7 +67,7 @@ def _lf_mag(name, ports, body_dut, vdd, ibias, cl, fb, netmap, outexpr,
             sup_ac: bool = False):
     """Low-frequency (1 mHz, matching the gain bench's first AC point)
     magnitude of ``outexpr`` for a 1 V AC stimulus."""
-    control = (f"ac lin 1 1e-3 1e-3\nlet vod={outexpr}\n"
+    control = (f"ac lin 1 {AC_START_HZ:g} {AC_START_HZ:g}\nlet vod={outexpr}\n"
                "wrdata __OUT__ real(vod) imag(vod)")
     deck = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap, control,
                  sup_ac=sup_ac)
@@ -223,7 +236,7 @@ def _measure_ac(name, ports, body_dut, topo, vdd, ibias, cl, vcm):
         # reported low-frequency gain are then genuinely DC values — starting
         # at 1 Hz skews the phase reference (and thus PM) by tens of degrees.
         ac = _deck(name, ports, body_dut, vdd, ibias, cl, fb, netmap,
-                   f"ac dec 30 1e-3 1e10\nlet vod={outexpr}\n"
+                   f"ac dec 30 {AC_START_HZ:g} 1e10\nlet vod={outexpr}\n"
                    "wrdata __OUT__ real(vod) imag(vod)")
         a = _run(ac, ["re", "im"])
         if a is None or a.shape[0] < 5 or a.shape[1] < 4:

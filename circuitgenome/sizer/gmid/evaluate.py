@@ -39,15 +39,19 @@ def _resistor_load_bias(
     """DC validity of a single-ended, rail-referenced resistor first-stage load.
 
     A fixed load resistor holds the first-stage output ``I·R`` from its
-    reference rail, but the driven common-source stage needs its gate exactly
-    ``|Vgs|`` from that *same* rail to carry its quiescent current in
-    saturation.  ``R`` is seeded from the driven signal device's ``Vgs`` read
-    from the LUT at the nominal corner (issue #158), so the two normally agree;
-    but if the driven device operates far from the seed's nominal gm/Id, they can
-    still disagree by more than its own ``Vdsat``, pushing the second stage out of
-    its intended regime so its high-impedance output rails open-loop — yet the
+    reference rail at the balanced branch current ``I = ibias/2``.  The driven
+    common-source stage needs its gate exactly ``|Vgs|`` from that *same* rail.
+    ``R`` is seeded from the driven signal device's ``Vgs`` read from the LUT
+    at the nominal gm/Id (issue #158), so the two normally agree.  They drift
+    apart when the driven device ends up at another gm/Id, e.g. pushed to the
+    weak-inversion ceiling.  Under the DC feedback every op-amp (and the SPICE
+    bench) runs in, the loop then sets the gate to ``|Vgs|``, and the input
+    pair shifts its current split so the load branch carries ``|Vgs|/R``.
+    The result is a small systematic offset, not a rail.  The operating point
+    exists only while that branch current fits inside the tail current
+    ``ibias``, i.e. ``|Vgs| < 2·I·R``.  Beyond it the output rails, but the
     small-signal formula would still report an optimistic ``gm·Rout`` gain
-    (issue #148).
+    (issues #148, #286).
 
     Returns ``(invalid, notes)``: ``invalid`` gates the gain-derived metrics;
     ``notes`` always carries a corner-fragility advisory because a fixed
@@ -62,20 +66,20 @@ def _resistor_load_bias(
     if s is None:
         return False, []
     v_off = (spec.ibias / 2.0) / currents.gd_load_r  # I·R across the load R
-    mismatch = abs(v_off - abs(s.vgs_v))
     fragility = (
         "first-stage load is a fixed rail-referenced resistor: its DC drop is "
         "sized from the LUT Vgs at the nominal corner and cannot track Vth "
         "across PVT corners, so the inter-stage bias is corner-fragile — verify "
         "gain across corners in SPICE.")
-    if mismatch > s.vds_sat_v:
+    if abs(s.vgs_v) >= 2.0 * v_off:
         rail = "gnd" if drv.type == "nmos" else "vdd"
         return True, [
             f"resistor-loaded first stage cannot bias the driven "
             f"{drv.type.upper()} second stage: the load holds the first-stage "
             f"output {v_off:.2f} V from {rail} but the stage needs "
-            f"{abs(s.vgs_v):.2f} V (off by {mismatch:.2f} V > Vdsat "
-            f"{s.vds_sat_v:.2f} V) — the open-loop output rails; "
+            f"{abs(s.vgs_v):.2f} V, so the load branch would need "
+            f"{abs(s.vgs_v) * currents.gd_load_r * 1e6:.1f} µA, at least "
+            f"the whole {spec.ibias * 1e6:.1f} µA tail — the output rails; "
             f"gain/GBW/PM/CMRR/PSRR reported as unmeasurable (issue #148).",
             fragility,
         ]
