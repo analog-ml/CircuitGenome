@@ -111,6 +111,7 @@ def plan_devices(
     spec: SizingSpec,
     tech: TechParams,
     intent: GmIdIntent,
+    cmrr_gm1: float | None = None,
 ) -> SizingPlan:
     """Derive gm requirements, compensation caps and per-device intent.
 
@@ -119,12 +120,15 @@ def plan_devices(
     RNMC template is planned with the default rules here and re-planned on
     the sized circuit (:mod:`.rnmc_refine`): its requirement-time gm1 and
     third-stage gate capacitance are estimates the geometry moves far from.
+    ``cmrr_gm1`` is the CMRR target's gm1 floor found on the sized circuit,
+    in place of the tail-only closed form (see ``compute_requirements``).
     """
     model = _model_for(tech, intent)
     scheme = None if view.compensation_scheme == RNMC else view.compensation_scheme
     gm_req_map, vod_max_map, cc_pf, cc2_pf, ceil_warnings = compute_requirements(
         view.slot_transistors, view.all_transistors, currents.ids_map,
         tech, spec, model, currents.gd_load_r, compensation_scheme=scheme,
+        cmrr_gm1=cmrr_gm1,
     )
     tintents = resolve_transistor_intents(
         view.all_transistors, view.cascode_refs, intent.block_intents)
