@@ -276,8 +276,9 @@ class SizingResult:
         headroom) — the assumed bias current won't flow, so the frequency-domain
         metrics are optimistic. Always ``True`` for the Level-1 path.
     :param open_loop_gain_measurable: ``False`` when the predicted ``gain_db``
-        exceeds the open-loop-bench ceiling
-        (:data:`~circuitgenome.sizer.physics.equations.OPEN_LOOP_GAIN_CEILING_DB`)
+        exceeds the open-loop-bench ceiling, ``20·log10(GBW / 1 mHz)`` of the
+        predicted GBW (see
+        :func:`~circuitgenome.sizer.physics.equations.open_loop_gain_measurable`)
         — the open-loop AC bench cannot read a DC gain that high (its first
         sweep point no longer sits below the dominant pole), so the measured
         gain/GBW/PM are not comparable with the prediction. This

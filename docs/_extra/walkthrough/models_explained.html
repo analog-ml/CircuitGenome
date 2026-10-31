@@ -550,7 +550,7 @@ This file defines the typed seams (@dataclass) between stages in the sizing pipe
       <tr><td><code>margins</code></td><td>predicted − limit (min specs) or limit − predicted (max specs), in the metric's own unit; a value <code>&gt;= 0</code> means the spec is met</td></tr>
       <tr><td><code>solver_status</code></td><td><code>GMID</code> for the gm/Id path (no solver); otherwise the OR-Tools CP-SAT string: <code>OPTIMAL</code>, <code>FEASIBLE</code>, <code>INFEASIBLE</code>, <code>UNKNOWN</code>, <code>MODEL_INVALID</code> — only the first two carry transistors</td></tr>
       <tr><td><code>bias_feasible</code></td><td>The gm/Id DC verdict — <code>False</code> when the metrics are optimistic</td></tr>
-      <tr><td><code>open_loop_gain_measurable</code></td><td>Advisory flag (parallel to <code>bias_feasible</code>): <code>False</code> when the predicted <code>gain_db</code> exceeds <code>OPEN_LOOP_GAIN_CEILING_DB</code>, so the open-loop AC bench cannot read a DC gain that high and the gain/GBW/PM are not comparable with SPICE — deprioritise, don't prune, on it</td></tr>
+      <tr><td><code>open_loop_gain_measurable</code></td><td>Advisory flag (parallel to <code>bias_feasible</code>): <code>False</code> when the predicted <code>gain_db</code> exceeds <code>20·log10(GBW / 1&nbsp;mHz)</code> of the predicted GBW (<code>OPEN_LOOP_GAIN_CEILING_DB</code> when there is none), so the open-loop AC bench cannot read a DC gain that high and the gain/GBW/PM are not comparable with SPICE — deprioritise, don't prune, on it</td></tr>
       <tr><td><code>warnings</code></td><td>Advisory text — often empty</td></tr>
     </tbody>
   </table>

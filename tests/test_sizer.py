@@ -187,6 +187,18 @@ def test_open_loop_gain_measurable_flag():
     assert open_loop_gain_measurable(None) is True
 
 
+def test_open_loop_gain_ceiling_follows_predicted_gbw():
+    """The bench reads DC gain at its 1 mHz first sweep point, valid while the
+    dominant pole GBW/A0 stays above it: the ceiling is 20·log10(GBW/1 mHz),
+    160 dB at 100 kHz and 180 dB at 1 MHz (issue #287)."""
+    assert open_loop_gain_measurable(165.0, gbw_hz=1e5) is False
+    assert open_loop_gain_measurable(165.0, gbw_hz=1e6) is True
+    assert open_loop_gain_measurable(159.0, gbw_hz=1e5) is True
+    assert open_loop_gain_measurable(185.0, gbw_hz=1e7) is True
+    # Unknown GBW falls back to the fixed ceiling.
+    assert open_loop_gain_measurable(185.0, gbw_hz=None) is False
+
+
 def _cap(ref: str) -> Device:
     return Device(ref=ref, type="capacitor", terminals={"p": "a", "m": "b"})
 

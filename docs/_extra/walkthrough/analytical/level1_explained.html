@@ -491,7 +491,8 @@ metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
 <span class="tok-kw">return</span> <span class="tok-fn">SizingResult</span>(
     transistors=transistor_sizing, resistors=resistors, capacitors=capacitors,
     metrics=metrics, margins=margins, solver_status=status_name,
-    open_loop_gain_measurable=eq.open_loop_gain_measurable(metrics.get(<span class="tok-str">"gain_db"</span>)),
+    open_loop_gain_measurable=eq.open_loop_gain_measurable(
+        metrics.get(<span class="tok-str">"gain_db"</span>), gbw_hz=metrics.get(<span class="tok-str">"gbw_hz"</span>)),
     warnings=all_warnings,
 )</code></pre>
 

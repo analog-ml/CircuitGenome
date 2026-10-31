@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import math
 
+from ..verify.measure import AC_START_HZ
+
 
 # ---------------------------------------------------------------------------
 # Level-1 MOSFET small-signal parameters
@@ -193,36 +195,48 @@ def open_loop_gain_db(stage_gains: list[float]) -> float:
     return 20.0 * math.log10(abs(product)) if product != 0.0 else -math.inf
 
 
-#: Open-loop DC-gain ceiling for the ngspice open-loop AC bench (dB).
-#: The bench reads the DC gain at its first sweep point, 1 mHz, so the reading
-#: is the DC gain only while the dominant pole ``GBW/A0`` stays above 1 mHz:
-#: up to A0 = 1e9 (180 dB) for a 1 MHz GBW, the lowest GBW the example specs
-#: ask for.  (Its ``Lfb``/``Cfb`` DC loop stays open to ~210 dB.)  On GF180
-#: the bench measures three-stage designs at 145–165 dB within a few dB of
-#: the prediction, and W/L-scaled probes read up to 196 dB without railing
-#: (#287).  The 150 dB of #155 flagged all of them.
+#: Fallback open-loop DC-gain ceiling (dB) for a design with no predicted GBW.
+#: The open-loop AC bench reads the DC gain at its first sweep point,
+#: :data:`~circuitgenome.sizer.verify.measure.AC_START_HZ` (1 mHz).  That
+#: reading is the DC gain only while the dominant pole ``GBW/A0`` stays above
+#: it, so a design's own ceiling is ``20·log10(GBW / 1 mHz)``
+#: (:func:`open_loop_gain_measurable`).  180 dB is that ceiling at 1 MHz, the
+#: lowest GBW the example specs ask for.  (The bench's ``Lfb``/``Cfb`` DC loop
+#: stays open to ~210 dB.)  On GF180 the bench measures three-stage designs at
+#: 145–165 dB within a few dB of the prediction, and W/L-scaled probes read up
+#: to 196 dB without railing (#287); the 150 dB of #155 flagged all of them.
 OPEN_LOOP_GAIN_CEILING_DB = 180.0
 
 
 def open_loop_gain_measurable(
-    gain_db: float | None, ceiling_db: float = OPEN_LOOP_GAIN_CEILING_DB
+    gain_db: float | None, ceiling_db: float = OPEN_LOOP_GAIN_CEILING_DB,
+    gbw_hz: float | None = None,
 ) -> bool:
     """Whether the analytical open-loop gain is measurable on an open-loop bench.
 
-    Above ``ceiling_db`` the open-loop AC bench's first (1 mHz) point no
-    longer sits below the dominant pole, so the measured gain falls short of
-    the DC gain the model predicts.  This is an **advisory** heuristic, not a
-    hard prune — the analytical ``gain_db`` is still reported and SPICE
-    remains the authority.  See
+    The open-loop AC bench reads the DC gain at its first sweep point,
+    :data:`~circuitgenome.sizer.verify.measure.AC_START_HZ`.  Once the dominant
+    pole ``GBW/A0`` falls below that point, the measured gain falls short of
+    the DC gain the model predicts.  With a predicted ``gbw_hz`` the ceiling is
+    therefore ``20·log10(gbw_hz / AC_START_HZ)`` (160 dB at 100 kHz, 180 dB
+    at 1 MHz); without one it is ``ceiling_db``.  This is an **advisory**
+    heuristic, not a hard prune — the analytical ``gain_db`` is still
+    reported and SPICE remains the authority.  See
     :data:`OPEN_LOOP_GAIN_CEILING_DB`.
 
     :param gain_db: Analytical open-loop DC gain in dB, or ``None`` when no gain
         was computed (single-stage / gated).  ``None`` → measurable (no evidence
         of railing).
+    :param ceiling_db: Ceiling in dB used when ``gbw_hz`` is unknown.
+    :param gbw_hz: Predicted gain-bandwidth product in Hz, or ``None``.
     :returns: ``True`` when measurable, ``False`` when the bench cannot read
         the predicted DC gain.
     """
-    return gain_db is None or gain_db <= ceiling_db
+    if gain_db is None:
+        return True
+    if gbw_hz is not None and gbw_hz > 0:
+        ceiling_db = 20.0 * math.log10(gbw_hz / AC_START_HZ)
+    return gain_db <= ceiling_db
 
 
 def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
