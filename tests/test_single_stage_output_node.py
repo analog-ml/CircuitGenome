@@ -3,8 +3,10 @@
 A multi-stage chain gets its first-stage output node for free -- it is the next
 stage's signal gate.  A single stage has no next stage, and the pair's own drain
 is only the output node when the load has nothing above it.  These tests pin the
-structural rule that resolves it, and the two metrics that depend on the answer:
-PSRR (the load branch's conductance at that node) and gain (its ``rout``).
+structural rule that resolves it, and gain (the ``rout`` at that node), which
+depends on the answer.  PSRR, which once read the load branch's conductance
+there, now comes from a nodal solve of the whole circuit (issue #290); its
+coverage and its resistor-load behaviour stay pinned here.
 
 Issue #228.
 """
@@ -127,29 +129,18 @@ def test_every_single_stage_load_variant_reports_psrr(one_stage_by_load):
     assert not silent, f"psrr_db still withheld for: {silent}"
 
 
-def test_cascoding_a_load_improves_its_psrr(one_stage_by_load):
-    """A stacked load presents 1/(ro·(1+gm·R)), not the top device's bare gds.
-
-    Read naively, a cascode load would report a *worse* PSRR than the plain
-    mirror it improves on — the top device of a cascode stack runs at the same
-    current with a similar gds, so its bare conductance says nothing about the
-    stack below it.
+def test_resistor_load_psrr_follows_the_rail_the_load_hangs_from(one_stage_by_load):
+    """Hung from VDD, a resistor load passes supply ripple to the output at
+    unity gain, so PSRR+ is the stage's own gain.  Hung from ground, it sees
+    VDD only through the tail -- rejected like a common-mode input -- and
+    PSRR+ sits well above the gain.  ngspice, one-stage #16 and #1 of the #256
+    sample, measured before #284 re-biased these loads: 11.9 dB at 11.7 dB
+    gain, and 28.0 dB at 4.4 dB gain (issue #290).
     """
-    plain = one_stage_by_load["active_load_nmos"].metrics["psrr_db"]
-    cascoded = one_stage_by_load["telescopic_cascode_load_pmos"].metrics["psrr_db"]
-    assert cascoded > plain + 20.0
-
-
-def test_resistor_load_psrr_is_the_stage_gain_over_its_own_load(one_stage_by_load):
-    """PSRR = gm1·R for a resistor-loaded stage, i.e. its own gain.
-
-    The output-node conductance is exactly 1/R — no device model needed, the
-    sizer already solved for it — so PSRR and gain come out of the same two
-    numbers and must agree to within the load's ``ro`` shunting the resistor.
-    """
-    for name in ("resistor_load_vdd", "resistor_load_gnd"):
-        m = one_stage_by_load[name].metrics
-        assert m["psrr_db"] == pytest.approx(m["gain_db"], abs=1.0)
+    vdd = one_stage_by_load["resistor_load_vdd"].metrics
+    assert vdd["psrr_db"] == pytest.approx(vdd["gain_db"], abs=1.0)
+    gnd = one_stage_by_load["resistor_load_gnd"].metrics
+    assert gnd["psrr_db"] > gnd["gain_db"] + 10.0
 
 
 def test_cascode_loads_measure_gain_above_the_pair_drain(one_stage_by_load):
@@ -209,3 +200,34 @@ def test_wideswing_loads_are_credited_as_mirrors(one_stage_by_load):
         wide = one_stage_by_load[f"telescopic_cascode_load_wideswing_{polarity}"]
         assert wide.metrics["gbw_hz"] == pytest.approx(
             plain.metrics["gbw_hz"], rel=0.25)
+
+
+def test_single_stage_resistor_load_holds_the_output_at_vcm(one_stage_by_load):
+    """A one-stage resistor load drops the output to the input common mode.
+
+    The resistor-loaded node is the amplifier's own output, which any feedback
+    loop (and the SPICE bench's unity-feedback DC loop) holds at Vcm.  Sized
+    instead for a second-stage gate's ``|Vgs|`` (~0.76 V on gf180), the output
+    could reach Vcm only by unbalancing the input pair, and GBW measured up to
+    92 % below the prediction (issue #284).
+    """
+    branch_i = _SPEC.ibias / 2.0
+    drops = {"resistor_load_gnd": _SPEC.vcm - _SPEC.vss,
+             "resistor_load_vdd": _SPEC.vdd - _SPEC.vcm}
+    for name, drop in drops.items():
+        r = one_stage_by_load[name].resistors
+        assert r["r1_load"] * branch_i == pytest.approx(drop), name
+        assert r["r2_load"] == pytest.approx(r["r1_load"]), name
+
+
+def test_level1_single_stage_resistor_load_holds_the_output_at_vcm():
+    """The Level-1 sizer (card-less ``generic`` tech) applies the same rule."""
+    mods = load_modules()
+    topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
+    c = next(c for c in enumerate_circuits(topo, mods)
+             if c.variant_map["load"].name == "resistor_load_gnd")
+    parsed = parse(to_flat_spice(c))
+    sr = recognize(parsed)
+    r = size_circuit(parsed, sr, assign_slots(sr, topo), topo,
+                     load_tech("generic"), _SPEC)
+    assert r.resistors["r1_load"] * _SPEC.ibias / 2.0 == pytest.approx(_SPEC.vcm)
