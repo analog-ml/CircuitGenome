@@ -8,8 +8,8 @@ A three-stage amplifier can pass the usual phase-margin check and still ring,
 or even oscillate.  For every RNMC design it sizes, the sizer therefore
 computes two numbers — the **phase margin** and the **damping** :math:`\zeta`
 of a *pole pair* — with
-:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg` and
-:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`.  The sizing
+:func:`~circuitgenome.sizer.physics.full_model.phase_margin_rnmc_deg` and
+:func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping`.  The sizing
 strategy that uses them
 (:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`) is described in
 :ref:`rnmc-inner-pair`.
@@ -391,13 +391,13 @@ round-off.  This happens when the output conductances are left at zero: the
 model floors them at :math:`10^{-9} g_m`, the DC gain reaches ~1e27, and the
 dominant pole (~4e-20 rad/s) comes back as ±1e-17 rad/s.  So the
 right-half-plane check that sets a 0° margin
-(:func:`~circuitgenome.sizer.physics.equations._has_rhp_pole`) ignores poles
+(:func:`~circuitgenome.sizer.physics.full_model._has_rhp_pole`) ignores poles
 below :math:`10^{-12}` of the fastest one.
 
 Step 5 — Read ζ off the poles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping` drops the
+:func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping` drops the
 dominant (smallest) pole and reports the **worst** :math:`\zeta` among the
 rest; a real pole counts as :math:`\zeta = 1`:
 
@@ -416,7 +416,7 @@ Two properties of the ``-p.real / abs(p)`` form matter here:
 
 - **The sign comes for free.**  A right-half-plane pole has a positive real
   part, so it gives :math:`\zeta < 0` — that is how
-  :func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping` reports an
+  :func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping` reports an
   unstable pair, with no separate check.
 - **Real poles read as 1.**  A real pole gives :math:`-p/|p| = 1`, so an
   *overdamped* pair (true :math:`\zeta > 1`, two real roots) reads 1, not its
@@ -426,7 +426,7 @@ Two properties of the ``-p.real / abs(p)`` form matter here:
 Step 6 — Sweep the frequency for the phase margin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg` solves
+:func:`~circuitgenome.sizer.physics.full_model.phase_margin_rnmc_deg` solves
 the system at 4000 log-spaced frequencies, from two decades below the lowest
 pole to two decades above the highest — one batched call:
 
@@ -557,10 +557,10 @@ does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code:
      - the closed-form :math:`\zeta` solved for the smallest :math:`g_{m2}`
        reaching a target — where the sizer's :math:`g_{m2}` search starts
      - no
-   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`
+   * - :func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping`
      - :math:`\zeta` from the full model's poles (Steps 1–5)
      - **yes**
-   * - :func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`
+   * - :func:`~circuitgenome.sizer.physics.full_model.phase_margin_rnmc_deg`
      - phase margin from the full model's sweep (Steps 1–4, 6)
      - **yes**
 

@@ -27,6 +27,7 @@ from circuitgenome.synthesizer.models import Device
 
 from .circuit_view import CircuitView
 from .device_model import DeviceModel
+from .full_model import Buffer
 from ..models import SizingSpec, TransistorSizing
 from .node_levels import device_bias, estimate_node_levels
 from .preprocess import _first_stage_gain_factor, _mirror_reference
@@ -201,8 +202,8 @@ class StageChain:
         metric is withheld rather than reported optimistically (issue #148).
     :param compensation_scheme: the template's three-stage compensation;
         ``"reversed_nested_miller"`` selects the RNMC full model
-        (:func:`~.equations.phase_margin_rnmc_deg`), any other the
-        nested-Miller one (:func:`~.equations.nested_miller_loop`).
+        (:func:`~.full_model.phase_margin_rnmc_deg`), any other the
+        nested-Miller one (:func:`~.full_model.nested_miller_loop`).
     :param node_caps_f: capacitance in F on each gain stage's output node,
         input pair first -- two entries on a two-stage chain, three on a
         three-stage one.  The inner entries are the gates of every device
@@ -219,10 +220,11 @@ class StageChain:
     :param third_stage_mirror_pole_hz: current-mirror node pole of a
         non-inverting third stage (RNMC) in Hz, ``None`` when it has no mirror.
     :param output_buffer: ``(gm, cgs, g_out)`` of a source-follower output
-        buffer (:func:`_output_buffer`): the last gain stage then drives the
-        follower's gate and ``CL`` sits on the follower's output; ``None``
-        without one.  Its gain ``gm/(gm + g_out)`` scales the GBW; RNMC's
-        full model also reads its ``cgs`` and output pole.
+        buffer (:class:`~.full_model.Buffer`, :func:`_output_buffer`): the
+        last gain stage then drives the follower's gate and ``CL`` sits on
+        the follower's output; ``None`` without one.  Its gain
+        ``gm/(gm + g_out)`` scales the GBW; RNMC's full model also reads its
+        ``cgs`` and output pole.
     :param comp_resistors: per half of the amplifier (one entry
         single-ended, ``_p`` then ``_n`` fully differential), whether its
         outer Miller branch and, three-stage, its inner ``Cc2`` branch have a
@@ -255,7 +257,7 @@ class StageChain:
     node_caps_f: tuple[float, ...] = ()
     second_stage_mirror_pole_hz: float | None = None
     third_stage_mirror_pole_hz: float | None = None
-    output_buffer: tuple[float, float, float] | None = None
+    output_buffer: Buffer | None = None
     comp_resistors: tuple[tuple[bool, bool], ...] = ()
     cmfb_coupling: tuple[float, float | None] | None = None
     k_slew: float = 1.0
@@ -488,11 +490,11 @@ def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
 
 
 def _output_buffer(slot_transistors: dict[str, list[Device]], model,
-                   sizing, spec: SizingSpec) -> tuple[float, float, float] | None:
-    """``(gm, cgs, g_out)`` of a source-follower output buffer, or ``None``.
+                   sizing, spec: SizingSpec) -> Buffer | None:
+    """The source-follower output buffer, or ``None`` without one.
 
     ``gm``/``cgs`` are the follower device's (the one gated by the signal);
-    ``g_out`` sums the other conductances on its output node: every
+    ``g_out`` (its ``g``) sums the other conductances on its output node: every
     output-stage device's ``gds``, plus the follower's body transconductance
     when its bulk sits on a rail rather than on its source.  The source is
     the amplifier output, which the feedback holds at ``spec.vcm``; there an
@@ -511,8 +513,8 @@ def _output_buffer(slot_transistors: dict[str, list[Device]], model,
     if bulk in RAILS and bulk != fol.terminals.get("s"):
         g_out += model.gmb(fol.type, s.w_um, s.l_um, s.ids_a,
                            abs(spec.vcm - spec.rail_v(bulk)))
-    return (model.gm(fol.type, s.w_um, s.l_um, s.ids_a),
-            model.cgs(fol.type, s.w_um, s.l_um), g_out)
+    return Buffer(model.gm(fol.type, s.w_um, s.l_um, s.ids_a),
+                  model.cgs(fol.type, s.w_um, s.l_um), g_out)
 
 
 #: Nets the CMFB coupling treats as fixed: the outputs' common-mode reference
@@ -539,7 +541,7 @@ def _cmfb_coupling(view: CircuitView, mosfets: list[Device], model, sizing,
     """
     import numpy as np
 
-    from . import equations as eq
+    from . import full_model as fm
 
     cmfb = [d for d in view.slot_transistors.get("cmfb", []) if d.ref in sizing]
     if not cmfb:
@@ -607,7 +609,7 @@ def _cmfb_coupling(view: CircuitView, mosfets: list[Device], model, sizing,
         return None
     sl = sizing[loads[0].ref]
     gm_load = model.gm(loads[0].type, sl.w_um, sl.l_um, sl.ids_a)
-    poles = [abs(p) for p in eq._poles(Guu, C) if abs(p) > 0]
+    poles = [abs(p) for p in fm._poles(Guu, C) if abs(p) > 0]
     return -gm_load * v_out, (min(poles) / (2.0 * math.pi) if poles else None)
 
 

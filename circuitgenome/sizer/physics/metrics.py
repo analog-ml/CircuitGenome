@@ -12,53 +12,59 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from . import equations as eq
+from . import full_model as fm
 from ..models import SizingSpec
 from .rnmc import RNMC, comp_resistances, worst_half
 from .stage_chain import StageChain
 
 
-def _rnmc_model(chain: StageChain, cc_f: float,
-                cc2_f: float) -> tuple[list[tuple[float, float]], dict]:
-    """The RNMC full model's per-half compensation resistors and the keyword
-    arguments every half shares: the chain's stage gm/rout, node parasitics,
-    third-stage mirror and output buffer."""
-    s = chain.stages
-    caps = chain.node_caps_f or (0.0, 0.0, 0.0)
-    g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s[:3]]
+def _loop_stages(chain: StageChain, gm1_loop: float,
+                 n: int) -> tuple[fm.SmallSignalStage, ...]:
+    """The chain's first ``n`` stages as the full model sees them: each
+    stage's gm (``gm1_loop`` for the input pair), output conductance and
+    output-node capacitance."""
+    s = chain.stages[:n]
+    caps = chain.node_caps_f or (0.0,) * n
+    gms = (gm1_loop, *(st.gm for st in s[1:]))
+    return tuple(fm.SmallSignalStage(gm, 1.0 / st.rout if st.rout < float("inf") else 0.0, c)
+                 for gm, st, c in zip(gms, s, caps))
+
+
+def _rnmc_model(chain: StageChain, gm1_loop: float, cc_f: float, cc2_f: float
+                ) -> tuple[tuple[fm.SmallSignalStage, ...], list[tuple[float, float]], dict]:
+    """The RNMC full model's stages, per-half compensation resistors, and the
+    keyword arguments every half shares (third-stage mirror, output buffer)."""
     buffer = chain.output_buffer
-    pairs = comp_resistances(chain.comp_resistors, s[2].gm, cc_f, cc2_f,
+    pairs = comp_resistances(chain.comp_resistors, chain.stages[2].gm, cc_f, cc2_f,
                              buffer[1] if buffer else 0.0)
-    kw = dict(c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],
-              mirror_pole_hz=chain.third_stage_mirror_pole_hz, buffer=buffer)
-    return pairs, kw
+    kw = dict(mirror_pole_hz=chain.third_stage_mirror_pole_hz, buffer=buffer)
+    return _loop_stages(chain, gm1_loop, 3), pairs, kw
 
 
 def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
                        cc2_f: float, cl_f: float) -> float | None:
-    """Full-model RNMC phase margin (:func:`~.equations.phase_margin_rnmc_deg`)
+    """Full-model RNMC phase margin (:func:`~.full_model.phase_margin_rnmc_deg`)
     on the worse half when the halves' compensation differs
     (:func:`~.rnmc.worst_half`)."""
-    s = chain.stages
-    pairs, kw = _rnmc_model(chain, cc_f, cc2_f)
-    _, pm = worst_half(gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f, pairs, **kw)
+    stages, pairs, kw = _rnmc_model(chain, gm1_loop, cc_f, cc2_f)
+    _, pm = worst_half(stages, cc_f, cc2_f, cl_f, pairs, **kw)
     return pm
 
 
 def _rnmc_gbw(chain: StageChain, gm1_loop: float, cc_f: float,
               cc2_f: float, cl_f: float) -> float | None:
-    """Full-model RNMC GBW (:func:`~.equations.unity_gain_bw_rnmc_hz`), the
+    """Full-model RNMC GBW (:func:`~.full_model.unity_gain_bw_rnmc_hz`), the
     lower of the halves'; ``None`` when a half never reaches 0 dB."""
-    s = chain.stages
-    pairs, kw = _rnmc_model(chain, cc_f, cc2_f)
-    gbws = [eq.unity_gain_bw_rnmc_hz(gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f,
-                                     cl_f, comp_r=r, **kw) for r in pairs]
+    stages, pairs, kw = _rnmc_model(chain, gm1_loop, cc_f, cc2_f)
+    gbws = [fm.unity_gain_bw_rnmc_hz(stages, cc_f, cc2_f, cl_f, comp_r=r, **kw)
+            for r in pairs]
     return None if None in gbws else min(gbws)
 
 
 def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
                  cc2_f: float | None, cl_f: float) -> tuple[float | None, float | None]:
     """``(GBW, PM)`` of a two-stage or nested-Miller chain from its full model
-    (:func:`~.equations.two_stage_loop`, :func:`~.equations.nested_miller_loop`):
+    (:func:`~.full_model.two_stage_loop`, :func:`~.full_model.nested_miller_loop`):
     one half single-ended, both halves of a fully-differential chain with its
     CMFB coupling them (``chain.cmfb_coupling``).
 
@@ -67,22 +73,19 @@ def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
     puts its zero on the output pole.
     """
     s = chain.stages
-    caps = chain.node_caps_f or (0.0,) * len(s)
-    g = [1.0 / st.rout if st.rout < float("inf") else 0.0 for st in s]
     gm_out = s[-1].gm
 
     def r(flag: bool, c_f: float) -> float:
         return eq.compensation_resistor_ohm(c_f, cl_f, gm_out) if flag and gm_out > 0 else 0.0
     halves = chain.comp_resistors or ((False, False),)
     if len(s) > 2:
-        return eq.nested_miller_loop(
-            gm1_loop, s[1].gm, s[2].gm, cc_f, cc2_f, cl_f,
-            c1_f=caps[0], c2_f=caps[1], c3_f=caps[2], g1=g[0], g2=g[1], g3=g[2],
+        return fm.nested_miller_loop(
+            _loop_stages(chain, gm1_loop, 3), cc_f, cc2_f, cl_f,
             mirror_pole_hz=chain.second_stage_mirror_pole_hz,
             buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
             comp_r=tuple((r(r1, cc_f), r(r2, cc2_f)) for r1, r2 in halves))
-    return eq.two_stage_loop(
-        gm1_loop, s[1].gm, cc_f, cl_f, c1_f=caps[0], c2_f=caps[1], g1=g[0], g2=g[1],
+    return fm.two_stage_loop(
+        _loop_stages(chain, gm1_loop, 2), cc_f, cl_f,
         buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
         r_ohm=tuple(r(r1, cc_f) for r1, _r2 in halves))
 

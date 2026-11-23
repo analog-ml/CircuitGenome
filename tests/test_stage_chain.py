@@ -11,6 +11,8 @@ import pytest
 from circuitgenome.sizer import SizingSpec
 from circuitgenome.sizer.models import TransistorSizing
 from circuitgenome.sizer.physics import equations as eq
+from circuitgenome.sizer.physics import full_model as fm
+from circuitgenome.sizer.physics.full_model import SmallSignalStage as S
 from circuitgenome.sizer.physics.circuit_view import CircuitView
 from circuitgenome.sizer.physics.metrics import evaluate_metrics
 from circuitgenome.sizer.physics.rnmc import RNMC
@@ -91,7 +93,7 @@ def test_gbw_and_slew_need_the_miller_cap():
     comp = evaluate_metrics(_chain((1e-3, 1e6, 10e-6), (2e-3, 5e5, 1e-3),
                                    cc_pf=2.0), _spec())[0]
     assert comp["gbw_hz"] == pytest.approx(
-        eq.two_stage_loop(1e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)[0])
+        fm.two_stage_loop((S(1e-3, 1e-6), S(2e-3, 2e-6)), 2e-12, 20e-12)[0])
     assert comp["slew_rate_vps"] == pytest.approx(eq.slew_rate_vps(10e-6, 2e-12))
 
 
@@ -127,8 +129,8 @@ def test_gbw_scales_with_the_output_followers_gain():
 
 def test_nested_miller_recovers_the_textbook_crossing_with_fast_stages():
     """Stages far faster than the crossover leave gm1/(2π·Cc1) and ~90°."""
-    gbw, pm = eq.nested_miller_loop(1e-3, 1.0, 10.0, 2e-12, 1e-12, 20e-12,
-                                    g1=1e-6, g2=1e-4, g3=1e-3)
+    gbw, pm = fm.nested_miller_loop((S(1e-3, 1e-6), S(1.0, 1e-4), S(10.0, 1e-3)),
+                                    2e-12, 1e-12, 20e-12)
     assert gbw == pytest.approx(eq.unity_gain_bw(1e-3, 2e-12), rel=0.02)
     assert pm > 85
 
@@ -138,14 +140,15 @@ def test_a_return_toward_0_db_counts_as_a_crossing():
     its lightly damped inner pair lifts the gain back to -0.3 dB near
     27 MHz.  SPICE puts that peak at +0.04 dB -- a second crossing, 47° --
     and the model cannot tell the two apart, so the return sets the margin."""
-    kw = dict(c1_f=5.31e-15, c2_f=103.5e-15, g1=6.98e-9, g2=2.42e-6, g3=5.4e-6,
-              mirror_pole_hz=952.8e6)
-    args = (6e-5, 2.4e-4, 8.4e-4, 1.25e-12, 1.008e-12, 5e-12)
-    gbw, pm = eq.nested_miller_loop(*args, comp_r=((5952.0, 0.0),), **kw)
+    stages = (S(6e-5, 6.98e-9, 5.31e-15), S(2.4e-4, 2.42e-6, 103.5e-15),
+              S(8.4e-4, 5.4e-6))
+    args = (stages, 1.25e-12, 1.008e-12, 5e-12)
+    kw = dict(mirror_pole_hz=952.8e6)
+    gbw, pm = fm.nested_miller_loop(*args, comp_r=((5952.0, 0.0),), **kw)
     assert gbw == pytest.approx(9.25e6, rel=0.02)
     assert 40 < pm < 50
     # A nulling resistor of 1/gm3 leaves no such peak: the first crossing sets it.
-    assert eq.nested_miller_loop(*args, comp_r=((1 / 8.4e-4, 0.0),), **kw)[1] > 75
+    assert fm.nested_miller_loop(*args, comp_r=((1 / 8.4e-4, 0.0),), **kw)[1] > 75
 
 
 def test_a_mixed_fd_amplifier_averages_its_halves():
@@ -166,16 +169,15 @@ def test_the_cmfb_couples_mismatched_halves_only():
     first-stage nodes.  Matched halves have none to feed back; mismatched
     ones are pulled from their average toward the halves' harmonic mean,
     still above the worse half."""
-    args = (1e-3, 14e-3, 2e-12, 20e-12)
-    kw = dict(g1=1e-6, g2=2e-6)
+    args = ((S(1e-3, 1e-6), S(14e-3, 2e-6)), 2e-12, 20e-12)
     r = eq.compensation_resistor_ohm(2e-12, 20e-12, 14e-3)
     strong = (10e-3, None)
-    assert eq.two_stage_loop(*args, r_ohm=(0.0, 0.0), cmfb=strong, **kw) == \
-        pytest.approx(eq.two_stage_loop(*args, **kw))
-    free = eq.two_stage_loop(*args, r_ohm=(0.0, r), **kw)[1]
-    worse = eq.two_stage_loop(*args, **kw)[1]
+    assert fm.two_stage_loop(*args, r_ohm=(0.0, 0.0), cmfb=strong) == \
+        pytest.approx(fm.two_stage_loop(*args))
+    free = fm.two_stage_loop(*args, r_ohm=(0.0, r))[1]
+    worse = fm.two_stage_loop(*args)[1]
     for cmfb in ((1e-3, None), strong):
-        assert worse + 5 < eq.two_stage_loop(*args, r_ohm=(0.0, r), cmfb=cmfb, **kw)[1] < free - 3
+        assert worse + 5 < fm.two_stage_loop(*args, r_ohm=(0.0, r), cmfb=cmfb)[1] < free - 3
 
 
 def test_two_stage_replan_raises_gm2_for_the_phase_margin():
@@ -333,15 +335,15 @@ def test_k_fs_scales_gbw_but_not_cmrr():
     full = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), **kw), _spec())[0]
     half = evaluate_metrics(_chain((1e-3, 1e6), (2e-3, 5e5), k_fs=0.5, **kw), _spec())[0]
     assert half["gbw_hz"] == pytest.approx(
-        eq.two_stage_loop(0.5e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)[0])
+        fm.two_stage_loop((S(0.5e-3, 1e-6), S(2e-3, 2e-6)), 2e-12, 20e-12)[0])
     assert half["cmrr_db"] == pytest.approx(full["cmrr_db"])
 
 
 def test_three_stage_uses_the_nested_miller_model():
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), (3e-3, 2e5), cc_pf=2.0, cc2_pf=0.5)
     m, _ = evaluate_metrics(chain, _spec())
-    gbw, pm = eq.nested_miller_loop(1e-3, 2e-3, 3e-3, 2e-12, 0.5e-12, 20e-12,
-                                    g1=1e-6, g2=2e-6, g3=5e-6)
+    gbw, pm = fm.nested_miller_loop((S(1e-3, 1e-6), S(2e-3, 2e-6), S(3e-3, 5e-6)),
+                                    2e-12, 0.5e-12, 20e-12)
     assert (m["gbw_hz"], m["phase_margin_deg"]) == (pytest.approx(gbw), pytest.approx(pm))
 
 
@@ -459,7 +461,7 @@ def test_a_miller_cap_still_wins_when_a_mirror_pole_is_present():
     does not enter it (issue #221)."""
     chain = _chain((1e-3, 1e6), (2e-3, 5e5), cc_pf=2.0, mirror_pole_hz=1e8)
     m, _ = evaluate_metrics(chain, _spec())
-    gbw, pm = eq.two_stage_loop(1e-3, 2e-3, 2e-12, 20e-12, g1=1e-6, g2=2e-6)
+    gbw, pm = fm.two_stage_loop((S(1e-3, 1e-6), S(2e-3, 2e-6)), 2e-12, 20e-12)
     assert m["gbw_hz"] == pytest.approx(gbw)
     assert m["phase_margin_deg"] == pytest.approx(pm)
 

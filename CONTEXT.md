@@ -109,8 +109,9 @@ above it.
 _Avoid_: Damping factor (in prose — same quantity), stability margin.
 
 **Full model**:
-The RNMC open loop solved from its nodal equations — parasitics, stage output
-conductances, the third-stage mirror and an output buffer included — as opposed
-to the **closed forms** derived from the simplified quadratic. The full model
-decides; the closed forms explain and seed the search.
+A multi-stage amplifier's open loop (two-stage Miller, nested Miller or RNMC)
+solved from its nodal equations — parasitics, stage output conductances,
+current mirrors and an output buffer included — as opposed to the **closed
+forms**, the textbook formulas in `equations.py`. It lives in `full_model.py`.
+The full model decides; the closed forms explain and seed the search.
 _Avoid_: Exact model, numerical model, SPICE model (SPICE gives *measured metrics*).

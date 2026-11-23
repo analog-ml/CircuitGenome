@@ -4,7 +4,7 @@
 two-stage Miller amplifier's gm1 and gm2 from closed forms that leave out the
 output pole's pull on the 0 dB crossing, the bare Miller cap's
 right-half-plane zero and the first-stage node's capacitance.  The metrics
-read the full model instead (:func:`~..physics.equations.two_stage_loop`),
+read the full model instead (:func:`~..physics.full_model.two_stage_loop`),
 where such a design can fall short of the specs it was sized for (issue #274).
 
 :func:`refine_two_stage_plan` finds the gm1 and gm2 the full model needs on the
