@@ -313,7 +313,7 @@ gm/Id sizing with a foundry PDK (GF180MCU)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A technology that carries a gm/Id LUT — the PTM nodes and the **GF180MCU** foundry
-PDK — sizes through the gm/Id pipeline instead of the Level-1 CP-SAT solver: the
+PDK — sizes through the gm/Id pipeline instead of the square-law CP-SAT solver: the
 same :func:`~circuitgenome.sizer.sizer.size_circuit` call, just a different
 :func:`~circuitgenome.sizer.loader.load_tech` name.  Performance is then
 **measured in ngspice** (BSIM4) across process corners rather than estimated

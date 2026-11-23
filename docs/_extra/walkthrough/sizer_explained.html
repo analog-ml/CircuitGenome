@@ -114,7 +114,7 @@
 
   <p class="beat">Here is the whole story without a line of code.</p>
 
-  <p>CircuitGenome does not have <em>one</em> way to size a circuit — it has <strong>several</strong>, and which one is correct depends entirely on the fabrication technology. A modern node characterized with a <strong>gm/Id lookup table</strong> deserves the accurate, block-based gm/Id pipeline. An idealized <code>generic</code> technology, which has no such table, can only use the fast analytical <strong>Level-1</strong> sizer built on square-law equations. And a real <strong>PTM/SPICE</strong> node that has <em>not yet</em> been characterized deserves neither — running square-law math on it would produce numbers that look plausible and are quietly wrong.</p>
+  <p>CircuitGenome does not have <em>one</em> way to size a circuit — it has <strong>several</strong>, and which one is correct depends entirely on the fabrication technology. A modern node characterized with a <strong>gm/Id lookup table</strong> deserves the accurate, block-based gm/Id pipeline. An idealized <code>generic</code> technology, which has no such table, can only use the fast analytical <strong>Square-law</strong> sizer built on square-law equations. And a real <strong>PTM/SPICE</strong> node that has <em>not yet</em> been characterized deserves neither — running square-law math on it would produce numbers that look plausible and are quietly wrong.</p>
 
   <p>Imagine walking into a hospital. You do not pick your own specialist — you meet a <strong>triage nurse</strong> at the front desk. She reads your chart, and in one glance sends you to cardiology, or to the general ward, or tells you honestly "we cannot treat this here yet." That is exactly what <code>size_circuit</code> is: a <strong>triage desk</strong> for sizing. It reads one field on the technology chart and points you at the right specialist — no more, no less.</p>
 
@@ -157,10 +157,10 @@
       <line x1="290" y1="242" x2="290" y2="264" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
       <text x="304" y="258" font-size="10.5" fill="var(--fig-muted)">no</text>
 
-      <!-- bottom: size_level1 -->
+      <!-- bottom: size_square_law -->
       <rect x="196" y="266" width="188" height="46" rx="8" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="290" y="286" text-anchor="middle" font-weight="600" font-size="12.5">size_level1</text>
-      <text x="290" y="301" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 CP-SAT sizer</text>
+      <text x="290" y="286" text-anchor="middle" font-weight="600" font-size="12.5">size_square_law</text>
+      <text x="290" y="301" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Square-law CP-SAT sizer</text>
       <text x="290" y="332" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">reached only by the card-less &#8220;generic&#8221; tech</text>
     </svg>
     <figcaption>One question at a time, top to bottom. The first &#8220;yes&#8221; wins; falling all the way through means the plain analytical sizer.</figcaption>
@@ -190,11 +190,11 @@
         <text x="120" y="170" text-anchor="middle" font-weight="600" font-size="12.5">size_gmid()</text>
         <text x="120" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm/Id block pipeline</text>
       </g>
-      <!-- level1 -->
+      <!-- square_law -->
       <g class="node" data-group="lvl1">
         <rect x="240" y="150" width="200" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="340" y="170" text-anchor="middle" font-weight="600" font-size="12.5">size_level1()</text>
-        <text x="340" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 CP-SAT sizer</text>
+        <text x="340" y="170" text-anchor="middle" font-weight="600" font-size="12.5">size_square_law()</text>
+        <text x="340" y="186" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Square-law CP-SAT sizer</text>
       </g>
       <!-- error -->
       <g class="node" data-group="err">
@@ -225,7 +225,7 @@
     tech: TechParams,                      <span class="tok-com"># THE routing field lives here</span>
     spec: SizingSpec,                      <span class="tok-com"># performance targets</span>
     *,
-    time_limit_s: <span class="tok-kw">float</span> = <span class="tok-num">30.0</span>,             <span class="tok-com"># Level-1 solver budget only</span>
+    time_limit_s: <span class="tok-kw">float</span> = <span class="tok-num">30.0</span>,             <span class="tok-com"># Square-law solver budget only</span>
 ) -> SizingResult:</code></pre>
 
   <p>Most of these are passed straight through to whichever sizer runs. The one that <em>decides</em> the route is <code>tech</code>. The dispatcher only ever inspects two attributes on it — <code>tech.gmid_lut</code> and <code>tech.spice_model</code> — and everything else rides along untouched.</p>
@@ -288,8 +288,8 @@
     <span class="tok-kw">raise</span> <span class="tok-fn">UnsupportedTechError</span>(...)
 
 <span class="tok-com"># Route 3 — only the card-less 'generic' tech reaches here.</span>
-<span class="tok-kw">from</span> .analytical.level1 <span class="tok-kw">import</span> size_level1
-<span class="tok-kw">return</span> <span class="tok-fn">size_level1</span>(parsed, sr_result, fbr_result, topology, tech, spec,
+<span class="tok-kw">from</span> .analytical.square_law <span class="tok-kw">import</span> size_square_law
+<span class="tok-kw">return</span> <span class="tok-fn">size_square_law</span>(parsed, sr_result, fbr_result, topology, tech, spec,
                    time_limit_s=time_limit_s)</code></pre>
 
   <p>Notice there is no explicit <code>elif</code> or <code>else</code>. Each branch <code>return</code>s (or <code>raise</code>s), so control never reaches the next question unless the current one failed. The bare code at the bottom is the <strong>default</strong> — the track the train coasts onto when both switches were left open.</p>
@@ -330,7 +330,7 @@
       <text x="315" y="133" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">falls through both</text>
       <line x1="442" y1="120" x2="452" y2="120" stroke="var(--fig-stroke)" stroke-width="1.8" marker-end="url(#ar4)"/>
       <rect x="454" y="98" width="156" height="44" rx="6" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="2"/>
-      <text x="532" y="125" text-anchor="middle" font-size="12" font-weight="600">size_level1</text>
+      <text x="532" y="125" text-anchor="middle" font-size="12" font-weight="600">size_square_law</text>
 
       <!-- ROW 3 -->
       <rect x="12" y="166" width="120" height="44" rx="6" fill="var(--fig-bad-fill)" stroke="var(--fig-bad)" stroke-width="2"/>
@@ -351,7 +351,7 @@
     <thead><tr><th>Technology</th><th>gmid_lut</th><th>spice_model</th><th>Route taken</th></tr></thead>
     <tbody>
       <tr><td><code>ptm130_lut</code></td><td>present</td><td>&mdash;</td><td><code>size_gmid</code></td></tr>
-      <tr><td><code>generic</code></td><td>absent</td><td>absent</td><td><code>size_level1</code></td></tr>
+      <tr><td><code>generic</code></td><td>absent</td><td>absent</td><td><code>size_square_law</code></td></tr>
       <tr><td><code>ptm130</code></td><td>absent</td><td>present</td><td><code>UnsupportedTechError</code></td></tr>
     </tbody>
   </table>
@@ -365,12 +365,12 @@
 
   <blockquote><p><strong>The one job:</strong> when a PTM/SPICE node has no gm/Id LUT, refuse loudly instead of running the analytical sizer — because its numbers would be silently wrong there.</p></blockquote>
 
-  <p>Here is the whole limitation of the file, stated on purpose. The Level-1 analytical sizer is built on <strong>square-law</strong> equations — the textbook <code>I<sub>D</sub> &prop; (V<sub>GS</sub> &minus; V<sub>th</sub>)&sup2;</code> model. That model is a fine <em>idealization</em>, which is exactly why the <code>generic</code> technology is defined to obey it. But a real 130&nbsp;nm PTM node does <em>not</em> obey square-law; short-channel effects bend those curves badly. Feed a real node's parameters into square-law math and you get transistor sizes that look reasonable and are quantitatively wrong.</p>
+  <p>Here is the whole limitation of the file, stated on purpose. The analytical sizer is built on <strong>square-law</strong> equations — the textbook <code>I<sub>D</sub> &prop; (V<sub>GS</sub> &minus; V<sub>th</sub>)&sup2;</code> model. That model is a fine <em>idealization</em>, which is exactly why the <code>generic</code> technology is defined to obey it. But a real 130&nbsp;nm PTM node does <em>not</em> obey square-law; short-channel effects bend those curves badly. Feed a real node's parameters into square-law math and you get transistor sizes that look reasonable and are quantitatively wrong.</p>
 
   <pre class="code"><code><span class="tok-kw">if</span> <span class="tok-fn">getattr</span>(tech, <span class="tok-str">"spice_model"</span>, <span class="tok-kw">None</span>):
     <span class="tok-kw">raise</span> <span class="tok-fn">UnsupportedTechError</span>(
         <span class="tok-str">f"Technology '{tech.name}' is a PTM/SPICE-model node without a gm/Id "</span>
-        <span class="tok-str">f"LUT. The analytical (Level-1) sizer is not valid for PTM nodes — "</span>
+        <span class="tok-str">f"LUT. The analytical (square-law) sizer is not valid for PTM nodes — "</span>
         <span class="tok-str">f"characterize a gm/Id LUT first (see issue #73). Only the 'generic' "</span>
         <span class="tok-str">f"technology uses the analytical sizer."</span>)</code></pre>
 
@@ -389,7 +389,7 @@
       <!-- forbidden fall-through (left) -->
       <line x1="250" y1="56" x2="140" y2="104" stroke="var(--fig-muted)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#ar5)"/>
       <rect x="30" y="106" width="210" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="2" stroke-dasharray="5 4"/>
-      <text x="135" y="128" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">if it fell through to Level-1…</text>
+      <text x="135" y="128" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">if it fell through to square-law…</text>
       <text x="135" y="146" text-anchor="middle" font-size="11" fill="var(--fig-bad)">plausible but wrong sizes &#10007;</text>
       <text x="135" y="180" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the silent bug gm/Id exists to avoid</text>
 
@@ -412,7 +412,7 @@
 
   <p>Although the file never names it, this dispatcher is a textbook <strong>Strategy pattern</strong> — a single boundary that chooses an interchangeable algorithm at runtime and hides that choice from everyone above it.</p>
 
-  <p>The payoff is <em>caller ignorance</em>, in the good sense. Every layer above sizing calls one function, <code>size_circuit</code>, and receives one <code>SizingResult</code>. It never imports <code>size_gmid</code> or <code>size_level1</code>, never branches on the technology, never learns that three different sizers even exist. Add a fourth sizer tomorrow and not a single caller changes.</p>
+  <p>The payoff is <em>caller ignorance</em>, in the good sense. Every layer above sizing calls one function, <code>size_circuit</code>, and receives one <code>SizingResult</code>. It never imports <code>size_gmid</code> or <code>size_square_law</code>, never branches on the technology, never learns that three different sizers even exist. Add a fourth sizer tomorrow and not a single caller changes.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 580 260" role="img" aria-label="size_circuit as the single dispatch boundary hiding three sizers from callers">
@@ -443,7 +443,7 @@
         <rect x="30" y="178" width="160" height="40" rx="7" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.8"/>
         <text x="110" y="203" text-anchor="middle" font-size="11.5">size_gmid</text>
         <rect x="210" y="178" width="160" height="40" rx="7" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.8"/>
-        <text x="290" y="203" text-anchor="middle" font-size="11.5">size_level1</text>
+        <text x="290" y="203" text-anchor="middle" font-size="11.5">size_square_law</text>
         <rect x="390" y="178" width="160" height="40" rx="7" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.8" stroke-dasharray="5 3"/>
         <text x="470" y="203" text-anchor="middle" font-size="10.5">UnsupportedTechError</text>
       </g>
@@ -456,17 +456,17 @@
 
   <h3>What it honestly does not do</h3>
   <ul>
-    <li>It does no sizing itself — every route either delegates or refuses. If a bug appears in the numbers, it lives in <code>size_gmid</code> or <code>size_level1</code>, not here.</li>
+    <li>It does no sizing itself — every route either delegates or refuses. If a bug appears in the numbers, it lives in <code>size_gmid</code> or <code>size_square_law</code>, not here.</li>
     <li>It reads exactly two fields of <code>tech</code>. A technology with, say, both a LUT and a SPICE model is routed to gm/Id and never reaches the refusal — the <em>order</em> encodes the priority.</li>
     <li>It trusts that <code>fbr_result</code> is in topology mode; it does not re-validate that here.</li>
-    <li><code>time_limit_s</code> matters only on the Level-1 path — it is quietly ignored by the gm/Id route.</li>
+    <li><code>time_limit_s</code> matters only on the square-law path — it is quietly ignored by the gm/Id route.</li>
   </ul>
 
   <h3>Why it's elegant</h3>
   <p>The cleverness is restraint. A less disciplined dispatcher might try to be helpful and size the PTM node anyway. This one draws a hard line: <strong>route when a valid sizer exists, refuse honestly when none does, and never let a caller learn which sizer ran.</strong> Seventy lines, one job, done cleanly.</p>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>sizer.py</code> is the single front door of Initial Sizing — it reads one technology field, routes a circuit to the gm/Id pipeline (if a LUT exists) or the Level-1 analytical sizer (for the card-less generic tech), refuses PTM nodes that lack a LUT rather than fabricate wrong numbers, and hands every caller back one identical <code>SizingResult</code> without ever revealing which sizer produced it.</p>
+  <p><strong>In one sentence:</strong> <code>sizer.py</code> is the single front door of Initial Sizing — it reads one technology field, routes a circuit to the gm/Id pipeline (if a LUT exists) or the square-law analytical sizer (for the card-less generic tech), refuses PTM nodes that lack a LUT rather than fabricate wrong numbers, and hands every caller back one identical <code>SizingResult</code> without ever revealing which sizer produced it.</p>
 </section>
 
 </main>

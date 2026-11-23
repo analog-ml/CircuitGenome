@@ -117,7 +117,7 @@
 
   <p class="beat">Here is the whole story with no code at all.</p>
 
-  <p>When the synthesizer draws an op-amp, it drops a resistor symbol wherever a resistor belongs and stamps every one of them with the same <strong>1 kΩ placeholder</strong> — a stand-in, not a real value. The earlier Level-1 sizer only fixed the <em>load</em> resistors (the ones tied straight to a supply rail). Every other resistor — the source-<strong>degeneration</strong> r1/r2, the <strong>resistor tail</strong>, the tunable <strong>bias</strong> legs, the <strong>CMFB</strong> sense network, the <strong>compensation</strong> nulling resistor — was left sitting at 1 kΩ.</p>
+  <p>When the synthesizer draws an op-amp, it drops a resistor symbol wherever a resistor belongs and stamps every one of them with the same <strong>1 kΩ placeholder</strong> — a stand-in, not a real value. The earlier square-law sizer only fixed the <em>load</em> resistors (the ones tied straight to a supply rail). Every other resistor — the source-<strong>degeneration</strong> r1/r2, the <strong>resistor tail</strong>, the tunable <strong>bias</strong> legs, the <strong>CMFB</strong> sense network, the <strong>compensation</strong> nulling resistor — was left sitting at 1 kΩ.</p>
 
   <p>Think of it like a recipe that lists five ingredients but writes <em>"1 cup"</em> next to all of them because nobody measured. One cup of salt where you needed a pinch will ruin the dish. A resistor at the wrong value doesn't just under-perform — it moves DC currents and node voltages, so it <strong>mis-biases</strong> the whole variant.</p>
 

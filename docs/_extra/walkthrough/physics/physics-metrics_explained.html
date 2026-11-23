@@ -108,7 +108,7 @@
 
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-  <p><strong>TLDR:</strong> <code>metrics.py</code> turns a <code>StageChain</code> into the op-amp's predicted report card &mdash; gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin &mdash; using nothing but arithmetic (textbook formula), so the exact same code is correct for both the Level-1 and the gm/Id sizer and can be tested without a circuit.</p>
+  <p><strong>TLDR:</strong> <code>metrics.py</code> turns a <code>StageChain</code> into the op-amp's predicted report card &mdash; gain, GBW, phase margin, slew, power, swing, CMRR and PSRR, each paired with a spec margin &mdash; using nothing but arithmetic (textbook formula), so the exact same code is correct for both the square-law and the gm/Id sizer and can be tested without a circuit.</p>
 
   <blockquote><p><strong>Main task:</strong> given a <code>StageChain</code> — the small-signal numbers already extracted from a solved sizing — compute what the amplifier delivers (gain, bandwidth, phase margin, slew rate, power, swing, CMRR, PSRR) and how much room each number has against its spec.</p></blockquote>
 
@@ -312,7 +312,7 @@ power = eq.<span class="tok-fn">quiescent_power</span>(spec.vdd, spec.vss, suppl
     </span>
   </div>
 
-  <p>The chain is the only physics-dependent term, and it was already resolved to floats upstream. Swapping Level-1 for gm/Id changes <em>what those numbers are</em> without changing <em>a single line that computes with them</em> &mdash; and because a chain is just a value, a formula here can be tested by handing it six floats instead of a circuit.</p>
+  <p>The chain is the only physics-dependent term, and it was already resolved to floats upstream. Swapping square-law for gm/Id changes <em>what those numbers are</em> without changing <em>a single line that computes with them</em> &mdash; and because a chain is just a value, a formula here can be tested by handing it six floats instead of a circuit.</p>
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>

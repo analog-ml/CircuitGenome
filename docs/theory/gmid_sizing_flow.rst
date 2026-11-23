@@ -8,7 +8,7 @@ This page documents the **block-based gm/Id sizing pipeline**
 :func:`~circuitgenome.sizer.sizer.size_circuit` selects for technologies that
 carry a gm/Id lookup table (the ``gmid_lut`` field of
 :class:`~circuitgenome.sizer.models.TechParams`, e.g. ``ptm45`` or the
-GF180MCU foundry PDK).  Unlike the Level-1 analytical flow — documented in
+GF180MCU foundry PDK).  Unlike the square-law analytical flow — documented in
 :doc:`sizing_flow`, which *searches* integer W/L with CP-SAT — the gm/Id path
 **computes** geometry in a single deterministic forward pass: with ``Id`` fixed
 by KCL and ``gm/Id`` chosen per device, the LUT turns ``Id/W`` straight into
@@ -26,7 +26,7 @@ Bootstrap
 The metrics this pipeline computes (Phase 5) are a fast, deterministic
 sizing-quality signal; for PTM / foundry techs the CLI reports **ngspice-measured**
 performance instead (see :doc:`sizing_flow`, *Feasibility verdict and SPICE
-metrics*).  For how a technology selects this path versus the Level-1 path — and
+metrics*).  For how a technology selects this path versus the square-law path — and
 the ``UnsupportedTechError`` case — see :doc:`../modules/sizer`, *Path selection*.
 
 All snippets below assume this bootstrap (topology ``two_stage_opamp_single_ended``,
@@ -620,7 +620,7 @@ region) — not a bias failure, and the gain spec is met regardless.
 See also
 --------
 
-* :doc:`sizing_flow` — the Level-1 (Shichman-Hodges) analytical flow with CP-SAT,
+* :doc:`sizing_flow` — the square-law (Shichman-Hodges) analytical flow with CP-SAT,
   used for the card-less ``generic`` technology.
 * :mod:`circuitgenome.sizer.gmid.intent` — the design-intent hierarchy
   (``GmIdIntent``, ``BlockIntent``, ``TransistorIntent``).

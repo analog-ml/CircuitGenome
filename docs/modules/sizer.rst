@@ -11,7 +11,7 @@ specs — gain, GBW, phase margin, slew rate, CMRR, power, and output swing.
 
 The sizer has two paths, selected by technology:
 
-- The card-less ``generic`` tech uses the **analytical Level-1 sizer**: a
+- The card-less ``generic`` tech uses the **analytical square-law sizer**: a
   square-law device model whose ``gm`` constraints linearise into an integer
   program solved with **OR-Tools CP-SAT**.
 - PTM nodes and foundry PDKs (e.g. GF180MCU) use the **gm/Id sizer**, which
@@ -128,7 +128,7 @@ and PSRR are reported for all ten.
 Analytical Sizer
 ----------------
 
-The card-less ``generic`` tech sizes with a **Level-1 (Shichman-Hodges)
+The card-less ``generic`` tech sizes with a **square-law (Shichman-Hodges)
 square-law model**.  Because each device's ``IDS`` is fixed by KCL and the bias
 current before any geometry is chosen, the nonlinear ``gm ≥ gm_req`` constraint
 linearises to ``2·µCox·IDS·W ≥ gm_req²·L`` — a linear constraint over the
@@ -173,7 +173,7 @@ The sizer reads its device parameters from a technology YAML, selected with
    * - ``tech_generic``
      - ~0.25 µm
      - Illustrative defaults; the built-in fallback.  Sizes with the analytical
-       Level-1 path.
+       square-law path.
    * - ``tech_ptm45``
      - 45 nm
      - Planar-bulk BSIM4 from the ASU Predictive Technology Model (see
@@ -188,7 +188,7 @@ The sizer reads its device parameters from a technology YAML, selected with
 
 A PTM node or foundry PDK sizes from its gm/Id LUT (LUT-accurate
 ``gm``/``gds``/``Vdsat`` from the BSIM4 device), while the card-less ``generic``
-tech uses *effective* Level-1 square-law fits.  FinFET nodes (≤16 nm in silicon)
+tech uses *effective* square-law fits.  FinFET nodes (≤16 nm in silicon)
 need a different device model and are not covered.  Add another PTM node — or
 regenerate an existing one's LUT — with ``tools/extract_tech.py`` (requires
 ngspice); see :doc:`../references` for the ASU Predictive Technology Model
@@ -201,7 +201,7 @@ Path selection
 technology:
 
 - ``tech.gmid_lut`` present (``ptm45``, GF180MCU) → the **gm/Id sizer**.
-- card-less ``generic`` (no LUT) → the **analytical Level-1 sizer**.
+- card-less ``generic`` (no LUT) → the **analytical square-law sizer**.
 - a PTM/SPICE-model node **without** a characterised LUT → ``UnsupportedTechError``:
   the square law is not valid there, and the gm/Id path needs a table the tech
   does not provide.
@@ -215,7 +215,7 @@ actually establishes its DC bias point, and to measure the real metrics on the
 device model rather than reading them back from the sizing formulas.  ngspice
 runs in two roles, using the model from the tech: a BSIM4 ``.pm`` card for the
 PTM nodes (``spice_model``), a foundry corner library for a PDK (``spice_lib`` →
-``.lib "<file>" <corner>``, e.g. GF180MCU), or a synthesised Level-1 ``.model``
+``.lib "<file>" <corner>``, e.g. GF180MCU), or a synthesised square-law ``.model``
 from ``mu_cox``/``vth``/``lam`` for ``generic``:
 
 * **PTM and foundry PDKs (default report).**  For a node with a real device model,
@@ -225,7 +225,7 @@ from ``mu_cox``/``vth``/``lam`` for ``generic``:
   if it is missing.  A foundry PDK additionally re-measures the sized design across
   its configured process corners (``{typical, ss, ff, sf, fs}`` for GF180MCU) and
   prints a corner-verification table; sizing itself stays at the nominal corner.
-* **``--simulate`` (generic cross-check).**  On the Level-1 ``generic`` tech,
+* **``--simulate`` (generic cross-check).**  On the square-law ``generic`` tech,
   ``circuitgenome size --simulate`` prints the analytical metrics next to the
   SPICE-measured ones with the delta — a sanity check on the formulas.  It is
   redundant for PTM / PDK techs (already SPICE-measured).

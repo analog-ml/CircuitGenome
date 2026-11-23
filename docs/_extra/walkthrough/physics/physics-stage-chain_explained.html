@@ -118,7 +118,7 @@
 
   <div class="eq-center"><span class="boxed-eq">solved sizing&nbsp;→&nbsp;<strong>StageChain</strong>&nbsp;→&nbsp;metrics</span></div>
 
-  <p>The two sizers fill the chain by the same code but arrive with different physics behind them: Level-1 answers <code>gm</code> and <code>gds</code> from the square law, gm/Id from a measured lookup table. Neither this file nor <code>metrics.py</code> ever asks which.</p>
+  <p>The two sizers fill the chain by the same code but arrive with different physics behind them: the square-law backend answers <code>gm</code> and <code>gds</code> from the square law, gm/Id from a measured lookup table. Neither this file nor <code>metrics.py</code> ever asks which.</p>
 
 </section>
 
@@ -148,7 +148,7 @@
       <line x1="230" y1="142" x2="150" y2="182" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
       <line x1="330" y1="142" x2="410" y2="182" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
       <rect x="30" y="182" width="235" height="52" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="147" y="204" text-anchor="middle" font-size="12.5" font-weight="600">Level-1 backend</text>
+      <text x="147" y="204" text-anchor="middle" font-size="12.5" font-weight="600">Square-law backend</text>
       <text x="147" y="222" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">gm=√(2·µCox·W/L·Id), gds=λ·Id</text>
       <rect x="295" y="182" width="235" height="52" rx="10" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="412" y="204" text-anchor="middle" font-size="12.5" font-weight="600">gm/Id backend</text>
@@ -157,7 +157,7 @@
     <figcaption>Same top box, two possible bottom boxes. Because the numbers are read <em>at the geometry the sizer already solved</em>, both backends are exact — not an approximation of each other.</figcaption>
   </figure>
 
-  <p>Why is this "exact" and not just "roughly consistent"? Because the metrics are evaluated <strong>after</strong> the geometry is frozen. The Level-1 backend evaluates its <code>λ·Id</code> physics at that <code>(W, L, Id)</code>; the gm/Id backend looks up its table at that same <code>(W, L, Id)</code>. Neither is guessing — each reports <em>its own</em> truth at the solved point. The arithmetic downstream (multiply gm by Rout, take a log) is physics-agnostic.</p>
+  <p>Why is this "exact" and not just "roughly consistent"? Because the metrics are evaluated <strong>after</strong> the geometry is frozen. The square-law backend evaluates its <code>λ·Id</code> physics at that <code>(W, L, Id)</code>; the gm/Id backend looks up its table at that same <code>(W, L, Id)</code>. Neither is guessing — each reports <em>its own</em> truth at the solved point. The arithmetic downstream (multiply gm by Rout, take a log) is physics-agnostic.</p>
 
   <p>Look at how the module docstring says exactly this:</p>
 
@@ -165,7 +165,7 @@
 <span class="tok-str">"""Performance-metric evaluation from a solved sizing.
 
 Small-signal parameters come through a DeviceModel evaluated at the
-*solved* geometry, so the same code is exact for both Level-1
+*solved* geometry, so the same code is exact for both square-law
 (geometry-free λ·Id) and gm/Id (LUT).  Shared by both sizers.
 """</span></code></pre>
 

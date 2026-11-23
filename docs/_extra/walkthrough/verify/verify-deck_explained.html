@@ -134,7 +134,7 @@
     <span class="tok-kw">return</span> <span class="tok-str">f'.include "{lib.design}"\n'</span> + <span class="tok-str">f'.lib "{lib.file}" {corner}\n'</span>
 <span class="tok-kw">if</span> tech.spice_model:                     <span class="tok-com"># PTM: flat .model cards</span>
     <span class="tok-kw">return</span> <span class="tok-str">f'.include "{tech.spice_model}"\n'</span>
-<span class="tok-com"># card-less "generic": synthesise a Level-1 card from the tech YAML</span>
+<span class="tok-com"># card-less "generic": synthesise a square-law card from the tech YAML</span>
 <span class="tok-kw">return</span> <span class="tok-str">f".model nmos nmos level=1 kp={n.mu_cox} vto={n.vth} lambda={n.lam} &hellip;"</span></code></pre>
 
   <h3>The generic branch is the interesting one</h3>
@@ -145,7 +145,7 @@
   <table>
     <thead><tr><th>Technology</th><th>SPICE sees</th><th>So the SPICE&ndash;analytical delta measures&hellip;</th></tr></thead>
     <tbody>
-      <tr><td><code>generic</code></td><td>a Level-1 card built from the same µCox/Vth/λ</td><td>&hellip;almost nothing &mdash; it is a <strong>self-check</strong> that the deck and the formulas agree</td></tr>
+      <tr><td><code>generic</code></td><td>a square-law card built from the same µCox/Vth/λ</td><td>&hellip;almost nothing &mdash; it is a <strong>self-check</strong> that the deck and the formulas agree</td></tr>
       <tr><td><code>ptm45</code></td><td>the real BSIM4 card</td><td>&hellip;the <strong>square-law-vs-real-device gap</strong></td></tr>
       <tr><td><code>gf180mcu</code>, <code>sky130</code></td><td>the foundry corner library</td><td>&hellip;the same gap, plus real process corners</td></tr>
     </tbody>
@@ -197,7 +197,7 @@
 
   <figure class="fig">
     <svg viewBox="0 0 820 210" role="img" aria-label="A generic MOSFET line rewritten as a PDK subcircuit instance">
-      <text x="24" y="30" font-size="11.5" font-weight="600" fill="var(--fig-muted)">generic (PTM / Level-1)</text>
+      <text x="24" y="30" font-size="11.5" font-weight="600" fill="var(--fig-muted)">generic (PTM / square-law)</text>
       <rect x="24" y="40" width="772" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="38" y="62" font-size="12.5" font-family="ui-monospace,monospace">m1_load  net1  in1  net2  net2   pmos      W=10.0u  L=0.56u</text>
 

@@ -22,16 +22,16 @@ def load_spec(path: Path | str) -> SizingSpec:
 
 
 def _validate_mosfets(
-    nmos: MosfetParams, pmos: MosfetParams, *, is_level1: bool
+    nmos: MosfetParams, pmos: MosfetParams, *, is_square_law: bool
 ) -> None:
     """Reject silently-broken process params at load time (issue #158).
 
     gm/Id (LUT) techs may omit ``vth``/``mu_cox``/``lam`` entirely — the LUT
-    supplies every operating-point voltage. Level-1/analytical techs (no
+    supplies every operating-point voltage. Square-law techs (no
     ``gmid_lut``) require all three, with ``lam``/``mu_cox`` positive and the
     ``vth`` sign matching the polarity, so a bad fit can't be committed silently.
     """
-    if not is_level1:
+    if not is_square_law:
         # Only sanity-check a vth if one is present (it is optional here).
         if nmos.vth is not None and nmos.vth <= 0:
             raise ValueError(f"nmos.vth must be positive, got {nmos.vth}")
@@ -40,20 +40,20 @@ def _validate_mosfets(
         return
     if nmos.vth is None or nmos.vth <= 0:
         raise ValueError(
-            f"nmos.vth must be a positive number for a Level-1 tech "
+            f"nmos.vth must be a positive number for a square-law tech "
             f"(no gmid_lut), got {nmos.vth}")
     if pmos.vth is None or pmos.vth >= 0:
         raise ValueError(
-            f"pmos.vth must be a negative number for a Level-1 tech "
+            f"pmos.vth must be a negative number for a square-law tech "
             f"(no gmid_lut), got {pmos.vth}")
     for name, p in (("nmos", nmos), ("pmos", pmos)):
         if p.mu_cox is None or p.mu_cox <= 0:
             raise ValueError(
-                f"{name}.mu_cox must be a positive number for a Level-1 tech "
+                f"{name}.mu_cox must be a positive number for a square-law tech "
                 f"(no gmid_lut), got {p.mu_cox}")
         if p.lam is None or p.lam <= 0:
             raise ValueError(
-                f"{name}.lam must be a positive number for a Level-1 tech "
+                f"{name}.lam must be a positive number for a square-law tech "
                 f"(no gmid_lut), got {p.lam}")
 
 
@@ -130,10 +130,10 @@ def load_tech(path: Path | str | None = None) -> TechParams:
         device_handle = {str(k): str(v) for k, v in device_handle.items()}
 
     # The nmos/pmos blocks are optional for gm/Id techs (they may carry only
-    # gamma/phi, or nothing); Level-1 techs are caught by _validate_mosfets.
+    # gamma/phi, or nothing); square-law techs are caught by _validate_mosfets.
     nmos = _mosfet(data.get("nmos") or {})
     pmos = _mosfet(data.get("pmos") or {})
-    _validate_mosfets(nmos, pmos, is_level1=gmid_lut is None)
+    _validate_mosfets(nmos, pmos, is_square_law=gmid_lut is None)
 
     return TechParams(
         name=str(data["name"]),

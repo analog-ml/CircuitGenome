@@ -220,8 +220,8 @@ def test_single_stage_resistor_load_holds_the_output_at_vcm(one_stage_by_load):
         assert r["r2_load"] == pytest.approx(r["r1_load"]), name
 
 
-def test_level1_single_stage_resistor_load_holds_the_output_at_vcm():
-    """The Level-1 sizer (card-less ``generic`` tech) applies the same rule."""
+def test_square_law_single_stage_resistor_load_holds_the_output_at_vcm():
+    """The square-law sizer (card-less ``generic`` tech) applies the same rule."""
     mods = load_modules()
     topo = next(t for t in load_topologies() if t.name == "one_stage_opamp")
     c = next(c for c in enumerate_circuits(topo, mods)

@@ -1,5 +1,6 @@
 """
-Level-1 MOSFET equations (Shichman-Hodges) and op-amp performance formulas.
+Square-law MOSFET equations (Shichman-Hodges, SPICE ``level=1``) and op-amp
+performance formulas.
 
 Most functions are closed-form textbook formulas.  The exception is the
 reversed-nested-Miller (RNMC) three-stage loop, whose phase margin and pole
@@ -19,7 +20,7 @@ from ..verify.measure import AC_LOOP_LIMIT_DB, AC_START_HZ
 
 
 # ---------------------------------------------------------------------------
-# Level-1 MOSFET small-signal parameters
+# Square-law MOSFET small-signal parameters
 # ---------------------------------------------------------------------------
 
 def gm(mu_cox: float, w_um: float, l_um: float, ids_a: float) -> float:

@@ -22,7 +22,7 @@ device_map:                                      # generic type -> PDK subcircui
 
 gmid_lut: models/gf180mcu_gmid.npz   # gm/Id LUT (drives sizing)
 
-# The gm/Id path sizes off the LUT above, so no Level-1 square-law params are
+# The gm/Id path sizes off the LUT above, so no square-law params are
 # needed (issue #158): mu_cox/lam and vth are all omitted. The load-resistor
 # bias seed is read from the LUT (the driven signal device's Vgs), so no
 # hand-curated vth is required. gamma/phi are retained for the body-effect

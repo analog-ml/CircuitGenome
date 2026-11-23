@@ -100,7 +100,7 @@
   <a href="#part-1">1 · Why this file exists</a>
   <a href="#part-2">2 · The five primitives</a>
   <a href="#part-3">3 · The Protocol &amp; _params()</a>
-  <a href="#part-4">4 · Level1Model (square law)</a>
+  <a href="#part-4">4 · SquareLawModel (square law)</a>
   <a href="#part-5">5 · GmIdModel (the LUT)</a>
   <a href="#part-6">6 · GmIdPolicy &amp; role L</a>
   <a href="#part-7">7 · geometry_for()</a>
@@ -112,7 +112,7 @@
 <!-- ================= PART 1 ================= -->
 <section class="part" id="part-1">
   <h2>Part 1 · Why this file even exists</h2>
-<p><strong>TLDR:</strong> <code>device_model.py</code> defines a single small-signal <code>DeviceModel</code> socket and two interchangeable plugs — a regression-safe Level-1 square law and a silicon-calibrated gm/Id lookup table so that CircuitGenome's model-independent op-amp topology math is written once and serves both technologies through one polymorphic interface. Adding a third technology model tomorrow means writing a third plug and touching nothing else.</p>
+<p><strong>TLDR:</strong> <code>device_model.py</code> defines a single small-signal <code>DeviceModel</code> socket and two interchangeable plugs — a regression-safe square-law model and a silicon-calibrated gm/Id lookup table so that CircuitGenome's model-independent op-amp topology math is written once and serves both technologies through one polymorphic interface. Adding a third technology model tomorrow means writing a third plug and touching nothing else.</p>
   <blockquote><p><strong>Main task:</strong> give the op-amp sizer <em>one</em> way to ask a transistor "what's your gm? your gds? your Vdsat?" — so the same topology math works whether those answers come from a textbook square law or from a measured lookup table.</p></blockquote>
 
 
@@ -129,7 +129,7 @@
   </ul>
 
 
-  <p><code>DeviceModel</code> <em>is</em> is a shared <strong>interface</strong> for both <code>Level1Model</code> (square law) and <code>GmIdModel</code> (LUT). The sizer only ever talks to the <code>DeviceModel</code>.</p>
+  <p><code>DeviceModel</code> <em>is</em> is a shared <strong>interface</strong> for both <code>SquareLawModel</code> (square law) and <code>GmIdModel</code> (LUT). The sizer only ever talks to the <code>DeviceModel</code>.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 580 300" role="img" aria-label="One interface, two implementations: topology math plugs into DeviceModel, which two backends satisfy">
@@ -150,9 +150,9 @@
       <!-- two plugs -->
       <line x1="240" y1="166" x2="150" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
       <line x1="340" y1="166" x2="430" y2="212" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
-      <!-- left plug: Level1 -->
+      <!-- left plug: SquareLaw -->
       <rect x="30" y="214" width="230" height="66" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="145" y="236" text-anchor="middle" font-size="13" font-weight="600">Level1Model</text>
+      <text x="145" y="236" text-anchor="middle" font-size="13" font-weight="600">SquareLawModel</text>
       <text x="145" y="253" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square law — equations.*</text>
       <text x="145" y="269" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">card-less generic tech</text>
       <!-- right plug: GmId -->
@@ -189,10 +189,10 @@
         <text x="300" y="36" text-anchor="middle" font-weight="600" font-size="12">size_circuit()</text>
         <text x="300" y="50" text-anchor="middle" font-size="9.5" fill="var(--fig-muted)">routes on tech.gmid_lut</text>
       </g>
-      <!-- Level1Model -->
+      <!-- SquareLawModel -->
       <g class="node" data-group="l1">
         <rect x="25" y="100" width="165" height="46" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="107" y="120" text-anchor="middle" font-weight="600" font-size="12.5">Level1Model</text>
+        <text x="107" y="120" text-anchor="middle" font-weight="600" font-size="12.5">SquareLawModel</text>
         <text x="107" y="136" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square-law primitives</text>
       </g>
       <!-- GmIdModel -->
@@ -266,9 +266,9 @@
       <text x="280" y="51" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">the caller writes exactly one line</text>
       <line x1="230" y1="58" x2="140" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
       <line x1="330" y1="58" x2="420" y2="98" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#arrow)"/>
-      <!-- level1 -->
+      <!-- square_law -->
       <rect x="40" y="100" width="200" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="140" y="120" text-anchor="middle" font-size="12" font-weight="600">Level1Model</text>
+      <text x="140" y="120" text-anchor="middle" font-size="12" font-weight="600">SquareLawModel</text>
       <text x="140" y="137" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">√(2·µCox·(W/L)·Id)</text>
       <rect x="60" y="162" width="160" height="34" rx="6" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="140" y="184" text-anchor="middle" font-size="12">gm = 632 µS</text>
@@ -281,7 +281,7 @@
       <text x="420" y="184" text-anchor="middle" font-size="12">gm = 1.50 mA/V</text>
       <line x1="420" y1="146" x2="420" y2="162" stroke="var(--fig-accent2)" stroke-width="2" marker-end="url(#arrow)"/>
     </svg>
-    <figcaption>Same question, same signature. Level-1 evaluates a formula; gm/Id reads a measured table. The caller never branches.</figcaption>
+    <figcaption>Same question, same signature. Square-law evaluates a formula; gm/Id reads a measured table. The caller never branches.</figcaption>
   </figure>
 
   <p>Notice <code>gds_estimate</code> is the odd one out — it takes a <code>role</code>, not geometry. It exists for a chicken-and-egg moment during <em>requirement derivation</em>: the sizer needs a rough gds to size for gain <em>before</em> it has chosen any W/L. So the interface offers a geometry-free estimate keyed on what the device is <em>for</em>. Hold that thought — it pays off in Part 6.</p>
@@ -308,7 +308,7 @@
 
   <p>The <code>...</code> bodies are literally the word "ellipsis" — the spec says <em>what</em>, never <em>how</em>.</p>
 
-  <p>The odd one out is <code>realized_gm</code>. Every other method answers "what is this device doing?"; this one answers "if I <em>ask</em> for this gm, what will I actually <em>get</em>?" — and the two backends genuinely differ. CP-SAT constrains <code>gm ≥ gm_req</code> over an integer W grid, so Level-1 hands back the grid ceiling, which overshoots. The gm/Id pass computes W straight from the target, so it hands back <code>gm_req</code> — except below the table's strongest-inversion gm/Id, where the geometry is built at that floor and the delivered gm is <code>gm_id_axis[0]·|Id|</code> (gf180 at 10 µA: 60 µS for a 16 µS ask). Requirement derivation needs the delivered gm — the phase-margin gm2 is chained off the gm1 the input pair will really have — and asking the model keeps that fork out of the shared code.</p>
+  <p>The odd one out is <code>realized_gm</code>. Every other method answers "what is this device doing?"; this one answers "if I <em>ask</em> for this gm, what will I actually <em>get</em>?" — and the two backends genuinely differ. CP-SAT constrains <code>gm ≥ gm_req</code> over an integer W grid, so square-law hands back the grid ceiling, which overshoots. The gm/Id pass computes W straight from the target, so it hands back <code>gm_req</code> — except below the table's strongest-inversion gm/Id, where the geometry is built at that floor and the delivered gm is <code>gm_id_axis[0]·|Id|</code> (gf180 at 10 µA: 60 µS for a 16 µS ask). Requirement derivation needs the delivered gm — the phase-margin gm2 is chained off the gm1 the input pair will really have — and asking the model keeps that fork out of the shared code.</p>
 
   <h3>Why is it called <code>_params()</code>? Because it just picks a drawer</h3>
   <pre class="code"><code><span class="tok-kw">def</span> <span class="tok-fn">_params</span>(tech, dtype) -> MosfetParams:
@@ -319,13 +319,13 @@
 
 <!-- ================= PART 4 ================= -->
 <section class="part" id="part-4">
-  <h2>Part 4 · <code>Level1Model</code> — the square-law backend</h2>
+  <h2>Part 4 · <code>SquareLawModel</code> — the square-law backend</h2>
 
   <blockquote><p><strong>Main task:</strong> answer every primitive from the Shichman-Hodges square law, reproducing the existing generic-tech numbers byte-for-byte.</p></blockquote>
 
   <p>This is the plug you build first because it is the simplest: each method is a one-line delegation to <code>equations.py</code>. The class exists so those loose functions present the <code>DeviceModel</code> face.</p>
 
-  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">Level1Model</span>:
+  <pre class="code"><code><span class="tok-kw">class</span> <span class="tok-fn">SquareLawModel</span>:
     <span class="tok-kw">def</span> <span class="tok-fn">gm</span>(self, dtype, w_um, l_um, ids):
         <span class="tok-kw">return</span> eq.<span class="tok-fn">gm</span>(<span class="tok-fn">_params</span>(self.tech, dtype).mu_cox, w_um, l_um, ids)
     <span class="tok-kw">def</span> <span class="tok-fn">gds</span>(self, dtype, w_um, l_um, ids):
@@ -334,7 +334,7 @@
 
 
   <h3>Two tells that this is the "cheap" model</h3>
-  <p>Look at <code>gds</code>: it returns <code>eq.gd(λ, Id) = λ·|Id|</code> and <strong>ignores W and L entirely</strong>. Under Level-1, output conductance is purely current-proportional — geometry doesn't enter. That's a known limitation of the square law, faithfully preserved.</p>
+  <p>Look at <code>gds</code>: it returns <code>eq.gd(λ, Id) = λ·|Id|</code> and <strong>ignores W and L entirely</strong>. Under the square law, output conductance is purely current-proportional — geometry doesn't enter. That's a known limitation of the square law, faithfully preserved.</p>
   <p>And <code>gm_ceiling</code> returns <code>eq.gm_ceiling(ids) = 25·|Id|</code>, independent of dtype <em>and</em> L. It's the weak-inversion limit baked in as a flat heuristic.
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;5 swaps in the richer plug — <code>GmIdModel</code> — where every primitive is a <em>measured</em> lookup and the geometry finally matters.</p></blockquote>
 </section>
@@ -395,9 +395,9 @@
         gds *= self.lut.<span class="tok-fn">gds_scale</span>(dtype, gm_id, l_um, vds)
     <span class="tok-kw">return</span> gds</code></pre>
 
-  <p>The table's <code>gm_gds</code> is measured at one drain bias, <code>Vds = Vdd/2</code>. When the caller knows the device's own <code>Vds</code>, <code>gds_scale</code> moves <code>gds</code> there &mdash; several times larger just above the saturation knee, where a device under a cascode sits &mdash; but never deeper than <code>Vdsat</code>, below which the device is in triode and the estimate that supplied <code>vds</code> no longer holds (issue #273). Its sibling <code>gmb(dtype, w_um, l_um, ids, vsb)</code> reads the body transconductance <code>gm&middot;(gmbs/gm)</code> at a reverse body bias the same way; Level-1 returns <code>0</code> for it, since its SPICE card has <code>gamma=0</code>.</p>
+  <p>The table's <code>gm_gds</code> is measured at one drain bias, <code>Vds = Vdd/2</code>. When the caller knows the device's own <code>Vds</code>, <code>gds_scale</code> moves <code>gds</code> there &mdash; several times larger just above the saturation knee, where a device under a cascode sits &mdash; but never deeper than <code>Vdsat</code>, below which the device is in triode and the estimate that supplied <code>vds</code> no longer holds (issue #273). Its sibling <code>gmb(dtype, w_um, l_um, ids, vsb)</code> reads the body transconductance <code>gm&middot;(gmbs/gm)</code> at a reverse body bias the same way; square-law returns <code>0</code> for it, since its SPICE card has <code>gamma=0</code>.</p>
 
-  <blockquote><p><strong>Looking ahead:</strong> the gm/Id plug has two extra powers Level-1 lacks — a <em>policy</em> for choosing L by role (Part&nbsp;6) and full <em>geometry inversion</em> (Part&nbsp;7). Those are what let it not just <em>measure</em> devices but <em>size</em> them.</p></blockquote>
+  <blockquote><p><strong>Looking ahead:</strong> the gm/Id plug has two extra powers the square-law plug lacks — a <em>policy</em> for choosing L by role (Part&nbsp;6) and full <em>geometry inversion</em> (Part&nbsp;7). Those are what let it not just <em>measure</em> devices but <em>size</em> them.</p></blockquote>
 </section>
 
 <!-- ================= PART 6 ================= -->
@@ -543,7 +543,7 @@ W      = 100µ / 8µ     = 12.5 µm    →  GeomResult(W=12.5, L, gm/Id=15, capp
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
-    <li><code>Level1Model</code>'s <code>gds</code> ignores geometry entirely (<code>λ·Id</code>), and its <code>gm_ceiling</code> is a flat <code>25·Id</code> heuristic — the known price of the square law, kept for regression safety.</li>
+    <li><code>SquareLawModel</code>'s <code>gds</code> ignores geometry entirely (<code>λ·Id</code>), and its <code>gm_ceiling</code> is a flat <code>25·Id</code> heuristic — the known price of the square law, kept for regression safety.</li>
     <li>The primitives are small-signal <em>evaluations</em>; whether a stacked device actually fits under the supply is a separate concern (that's <code>bias.py</code>).</li>
   </ul>
 

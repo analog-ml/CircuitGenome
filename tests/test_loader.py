@@ -27,8 +27,8 @@ def test_builtin_techs_load():
         assert load_tech(name).name
 
 
-def test_lut_tech_omits_level1_params():
-    """A LUT-driven PDK tech carries no Level-1 params at all (#158).
+def test_lut_tech_omits_square_law_params():
+    """A LUT-driven PDK tech carries no square-law params at all (#158).
 
     mu_cox/lam are dead weight, and vth is decoupled too — the load-resistor
     seed now comes from the LUT.
@@ -41,7 +41,7 @@ def test_lut_tech_omits_level1_params():
         assert tech.nmos.vth is None and tech.pmos.vth is None
 
 
-def test_level1_tech_keeps_mu_cox_and_lam():
+def test_square_law_tech_keeps_mu_cox_and_lam():
     """A tech with no gmid_lut still provides the square-law params."""
     tech = load_tech("generic")
     assert tech.gmid_lut is None
@@ -49,7 +49,7 @@ def test_level1_tech_keeps_mu_cox_and_lam():
     assert tech.pmos.mu_cox and tech.pmos.lam
 
 
-def test_gmid_tech_may_omit_all_level1_params(tmp_path):
+def test_gmid_tech_may_omit_all_square_law_params(tmp_path):
     """gm/Id tech loads with empty mosfet blocks (no vth/mu_cox/lam)."""
     lut = Path(load_tech("sky130").gmid_lut)
     p = _write(tmp_path, {"gamma": 0.4}, {"gamma": 0.5}, gmid_lut=str(lut))
@@ -67,21 +67,21 @@ def test_gmid_tech_may_omit_mosfet_blocks_entirely(tmp_path):
     assert tech.nmos.vth is None and tech.pmos.mu_cox is None
 
 
-def test_level1_tech_requires_vth(tmp_path):
+def test_square_law_tech_requires_vth(tmp_path):
     p = _write(tmp_path, {"mu_cox": 1e-4, "lam": 0.04},
                {"vth": -0.5, "mu_cox": 1e-4, "lam": 0.04})
     with pytest.raises(ValueError, match="nmos.vth"):
         load_tech(p)
 
 
-def test_level1_tech_requires_mu_cox(tmp_path):
+def test_square_law_tech_requires_mu_cox(tmp_path):
     p = _write(tmp_path, {"vth": 0.5, "lam": 0.04},
                {"vth": -0.5, "mu_cox": 1e-4, "lam": 0.04})
     with pytest.raises(ValueError, match="mu_cox"):
         load_tech(p)
 
 
-def test_level1_tech_requires_positive_lam(tmp_path):
+def test_square_law_tech_requires_positive_lam(tmp_path):
     p = _write(tmp_path, {"vth": 0.5, "mu_cox": 1e-4, "lam": -0.04},
                {"vth": -0.5, "mu_cox": 1e-4, "lam": 0.04})
     with pytest.raises(ValueError, match="lam"):

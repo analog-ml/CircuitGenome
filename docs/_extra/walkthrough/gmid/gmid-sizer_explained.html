@@ -212,7 +212,7 @@
     <figcaption>Five stations, left to right. Each one produces a labelled crate — <code>CircuitView → CurrentPlan → SizingPlan → sizing</code> — and the finished, self-graded <code>SizingResult</code> rolls off the end.</figcaption>
   </figure>
 
-  <p>Notice this is a <strong>separate line</strong> from the Level-1 CP-SAT sizer. The gm/Id path is its own factory. And the model-independent topology math (KCL, mirror ratios) is <em>borrowed</em> from <code>circuitgenome.sizer.shared</code> rather than re-built here — the conductor reuses the orchestra's shared sheet music.</p>
+  <p>Notice this is a <strong>separate line</strong> from the square-law CP-SAT sizer. The gm/Id path is its own factory. And the model-independent topology math (KCL, mirror ratios) is <em>borrowed</em> from <code>circuitgenome.sizer.shared</code> rather than re-built here — the conductor reuses the orchestra's shared sheet music.</p>
 
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 reads the function's signature and one-line body-per-phase, then names the analogy that makes the rest obvious — an assembly line whose stations you can test one at a time.</p></blockquote>
 </section>
@@ -638,7 +638,7 @@ metrics, margins, eval_notes = <span class="tok-fn">evaluate_circuit</span>(
 
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
-    <li>It is the <strong>gm/Id path only</strong> — a totally separate line from the Level-1 CP-SAT sizer, chosen upstream.</li>
+    <li>It is the <strong>gm/Id path only</strong> — a totally separate line from the square-law CP-SAT sizer, chosen upstream.</li>
     <li>It <strong>requires <code>tech.gmid_lut</code></strong>; without the lookup table there is no device physics to read and the path can't run.</li>
     <li>Phase 5 is <strong>analytical, not SPICE</strong> — the metrics are first-order estimates. A <code>bias_feasible = True</code> is a green light for a real simulator, not a substitute for one.</li>
     <li>It <strong>orchestrates but does not compute</strong> — every hard decision lives in a specialist module; a wrong number here is almost always a bug in <code>analyze.py</code>, <code>plan.py</code>, <code>geometry.py</code>, <code>bias.py</code> or <code>evaluate.py</code>, not in the conductor.</li>

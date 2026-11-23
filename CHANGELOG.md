@@ -65,6 +65,7 @@ open the PR for the full root-cause / design detail. Emoji legend:
 
 ### Changed
 
+- ♻️ The "Level-1" sizer is now called the square-law sizer, so the two device models are `SquareLawModel` and `GmIdModel`. "Level-1" was SPICE jargon (the `level=1` model card) that reads like "tier 1" to anyone else. Renamed: `Level1Model` → `SquareLawModel`, `size_level1` → `size_square_law`, and the module `sizer/analytical/level1.py` → `sizer/analytical/square_law.py`. Error messages now say "square-law tech". Sizing results are unchanged.
 - 🧪 Only 6 tests are marked `slow` now (was 69), so `-m "not slow"` runs nearly every test in under two minutes ([#255](https://github.com/analog-ml/CircuitGenome/pull/255)).
 - 🧪 `test_three_stage_pmos_cs_metrics_present` drops from 33 minutes to 2 seconds. It spent the time searching through circuit variants for one to test; it now builds that circuit directly and is no longer marked `slow` ([#253](https://github.com/analog-ml/CircuitGenome/pull/253)).
 - ⚡ Circuit recognition is up to 1,000× faster on large netlists, with identical results: the pattern search now rejects impossible matches early. The full test suite drops from 87 to about 4 minutes ([#254](https://github.com/analog-ml/CircuitGenome/pull/254)).

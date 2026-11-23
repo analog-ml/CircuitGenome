@@ -1,6 +1,6 @@
 """Size the non-load resistor blocks of a gm/Id-sized op-amp.
 
-The Level-1 sizer (and gm/Id phase 1) only sized rail-referenced ``load``
+The square-law sizer (and gm/Id phase 1) only sized rail-referenced ``load``
 resistors; `resistor_bias`, `resistor_tail`, source-**degeneration** r1/r2, and
 the **compensation** nulling/series resistors kept the 1 kΩ netlist placeholder,
 mis-biasing those variants. This module sizes each per its role and reports the

@@ -3,7 +3,7 @@ Theory
 
 The design derivations behind the two sizing paths — read these to understand
 *why* the sizer computes what it does, not just the API surface.
-:doc:`../../theory/sizing_flow` covers the analytical **Level-1** path: the
+:doc:`../../theory/sizing_flow` covers the analytical **square-law** path: the
 square-law device equations, the CMRR → SR → GBW → gain → PM constraint order,
 the CP-SAT integer linearisation, and a worked numerical example.
 :doc:`../../theory/gmid_sizing_flow` covers the **gm/Id** path: the five-phase

@@ -20,7 +20,7 @@ trying the knobs in this order:
 2. **raise Cc2** — in steps up to ``Cc1``, which damps the pair further;
 3. **cap gm3** — only as a last resort, since it costs DC gain.
 
-The Level-1 sizer runs it inside :func:`~.preprocess.compute_requirements` on
+The square-law sizer runs it inside :func:`~.preprocess.compute_requirements` on
 estimated values (its geometry delivers what it is asked for); the gm/Id
 pipeline runs it after geometry (:mod:`~circuitgenome.sizer.gmid.rnmc_refine`),
 because its DC-bias repair can move the input pair's gm far from the GBW
@@ -237,7 +237,7 @@ def signal_cgs_estimate(model, dtype: str, gm: float, ids: float, tech) -> float
     """Gate capacitance in F of a signal device sized for ``gm`` at ``ids``.
 
     Used before geometry exists: the gm/Id model inverts its LUT for the
-    width (:meth:`~.device_model.GmIdModel.geometry_for`); the Level-1 model
+    width (:meth:`~.device_model.GmIdModel.geometry_for`); the square-law model
     solves the square law ``W = gm²·L / (2·µCox·Id)`` at minimum length.
     Either width is clamped to the technology's range.
     """

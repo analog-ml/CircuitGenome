@@ -1,6 +1,6 @@
 """Orchestrator for the block-based gm/Id sizing pipeline.
 
-``size_gmid`` runs the gm/Id path end-to-end, separate from the Level-1 CP-SAT
+``size_gmid`` runs the gm/Id path end-to-end, separate from the square-law CP-SAT
 sizer, as five phases with explicit hand-offs:
 
 1. **Analyze** (:mod:`.analyze`) — structural view: slots, blocks, cascodes,

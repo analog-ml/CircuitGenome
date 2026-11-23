@@ -10,7 +10,7 @@ be **feasible** for a two-stage single-ended op-amp. Pair each with its node via
 | `spec_ptm45.yaml` | `ptm45` | 1.0 V | PTM 45 nm HP bulk |
 
 The PTM specs use lower supplies and more modest gain targets than the generic
-spec because the extracted effective Level-1 parameters have higher channel-length
+spec because the extracted effective square-law parameters have higher channel-length
 modulation (λ) at these short channels. See *Initial Sizer → Technology
 configurations* in the Sphinx docs for details.
 

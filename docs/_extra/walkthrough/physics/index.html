@@ -63,7 +63,7 @@
 <p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
 
 <h1>Op-amp Physics — a package walkthrough</h1>
-<div class="subtitle"><code>circuitgenome/sizer/physics/</code> — the relationships both the Level-1 (square-law) sizer and the gm/Id pipeline must satisfy, independent of how either chooses a geometry.</div>
+<div class="subtitle"><code>circuitgenome/sizer/physics/</code> — the relationships both the square-law sizer and the gm/Id pipeline must satisfy, independent of how either chooses a geometry.</div>
 
 <p>Two very different sizers — a card-less <strong>square-law</strong> analytical sizer and a measured <strong>gm/Id</strong> LUT pipeline — share one body of code. They can, because of a single idea: the op-amp <em>topology</em> relationships (gain, GBW, phase margin, CMRR) are <strong>model-independent</strong>. Only the transistor <em>primitives</em> differ. So the primitives hide behind one interface — <code>DeviceModel</code> — with two swappable implementations, and every other file in this package is written against that interface once.</p>
 
@@ -106,7 +106,7 @@
     <a href="physics-equations_explained.html">
       <rect x="150" y="250" width="200" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="250" y="272" text-anchor="middle" font-weight="600" font-size="12.5">equations.py</text>
-      <text x="250" y="289" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 square law</text>
+      <text x="250" y="289" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square-law</text>
     </a>
     <a href="physics-gmid-lut_explained.html">
       <rect x="510" y="250" width="200" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
@@ -149,7 +149,7 @@
 <div class="cards">
   <a class="card" href="../models_explained.html"><span class="fn">models.py</span><div class="role">Plain dataclasses — the typed data vocabulary between stages</div><span class="phase">foundation</span></a>
   <a class="card" href="physics-taxonomy_explained.html"><span class="fn">taxonomy.py</span><div class="role">Slot/net naming conventions — one source of truth</div><span class="phase">foundation</span></a>
-  <a class="card" href="physics-equations_explained.html"><span class="fn">equations.py</span><div class="role">Level-1 square-law MOSFET + op-amp formulas</div><span class="phase">primitive</span></a>
+  <a class="card" href="physics-equations_explained.html"><span class="fn">equations.py</span><div class="role">square-law MOSFET + op-amp formulas</div><span class="phase">primitive</span></a>
   <a class="card" href="physics-gmid-lut_explained.html"><span class="fn">gmid_lut.py</span><div class="role">gm/Id LUT + bilinear interpolation (measured BSIM4)</div><span class="phase">primitive</span></a>
   <a class="card" href="physics-device-model_explained.html"><span class="fn">device_model.py</span><div class="role">The keystone — DeviceModel interface unifying both primitives</div><span class="phase">keystone</span></a>
   <a class="card" href="../loader_explained.html"><span class="fn">loader.py</span><div class="role">Load tech params + specs from YAML into typed objects</div><span class="phase">boundary</span></a>

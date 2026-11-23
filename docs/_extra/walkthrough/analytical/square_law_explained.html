@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>level1.py — explained</title>
+<title>square_law.py — explained</title>
 <style>
   :root {
     --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
@@ -91,8 +91,8 @@
 <p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
 
 <header>
-  <h1>level1.py — explained</h1>
-  <div class="subtitle"><code>circuitgenome/sizer/analytical/level1.py</code> — the Level-1 square-law sizing pipeline for the card-less <code>generic</code> technology.</div>
+  <h1>square_law.py — explained</h1>
+  <div class="subtitle"><code>circuitgenome/sizer/analytical/square_law.py</code> — the square-law sizing pipeline for the card-less <code>generic</code> technology.</div>
 </header>
 
 <nav id="toc">
@@ -117,17 +117,17 @@
 
   <p>A sizer's job is to turn a <em>topology</em> (which transistors connect to what) plus a <em>spec</em> (gain, bandwidth, power…) into concrete <strong>geometries</strong>: numbers like "this device is 3.0&nbsp;µm wide and 0.15&nbsp;µm long." CircuitGenome has two ways to do this. The fancy one reads a measured <code>gm/Id</code> lookup table baked into a technology <em>card</em>. But some technologies are <strong>card-less</strong> — the generic, no-PDK case — and have no table to read.</p>
 
-  <p>That's what <code>level1.py</code> is for. It sizes using the textbook <strong>square-law (Level-1) MOSFET model</strong>, where a transistor's behaviour follows a clean algebraic formula instead of a measured table. And because the generic technology only offers geometries on a fixed manufacturing grid, it can't spin a smooth dial — it must <strong>pick parts from a discrete catalog</strong>. It hands that discrete search to a real constraint solver, Google OR-Tools' CP-SAT.</p>
+  <p>That's what <code>square_law.py</code> is for. It sizes using the textbook <strong>square-law (Shichman–Hodges) MOSFET model</strong>, where a transistor's behaviour follows a clean algebraic formula instead of a measured table. And because the generic technology only offers geometries on a fixed manufacturing grid, it can't spin a smooth dial — it must <strong>pick parts from a discrete catalog</strong>. It hands that discrete search to a real constraint solver, Google OR-Tools' CP-SAT.</p>
 
-  <p>Think of the file as a <strong>factory production line</strong>. Most of its stations are shared with the fancy sizer — cutting the raw netlist into slots, de-duplicating matched devices, assigning currents, computing what each device must achieve, and finally scoring the finished amplifier. Only <em>one</em> station is special to Level-1: the machine that actually picks each transistor's width and length off the catalog. Everything else is borrowed.</p>
+  <p>Think of the file as a <strong>factory production line</strong>. Most of its stations are shared with the fancy sizer — cutting the raw netlist into slots, de-duplicating matched devices, assigning currents, computing what each device must achieve, and finally scoring the finished amplifier. Only <em>one</em> station is special to square-law: the machine that actually picks each transistor's width and length off the catalog. Everything else is borrowed.</p>
 
   <blockquote><p><strong>The punchline, stated early:</strong> the <em>only</em> thing that separates this pipeline from the <code>gm/Id</code> pipeline is the geometry-search station in the middle. The prep before it and the scoring after it are literally the same shared code.</p></blockquote>
 
   <h3>The cast of characters</h3>
-  <p>One public function, <code>size_level1()</code>, orchestrates five collaborators. Hover any box to trace it.</p>
+  <p>One public function, <code>size_square_law()</code>, orchestrates five collaborators. Hover any box to trace it.</p>
 
   <figure class="fig interactive">
-    <svg viewBox="0 0 900 210" role="img" aria-label="Call graph of size_level1">
+    <svg viewBox="0 0 900 210" role="img" aria-label="Call graph of size_square_law">
       <defs>
         <marker id="cg-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
       </defs>
@@ -140,7 +140,7 @@
       <!-- root -->
       <g class="node" data-group="root">
         <rect x="352" y="16" width="180" height="46" rx="8" fill="var(--fig-fill)" stroke="var(--fig-accent)" stroke-width="2"/>
-        <text x="442" y="45" text-anchor="middle" font-weight="600" font-size="14">size_level1()</text>
+        <text x="442" y="45" text-anchor="middle" font-weight="600" font-size="14">size_square_law()</text>
       </g>
       <!-- n1 preprocess -->
       <g class="node" data-group="pre">
@@ -151,7 +151,7 @@
       <!-- n2 model -->
       <g class="node" data-group="model">
         <rect x="185" y="110" width="165" height="52" rx="8" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
-        <text x="267" y="132" text-anchor="middle" font-weight="600" font-size="12.5">Level1Model</text>
+        <text x="267" y="132" text-anchor="middle" font-weight="600" font-size="12.5">SquareLawModel</text>
         <text x="267" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">square-law device physics</text>
       </g>
       <!-- n3 build_model (the specialist) -->
@@ -173,7 +173,7 @@
         <text x="800" y="150" text-anchor="middle" font-size="10" fill="var(--fig-muted)">physics.stage_chain + metrics</text>
       </g>
     </svg>
-    <figcaption>One orchestrator, five helpers. Four are shared with the gm/Id sizer; only the teal box — <code>build_model()</code> — is special to Level-1.</figcaption>
+    <figcaption>One orchestrator, five helpers. Four are shared with the gm/Id sizer; only the teal box — <code>build_model()</code> — is special to the square-law path.</figcaption>
   </figure>
 
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;2 builds the two ideas the whole file rests on — the square-law formula, and why a discrete catalog forces a solver instead of a dial.</p></blockquote>
@@ -186,7 +186,7 @@
   <p class="beat">Two concepts unlock everything. Neither is scary.</p>
 
   <h3>Idea 1 — the square-law model</h3>
-  <p>In the textbook (Level-1) model, a saturated MOSFET's transconductance <code>gm</code> — how strongly it converts voltage into current — follows one clean formula:</p>
+  <p>In the textbook (square-law) model, a saturated MOSFET's transconductance <code>gm</code> — how strongly it converts voltage into current — follows one clean formula:</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -203,7 +203,7 @@
     </span>
   </div>
 
-  <p>Read it in words: a transistor's strength grows with the square root of its <strong>shape</strong> <code>W/L</code> and its <strong>current</strong> <code>I<sub>DS</sub></code>. The term <code>µC<sub>ox</sub></code> is a fixed property of the technology. That is the entire physics of the <code>Level1Model</code> — a few algebraic formulas, no measured table required. Its saturation-voltage cousin is just as clean:</p>
+  <p>Read it in words: a transistor's strength grows with the square root of its <strong>shape</strong> <code>W/L</code> and its <strong>current</strong> <code>I<sub>DS</sub></code>. The term <code>µC<sub>ox</sub></code> is a fixed property of the technology. That is the entire physics of the <code>SquareLawModel</code> — a few algebraic formulas, no measured table required. Its saturation-voltage cousin is just as clean:</p>
 
   <div class="eq-center">
     <span class="boxed-eq">
@@ -231,7 +231,7 @@
 
       <line x1="280" y1="30" x2="280" y2="165" stroke="var(--fig-border,var(--fig-muted))" stroke-width="1" stroke-dasharray="3 4"/>
 
-      <text x="415" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">Level-1: a discrete catalog</text>
+      <text x="415" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fig-accent2)">Square-law: a discrete catalog</text>
       <line x1="310" y1="95" x2="520" y2="95" stroke="var(--fig-muted)" stroke-width="2"/>
       <g fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2">
         <rect x="315" y="83" width="16" height="24"/>
@@ -243,14 +243,14 @@
       <rect x="420" y="79" width="16" height="32" fill="var(--fig-fill2)" stroke="var(--fig-accent2)" stroke-width="3"/>
       <text x="415" y="135" text-anchor="middle" font-size="11.5" fill="var(--fig-muted)">only grid steps — a solver picks one</text>
     </svg>
-    <figcaption>Left: a lookup table lets the gm/Id sizer stop anywhere. Right: Level-1 must choose from fixed grid steps — a discrete search.</figcaption>
+    <figcaption>Left: a lookup table lets the gm/Id sizer stop anywhere. Right: the square-law sizer must choose from fixed grid steps — a discrete search.</figcaption>
   </figure>
 
   <h3>How the stations line up</h3>
-  <p>Zoomed out, <code>size_level1()</code> is a five-stage assembly line. Watch where the two paths agree and where they split.</p>
+  <p>Zoomed out, <code>size_square_law()</code> is a five-stage assembly line. Watch where the two paths agree and where they split.</p>
 
   <figure class="fig">
-    <svg viewBox="0 0 680 120" role="img" aria-label="The size_level1 pipeline stages">
+    <svg viewBox="0 0 680 120" role="img" aria-label="The size_square_law pipeline stages">
       <defs>
         <marker id="pl-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
       </defs>
@@ -282,7 +282,7 @@
         <line x1="527" y1="56" x2="556" y2="56" marker-end="url(#pl-ar)"/>
       </g>
     </svg>
-    <figcaption>Five stages, output feeding input. The two teal stages in the middle are the Level-1 geometry search; the rest is shared code.</figcaption>
+    <figcaption>Five stages, output feeding input. The two teal stages in the middle are the square-law geometry search; the rest is shared code.</figcaption>
   </figure>
 
   <blockquote><p><strong>Looking ahead:</strong> Part&nbsp;3 walks the shared prep stations that run <em>before</em> the solver — turning a raw netlist into a tidy list of requirements.</p></blockquote>
@@ -294,7 +294,7 @@
 
   <blockquote><p><strong>The one job:</strong> turn the recognizer's messy output into three clean inputs the solver needs — <em>which</em> devices to size, <em>how much current</em> each carries, and <em>what target</em> each must hit.</p></blockquote>
 
-  <p>None of this code is Level-1-specific. The structure comes from <code>sizer.physics.circuit_view</code> and the requirements from <code>sizer.physics.preprocess</code> — both shared with the gm/Id sizer. Here is the whole prep block.</p>
+  <p>None of this code is square-law-specific. The structure comes from <code>sizer.physics.circuit_view</code> and the requirements from <code>sizer.physics.preprocess</code> — both shared with the gm/Id sizer. Here is the whole prep block.</p>
 
   <pre class="code"><code>view = <span class="tok-fn">analyze_circuit</span>(fbr_result, topology)   <span class="tok-com"># slots, dedup, warnings</span>
 slot_transistors = view.slot_transistors
@@ -305,7 +305,7 @@ ids_map = <span class="tok-fn">assign_ids</span>(slot_transistors, all_transisto
 resistors = <span class="tok-fn">size_load_resistors</span>(view.slot_resistors, spec, tech)
 gd_load_r = (<span class="tok-num">1.0</span> / <span class="tok-fn">min</span>(resistors.values())) <span class="tok-kw">if</span> resistors <span class="tok-kw">else</span> <span class="tok-num">0.0</span>
 
-dev_model = <span class="tok-fn">Level1Model</span>(tech)
+dev_model = <span class="tok-fn">SquareLawModel</span>(tech)
 <span class="tok-com"># … then, inside _size_planned(…, cmrr_gm1):</span>
 gm_req_map, vod_max_map, cc_pf, cc2_pf, gm_ceiling_warnings = <span class="tok-fn">compute_requirements</span>(
     slot_transistors, all_transistors, ids_map, tech, spec, dev_model, gd_load_r,
@@ -330,11 +330,11 @@ capacitors = <span class="tok-fn">size_compensation_caps</span>(view.slot_capaci
 
   <p>The two maps at the end are the real hand-off. <span class="keyline"><code>gm_req_map</code></span> says "device X must reach <em>at least</em> this transconductance," and <span class="keyline"><code>vod_max_map</code></span> says "device X may spend <em>at most</em> this saturation voltage." Everything the solver does is chasing those two numbers per device.</p>
 
-  <h3>Why <code>Level1Model(tech)</code> matters here</h3>
-  <p>Notice <code>compute_requirements</code> is handed a <code>dev_model</code>. This is the one spot in prep where the square-law choice leaks in: the requirements are computed <em>through</em> the Level-1 formulas from Part&nbsp;2. Swap in the gm/Id model and the same function computes the same-shaped maps a different way. That is precisely why the surrounding code can be shared — the model is a plug-in.</p>
+  <h3>Why <code>SquareLawModel(tech)</code> matters here</h3>
+  <p>Notice <code>compute_requirements</code> is handed a <code>dev_model</code>. This is the one spot in prep where the square-law choice leaks in: the requirements are computed <em>through</em> the square-law formulas from Part&nbsp;2. Swap in the gm/Id model and the same function computes the same-shaped maps a different way. That is precisely why the surrounding code can be shared — the model is a plug-in.</p>
 
   <h3>Why the requirements sit in <code>_size_planned</code></h3>
-  <p>Everything from <code>compute_requirements</code> to the returned <code>SizingResult</code> lives in one helper, <code>_size_planned(…, cmrr_gm1)</code>, so it can run more than once. A single-ended chain reports CMRR from a DC solve of the whole sized circuit (issue #290), so a CMRR target there can only be judged after the solve. <code>size_level1</code> then hands the helper to <code>lift_nodal_cmrr</code>, which re-solves with a raised <code>cmrr_gm1</code> floor while the reported CMRR is short, keeping a re-solve only when no other spec was lost or got worse (issue #296). Every other chain, and every spec without a CMRR target, runs the helper once with <code>cmrr_gm1=None</code>: the tail-only CMRR formula, exactly as before.</p>
+  <p>Everything from <code>compute_requirements</code> to the returned <code>SizingResult</code> lives in one helper, <code>_size_planned(…, cmrr_gm1)</code>, so it can run more than once. A single-ended chain reports CMRR from a DC solve of the whole sized circuit (issue #290), so a CMRR target there can only be judged after the solve. <code>size_square_law</code> then hands the helper to <code>lift_nodal_cmrr</code>, which re-solves with a raised <code>cmrr_gm1</code> floor while the reported CMRR is short, keeping a re-solve only when no other spec was lost or got worse (issue #296). Every other chain, and every spec without a CMRR target, runs the helper once with <code>cmrr_gm1=None</code>: the tail-only CMRR formula, exactly as before.</p>
 
   <blockquote><p><strong>Looking ahead:</strong> now we have per-device targets. Part&nbsp;4 is the heart — turning those targets into a discrete W/L pick with CP-SAT.</p></blockquote>
 </section>
@@ -345,7 +345,7 @@ capacitors = <span class="tok-fn">size_compensation_caps</span>(view.slot_capaci
 
   <blockquote><p><strong>The one job:</strong> hand the per-device targets to <code>build_model()</code>, which encodes them as integer constraints over grid-step W and L, then let CP-SAT pick the smallest-width sizing that satisfies them all.</p></blockquote>
 
-  <p>This is the single station that makes <code>level1.py</code> different from every other sizer in the codebase. It is only five lines.</p>
+  <p>This is the single station that makes <code>square_law.py</code> different from every other sizer in the codebase. It is only five lines.</p>
 
   <pre class="code"><code>cp_mdl, W_vars, L_vars = <span class="tok-fn">build_model</span>(
     all_transistors, slot_transistors, ids_map, gm_req_map, vod_max_map, tech
@@ -483,7 +483,7 @@ transistor_sizing = {}
   <p>Trace our device: the solver returned <code>W_vars[ref] = 30</code> steps and <code>L_vars[ref] = 3</code> steps. Multiply back:</p>
   <pre class="code"><code>w_um = 30 &#183; 0.1  = <span class="tok-num">3.0</span> µm
 l_um = 3  &#183; 0.05 = <span class="tok-num">0.15</span> µm</code></pre>
-  <p>Then it re-derives <code>vgs</code> and <code>vds_sat</code> through the <em>same</em> <code>Level1Model</code> and stores a tidy <code>TransistorSizing</code> record per device. The integer world stays inside the solver; the outside world only ever sees micrometres and volts.</p>
+  <p>Then it re-derives <code>vgs</code> and <code>vds_sat</code> through the <em>same</em> <code>SquareLawModel</code> and stores a tidy <code>TransistorSizing</code> record per device. The integer world stays inside the solver; the outside world only ever sees micrometres and volts.</p>
 
   <h3>Score, then package</h3>
   <pre class="code"><code>chain = <span class="tok-fn">build_stage_chain</span>(
@@ -510,7 +510,7 @@ metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
   <p>Step back and the design intent is unmistakable. Two sizing pipelines run through the <em>same</em> shared stations on both ends, and diverge in exactly one box in the middle.</p>
 
   <figure class="fig">
-    <svg viewBox="0 0 620 225" role="img" aria-label="gm/Id path and Level-1 path differ only in the middle box">
+    <svg viewBox="0 0 620 225" role="img" aria-label="gm/Id path and square-law path differ only in the middle box">
       <defs>
         <marker id="hi-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
       </defs>
@@ -518,7 +518,7 @@ metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
       <rect x="226" y="16" width="168" height="180" rx="10" fill="none" stroke="var(--fig-accent)" stroke-width="2" stroke-dasharray="6 5"/>
 
       <text x="90"  y="28" text-anchor="middle" font-size="11" fill="var(--fig-muted)">gm/Id path</text>
-      <text x="90"  y="128" text-anchor="middle" font-size="11" fill="var(--fig-muted)">Level-1 path</text>
+      <text x="90"  y="128" text-anchor="middle" font-size="11" fill="var(--fig-muted)">Square-law path</text>
 
       <!-- top row -->
       <g text-anchor="middle">
@@ -548,7 +548,7 @@ metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
       </g>
       <text x="310" y="214" text-anchor="middle" font-size="11.5" fill="var(--fig-accent)" font-weight="600">only this box changes</text>
     </svg>
-    <figcaption>Same prep, same scoring. The whole identity of Level-1 sizing is a single swapped station — a discrete CP-SAT search in place of a table lookup.</figcaption>
+    <figcaption>Same prep, same scoring. The whole identity of square-law sizing is a single swapped station — a discrete CP-SAT search in place of a table lookup.</figcaption>
   </figure>
 
   <p>That is the elegance worth naming: the file achieves a whole alternative sizing strategy by <strong>reusing everything except the one part that must differ</strong>. The square-law model plugs in as <code>dev_model</code>; the discrete search plugs in as <code>build_model</code>; the rest is untouched shared code.</p>
@@ -556,13 +556,13 @@ metrics, margins = <span class="tok-fn">evaluate_metrics</span>(chain, spec)
   <h3>What it honestly does <em>not</em> do</h3>
   <ul>
     <li><strong>Discrete grid only.</strong> The answer is the best point <em>on the manufacturing grid</em> — a value between two grid steps is unreachable by construction.</li>
-    <li><strong>Square-law validity.</strong> The Level-1 model is an idealization. Short-channel effects, mobility degradation, and true weak inversion are not captured, so the metrics are optimistic estimates, not SPICE truth.</li>
+    <li><strong>Square-law validity.</strong> The square-law model is an idealization. Short-channel effects, mobility degradation, and true weak inversion are not captured, so the metrics are optimistic estimates, not SPICE truth.</li>
     <li><strong>Solver time and infeasibility.</strong> CP-SAT is bounded by <code>time_limit_s</code>; a hard problem can time out with only a <code>FEASIBLE</code> (not proven optimal) answer, or return <code>INFEASIBLE</code> and force the honest empty result from Part&nbsp;5.</li>
     <li><strong>Resistors are pre-solved.</strong> Resistor loads are sized deterministically and folded in as a conductance — they are not part of the CP-SAT search.</li>
   </ul>
 
   <hr>
-  <p><strong>In one sentence:</strong> <code>level1.py</code> sizes a card-less generic-technology amplifier by running the <em>same</em> shared preprocessing and metric evaluation as the gm/Id sizer, but replacing the one middle station with a square-law-driven CP-SAT search that picks each transistor's discrete grid-step width and length to meet its per-device gm and V<sub>dsat</sub> targets at minimum total width.</p>
+  <p><strong>In one sentence:</strong> <code>square_law.py</code> sizes a card-less generic-technology amplifier by running the <em>same</em> shared preprocessing and metric evaluation as the gm/Id sizer, but replacing the one middle station with a square-law-driven CP-SAT search that picks each transistor's discrete grid-step width and length to meet its per-device gm and V<sub>dsat</sub> targets at minimum total width.</p>
 </section>
 
 </main>

@@ -8,10 +8,10 @@ and a performance spec to the right sizer and returns a
 
 * technologies with a gm/Id LUT → the block-based gm/Id pipeline
   (:func:`~circuitgenome.sizer.gmid.gmid_sizer.size_gmid`);
-* the card-less ``generic`` technology → the Level-1 CP-SAT sizer
-  (:func:`~.analytical.level1.size_level1`);
+* the card-less ``generic`` technology → the square-law CP-SAT sizer
+  (:func:`~.analytical.square_law.size_square_law`);
 * a PTM/SPICE-model node **without** a LUT → ``UnsupportedTechError`` (the
-  Level-1 square-law numbers are not valid for such nodes).
+  square-law numbers are not valid for such nodes).
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def size_circuit(
     :param topology: Topology template corresponding to ``fbr_result``.
     :param tech: Technology parameters (from :func:`~.loader.load_tech`).
     :param spec: Performance specification.
-    :param time_limit_s: CP-SAT solver time limit in seconds (Level-1 path only).
+    :param time_limit_s: CP-SAT solver time limit in seconds (square-law path only).
     :returns: :class:`~.models.SizingResult` with per-transistor sizing,
         compensation cap, computed metrics, and safety margins.
     """
@@ -57,15 +57,15 @@ def size_circuit(
                          intent=intent_for_tech(tech.name))
 
     # A PTM/SPICE-model node without a gm/Id LUT must not silently fall through
-    # to the Level-1 square-law sizer — those are the inaccurate numbers gm/Id
+    # to the square-law sizer — those are the inaccurate numbers gm/Id
     # exists to avoid. Only the card-less generic tech uses the analytical path.
     if getattr(tech, "spice_model", None):
         raise UnsupportedTechError(
             f"Technology '{tech.name}' is a PTM/SPICE-model node without a gm/Id "
-            f"LUT. The analytical (Level-1) sizer is not valid for PTM nodes — "
+            f"LUT. The analytical (square-law) sizer is not valid for PTM nodes — "
             f"characterize a gm/Id LUT first (see issue #73). Only the 'generic' "
             f"technology uses the analytical sizer.")
 
-    from .analytical.level1 import size_level1
-    return size_level1(parsed, sr_result, fbr_result, topology, tech, spec,
+    from .analytical.square_law import size_square_law
+    return size_square_law(parsed, sr_result, fbr_result, topology, tech, spec,
                        time_limit_s=time_limit_s)

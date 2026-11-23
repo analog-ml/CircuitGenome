@@ -64,7 +64,7 @@
 <h1>The CircuitGenome Sizer — a full walkthrough</h1>
 <div class="subtitle"><code>circuitgenome/sizer/</code> — Layer 3 of the pipeline: turn a recognised op-amp + a performance spec into concrete transistor and resistor sizes.</div>
 
-<p>The sizer has <strong>one front door</strong> (<code>sizer.py</code>) that routes each circuit to one of <strong>two sizing paths</strong> — a measured <strong>gm/Id</strong> pipeline or a square-law <strong>Level-1</strong> CP-SAT sizer — both built on a <strong>shared core</strong>. This overview mirrors the source tree; open any package to dive in, or open the dispatcher to see how the route is chosen.</p>
+<p>The sizer has <strong>one front door</strong> (<code>sizer.py</code>) that routes each circuit to one of <strong>two sizing paths</strong> — a measured <strong>gm/Id</strong> pipeline or a <strong>square-law</strong> CP-SAT sizer — both built on a <strong>shared core</strong>. This overview mirrors the source tree; open any package to dive in, or open the dispatcher to see how the route is chosen.</p>
 
 <h2>The map</h2>
 
@@ -94,7 +94,7 @@
     <a href="analytical/index.html">
       <rect x="120" y="140" width="190" height="66" rx="9" fill="var(--fig-bg)" stroke="var(--fig-stroke)" stroke-width="2"/>
       <text x="215" y="165" text-anchor="middle" font-weight="600" font-size="13">analytical/</text>
-      <text x="215" y="182" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">Level-1 square-law (CP-SAT)</text>
+      <text x="215" y="182" text-anchor="middle" font-size="10.5" fill="var(--fig-muted)">square-law (CP-SAT)</text>
       <text x="215" y="196" text-anchor="middle" font-size="10" fill="var(--fig-accent2)">2 pages</text>
     </a>
 
@@ -140,7 +140,7 @@
 <div class="pkgcards">
   <a class="pkg" href="sizer_explained.html"><span class="fn">sizer.py</span><div class="role">The dispatcher — routes each circuit to the right sizer, or refuses with <code>UnsupportedTechError</code>.</div><span class="count">entry point · 1 page</span></a>
   <a class="pkg" href="gmid/index.html"><span class="fn">gmid/</span><div class="role">The measured gm/Id pipeline — five phases from structural analysis to metrics.</div><span class="count">11 pages + index</span></a>
-  <a class="pkg" href="analytical/index.html"><span class="fn">analytical/</span><div class="role">The Level-1 square-law sizer — discrete W/L via an OR-Tools CP-SAT search.</div><span class="count">2 pages + index</span></a>
+  <a class="pkg" href="analytical/index.html"><span class="fn">analytical/</span><div class="role">The square-law sizer — discrete W/L via an OR-Tools CP-SAT search.</div><span class="count">2 pages + index</span></a>
   <a class="pkg" href="physics/index.html"><span class="fn">physics/</span><div class="role">The model-independent core both sizers rest on, keyed on the <code>DeviceModel</code> interface.</div><span class="count">9 pages + index</span></a>
   <a class="pkg" href="verify/index.html"><span class="fn">verify/</span><div class="role">The ngspice bench — put the sized design on a simulator and measure what it really does.</div><span class="count">5 pages + index</span></a>
 </div>
