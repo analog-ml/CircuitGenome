@@ -1,11 +1,11 @@
-"""Tests for the gm/Id lookup table and the Level-1 model equivalence."""
+"""Tests for the gm/Id lookup table and the square-law model equivalence."""
 from pathlib import Path
 
 import pytest
 
 import circuitgenome.sizer as _sz
 from circuitgenome.sizer.physics import equations as eq
-from circuitgenome.sizer.physics.device_model import Level1Model
+from circuitgenome.sizer.physics.device_model import SquareLawModel
 from circuitgenome.sizer.physics.gmid_lut import GmIdLut
 from circuitgenome.sizer import load_tech
 
@@ -37,7 +37,7 @@ def test_idw_decreases_with_gm_id(lut, dtype):
 
 @pytest.mark.parametrize("dtype", ["nmos", "pmos"])
 def test_intrinsic_gain_rises_with_length(lut, dtype):
-    """gm/gds increases with L — the lever the single-λ Level-1 model lacked."""
+    """gm/gds increases with L — the lever the single-λ square-law model lacked."""
     short = lut.gm_gds(dtype, 12.0, lut.l_axis[0])
     long = lut.gm_gds(dtype, 12.0, lut.l_axis[-1])
     assert long > short > 0
@@ -56,11 +56,11 @@ def test_off_grid_length_interpolates(lut):
 
 
 # --------------------------------------------------------------------------- #
-# Level1Model must reproduce equations.* exactly (generic-path regression guard)
+# SquareLawModel must reproduce equations.* exactly (generic-path regression guard)
 # --------------------------------------------------------------------------- #
-def test_level1_model_matches_equations():
+def test_square_law_model_matches_equations():
     tech = load_tech("generic")
-    m = Level1Model(tech)
+    m = SquareLawModel(tech)
     for dtype, p in (("nmos", tech.nmos), ("pmos", tech.pmos)):
         w, l, ids = 4.0, 0.5, 5e-6
         assert m.gm(dtype, w, l, ids) == eq.gm(p.mu_cox, w, l, ids)
@@ -122,10 +122,10 @@ def test_gmid_model_reads_gds_no_deeper_than_vdsat():
     assert m.gmb("nmos", w, l, ids, 0.0) > 0.0
 
 
-def test_level1_model_has_no_bias_dependence():
-    """Level-1 λ is Vds-independent and its SPICE card has gamma=0."""
+def test_square_law_model_has_no_bias_dependence():
+    """Square-law λ is Vds-independent and its SPICE card has gamma=0."""
     tech = load_tech("generic")
-    m = Level1Model(tech)
+    m = SquareLawModel(tech)
     assert m.gds("nmos", 4.0, 0.5, 5e-6, vds=0.1) == eq.gd(tech.nmos.lam, 5e-6)
     assert m.gmb("nmos", 4.0, 0.5, 5e-6, 1.0) == 0.0
 
@@ -144,6 +144,6 @@ def test_gmid_gate_capacitance_follows_the_inversion_level():
     assert narrow == pytest.approx(m.cgs("nmos", 1.0, 0.18), rel=0.5)
 
 
-def test_level1_gate_capacitance_is_the_cox_estimate():
-    m = Level1Model(load_tech("generic"))
+def test_square_law_gate_capacitance_is_the_cox_estimate():
+    m = SquareLawModel(load_tech("generic"))
     assert m.cgg("nmos", 4.0, 0.5, 5e-6) == m.cgs("nmos", 4.0, 0.5)

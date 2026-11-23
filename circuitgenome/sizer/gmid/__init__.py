@@ -1,4 +1,4 @@
-"""Block-based gm/Id sizing pipeline (separate from the Level-1 CP-SAT sizer).
+"""Block-based gm/Id sizing pipeline (separate from the square-law CP-SAT sizer).
 
 :func:`size_gmid` runs five phases with typed hand-offs — Analyze
 (:mod:`.analyze` → ``GmIdCircuitView``), Bias currents and Plan (:mod:`.plan` →
@@ -9,7 +9,7 @@ per-block design intent in :mod:`.intent`.  The device primitives
 :mod:`~circuitgenome.sizer.physics.device_model`) and the model-independent
 op-amp physics (:mod:`~circuitgenome.sizer.physics.preprocess`,
 :mod:`~circuitgenome.sizer.physics.metrics`) are reused from ``sizer.physics``;
-the Level-1 analytical sizer is left untouched.
+the square-law analytical sizer is left untouched.
 """
 from __future__ import annotations
 

@@ -47,7 +47,7 @@ def _emit_model(tech: TechParams, corner: str | None = None,
       after the ``.lib`` and ngspice's random seed is fixed, so every device
       gets its own repeatable mismatch draw.
     * ``spice_model`` (PTM): flat ``.include`` of ``.model nmos``/``pmos`` cards.
-    * neither: synthesise a Level-1 ``.model`` from ``mu_cox``/``vth``/``lam``.
+    * neither: synthesise a square-law ``.model`` from ``mu_cox``/``vth``/``lam``.
 
     :raises ValueError: when ``mismatch_seed`` is given for a tech without a
         ``mismatch_switch`` — there is no mismatch model to turn on.

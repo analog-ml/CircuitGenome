@@ -144,7 +144,7 @@
     <figcaption>The file is a compiler: curvy √-physics on the left, a flat integer-linear program on the right that CP-SAT can solve.</figcaption>
   </figure>
 
-  <p>Why go to this trouble instead of just calling a numerical optimizer? Because CP-SAT gives you something precious for the card-less <code>generic</code> technology used by <code>level1.py</code>: it <strong>simultaneously</strong> honors gain targets, headroom limits, matched-pair symmetry, and current-mirror ratios across an <em>entire</em> op-amp, and it either returns a provably valid integer solution or tells you honestly that none exists. It's a sudoku engine for transistor geometry.</p>
+  <p>Why go to this trouble instead of just calling a numerical optimizer? Because CP-SAT gives you something precious for the card-less <code>generic</code> technology used by <code>square_law.py</code>: it <strong>simultaneously</strong> honors gain targets, headroom limits, matched-pair symmetry, and current-mirror ratios across an <em>entire</em> op-amp, and it either returns a provably valid integer solution or tells you honestly that none exists. It's a sudoku engine for transistor geometry.</p>
 
   <h3>The cast of characters</h3>
   <p>The file is unusually lean: one public builder, one tiny helper, and six constraint-building phases inside the builder. Hover a box to trace where <code>_coeff()</code> is used.</p>

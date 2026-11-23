@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Extract Level-1 sizing parameters (mu_cox, vth, lam) from a BSIM4 card.
+"""Extract square-law sizing parameters (mu_cox, vth, lam) from a BSIM4 card.
 
-The CircuitGenome sizer uses a Level-1 square-law MOSFET model
+The CircuitGenome sizer uses a square-law MOSFET model
 (``gm = sqrt(2*mu_cox*(W/L)*IDS)``, ``gd = lam*IDS``).  Real PDK / predictive
 models (here: ASU Predictive Technology Models, BSIM4 ``level=54``) carry
-hundreds of parameters instead.  This tool fits *effective* Level-1 equivalents
+hundreds of parameters instead.  This tool fits *effective* square-law equivalents
 by simulating the actual BSIM4 device in ngspice and fitting:
 
 * **vth / mu_cox** from a transfer sweep (``Id`` vs ``Vgs`` at ``Vds=Vdd``):
@@ -17,7 +17,7 @@ by simulating the actual BSIM4 device in ngspice and fitting:
 Because mu_cox(effective) and lam are bias/length dependent, the extraction
 geometry (``Wext``, ``Lext``) and bias are recorded in the emitted YAML header.
 
-A ``--body-effect`` pass additionally fits the Level-1 body-effect pair
+A ``--body-effect`` pass additionally fits the square-law body-effect pair
 (``γ``, ``2φF``) from a reverse-body-bias sweep of ``vth`` and injects them
 into the tech YAML — the rail planner uses them to place cascode gates that
 sit off their body rail (issue #106).
@@ -74,7 +74,7 @@ NODES: dict[str, dict] = {
         handles={"nmos": "msky130_fd_pr__nfet_01v8",
                  "pmos": "msky130_fd_pr__pfet_01v8"},
         wl_units="um",
-        # Level-1 fit at L=0.5um: the square-law fit is degenerate at
+        # Square-law fit at L=0.5um: the square-law fit is degenerate at
         # Lmin=0.15um (130nm short channel; negative-lambda artifacts).
         vdd=1.8, l_ext_um=0.5, w_ext_um=10.0,
         width=(0.42, 100.0, 0.005), length=(0.15, 4.0, 0.01),
@@ -329,7 +329,7 @@ def write_yaml(node: str, params: dict) -> Path:
     out = _CONFIG / f"tech_ptm{node}.yaml"
     out.write_text(f"""\
 # {cfg['desc']}
-# Level-1 parameters (mu_cox, vth, lam) EXTRACTED with ngspice from the BSIM4
+# Square-law parameters (mu_cox, vth, lam) EXTRACTED with ngspice from the BSIM4
 # card models/{cfg['card']} by tools/extract_tech.py.
 # Source: ASU Predictive Technology Model (PTM), https://ptm.asu.edu
 #   W. Zhao, Y. Cao, "New Generation of Predictive Technology Model for
@@ -596,7 +596,7 @@ def main() -> None:
     ap.add_argument("--node", choices=sorted(NODES), help="One node (default: all)")
     ap.add_argument("--gm-id", action="store_true",
                     help="Characterize the gm/Id LUT (write *_gmid.npz + YAML gmid_lut:) "
-                         "instead of the Level-1 fit.")
+                         "instead of the square-law fit.")
     ap.add_argument("--body-effect", action="store_true",
                     help="Extract γ/2φF from a reverse-body-bias sweep and inject "
                          "gamma:/phi: into the tech YAML (issue #106). Separate pass; "

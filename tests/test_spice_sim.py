@@ -46,7 +46,7 @@ def _active_load_two_stage_se(tech_name, vdd, gain_min, sr_min):
 
 # --- model emission (no ngspice needed) ------------------------------------
 
-def test_emit_level1_for_generic():
+def test_emit_square_law_for_generic():
     model = deck._emit_model(load_tech("generic"))
     assert "level=1" in model and "kp=" in model and ".model nmos" in model
 
@@ -115,8 +115,8 @@ def ngspice(test):
 
 
 @ngspice
-def test_generic_level1_tracks_analytical():
-    """Level-1 SPICE should roughly track the (Level-1) analytical formulas."""
+def test_generic_square_law_tracks_analytical():
+    """The square-law SPICE card (``level=1``) should roughly track the analytical formulas."""
     text, result, tech, spec = _active_load_two_stage_se("generic", 5.0, 80, 3.5e6)
     assert result.solver_status in ("OPTIMAL", "FEASIBLE")
     sim = simulate_metrics(text, result, tech, spec)
@@ -134,7 +134,7 @@ def test_ptm_bsim4_runs():
     text, result, tech, spec = _active_load_two_stage_se("ptm45", 1.0, 60, 5e5)
     sim = simulate_metrics(text, result, tech, spec)
     assert sim["power_w"] is not None
-    # Real 45nm gain is well below the optimistic Level-1 prediction.
+    # Real 45nm gain is well below the optimistic square-law prediction.
     assert sim["gain_db"] is None or sim["gain_db"] < result.metrics["gain_db"]
 
 
@@ -1328,7 +1328,7 @@ def test_new_metrics_measured_on_generic_two_stage():
 def test_slew_swing_measured_on_real_device_techs(tech, vdd):
     """Issue #63 acceptance: on the active-load SE anchor, slew rate and output
     swing return numbers (not n/a) that are physically plausible on the *real
-    device* techs, not just the Level-1 generic tech. Values are device- and
+    device* techs, not just the square-law generic tech. Values are device- and
     corner-dependent, so the bounds are loose (sign, straddles mid-supply,
     within an order of magnitude of the analytical ibias/Cc)."""
     text, result, tech_p, spec = _active_load_two_stage_se(tech, vdd, 50, 5e5)

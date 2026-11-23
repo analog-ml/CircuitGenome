@@ -12,7 +12,7 @@ class UnsupportedTechError(ValueError):
     """Raised when a technology cannot be sized by the requested method.
 
     Currently raised when a PTM/SPICE-model node has no gm/Id LUT: such nodes
-    must use the gm/Id pipeline, and the analytical (Level-1) sizer is not a
+    must use the gm/Id pipeline, and the analytical (square-law) sizer is not a
     valid fallback for them.
     """
 
@@ -22,17 +22,17 @@ class MosfetParams:
     """CMOS process parameters for one device polarity.
 
     :param vth: Threshold voltage in V (positive for NMOS, negative for PMOS).
-        Required for Level-1/analytical techs. ``None`` for gm/Id (LUT) techs:
+        Required for square-law techs. ``None`` for gm/Id (LUT) techs:
         the LUT supplies every operating-point voltage, including the load-resistor
         bias seed, so a gm/Id tech needs no hand-curated ``vth`` (issue #158).
     :param mu_cox: Process transconductance parameter µ·Cox in A/V². Required for
-        Level-1/analytical techs; ``None`` for gm/Id (LUT) techs, where sizing
+        square-law techs; ``None`` for gm/Id (LUT) techs, where sizing
         runs off the LUT and the square-law fit is dead weight (issue #158).
     :param lam: Channel-length modulation coefficient λ in 1/V (always positive).
         Required/optional under the same rule as ``mu_cox``.
     :param gamma: Body-effect coefficient γ in √V (``ΔVth = γ(√(2φF+Vsb) −
         √(2φF))``). Defaults to ``0.0`` — no body-effect correction, which is
-        correct for the synthetic Level-1 SPICE model (``gamma=0``) and any
+        correct for the synthetic square-law SPICE model (``gamma=0``) and any
         tech whose YAML omits it.
     :param phi: Surface-potential term 2φF in V (only meaningful with a
         non-zero ``gamma``). Defaults to ``0.7``.
@@ -42,7 +42,7 @@ class MosfetParams:
         the RNMC model's nodes. ``None`` when the tech YAML omits it, in which
         case the single-stage phase margin is withheld rather than guessed.
         Unlike ``mu_cox``, this is required by *neither* sizing path: both the
-        Level-1 and gm/Id backends read it only for those capacitances.
+        square-law and gm/Id backends read it only for those capacitances.
     :param cdb: Drain-bulk junction capacitance per µm of gate width in F/µm,
         at a mid-supply drain voltage. Only the RNMC phase-margin model reads
         it, for the third stage's output behind an output buffer (issue #266).
@@ -124,11 +124,11 @@ class TechParams:
     :param spice_model: Optional path (relative to the config dir, or absolute)
         to a SPICE ``.model`` card whose ``nmos``/``pmos`` models match the
         netlist (e.g. a BSIM4 ``.pm`` file). When ``None``, the SPICE-verification
-        path synthesises a Level-1 model from ``mu_cox``/``vth``/``lam``.
+        path synthesises a square-law model from ``mu_cox``/``vth``/``lam``.
     :param gmid_lut: Optional path (relative to the config dir, or absolute) to a
         committed gm/Id lookup table (``*_gmid.npz`` from
         ``tools/extract_tech.py --gm-id``). When present, sizing uses the
-        procedural gm/Id path instead of the Level-1 analytical sizer.
+        procedural gm/Id path instead of the square-law analytical sizer.
     :param spice_lib: Optional :class:`SpiceLib` for a corner-based foundry PDK.
         Mutually exclusive with ``spice_model``.
     :param device_map: Optional mapping from the generic device type
@@ -249,7 +249,7 @@ class SizingResult:
         outer Miller cap Cc1. Empty for an uncompensated (single-stage) circuit.
     :param metrics: **Predicted** performance metrics, e.g.
         ``{"gain_db": 90.1, "gbw_hz": 3.0e6, ...}`` — computed from the device
-        model (Level-1 square law or gm/Id LUT), never from a circuit
+        model (square-law or gm/Id LUT), never from a circuit
         simulation. SPICE-measured metrics come from
         :func:`~circuitgenome.sizer.verify.simulate.simulate_metrics` as a
         separate dict.  Note ``gain_db`` is an **un-derated single-point upper
@@ -266,15 +266,15 @@ class SizingResult:
 
         * ``"GMID"`` — gm/Id path; sized procedurally from the LUT, no solver
           involved. Always a success.
-        * ``"OPTIMAL"`` / ``"FEASIBLE"`` — Level-1 path; OR-Tools CP-SAT found
+        * ``"OPTIMAL"`` / ``"FEASIBLE"`` — square-law path; OR-Tools CP-SAT found
           the best / a valid grid assignment.
-        * ``"INFEASIBLE"`` / ``"UNKNOWN"`` / ``"MODEL_INVALID"`` — Level-1 path;
+        * ``"INFEASIBLE"`` / ``"UNKNOWN"`` / ``"MODEL_INVALID"`` — square-law path;
           CP-SAT found no assignment (proven impossible / time limit hit / model
           malformed). ``transistors`` is then empty.
     :param bias_feasible: ``False`` when the gm/Id DC operating-point check finds
         a current source that cannot stay saturated (e.g. a cascode tail with no
         headroom) — the assumed bias current won't flow, so the frequency-domain
-        metrics are optimistic. Always ``True`` for the Level-1 path.
+        metrics are optimistic. Always ``True`` for the square-law path.
     :param open_loop_gain_measurable: ``False`` when the predicted ``gain_db``
         exceeds the open-loop-bench ceiling, ``20·log10(GBW / 1 mHz)`` of the
         predicted GBW capped at the bench's ≈ 212 dB DC-loop limit (see

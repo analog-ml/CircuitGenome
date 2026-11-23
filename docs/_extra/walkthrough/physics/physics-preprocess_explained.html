@@ -110,7 +110,7 @@
 
 <section class="part" id="part-1">
   <h2>Part 1 &middot; Why this file even exists</h2>
-  <p><strong>TLDR:</strong> <code>preprocess.py</code> is the model-independent pre-sizing both sizers share &mdash; taking the structure <a href="physics-circuit-view_explained.html"><code>circuit_view.py</code></a> derived, it assigns every transistor its KCL current from <code>spec.ibias</code>, sizes rail-referenced load resistors by Ohm's law, and derives per-stage gm and VDS_sat targets (plus the compensation caps) straight from the performance spec, pushing the only model-dependent quantity, <code>gds</code>, behind a <code>DeviceModel</code> so the gm/Id path gets LUT-accurate conductance while Level-1 reproduces <code>&lambda;&middot;Id</code> exactly.</p>
+  <p><strong>TLDR:</strong> <code>preprocess.py</code> is the model-independent pre-sizing both sizers share &mdash; taking the structure <a href="physics-circuit-view_explained.html"><code>circuit_view.py</code></a> derived, it assigns every transistor its KCL current from <code>spec.ibias</code>, sizes rail-referenced load resistors by Ohm's law, and derives per-stage gm and VDS_sat targets (plus the compensation caps) straight from the performance spec, pushing the only model-dependent quantity, <code>gds</code>, behind a <code>DeviceModel</code> so the gm/Id path gets LUT-accurate conductance while square-law reproduces <code>&lambda;&middot;Id</code> exactly.</p>
 
   <blockquote><p><strong>Main task:</strong> between "here is the circuit's structure" and "here is a width for every transistor" sits a layer of pure physics &mdash; how much current each device carries, what each stage's <code>gm</code> must be to meet the spec, and how big the compensation cap has to be. That layer is this file.</p></blockquote>
 
@@ -153,7 +153,7 @@
             out[r.ref] = v / branch_i
     <span class="tok-kw">return</span> out</code></pre>
 
-  <p>The threshold-plus-overdrive figure is only the analytical (Level-1) fallback. The gm/Id pipeline instead passes the driven device's real turn-on <code>Vgs</code> read straight from its LUT (<code>seed_v</code>), so the <code>I·R</code> drop lands on the exact gate voltage the next stage actually needs (#158).</p>
+  <p>The threshold-plus-overdrive figure is only the analytical (square-law) fallback. The gm/Id pipeline instead passes the driven device's real turn-on <code>Vgs</code> read straight from its LUT (<code>seed_v</code>), so the <code>I·R</code> drop lands on the exact gate voltage the next stage actually needs (#158).</p>
 
   <h3>Traced with real numbers</h3>
   <p>Take <code>spec.ibias = 20 µA</code>, so each branch carries <code>10 µA</code>. The resistor connects to <code>gnd</code>, so it must lift its node high enough to turn an NMOS on. With <code>Vth,n = 0.45 V</code> and <code>Vov = 0.15 V</code>:</p>
@@ -323,7 +323,7 @@ gd_ld = <span class="tok-fn">_gds_est</span>(ld_devices[<span class="tok-num">0<
 rout1 = eq.<span class="tok-fn">rout</span>(gd_ip, gd_ld + gd_load_r)                <span class="tok-com"># resistor load folded in</span>
 k_fs  = <span class="tok-fn">_first_stage_gain_factor</span>(slot_transistors)</code></pre>
 
-  <p><strong>This <code>_gds_est</code> is the hidden hinge of the whole file.</strong> It's the single place a device model is consulted. Everything else — currents, Rs, gm targets — is pure algebra. Route <code>gds</code> through the <code>DeviceModel</code> and the exact same code gives Level-1 its analytical <code>λ·Id</code> and the gm/Id path its LUT-accurate silicon <code>gds</code>. </p>
+  <p><strong>This <code>_gds_est</code> is the hidden hinge of the whole file.</strong> It's the single place a device model is consulted. Everything else — currents, Rs, gm targets — is pure algebra. Route <code>gds</code> through the <code>DeviceModel</code> and the exact same code gives square-law its analytical <code>λ·Id</code> and the gm/Id path its LUT-accurate silicon <code>gds</code>. </p>
 
   <figure class="fig">
     <svg viewBox="0 0 520 170" role="img" aria-label="Output conductances add in parallel; resistance is the reciprocal">
@@ -376,7 +376,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
     <figcaption>Slew rate only <em>upper</em>-bounds Cc; the stability floor <em>lower</em>-bounds it. The chosen Cc sits at the floor so gm1 stays as small as possible.</figcaption>
   </figure>
 
-  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code> — except nested-Miller (NMC) templates, where Cc2 is sized so the inner pole pair is damped (ζ = 0.3 at gm3 = 3.5·gm2, about <code>0.2·CL</code>, never above Cc1). A reversed-nested-Miller template (the Level-1 sizer passes <code>compensation_scheme</code>) instead re-plans <code>gm2</code>, <code>Cc2</code> and <code>gm3</code> with <code>rnmc.design_rnmc</code> so its inner pole pair stays damped — raising <code>gm2</code> first, then <code>Cc2</code> (up to <code>Cc1</code>), and capping <code>gm3</code> only as a last resort. Both caps are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
+  <p>For a three-stage amp there's an inner cap too: <code>Cc2 = Cc1 / 4</code> — except nested-Miller (NMC) templates, where Cc2 is sized so the inner pole pair is damped (ζ = 0.3 at gm3 = 3.5·gm2, about <code>0.2·CL</code>, never above Cc1). A reversed-nested-Miller template (the square-law sizer passes <code>compensation_scheme</code>) instead re-plans <code>gm2</code>, <code>Cc2</code> and <code>gm3</code> with <code>rnmc.design_rnmc</code> so its inner pole pair stays damped — raising <code>gm2</code> first, then <code>Cc2</code> (up to <code>Cc1</code>), and capping <code>gm3</code> only as a last resort. Both caps are returned in picofarads. A one-stage amp needs no cap at all — <code>cc_pf</code> stays <code>None</code>.</p>
 </section>
 
 <section class="part" id="part-6">
@@ -511,7 +511,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
       <text x="150" y="142" text-anchor="middle" font-size="11.5" font-weight="600">gm/Id pipeline</text>
       <text x="150" y="159" text-anchor="middle" font-size="10" fill="var(--fig-muted)">LUT-accurate silicon gds</text>
       <rect x="280" y="120" width="220" height="56" rx="8" fill="var(--fig-fill)" stroke="var(--fig-stroke)" stroke-width="2"/>
-      <text x="390" y="142" text-anchor="middle" font-size="11.5" font-weight="600">Level-1 analytical</text>
+      <text x="390" y="142" text-anchor="middle" font-size="11.5" font-weight="600">Square-law analytical</text>
       <text x="390" y="159" text-anchor="middle" font-size="10" fill="var(--fig-muted)">reproduces λ·Id exactly</text>
     </svg>
     <figcaption>Same call, two truths. Polymorphism keeps the pre-sizing code model-agnostic while each path gets the <code>gds</code> it deserves.</figcaption>

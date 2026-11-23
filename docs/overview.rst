@@ -227,7 +227,7 @@ Sizer (SZ)
 
 The sizer takes the FBR result (slot assignments) plus a performance
 specification and returns W/L values for every transistor in the circuit.  It
-has two sizing paths — an **analytical** Level-1 CP-SAT solver and a **gm/Id**
+has two sizing paths — an **analytical** square-law CP-SAT solver and a **gm/Id**
 lookup pipeline, selected by technology — and supports every op-amp topology
 template the synthesizer produces.
 

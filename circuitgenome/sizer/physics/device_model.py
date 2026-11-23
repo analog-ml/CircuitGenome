@@ -3,13 +3,13 @@
 The op-amp *topology* relationships (gain = ∏ gmᵢ·routᵢ, GBW = gm1/2πCc, phase
 margin, CMRR, …) are model-independent — only the device *primitives* differ:
 
-* the **Level-1** square law (``equations.gm``/``gd``/``vds_sat``), used for the
+* the **square law** (``equations.gm``/``gd``/``vds_sat``), used for the
   card-less generic tech, and
 * the **gm/Id** lookup table (:class:`~.gmid_lut.GmIdLut`), used for PTM nodes.
 
 Both implement :class:`DeviceModel` so ``compute_requirements`` and
 ``evaluate_metrics`` in :mod:`~circuitgenome.sizer.sizer` can stay single-source.
-``Level1Model`` reproduces the existing numbers exactly (regression-safe);
+``SquareLawModel`` reproduces the existing numbers exactly (regression-safe);
 ``GmIdModel`` adds the LUT-backed primitives plus the geometry inversion and
 L-selection policy used by the procedural geometry pass.
 
@@ -40,7 +40,7 @@ class DeviceModel(Protocol):
     """Small-signal primitives consumed by requirement-derivation and metrics.
 
     All geometry arguments are in µm and currents in A; ``dtype`` is ``"nmos"``
-    or ``"pmos"``.  :class:`Level1Model` implements these from the square law and
+    or ``"pmos"``.  :class:`SquareLawModel` implements these from the square law and
     :class:`GmIdModel` from the LUT, so the topology math in
     :mod:`~circuitgenome.sizer.sizer` can call through one interface.
     """
@@ -114,7 +114,7 @@ class DeviceModel(Protocol):
         """Geometry-free gds in A/V from the device's ``role``.
 
         Used during requirement derivation, before geometry is chosen, where
-        Level-1 returns ``λ·Id`` and gm/Id uses the role's nominal operating
+        the square law returns ``λ·Id`` and gm/Id uses the role's nominal operating
         point (see :data:`SIGNAL` / :data:`CURRENT_SOURCE`).
         """
         ...
@@ -137,9 +137,9 @@ def _params(tech: TechParams, dtype: str) -> MosfetParams:
 
 
 # --------------------------------------------------------------------------- #
-# Level-1 (square law) — wraps equations.* with identical numerics
+# Square law — wraps equations.* with identical numerics
 # --------------------------------------------------------------------------- #
-class Level1Model:
+class SquareLawModel:
     """Shichman-Hodges primitives — byte-for-byte the current generic behaviour."""
 
     def __init__(self, tech: TechParams):
@@ -151,11 +151,11 @@ class Level1Model:
         return eq.gm(_params(self.tech, dtype).mu_cox, w_um, l_um, ids)
 
     def gds(self, dtype, w_um, l_um, ids, vds=None):
-        """Level-1 gds ``λ·|Id|`` — geometry- and ``vds``-independent."""
+        """Square-law gds ``λ·|Id|`` — geometry- and ``vds``-independent."""
         return eq.gd(_params(self.tech, dtype).lam, ids)
 
     def gmb(self, dtype, w_um, l_um, ids, vsb):
-        """``0.0``: the Level-1 card this backend is verified against is
+        """``0.0``: the square-law card this backend is verified against is
         emitted with ``gamma=0`` (see ``verify.deck._emit_model``)."""
         return 0.0
 

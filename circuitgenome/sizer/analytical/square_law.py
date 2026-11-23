@@ -1,4 +1,4 @@
-"""Level-1 (square-law) sizing pipeline: discrete W/L via OR-Tools CP-SAT.
+"""Square-law sizing pipeline: discrete W/L via OR-Tools CP-SAT.
 
 Used for the card-less ``generic`` technology.  Reuses the shared preprocessing
 (:mod:`circuitgenome.sizer.physics.preprocess`) and metric evaluation
@@ -17,7 +17,7 @@ from circuitgenome.recognizer.models import (
 from circuitgenome.synthesizer.models import TopologyTemplate
 
 from ..physics import equations as eq
-from ..physics.device_model import Level1Model
+from ..physics.device_model import SquareLawModel
 from ..physics.metrics import evaluate_metrics, two_stage_replan
 from ..models import SizingResult, SizingSpec, TechParams, TransistorSizing
 from ..physics.circuit_view import CircuitView, adoption_warnings, analyze_circuit
@@ -37,7 +37,7 @@ from .constraints import build_model
 _TWO_STAGE_PASSES = 2
 
 
-def size_level1(
+def size_square_law(
     parsed: ParsedNetlist,
     sr_result: SubcircuitRecognitionResult,
     fbr_result: FunctionalBlockRecognitionResult,
@@ -47,7 +47,7 @@ def size_level1(
     *,
     time_limit_s: float = 30.0,
 ) -> SizingResult:
-    """Size a circuit with the Level-1 square-law model + CP-SAT geometry search.
+    """Size a circuit with the square-law model + CP-SAT geometry search.
 
     A CMRR target on a chain that reports the nodal CMRR is sized against
     that CMRR by re-solving (:func:`~..physics.preprocess.lift_nodal_cmrr`,
@@ -63,8 +63,8 @@ def size_level1(
                                     single_stage=single_stage)
     gd_load_r = (1.0 / min(resistors.values())) if resistors else 0.0
 
-    # Level-1 square-law model; discrete W/L via CP-SAT.
-    dev_model = Level1Model(tech)
+    # Square-law model; discrete W/L via CP-SAT.
+    dev_model = SquareLawModel(tech)
     args = (view, ids_map, resistors, gd_load_r, dev_model, tech, spec, time_limit_s)
     if not (spec.cmrr_min_db and reports_nodal_rejection(slot_transistors)):
         return _size_planned(*args)
@@ -77,7 +77,7 @@ def _size_planned(
     ids_map: dict[str, float],
     resistors: dict[str, float],
     gd_load_r: float,
-    dev_model: Level1Model,
+    dev_model: SquareLawModel,
     tech: TechParams,
     spec: SizingSpec,
     time_limit_s: float,

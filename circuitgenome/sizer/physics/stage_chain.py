@@ -13,7 +13,7 @@ Output resistances come from :func:`node_rout`, a cascode-aware walk of the
 device graph: a cascode device boosts the resistance below it by ``1 + gm·R``,
 which a per-device ``gds`` sum cannot see -- as does a source-degeneration
 resistor, which is the same effect with a resistor in place of the device.  It
-reads only ``model.gm``, ``model.gds`` and ``model.gmb``, so both the Level-1
+reads only ``model.gm``, ``model.gds`` and ``model.gmb``, so both the square-law
 and gm/Id backends get the same treatment.  Given quiescent node levels
 (:mod:`~.node_levels`), each device is read at its own ``Vds``/``Vsb``
 (issue #273).

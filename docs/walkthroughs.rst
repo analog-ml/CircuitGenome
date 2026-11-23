@@ -31,7 +31,7 @@ Sizer
   <walkthrough/verify/verify-fd-rejection_explained.html>`__ deep dive covers
   why a matched FD circuit rejects common mode exactly, and how the bench
   measures it from PDK mismatch.
-- `Analytical (Level-1) sizer <walkthrough/analytical/index.html>`__ — the
+- `Analytical (square-law) sizer <walkthrough/analytical/index.html>`__ — the
   card-less square-law path: how device constraints linearise into a CP-SAT
   integer program.
 - `gm/Id sizer <walkthrough/gmid/index.html>`__ — the SPICE-characterised

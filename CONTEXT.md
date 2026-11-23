@@ -46,13 +46,26 @@ topology. A **positional** property, deliberately kept distinct from "output sta
 in an unbuffered amp the load-driving stage is a *gain stage*, not an output stage.
 _Avoid_: Output stage (see above), final gain stage.
 
+## Device models
+
+**Square-law model**:
+The textbook MOSFET equations (Shichman-Hodges, `Id ∝ (Vgs − Vth)²`), fed by a
+technology's three fitted numbers `mu_cox`, `vth` and `lam` (`SquareLawModel`).
+Used for the card-less `generic` technology, which the square-law sizer sizes with
+CP-SAT. A *square-law tech* is a technology without a gm/Id lookup table.
+_Avoid_: Level-1 (SPICE's model-card number, which reads like "tier 1"), SHM.
+
+**gm/Id model**:
+Device behaviour read from a lookup table measured on the real process
+(`GmIdModel`). Used for PTM nodes and foundry PDKs.
+
 ## Sizing metrics
 
 **Predicted metrics**:
 Performance figures (gain, GBW, phase margin, slew rate, …) computed by the
-sizer's device model — the Level-1 square-law or the gm/Id lookup table — with no
+sizer's device model — the square-law model or the gm/Id lookup table — with no
 circuit simulation. Always what a sizing result carries, for every technology.
-_Avoid_: Analytical metrics (collides with the Level-1 *analytical* sizer, yet gm/Id
+_Avoid_: Analytical metrics (collides with the square-law *analytical* sizer, yet gm/Id
 results are predicted too), estimated metrics.
 
 **Quiescent node level**:

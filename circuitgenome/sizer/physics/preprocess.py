@@ -5,9 +5,9 @@ performance spec.  The circuit's *structure* comes from
 the sized circuit instead: a single-ended CMRR target's gm1 floor
 (:func:`lift_nodal_cmrr`).
 
-Shared by both the Level-1 analytical sizer and the gm/Id pipeline.  Output
+Shared by both the square-law analytical sizer and the gm/Id pipeline.  Output
 conductances come through a :class:`~.device_model.DeviceModel`, so the gm/Id
-path gets LUT-accurate ``gds`` while Level-1 reproduces ``λ·Id`` exactly.
+path gets LUT-accurate ``gds`` while square-law reproduces ``λ·Id`` exactly.
 """
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def size_load_resistors(
 
     ``seed_v`` supplies that turn-on voltage per polarity (``{"nmos": …,
     "pmos": …}``, magnitudes in V). The gm/Id path passes the driven signal
-    device's ``Vgs`` read from the LUT (issue #158); when omitted (Level-1 path),
+    device's ``Vgs`` read from the LUT (issue #158); when omitted (square-law path),
     it falls back to the analytical ``|vth| + Vov`` estimate.
 
     ``single_stage`` marks a load that drives no next stage: its node is the
@@ -318,7 +318,7 @@ def compute_requirements(
     Returns ``(gm_req_map, vod_max_map, cc_pf, cc2_pf, warnings)`` where
     ``warnings`` lists any gm requirement clamped to the weak-inversion
     ceiling (the spec cannot be met at this bias current).  Output conductances
-    come through ``model`` so the gm/Id path uses LUT-accurate gds; the Level-1
+    come through ``model`` so the gm/Id path uses LUT-accurate gds; the square-law
     model reproduces the geometry-free ``λ·Id`` exactly.
 
     ``spec.cmrr_min_db`` sets a gm1 floor.  By default it is the tail-only
@@ -338,7 +338,7 @@ def compute_requirements(
     * ``"reversed_nested_miller"`` (RNMC) — gm2, Cc2 and gm3 are re-planned
       with :func:`~.rnmc.design_rnmc` (raise gm2, then Cc2, then cap gm3) so
       the inner pole pair is damped and in the left half plane; its
-      advisories join ``warnings``.  Only the Level-1 sizer asks for this:
+      advisories join ``warnings``.  Only the square-law sizer asks for this:
       the gm/Id pipeline's geometry moves gm1 far from this estimate (bias
       repair), so it re-plans RNMC on the sized circuit instead
       (:mod:`~circuitgenome.sizer.gmid.rnmc_refine`).
@@ -502,7 +502,7 @@ def compute_requirements(
             # From PM: gm2 = gm1·CL / (Cc·tan(90°−PM)).
             if spec.phase_margin_min_deg and gm1_req > 0.0 and ip_devices:
                 # gm2 follows the gm1 the pair will *actually* have, which the
-                # model knows: Level-1 overshoots to the integer W grid, gm/Id
+                # model knows: square-law overshoots to the integer W grid, gm/Id
                 # delivers the request.
                 ip_dev = ip_devices[0]
                 ids_ip = spec.ibias / max(

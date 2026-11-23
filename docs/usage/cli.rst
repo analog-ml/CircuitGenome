@@ -259,7 +259,7 @@ assignment) and a YAML spec file.
      --topology two_stage_opamp_single_ended \
      --spec examples/two_stage_se_specs/spec_generic.yaml
 
-Sample output (``generic`` tech — Level-1 analytical path):
+Sample output (``generic`` tech — square-law analytical path):
 
 .. code-block:: text
 
@@ -290,7 +290,7 @@ Sample output (``generic`` tech — Level-1 analytical path):
 The verdict line is **FEASIBLE**, **MARGINAL** (biases but misses a spec — failing
 rows are marked ``✗``, as the gain and slew rows are here), or **INFEASIBLE** (bias point
 cannot be established — the metrics table is suppressed).  For the ``generic`` tech
-the metrics are the Level-1 analytical estimates.
+the metrics are the square-law analytical estimates.
 
 Options
 ~~~~~~~
@@ -319,7 +319,7 @@ Options
        for PTM, whose metrics are already ngspice-measured.
      - off
    * - ``--time-limit S``
-     - CP-SAT solver time limit, seconds (Level-1 path only)
+     - CP-SAT solver time limit, seconds (square-law path only)
      - ``30``
 
 ``--tech`` accepts either a path to a technology YAML or the short name of a
@@ -338,7 +338,7 @@ with ``tools/extract_tech.py``.
 PTM / foundry PDK technologies (gm/Id path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For a PTM node or a foundry PDK the sizer uses the gm/Id pipeline (not the Level-1
+For a PTM node or a foundry PDK the sizer uses the gm/Id pipeline (not the square-law
 CP-SAT solver), and the performance section reports metrics **measured in ngspice**
 (BSIM4) rather than the analytical estimates — so ngspice must be on ``PATH`` (the
 command errors otherwise).  Only gain, GBW, phase margin, slew rate, and power are
@@ -362,7 +362,7 @@ omitted.  A metric ngspice cannot extract is shown as ``n/a``.
      ⓘ CMRR, PSRR, and output swing are not measured by the current ngspice rig and are omitted.
 
 A PTM/SPICE-model node *without* a characterized gm/Id LUT is rejected with
-``UnsupportedTechError`` (the Level-1 square-law numbers are not valid there).
+``UnsupportedTechError`` (the square-law numbers are not valid there).
 
 **Foundry PDKs and process corners.**  ``--tech gf180mcu`` selects the GF180MCU
 open PDK: its devices are PDK **subcircuits** (``nmos_3p3``/``pmos_3p3``) and a

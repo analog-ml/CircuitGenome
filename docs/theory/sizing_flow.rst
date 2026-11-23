@@ -1,7 +1,7 @@
 Analytical Sizing Flow
 ======================
 
-*Level-1 square-law equations and their step-by-step derivation.*
+*Square-law equations and their step-by-step derivation.*
 
 This page documents the complete analytical flow used by
 :func:`~circuitgenome.sizer.sizer.size_circuit` to size a two-stage
@@ -18,7 +18,7 @@ Scope and circuit topology
 
 The sizer targets every op-amp topology template the synthesizer produces.
 
-This page documents the **Level-1 (Shichman-Hodges)** analytical flow — square-law
+This page documents the **square-law (Shichman-Hodges)** analytical flow — quadratic
 drain current in saturation, constant channel-length modulation coefficient λ, no
 short-channel or velocity-saturation effects.  This flow is selected for the
 card-less ``generic`` technology.  Deep-submicron **PTM nodes and foundry PDKs
@@ -26,7 +26,7 @@ card-less ``generic`` technology.  Deep-submicron **PTM nodes and foundry PDKs
 geometry — see `gm/Id model (PTM nodes)`_ below); a PTM/SPICE-model node without a
 gm/Id LUT raises ``UnsupportedTechError``.  For those technologies the reported
 performance numbers are **measured in ngspice** rather than computed from the
-Level-1 equations below (see `Post-sizing performance metrics`_).
+square-law equations below (see `Post-sizing performance metrics`_).
 
 .. code-block:: text
 
@@ -69,7 +69,7 @@ derives performance requirements in this order:
 Device model
 ------------
 
-Three Level-1 equations underpin the constraints below.  All are implemented
+Three square-law equations underpin the constraints below.  All are implemented
 in :mod:`circuitgenome.sizer.physics.equations`.
 
 Transconductance
@@ -125,7 +125,7 @@ gm/Id model (PTM nodes)
 
 The single fitted :math:`(\mu C_{ox}, V_{th}, \lambda)` triple above cannot
 capture moderate/weak inversion, velocity saturation, or
-:math:`\lambda \propto 1/L` — so on deep-submicron PTM nodes the Level-1
+:math:`\lambda \propto 1/L` — so on deep-submicron PTM nodes the square-law
 predictions diverge sharply from SPICE.  A technology that carries a
 **gm/Id lookup table** (the ``gmid_lut`` field of
 :class:`~circuitgenome.sizer.models.TechParams`, e.g. ``ptm45``) instead drives
@@ -144,10 +144,10 @@ ratios.
 The model is selected per-tech by
 :func:`~circuitgenome.sizer.sizer.size_circuit`, which routes a LUT-bearing tech to
 the gm/Id pipeline (:class:`~circuitgenome.sizer.physics.device_model.GmIdModel`) and
-the card-less ``generic`` tech to Level-1
-(:class:`~circuitgenome.sizer.physics.device_model.Level1Model`); the table interface is
+the card-less ``generic`` tech to square-law
+(:class:`~circuitgenome.sizer.physics.device_model.SquareLawModel`); the table interface is
 :class:`~circuitgenome.sizer.physics.gmid_lut.GmIdLut` and the geometry pass is
-:func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid`.  The Level-1
+:func:`~circuitgenome.sizer.gmid.geometry.assign_geometry_gmid`.  The square-law
 flow described below is unchanged for the card-less generic tech.
 
 ----
@@ -570,7 +570,7 @@ two-stage amplifier is re-planned against the full model the metrics read
 Each targets its spec plus a small allowance for the re-sized geometry's
 rounding (0.5 % GBW, 0.5°), and is searched up to the device's weak-inversion
 :math:`g_m` ceiling; a spec no value below it meets is left alone, and the
-metric reports the shortfall.  The Level-1 sizer re-solves CP-SAT with the
+metric reports the shortfall.  The square-law sizer re-solves CP-SAT with the
 raised requirements, the gm/Id sizer re-sizes
 (:mod:`~circuitgenome.sizer.gmid.two_stage_refine`); a second pass re-plans
 against what the first delivered.
@@ -819,11 +819,11 @@ Assumptions and where they break down
 
 .. warning::
 
-   **Level-1 (square-law) model.**  The :math:`g_m = \sqrt{2\,\mu C_{ox}\,(W/L)\,I_{DS}}`
+   **Square-law model.**  The :math:`g_m = \sqrt{2\,\mu C_{ox}\,(W/L)\,I_{DS}}`
    formula is accurate for transistors well into saturation with :math:`L \geq`
    approximately 0.18–0.25 µm (as in the generic tech config).  For deep-submicron
    nodes (28 nm, 7 nm), velocity saturation and other short-channel effects
-   dominate; the Level-1 model will significantly over-estimate :math:`g_m`
+   dominate; the square-law model will significantly over-estimate :math:`g_m`
    at a given :math:`W/L` and :math:`I_{DS}`.
 
 .. warning::
@@ -1154,7 +1154,7 @@ designs that cannot be damped with :math:`g_{m2}`, :math:`C_{c2}` and
 :math:`g_{m3}` are reported with the RHP margin (0°) and an advisory; the
 follower itself is not re-sized.
 
-The Level-1 sizer applies these rules to its requirement estimates.  The gm/Id
+The square-law sizer applies these rules to its requirement estimates.  The gm/Id
 pipeline applies them after geometry
 (:mod:`~circuitgenome.sizer.gmid.rnmc_refine`): its DC-bias repair can move the
 input pair's :math:`g_{m1}` far above the GBW requirement (a ptm45 FD fixture

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Analytical (Level-1) Sizer — package walkthrough</title>
+<title>Analytical (Square-Law) Sizer — package walkthrough</title>
 <style>
   :root {
     --bg:#fbfaf7; --surface:#ffffff; --text:#1c1b19; --muted:#6b6862; --border:#e3ded4;
@@ -62,17 +62,17 @@
 <div class="container">
 <p class="docs-backlink" style="margin:0 0 20px;font-size:0.9rem"><a href="../../index.html">&larr; CircuitGenome docs</a></p>
 
-<h1>The Analytical (Level-1) Sizer — a package walkthrough</h1>
+<h1>The Analytical (Square-Law) Sizer — a package walkthrough</h1>
 <div class="subtitle"><code>circuitgenome/sizer/analytical/</code> — the square-law sizer that searches for discrete transistor geometry with a CP-SAT solver.</div>
 
-<p>For the card-less <code>generic</code> technology there is no measured lookup table, so this sizer falls back on the <strong>Level-1 square law</strong> and turns sizing into a <strong>discrete search</strong>: pick integer multiples of the grid step for every <code>W</code> and <code>L</code> such that the performance requirements are met. It reuses the shared preprocessing and metric code — the <em>only</em> thing that differs from the gm/Id path is how geometry is chosen.</p>
+<p>For the card-less <code>generic</code> technology there is no measured lookup table, so this sizer falls back on the <strong>square-law</strong> and turns sizing into a <strong>discrete search</strong>: pick integer multiples of the grid step for every <code>W</code> and <code>L</code> such that the performance requirements are met. It reuses the shared preprocessing and metric code — the <em>only</em> thing that differs from the gm/Id path is how geometry is chosen.</p>
 
 <p><a class="xlink" href="../index.html">↑ Up to the full sizer overview</a> &nbsp;·&nbsp; <a class="xlink" href="../gmid/index.html">gm/Id pipeline</a> &nbsp;·&nbsp; <a class="xlink" href="../physics/index.html">op-amp physics</a></p>
 
 <h2>The pipeline — reuse shared, then solve</h2>
 
 <figure class="fig">
-  <svg viewBox="0 0 840 210" role="img" aria-label="The Level-1 analytical sizing pipeline">
+  <svg viewBox="0 0 840 210" role="img" aria-label="The square-law analytical sizing pipeline">
     <defs>
       <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
     </defs>
@@ -101,18 +101,18 @@
     <line x1="720" y1="100" x2="760" y2="100" stroke="var(--fig-stroke)" stroke-width="2" marker-end="url(#ar)"/>
     <rect x="760" y="78" width="70" height="44" rx="8" fill="var(--fig-bg)" stroke="var(--fig-muted)" stroke-width="1.5" stroke-dasharray="4 3"/>
     <text x="795" y="104" text-anchor="middle" font-size="11">Result</text>
-    <!-- level1 wrapper -->
-    <a href="level1_explained.html">
+    <!-- square_law wrapper -->
+    <a href="square_law_explained.html">
       <rect x="10" y="30" width="720" height="120" rx="12" fill="none" stroke="var(--fig-accent)" stroke-width="1.5" stroke-dasharray="7 5"/>
     </a>
-    <text x="30" y="24" font-size="11.5" fill="var(--fig-accent)" font-weight="600">level1.py — the pipeline (click the frame)</text>
+    <text x="30" y="24" font-size="11.5" fill="var(--fig-accent)" font-weight="600">square_law.py — the pipeline (click the frame)</text>
   </svg>
-  <figcaption>Level-1 reuses the shared <code>preprocess</code>/<code>metrics</code> stations (teal); only the discrete geometry search — building &amp; solving the CP-SAT model — is its own (accent). Click a box to open its walkthrough.</figcaption>
+  <figcaption>Square-law reuses the shared <code>preprocess</code>/<code>metrics</code> stations (teal); only the discrete geometry search — building &amp; solving the CP-SAT model — is its own (accent). Click a box to open its walkthrough.</figcaption>
 </figure>
 
 <h2>All pages</h2>
 <div class="cards">
-  <a class="card" href="level1_explained.html"><span class="fn">level1.py</span><div class="role">The Level-1 pipeline — reuse shared, build/solve CP-SAT, evaluate</div><span class="phase">pipeline</span></a>
+  <a class="card" href="square_law_explained.html"><span class="fn">square_law.py</span><div class="role">The square-law pipeline — reuse shared, build/solve CP-SAT, evaluate</div><span class="phase">pipeline</span></a>
   <a class="card" href="constraints_explained.html"><span class="fn">constraints.py</span><div class="role">CP-SAT model builder — linearize gm≥gm_req into integer constraints</div><span class="phase">solver model</span></a>
 </div>
 

@@ -7,7 +7,7 @@ follow these conventions needs **no sizer changes**; a topology that introduces
 new slot names or bias-net conventions is supported by extending the groups
 here (and only here).
 
-Shared by the Level-1 analytical sizer and the gm/Id pipeline.
+Shared by the square-law analytical sizer and the gm/Id pipeline.
 """
 from __future__ import annotations
 

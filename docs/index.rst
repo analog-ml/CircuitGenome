@@ -35,7 +35,7 @@ functional building blocks it can:
 - **Synthesize** thousands of structurally distinct op-amp netlists by enumerating
   every valid module combination for a topology template;
 - **Recognize** the functional blocks in a flat SPICE netlist;
-- **Size** a circuit to a performance spec (a card-less Level-1 CP-SAT path and a
+- **Size** a circuit to a performance spec (a card-less square-law CP-SAT path and a
   SPICE-characterized gm/Id path); and
 - **Design** — chain the above against a target spec, SPICE-verify each candidate,
   and export the designs that meet it.

@@ -95,7 +95,7 @@ def test_load_tech_resolves_relative_tech_path_to_absolute_models(tmp_path, monk
 
 
 # ---------------------------------------------------------------------------
-# Level-1 MOSFET equations
+# Square-law MOSFET equations
 # ---------------------------------------------------------------------------
 
 def test_gm_formula():
@@ -913,7 +913,7 @@ def test_rnmc_buffered_follower_is_in_the_pm_model(three_stage_buffered_se_fbr):
     """The RNMC phase margin sees the output follower, so a buffered design
     whose weak follower breaks the loop is no longer reported as meeting PM.
 
-    The Level-1 sizer leaves the follower at minimum width (no gm target);
+    The square-law sizer leaves the follower at minimum width (no gm target);
     the old two-pole formula still reported ~65°."""
     parsed, sr_result, fbr_result, topology = three_stage_buffered_se_fbr
     spec = SizingSpec(**_THREE_STAGE_SPEC)
@@ -957,7 +957,7 @@ def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
     """
     from circuitgenome.sizer.physics import equations as eq
     from circuitgenome.sizer.physics.circuit_view import analyze_circuit
-    from circuitgenome.sizer.physics.device_model import Level1Model
+    from circuitgenome.sizer.physics.device_model import SquareLawModel
     from circuitgenome.sizer.physics.preprocess import assign_ids, compute_requirements
     from circuitgenome.sizer.physics.taxonomy import is_signal_device
 
@@ -970,7 +970,7 @@ def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
     def gms(scheme):
         gm, _v, cc, cc2, _w = compute_requirements(
             view.slot_transistors, view.all_transistors, ids, tech, spec,
-            Level1Model(tech), compensation_scheme=scheme)
+            SquareLawModel(tech), compensation_scheme=scheme)
         sig = {slot: max(gm[d.ref] for d in view.slot_transistors[slot]
                          if is_signal_device(d))
                for slot in ("second_stage", "third_stage")}
@@ -1785,7 +1785,7 @@ def test_closed_form_cmrr_designs_keep_the_tail_only_gm1_floor(template, variant
     """Fully-differential and telescopic-cascode designs report the closed form
     gm1/(2·gd_tail), so their CMRR target still sizes gm1 against it."""
     from circuitgenome.sizer.physics.circuit_view import analyze_circuit
-    from circuitgenome.sizer.physics.device_model import Level1Model
+    from circuitgenome.sizer.physics.device_model import SquareLawModel
     from circuitgenome.sizer.physics.preprocess import assign_ids, compute_requirements
 
     _parsed, _sr, fbr_result, topology = _fbr(template, variants)
@@ -1796,7 +1796,7 @@ def test_closed_form_cmrr_designs_keep_the_tail_only_gm1_floor(template, variant
         spec = SizingSpec(vdd=5.0, vss=0.0, ibias=10e-6, cl=20e-12, cmrr_min_db=cmrr)
         ids = assign_ids(view.slot_transistors, view.all_transistors, spec)
         gm = compute_requirements(view.slot_transistors, view.all_transistors, ids,
-                                  tech, spec, Level1Model(tech))[0]
+                                  tech, spec, SquareLawModel(tech))[0]
         return max(gm[d.ref] for d in view.slot_transistors["input_pair"])
 
     assert gm1(None) == 0.0
