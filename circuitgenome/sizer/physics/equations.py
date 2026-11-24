@@ -265,28 +265,29 @@ def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
 
 
 def phase_margin_single_stage_deg(gbw_hz: float, mirror_pole_hz: float) -> float:
-    """Phase margin in degrees for a **load**-compensated single-stage OTA.
+    """Phase margin in degrees of a single-stage OTA (the load cap is the
+    compensation).
 
-    PM ≈ 90° − arctan(GBW / f_mirror)
+    PM = 90° − arctan(GBW / f_mirror)
 
-    A single-stage OTA has no Miller cap: its dominant pole is the output node
-    itself, ``1/(2π·Rout·CL)``, which alone would put the phase margin at
-    exactly 90°. The lag that pulls it below comes from the *next* pole — the
-    current-mirror node, whose low ``1/gm`` resistance works against the mirror
-    devices' gate capacitance. ``CL`` is normally orders of magnitude larger
-    than that gate capacitance, so a healthy single-stage OTA lands just under
-    90°; a design that pushes GBW toward the mirror pole is what this formula
-    is here to catch.
+    Phase margin starts at 180°.  The output node is the main pole and, by the
+    GBW, has used up 90° of it.  The current-mirror node is the next pole; at
+    the GBW it takes another arctan(GBW / f_mirror).  A mirror pole far above
+    the GBW leaves PM near 90°; a GBW equal to f_mirror leaves 45°.
 
-    Contrast :func:`phase_margin_two_stage_deg`, whose dominant pole is the
-    Miller cap and whose non-dominant pole is the *output* — the roles of
-    ``CL`` and the internal node are exchanged, which is why the two cannot
-    share a formula.
+    Derivation: :doc:`/theory/single_stage_phase_margin`.
 
     :param gbw_hz: Unity-gain bandwidth in Hz (``gm1/(2π·CL)``).
-    :param mirror_pole_hz: Current-mirror node pole in Hz.
+    :param mirror_pole_hz: Current-mirror node pole in Hz,
+        ``1/(2π·R_mirror·C_mirror)``.
     """
-    return 90.0 - math.degrees(math.atan(gbw_hz / mirror_pole_hz))
+    # The output (main) pole has used up 90° of the 180° by the GBW.
+    remaining_phase_deg = 180.0 - 90.0
+
+    # The current-mirror pole's extra phase lag at the GBW.
+    phase_lag_deg = math.degrees(math.atan(gbw_hz / mirror_pole_hz))
+
+    return remaining_phase_deg - phase_lag_deg
 
 
 def phase_margin_two_stage_deg(
