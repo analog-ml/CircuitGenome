@@ -145,7 +145,7 @@ def two_stage_loop(stages, cc_f, cl_f, *, buffer, r_ohm, cmfb):
     <tr><td>Measure RNMC damping and stability</td><td><span class="eq">\(\zeta_{\mathrm{RNMC}} = \min_{p\in\mathrm{non\text{-}dominant}}\left(-\frac{\operatorname{Re}(p)}{|p|}\right)\)</span><pre><code># open_loop_response.py
 def rnmc_pole_damping(stages, cc1_f, cc2_f, cl_f, *,
                       mirror_pole_hz, buffer, comp_r):
-    return min(-pole.real / abs(pole) for pole in non_dominant)</code></pre>Solves the full RNMC model (<code>open_loop_response.py</code>) — parasitics, third-stage mirror, output buffer and any compensation-branch series resistors — and returns its worst non-dominant <code>ζ</code>; <code>phase_margin_rnmc_deg()</code> uses the same model for the worst phase margin.</td></tr>
+    return min(-pole.real / abs(pole) for pole in non_dominant)</code></pre>Solves the RNMC open-loop model (<code>open_loop_response.py</code>) — parasitics, third-stage mirror, output buffer and any compensation-branch series resistors — and returns its worst non-dominant <code>ζ</code>; <code>phase_margin_rnmc_deg()</code> uses the same model for the worst phase margin.</td></tr>
     <tr><td>Power is voltage times current</td><td><span class="eq">\(\displaystyle P_Q = (V_{DD}-V_{SS})\sum_i |I_i|\)</span><pre><code>def quiescent_power(vdd, vss, currents):
     return (vdd - vss) * sum(abs(i) for i in currents)</code></pre>Computes idle supply power.</td></tr>
   </tbody></table>

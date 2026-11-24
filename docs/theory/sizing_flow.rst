@@ -308,7 +308,7 @@ magnitude first crosses 0 dB) is :math:`g_{m1}/(2\pi C_c)`.  GBW is
 essentially proportional to :math:`g_{m1}` at a fixed :math:`C_c`.
 
 The predicted GBW metric (`Post-sizing performance metrics`_) reads the
-crossing off the full small-signal model, where the output pole pulls it
+crossing off the open-loop model, where the output pole pulls it
 ~10–15 % under :math:`g_{m1}/(2\pi C_c)` and a source-follower output stage
 by its gain below 1 (issue #274).  This step sizes against the plain formula;
 once the circuit is sized, a two-stage re-plan raises :math:`g_{m1}` to the
@@ -642,7 +642,7 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - :func:`~circuitgenome.sizer.physics.equations.open_loop_gain_db`
      - actual − spec
    * - GBW
-     - The first 0 dB crossing of the amplifier's full small-signal model:
+     - The first 0 dB crossing of the amplifier's open-loop model:
        the half circuit's nodal equations, with the node parasitics, the
        compensation branch's series resistor, a non-inverting stage's mirror
        and an output follower (its gain

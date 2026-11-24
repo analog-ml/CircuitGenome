@@ -181,7 +181,7 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
   <pre class="code"><code>cc_f = (chain.cc_pf * <span class="tok-num">1e-12</span>) <span class="tok-kw">if</span> chain.cc_pf <span class="tok-kw">else</span> <span class="tok-kw">None</span>
 <span class="tok-kw">if</span> cc_f <span class="tok-kw">and</span> <span class="tok-fn">len</span>(stages) &gt; <span class="tok-num">1</span> <span class="tok-kw">and</span> gm1 &gt; <span class="tok-num">0</span>:
     gm1_loop = k_fs * gm1                     <span class="tok-com"># gm into the Miller loop</span>
-    <span class="tok-com"># two-stage / nested Miller: GBW and PM off the full small-signal model</span>
+    <span class="tok-com"># two-stage / nested Miller: GBW and PM off the open-loop model</span>
     gbw, pm = <span class="tok-fn">_miller_loop</span>(chain, gm1_loop, cc_f, cc2_f, spec.cl)</code></pre>
 
   <h3>GBW — the gain-bandwidth product</h3>

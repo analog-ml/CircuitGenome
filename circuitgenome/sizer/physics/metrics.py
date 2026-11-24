@@ -255,8 +255,8 @@ def evaluate_metrics(
     cc2_f = (chain.cc2_pf * 1e-12) if chain.cc2_pf else None
     if cc_f and len(stages) > 1 and gm1 > 0:
         if chain.gain_measurable:
-            # GBW and phase margin both come off the amplifier's full
-            # small-signal model (issue #274); a chain without one, or a loop
+            # GBW and phase margin both come off the amplifier's open-loop
+            # model (issue #274); a chain without one, or a loop
             # that never reaches 0 dB, falls back to gm1/(2π·Cc) behind the
             # output follower's gain.
             buffer = chain.output_buffer
