@@ -432,6 +432,7 @@ frequency upward relative to :math:`g_{m2}`, degrading PM.  Sizing
 post-rounding value — ensures PM is satisfied on the integer grid.
 
 Implementing function: :func:`~circuitgenome.sizer.physics.equations.phase_margin_two_stage_deg`
+(derived step by step in :doc:`two_stage_phase_margin`)
 
 The closed form leaves out the bare Miller cap's right-half-plane zero at
 :math:`g_{m2}/C_c` and the first-stage node's capacitance, which cost a

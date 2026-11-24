@@ -293,18 +293,25 @@ def phase_margin_single_stage_deg(gbw_hz: float, mirror_pole_hz: float) -> float
 def phase_margin_two_stage_deg(
     gm1: float, gm2: float, cc_f: float, cl_f: float
 ) -> float:
-    """Phase margin in degrees for a two-stage Miller op-amp.
+    """Phase margin in degrees of a two-stage Miller op-amp.
 
-    PM ≈ 90° − arctan(gm1·CL / (gm2·Cc))
+    PM = 90° − arctan(gm1·CL / (gm2·Cc))
 
-    Valid when the dominant pole is at 1/(Rout1·Cc) and the non-dominant
-    pole is at gm2/CL (internal mirror pole neglected).  The Miller cap
-    splits the two poles far apart, so the non-dominant one is real and a
-    single lag term is the whole story — there is no pole pair to ring.
+    Phase margin starts at 180°.  The first stage's output, slowed by the
+    Miller cap Cc, is the main pole and, by the GBW, has used up 90° of it.
+    The output node is the second pole, at gm2/CL; at the GBW (gm1/Cc) it
+    takes another arctan(GBW / f_p2) = arctan(gm1·CL / (gm2·Cc)).
+
+    It reads 2–5° high: it leaves out Cc's right-half-plane zero and the
+    first-stage node capacitance (issue #274).  The sizer uses it to choose
+    gm2; the reported phase margin comes from the full model,
+    :func:`two_stage_loop`.
+
+    Derivation: :doc:`/theory/two_stage_phase_margin`.
 
     :param gm1: Input-pair gm in A/V.
     :param gm2: Second-stage signal transistor gm in A/V.
-    :param cc_f: Compensation capacitor in F.
+    :param cc_f: Compensation (Miller) capacitor in F.
     :param cl_f: Output load capacitance in F.
     """
     return 90.0 - math.degrees(math.atan(gm1 * cl_f / (gm2 * cc_f)))

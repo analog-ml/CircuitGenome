@@ -227,6 +227,6 @@ Scope
   :func:`~circuitgenome.sizer.physics.equations.phase_margin_two_stage_deg`
   instead.  There the Miller capacitor sets the main pole and the *output* is
   the second pole — the roles of ``CL`` and the internal node are swapped, so
-  the two cannot share a formula.
+  the two cannot share a formula.  Derived in :doc:`two_stage_phase_margin`.
 - **Three-stage RNMC loops** are judged from a small nodal model; see
   :doc:`rnmc_stability`.
