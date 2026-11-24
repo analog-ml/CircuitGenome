@@ -11,7 +11,7 @@ sizers start from, using the slot and net conventions in
 :doc:`physics/taxonomy`.  :doc:`physics/device_model` wraps the two device
 backends — square-law (:doc:`physics/equations`) and measured LUT
 (:doc:`physics/gmid_lut`) — behind one interface, so everything above it is
-written once.  :doc:`physics/full_model` solves a multi-stage amplifier's
+written once.  :doc:`physics/open_loop_response` solves a multi-stage amplifier's
 open loop numerically for GBW, phase margin and pole damping, where the
 closed forms in :doc:`physics/equations` fall short.
 :doc:`physics/preprocess` derives the per-device currents, gm targets and
@@ -31,7 +31,7 @@ Nothing here decides a width, and nothing here runs a simulator — see
    physics/taxonomy
    physics/device_model
    physics/equations
-   physics/full_model
+   physics/open_loop_response
    physics/gmid_lut
    physics/preprocess
    physics/node_levels

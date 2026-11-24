@@ -10,7 +10,7 @@ not of the transistor model, so they live here once:
 * :mod:`.taxonomy` — the slot and net naming conventions that view assumes
 * :mod:`.device_model` — the one interface behind which square-law
   (:mod:`.equations`) and gm/Id (:mod:`.gmid_lut`) primitives are swappable
-* :mod:`.full_model` — the multi-stage open loop solved numerically for GBW,
+* :mod:`.open_loop_response` — the multi-stage open loop solved numerically for GBW,
   phase margin and pole damping
 * :mod:`.preprocess` — currents, gm targets and compensation caps from the spec
 * :mod:`.stage_chain` — the small-signal chain a solved sizing presents

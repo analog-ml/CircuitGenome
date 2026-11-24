@@ -8,8 +8,8 @@ A three-stage amplifier can pass the usual phase-margin check and still ring,
 or even oscillate.  For every RNMC design it sizes, the sizer therefore
 computes two numbers — the **phase margin** and the **damping** :math:`\zeta`
 of a *pole pair* — with
-:func:`~circuitgenome.sizer.physics.full_model.phase_margin_rnmc_deg` and
-:func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping`.  The sizing
+:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg` and
+:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`.  The sizing
 strategy that uses them
 (:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`) is described in
 :ref:`rnmc-inner-pair`.
@@ -391,13 +391,13 @@ round-off.  This happens when the output conductances are left at zero: the
 model floors them at :math:`10^{-9} g_m`, the DC gain reaches ~1e27, and the
 dominant pole (~4e-20 rad/s) comes back as ±1e-17 rad/s.  So the
 right-half-plane check that sets a 0° margin
-(:func:`~circuitgenome.sizer.physics.full_model._has_rhp_pole`) ignores poles
+(:func:`~circuitgenome.sizer.physics.open_loop_response._has_rhp_pole`) ignores poles
 below :math:`10^{-12}` of the fastest one.
 
 Step 5 — Read ζ off the poles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping` drops the
+:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping` drops the
 dominant (smallest) pole and reports the **worst** :math:`\zeta` among the
 rest; a real pole counts as :math:`\zeta = 1`:
 
@@ -416,7 +416,7 @@ Two properties of the ``-p.real / abs(p)`` form matter here:
 
 - **The sign comes for free.**  A right-half-plane pole has a positive real
   part, so it gives :math:`\zeta < 0` — that is how
-  :func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping` reports an
+  :func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping` reports an
   unstable pair, with no separate check.
 - **Real poles read as 1.**  A real pole gives :math:`-p/|p| = 1`, so an
   *overdamped* pair (true :math:`\zeta > 1`, two real roots) reads 1, not its
@@ -426,7 +426,7 @@ Two properties of the ``-p.real / abs(p)`` form matter here:
 Step 6 — Sweep the frequency for the phase margin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.physics.full_model.phase_margin_rnmc_deg` solves
+:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg` solves
 the system at 4000 log-spaced frequencies, from two decades below the lowest
 pole to two decades above the highest — one batched call:
 
@@ -529,8 +529,8 @@ worst crossing 4.6°, and in unity feedback the circuit rang at 28 MHz.
 
 ----
 
-Closed forms and the full model
--------------------------------
+Closed forms and the open-loop model
+------------------------------------
 
 The textbook closed forms come from the simplified quadratic
 :math:`1 + a_1 s + a_2 s^2` (:ref:`rnmc-inner-pair`).  As in
@@ -542,7 +542,7 @@ The textbook closed forms come from the simplified quadratic
 
 and :math:`\zeta > 0` exactly when :math:`a_1 > 0`, i.e. the stability
 condition :math:`g_{m3} < g_{m2}(1 + C_L/C_{c1})`.  On the bare loop (no
-mirror, buffer or output conductances) the full model reproduces both — it
+mirror, buffer or output conductances) the open-loop model reproduces both — it
 flips sign at that boundary and reads :math:`\zeta = 0.7` where the closed form
 does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code:
 
@@ -557,15 +557,15 @@ does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code:
      - the closed-form :math:`\zeta` solved for the smallest :math:`g_{m2}`
        reaching a target — where the sizer's :math:`g_{m2}` search starts
      - no
-   * - :func:`~circuitgenome.sizer.physics.full_model.rnmc_pole_damping`
-     - :math:`\zeta` from the full model's poles (Steps 1–5)
+   * - :func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`
+     - :math:`\zeta` from the open-loop model's poles (Steps 1–5)
      - **yes**
-   * - :func:`~circuitgenome.sizer.physics.full_model.phase_margin_rnmc_deg`
-     - phase margin from the full model's sweep (Steps 1–4, 6)
+   * - :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`
+     - phase margin from the open-loop model's sweep (Steps 1–4, 6)
      - **yes**
 
 The closed forms explain the physics and give the search a good start; the
-full model decides.  The difference is real: a buffered gf180 candidate looks
+open-loop model decides.  The difference is real: a buffered gf180 candidate looks
 stable with :math:`C_L` on the third stage, yet with the source follower in
 place the pair lands in the right half plane — and SPICE's settling bench saw
 it ring (``test_output_follower_inside_the_cc1_loop_is_seen``).

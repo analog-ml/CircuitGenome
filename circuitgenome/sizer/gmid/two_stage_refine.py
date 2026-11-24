@@ -4,10 +4,10 @@
 two-stage Miller amplifier's gm1 and gm2 from closed forms that leave out the
 output pole's pull on the 0 dB crossing, the bare Miller cap's
 right-half-plane zero and the first-stage node's capacitance.  The metrics
-read the full model instead (:func:`~..physics.full_model.two_stage_loop`),
+read the open-loop model instead (:func:`~..physics.open_loop_response.two_stage_loop`),
 where such a design can fall short of the specs it was sized for (issue #274).
 
-:func:`refine_two_stage_plan` finds the gm1 and gm2 the full model needs on the
+:func:`refine_two_stage_plan` finds the gm1 and gm2 the open-loop model needs on the
 sized circuit (:func:`~..physics.metrics.two_stage_replan`) and returns a plan
 with them for the caller to re-size against.
 """
@@ -32,7 +32,7 @@ def refine_two_stage_plan(
     spec: SizingSpec,
 ) -> tuple[SizingPlan, bool]:
     """Return ``(plan, changed)`` with the input-pair and second-stage gm the
-    full-model GBW and phase margin need.
+    open-loop model's GBW and phase margin need.
 
     ``changed`` is ``True`` when either requirement rose -- the caller must
     re-size.  gm1 is searched up to the widest single PDK device; gm2 up to

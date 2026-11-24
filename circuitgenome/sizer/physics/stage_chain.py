@@ -27,7 +27,7 @@ from circuitgenome.synthesizer.models import Device
 
 from .circuit_view import CircuitView
 from .device_model import DeviceModel
-from .full_model import Buffer
+from .open_loop_response import Buffer
 from ..models import SizingSpec, TransistorSizing
 from .node_levels import device_bias, estimate_node_levels
 from .preprocess import _first_stage_gain_factor, _mirror_reference
@@ -201,9 +201,9 @@ class StageChain:
         small-signal formulas sit on does not exist, so every gain-derived
         metric is withheld rather than reported optimistically (issue #148).
     :param compensation_scheme: the template's three-stage compensation;
-        ``"reversed_nested_miller"`` selects the RNMC full model
-        (:func:`~.full_model.phase_margin_rnmc_deg`), any other the
-        nested-Miller one (:func:`~.full_model.nested_miller_loop`).
+        ``"reversed_nested_miller"`` selects the RNMC open-loop model
+        (:func:`~.open_loop_response.phase_margin_rnmc_deg`), any other the
+        nested-Miller one (:func:`~.open_loop_response.nested_miller_loop`).
     :param node_caps_f: capacitance in F on each gain stage's output node,
         input pair first -- two entries on a two-stage chain, three on a
         three-stage one.  The inner entries are the gates of every device
@@ -212,18 +212,18 @@ class StageChain:
         stage's output behind an output buffer -- the follower's gate net,
         its gates (the follower's own aside: ``output_buffer`` models it) plus
         the drain junctions on it, nearly all that node carries (issue #266)
-        -- and ``0.0`` without one, where ``CL`` dwarfs it.  The full-model
-        GBW and phase margin read it.
+        -- and ``0.0`` without one, where ``CL`` dwarfs it.  The open-loop
+        model's GBW and phase margin read it.
     :param second_stage_mirror_pole_hz: current-mirror node pole of a
         non-inverting second stage (nested Miller) in Hz, ``None`` when it
         has no mirror.
     :param third_stage_mirror_pole_hz: current-mirror node pole of a
         non-inverting third stage (RNMC) in Hz, ``None`` when it has no mirror.
     :param output_buffer: ``(gm, cgs, g_out)`` of a source-follower output
-        buffer (:class:`~.full_model.Buffer`, :func:`_output_buffer`): the
+        buffer (:class:`~.open_loop_response.Buffer`, :func:`_output_buffer`): the
         last gain stage then drives the follower's gate and ``CL`` sits on
         the follower's output; ``None`` without one.  Its gain
-        ``gm/(gm + g_out)`` scales the GBW; RNMC's full model also reads its
+        ``gm/(gm + g_out)`` scales the GBW; RNMC's open-loop model also reads its
         ``cgs`` and output pole.
     :param comp_resistors: per half of the amplifier (one entry
         single-ended, ``_p`` then ``_n`` fully differential), whether its
@@ -233,7 +233,7 @@ class StageChain:
     :param cmfb_coupling: ``(gm_c, pole_hz)`` of a fully-differential
         amplifier's common-mode feedback (:func:`_cmfb_coupling`): it couples
         halves whose compensation differs in the two-stage and nested-Miller
-        full models; ``None`` without a CMFB.
+        open-loop models; ``None`` without a CMFB.
     :param k_slew: fraction of the tail current the first stage can steer into
         its output node -- ``1.0`` when a current-mirror load collects both
         halves of a single-ended pair, ``0.5`` without a mirror or per side of
@@ -541,7 +541,7 @@ def _cmfb_coupling(view: CircuitView, mosfets: list[Device], model, sizing,
     """
     import numpy as np
 
-    from . import full_model as fm
+    from . import open_loop_response as olr
 
     cmfb = [d for d in view.slot_transistors.get("cmfb", []) if d.ref in sizing]
     if not cmfb:
@@ -609,7 +609,7 @@ def _cmfb_coupling(view: CircuitView, mosfets: list[Device], model, sizing,
         return None
     sl = sizing[loads[0].ref]
     gm_load = model.gm(loads[0].type, sl.w_um, sl.l_um, sl.ids_a)
-    poles = [abs(p) for p in fm._poles(Guu, C) if abs(p) > 0]
+    poles = [abs(p) for p in olr._poles(Guu, C) if abs(p) > 0]
     return -gm_load * v_out, (min(poles) / (2.0 * math.pi) if poles else None)
 
 
@@ -1243,7 +1243,7 @@ def build_stage_chain(
         r_tail = node_rout(tail_current_net, mosfets, model, sizing, frozenset())
         gd_tail = 1.0 / r_tail if r_tail and r_tail != float("inf") else 0.0
 
-    # --- Multi-stage: the parasitics the full-model GBW and PM need ---
+    # --- Multi-stage: the parasitics the open-loop model needs ---
     follower = next((d for d in _first_present(slot_transistors, _OUTPUT_STAGE_ORDER)
                      if is_signal_device(d)), None)
     node_caps: tuple[float, ...] = ()

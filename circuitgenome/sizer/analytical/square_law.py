@@ -33,7 +33,7 @@ from ..physics.taxonomy import SECOND_STAGE_SLOTS, is_signal_device
 from .constraints import build_model
 
 
-#: Re-plan/re-solve rounds for a two-stage amplifier's full-model GBW and PM.
+#: Re-plan/re-solve rounds for a two-stage amplifier's open-loop-model GBW and PM.
 _TWO_STAGE_PASSES = 2
 
 
@@ -136,7 +136,7 @@ def _size_planned(
         return build_stage_chain(view, sizing, dev_model, spec,
                                  cc_pf=cc_pf, cc2_pf=cc2_pf, gd_load_r=gd_load_r)
 
-    # Two-stage: re-solve at the gm1/gm2 the full-model GBW and phase margin
+    # Two-stage: re-solve at the gm1/gm2 the open-loop model's GBW and phase margin
     # need (issue #274).  Square law: W, and with it the second stage's own
     # gate on the first-stage node, grows as gm2².  The integer W grid can
     # overshoot a raised gm1 by ~10 %, so a second pass re-plans gm2 against

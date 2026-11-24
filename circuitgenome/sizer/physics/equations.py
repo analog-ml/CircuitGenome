@@ -11,7 +11,7 @@ Every function here is a closed-form textbook formula, in three groups:
 3. **Compensation design rules**: the value a compensation part should take.
 
 Multi-stage GBW, phase margin and pole damping are read off the
-:mod:`.full_model` instead, which solves the circuit numerically.
+:mod:`.open_loop_response` instead, which solves the circuit numerically.
 
 Units are SI unless the name says otherwise: currents in A, voltages in V,
 transconductances in A/V, capacitances in F, frequencies in Hz, power in W.
@@ -154,7 +154,7 @@ def cdb(cdb_f_per_um: float | None, w_um: float) -> float:
     Cdb = W·cdb
 
     The drain's area grows with the width, not the length.  Only the RNMC
-    full model reads it: behind an output buffer the third stage's drains
+    open-loop model reads it: behind an output buffer the third stage's drains
     are most of what its output node carries (#266).
 
     :param cdb_f_per_um: Junction capacitance per µm of width in F/µm, or
@@ -243,7 +243,8 @@ def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
     GBW = gain·gm1 / (2π·Cc)
 
     Poles near the crossing pull the real GBW lower; the multi-stage metrics
-    read it off the full model instead (:func:`~.full_model.two_stage_loop`).
+    read it off the open-loop model instead
+    (:func:`~.open_loop_response.two_stage_loop`).
 
     :param gm1_a_v: Input-pair transconductance in A/V.
     :param cc_f: Compensation cap in F.
@@ -278,7 +279,7 @@ def phase_margin_two_stage_deg(
 
     The Miller cap sets the main pole; the output, at ``gm2/CL``, sets the
     next one.  The mirror pole is ignored.  The sizer plans with this; the
-    reported margin comes from :func:`~.full_model.two_stage_loop`.
+    reported margin comes from :func:`~.open_loop_response.two_stage_loop`.
 
     :param gm1: Input-pair transconductance in A/V.
     :param gm2: Second-stage transconductance in A/V.
@@ -299,8 +300,8 @@ def phase_margin_three_stage_deg(
 
     Treats the two extra poles, at ``gm2/Cc2`` and ``gm3/CL``, as separate.
     They really form a pair that can ring, so the reported margin comes from
-    :func:`~.full_model.nested_miller_loop` (and, for reversed nested Miller,
-    :func:`~.full_model.phase_margin_rnmc_deg`).
+    :func:`~.open_loop_response.nested_miller_loop` (and, for reversed nested Miller,
+    :func:`~.open_loop_response.phase_margin_rnmc_deg`).
 
     :param gm1: Input-pair transconductance in A/V.
     :param gm2: Second-stage transconductance in A/V.
@@ -426,7 +427,7 @@ def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
 
     whose positive root is the answer.  A quick seed: it ignores output
     conductances, the first-stage parasitic, a third-stage mirror and an
-    output buffer, which :func:`~.full_model.rnmc_pole_damping` includes.
+    output buffer, which :func:`~.open_loop_response.rnmc_pole_damping` includes.
 
     :param gm3: Third-stage transconductance in A/V.
     :param cc1_f: Outer cap, first-stage output → output, in F.

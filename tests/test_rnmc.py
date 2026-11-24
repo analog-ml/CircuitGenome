@@ -14,7 +14,7 @@ import pytest
 
 from circuitgenome.sizer import SizingSpec
 from circuitgenome.sizer.physics import equations as eq
-from circuitgenome.sizer.physics import full_model as fm
+from circuitgenome.sizer.physics import open_loop_response as olr
 from circuitgenome.sizer.physics import rnmc
 from circuitgenome.sizer.physics.metrics import evaluate_metrics
 from circuitgenome.sizer.physics.stage_chain import Stage, StageChain
@@ -30,15 +30,15 @@ MIRROR = dict(mirror_pole_hz=840e6)
 def loop(gm1, gm2, gm3, c=(0.0, 0.0, 0.0), g=(0.0, 0.0, 0.0)):
     """The RNMC loop's three stages from per-stage gm, output-node
     capacitance ``c`` and output conductance ``g``."""
-    return tuple(fm.SmallSignalStage(*x) for x in zip((gm1, gm2, gm3), g, c))
+    return tuple(olr.SmallSignalStage(*x) for x in zip((gm1, gm2, gm3), g, c))
 
 
 # --------------------------------------------------------------------------- #
 # Stability condition gm3 < gm2·(1 + CL/Cc1)
 # --------------------------------------------------------------------------- #
 def damping(gm2, gm3, c2_f=0.0):
-    """Full-model damping of the bare loop: no mirror, buffer or conductances."""
-    return fm.rnmc_pole_damping(loop(GM1, gm2, gm3, c=(0.0, c2_f, 0.0)), *CAPS)
+    """Open-loop-model damping of the bare loop: no mirror, buffer or conductances."""
+    return olr.rnmc_pole_damping(loop(GM1, gm2, gm3, c=(0.0, c2_f, 0.0)), *CAPS)
 
 
 def test_fixture_sizing_violates_the_stability_condition():
@@ -54,7 +54,7 @@ def test_stability_boundary_is_one_plus_cl_over_cc1():
 
 
 def test_min_gm2_hits_the_damping_target_exactly():
-    """The closed form agrees with the full model on the bare loop."""
+    """The closed form agrees with the open-loop model on the bare loop."""
     gm2 = eq.rnmc_min_gm2(GM3, CC1, CC2, CL, C2, zeta=0.7)
     assert damping(gm2, GM3, C2) == pytest.approx(0.7, abs=1e-6)
     # Damping needs more than bare stability.
@@ -68,12 +68,12 @@ def test_second_stage_output_parasitic_raises_the_gm2_floor():
 
 
 # --------------------------------------------------------------------------- #
-# Full-model phase margin
+# Open-loop-model phase margin
 # --------------------------------------------------------------------------- #
 def test_rhp_inner_pair_reports_zero_margin():
     """The fixture's as-built sizing: the old formula said ~59°, SPICE said RHP."""
     assert eq.phase_margin_three_stage_deg(GM1, 0.23e-3, GM3, CC1, CC2, CL) > 55
-    assert fm.phase_margin_rnmc_deg(loop(GM1, 0.23e-3, GM3, C_NODES, G), *CAPS,
+    assert olr.phase_margin_rnmc_deg(loop(GM1, 0.23e-3, GM3, C_NODES, G), *CAPS,
                                     **MIRROR) == 0.0
 
 
@@ -85,38 +85,38 @@ def test_round_off_on_the_dominant_pole_is_not_a_rhp_pole():
     LAPACK build), which used to read as an RHP pole and a 0° margin.  A
     real RHP pole, or a complex pair, still counts."""
     noise = [complex(6e-17, 0), complex(-1.76e9, 0), complex(-2.27e10, 0)]
-    assert not fm._has_rhp_pole(noise)
-    assert fm._has_rhp_pole([complex(1e3, 0), complex(-1e9, 0)])
-    assert fm._has_rhp_pole([complex(-1e3, 0), complex(2e8, 9e8),
+    assert not olr._has_rhp_pole(noise)
+    assert olr._has_rhp_pole([complex(1e3, 0), complex(-1e9, 0)])
+    assert olr._has_rhp_pole([complex(-1e3, 0), complex(2e8, 9e8),
                              complex(2e8, -9e8)])
     for gm2 in (10e-3, 11.5e-3, 13.225e-3):
-        assert fm.phase_margin_rnmc_deg(loop(20e-6, gm2, 1e-3), *CAPS) > 85
+        assert olr.phase_margin_rnmc_deg(loop(20e-6, gm2, 1e-3), *CAPS) > 85
 
 
 def test_second_zero_db_crossing_is_a_negative_margin():
     """A lightly damped pair lifts the gain back above 0 dB past −180°."""
     stages = loop(GM1, 0.72e-3, GM3, C_NODES, G)
-    assert fm.rnmc_pole_damping(stages, *CAPS, **MIRROR) > 0
-    pm = fm.phase_margin_rnmc_deg(stages, *CAPS, **MIRROR)
+    assert olr.rnmc_pole_damping(stages, *CAPS, **MIRROR) > 0
+    pm = olr.phase_margin_rnmc_deg(stages, *CAPS, **MIRROR)
     assert pm < 0
 
 
 def test_damped_design_has_a_sane_margin():
     """gm2 at its ceiling, gm3 capped: SPICE measured ~59° on this sizing."""
-    pm = fm.phase_margin_rnmc_deg(loop(GM1, 0.9e-3, 0.45e-3, (160e-15, 1.4e-15, 0.0), G),
+    pm = olr.phase_margin_rnmc_deg(loop(GM1, 0.9e-3, 0.45e-3, (160e-15, 1.4e-15, 0.0), G),
                                   *CAPS, **MIRROR)
     assert 50 < pm < 70
 
 
 def test_far_nondominant_poles_approach_ninety_degrees():
     """With gm2, gm3 huge the loop is a pure integrator at crossover."""
-    pm = fm.phase_margin_rnmc_deg(loop(1e-5, 1.0, 1.0), *CAPS)
+    pm = olr.phase_margin_rnmc_deg(loop(1e-5, 1.0, 1.0), *CAPS)
     assert pm == pytest.approx(90.0, abs=1.0)
 
 
 def test_no_crossing_returns_none():
     """A loop whose DC gain is below 0 dB has no margin to report."""
-    assert fm.phase_margin_rnmc_deg(loop(1e-6, 1e-6, 1e-6, g=(1e-3,) * 3),
+    assert olr.phase_margin_rnmc_deg(loop(1e-6, 1e-6, 1e-6, g=(1e-3,) * 3),
                                     *CAPS) is None
 
 
@@ -124,7 +124,7 @@ _GF180 = loop(60e-6, 0.913e-3, 1.15e-3, (161e-15, 57.5e-15, 0.0),
               (1 / 1.33e6, 1 / 1.98e5, 1 / 1.18e5))
 _GF180_CAPS = (1.25e-12, 0.9375e-12, 5e-12)
 _GF180_KW = dict(mirror_pole_hz=512e6)
-_GF180_FOLLOWER = fm.Buffer(0.3e-3, 19.9e-15, 1e-5)
+_GF180_FOLLOWER = olr.Buffer(0.3e-3, 19.9e-15, 1e-5)
 
 
 @pytest.mark.parametrize("stages, caps, kw, zeta, pm", [
@@ -140,11 +140,11 @@ _GF180_FOLLOWER = fm.Buffer(0.3e-3, 19.9e-15, 1e-5)
     pytest.param(_GF180, _GF180_CAPS, dict(_GF180_KW, buffer=_GF180_FOLLOWER),
                  -0.216649, 0.0, id="gf180-buffered-rhp"),
 ])
-def test_full_model_values_are_pinned(stages, caps, kw, zeta, pm):
-    """Damping and PM of the full model on the fixtures, frozen so a change
+def test_open_loop_model_values_are_pinned(stages, caps, kw, zeta, pm):
+    """Damping and PM of the open-loop model on the fixtures, frozen so a change
     to how the model is solved cannot move them unnoticed."""
-    assert fm.rnmc_pole_damping(stages, *caps, **kw) == pytest.approx(zeta, abs=1e-6)
-    assert fm.phase_margin_rnmc_deg(stages, *caps, **kw) == pytest.approx(pm, abs=1e-3)
+    assert olr.rnmc_pole_damping(stages, *caps, **kw) == pytest.approx(zeta, abs=1e-6)
+    assert olr.phase_margin_rnmc_deg(stages, *caps, **kw) == pytest.approx(pm, abs=1e-3)
 
 
 def test_metrics_use_the_rnmc_model_for_rnmc_chains():
@@ -198,7 +198,7 @@ def test_design_scores_parasitics_at_the_chosen_gm():
     d = rnmc.design_rnmc(GM1, 0.23e-3, GM3, cc1_f=CC1, cc2_f=CC2, cl_f=CL,
                          gm2_max=0.9e-3, gm3_min=0.45e-3, pm_min_deg=60,
                          c1_f=c1, c2_f=C2, g=G, mirror_pole_hz=840e6)
-    expected = fm.phase_margin_rnmc_deg(
+    expected = olr.phase_margin_rnmc_deg(
         loop(GM1, d.gm2, d.gm3, (c1(d.gm2), C2 * d.gm3 / GM3, 0.0), G),
         CC1, d.cc2_f, CL, mirror_pole_hz=840e6)
     assert d.pm_deg == pytest.approx(expected)
@@ -211,11 +211,11 @@ def test_output_follower_inside_the_cc1_loop_is_seen():
     stable; with the source follower in place the third stage drives only the
     follower's gate, whose input turns negative-resistive above gm_f/CL, and
     the inner pair lands in the right half plane."""
-    assert fm.rnmc_pole_damping(_GF180, *_GF180_CAPS, **_GF180_KW) > 0
-    assert fm.phase_margin_rnmc_deg(_GF180, *_GF180_CAPS, **_GF180_KW) > 45
+    assert olr.rnmc_pole_damping(_GF180, *_GF180_CAPS, **_GF180_KW) > 0
+    assert olr.phase_margin_rnmc_deg(_GF180, *_GF180_CAPS, **_GF180_KW) > 45
     buffered = dict(_GF180_KW, buffer=_GF180_FOLLOWER)
-    assert fm.rnmc_pole_damping(_GF180, *_GF180_CAPS, **buffered) < 0
-    assert fm.phase_margin_rnmc_deg(_GF180, *_GF180_CAPS, **buffered) == 0.0
+    assert olr.rnmc_pole_damping(_GF180, *_GF180_CAPS, **buffered) < 0
+    assert olr.phase_margin_rnmc_deg(_GF180, *_GF180_CAPS, **buffered) == 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -229,7 +229,7 @@ def test_output_follower_inside_the_cc1_loop_is_seen():
 _BUF = loop(0.1e-3, 0.573e-3, 0.601e-3, (182.5e-15, 57.2e-15, 32e-15),
             (1e-9, 2.3e-6, 7.54e-6))
 _BUF_CAPS = (1.25e-12, 1.25e-12, 5e-12)
-_BUF_KW = dict(mirror_pole_hz=747e6, buffer=fm.Buffer(0.3014e-3, 5.38e-15, 40.4e-6))
+_BUF_KW = dict(mirror_pole_hz=747e6, buffer=olr.Buffer(0.3014e-3, 5.38e-15, 40.4e-6))
 
 
 def test_cc2_series_resistor_damps_the_buffered_pair():
@@ -237,11 +237,11 @@ def test_cc2_series_resistor_damps_the_buffered_pair():
     sits in series with Cc2, but not with Cc1.  A bare Cc2 feeds the
     first-stage output forward into the second's (a right-half-plane zero
     near gm2/Cc2 ≈ 73 MHz); the resistor cancels it."""
-    assert fm.rnmc_pole_damping(_BUF, *_BUF_CAPS, **_BUF_KW) < 0
-    assert fm.phase_margin_rnmc_deg(_BUF, *_BUF_CAPS, **_BUF_KW) == 0.0
-    assert fm.rnmc_pole_damping(_BUF, *_BUF_CAPS, **_BUF_KW, comp_r=(1700.0, 0.0)) < 0
-    assert fm.rnmc_pole_damping(_BUF, *_BUF_CAPS, **_BUF_KW, comp_r=(0.0, 1700.0)) > 0.7
-    assert fm.phase_margin_rnmc_deg(_BUF, *_BUF_CAPS, **_BUF_KW,
+    assert olr.rnmc_pole_damping(_BUF, *_BUF_CAPS, **_BUF_KW) < 0
+    assert olr.phase_margin_rnmc_deg(_BUF, *_BUF_CAPS, **_BUF_KW) == 0.0
+    assert olr.rnmc_pole_damping(_BUF, *_BUF_CAPS, **_BUF_KW, comp_r=(1700.0, 0.0)) < 0
+    assert olr.rnmc_pole_damping(_BUF, *_BUF_CAPS, **_BUF_KW, comp_r=(0.0, 1700.0)) > 0.7
+    assert olr.phase_margin_rnmc_deg(_BUF, *_BUF_CAPS, **_BUF_KW,
                                     comp_r=(0.0, 1700.0)) > 30
 
 
@@ -250,7 +250,7 @@ def test_third_stage_output_capacitance_damps_the_buffered_pair():
     +100 fF still rings.  The model's pair moves left with every femtofarad
     and crosses into the left half plane near +100 fF -- a little early."""
     def zeta(c3):
-        return fm.rnmc_pole_damping((*_BUF[:2], _BUF[2]._replace(c=c3)),
+        return olr.rnmc_pole_damping((*_BUF[:2], _BUF[2]._replace(c=c3)),
                                     *_BUF_CAPS, **_BUF_KW)
     assert zeta(32e-15) < 0 < zeta(332e-15)
     assert zeta(32e-15) < zeta(132e-15) < zeta(232e-15) < zeta(332e-15)
@@ -270,19 +270,19 @@ def test_comp_resistances_follow_the_sizing_rule_per_half():
     assert rnmc.comp_resistances((), gm3, cc1, cc2, cbuf) == [(0.0, 0.0)]
 
 
-def test_rnmc_gbw_is_the_full_models_first_crossing():
+def test_rnmc_gbw_is_the_open_loop_models_first_crossing():
     """Issue #274: the buffered RNMC loop crosses 0 dB well under
     gm1/(2π·Cc1) -- the pair near crossover and the follower's gain below 1
     both pull it, and SPICE measured ~20 % under -- while stages far faster
     than the crossover leave it there."""
     gm1, gm2, gm3 = (s.gm for s in _BUF)
     cc1 = _BUF_CAPS[0]
-    gbw = fm.unity_gain_bw_rnmc_hz(_BUF, *_BUF_CAPS, **_BUF_KW, comp_r=(0.0, 1700.0))
+    gbw = olr.unity_gain_bw_rnmc_hz(_BUF, *_BUF_CAPS, **_BUF_KW, comp_r=(0.0, 1700.0))
     nominal = eq.unity_gain_bw(gm1, cc1)
     gm_f, _cgs, g_f = _BUF_KW["buffer"]
     assert gbw < eq.unity_gain_bw(gm1, cc1, gain=gm_f / (gm_f + g_f)) < nominal
     assert 0.6 * nominal < gbw
-    fast = fm.unity_gain_bw_rnmc_hz(loop(gm1, 100 * gm2, 100 * gm3), *_BUF_CAPS)
+    fast = olr.unity_gain_bw_rnmc_hz(loop(gm1, 100 * gm2, 100 * gm3), *_BUF_CAPS)
     assert fast == pytest.approx(nominal, rel=0.01)
 
 
@@ -320,7 +320,7 @@ def test_unbuffered_rnmc_models_its_resistors_at_one_over_gm3():
 
     pm = evaluate_metrics(replace(chain, comp_resistors=((True, False),)),
                           spec)[0]["phase_margin_deg"]
-    expected = fm.phase_margin_rnmc_deg(
+    expected = olr.phase_margin_rnmc_deg(
         loop(GM1, 1.5e-3, gm3, C_NODES, (1 / 2e6, 1 / 7e4, 1 / 3e4)),
         *CAPS, comp_r=(1 / gm3, 0.0))
     assert pm == pytest.approx(expected)

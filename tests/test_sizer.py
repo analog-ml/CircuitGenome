@@ -1663,7 +1663,7 @@ def test_fd_cmfb_couples_mismatched_compensation_halves():
     The chain reads that loop off the CMFB devices."""
     from circuitgenome.sizer.gmid import evaluate as ev
     from circuitgenome.sizer.physics import equations as eq
-    from circuitgenome.sizer.physics import full_model as fm
+    from circuitgenome.sizer.physics import open_loop_response as olr
     captured = {}
     orig = ev.evaluate_metrics
 
@@ -1694,10 +1694,10 @@ def test_fd_cmfb_couples_mismatched_compensation_halves():
     assert 0.3 * gm1 < gm_c < 3.0 * gm1
     assert pole_hz > 5 * result.metrics["gbw_hz"]
     pm = result.metrics["phase_margin_deg"]
-    stages = (fm.SmallSignalStage(gm1, 1 / chain.stages[0].rout, chain.node_caps_f[0]),
-              fm.SmallSignalStage(chain.stages[1].gm, 1 / chain.stages[1].rout,
+    stages = (olr.SmallSignalStage(gm1, 1 / chain.stages[0].rout, chain.node_caps_f[0]),
+              olr.SmallSignalStage(chain.stages[1].gm, 1 / chain.stages[1].rout,
                                   chain.node_caps_f[1]))
-    uncoupled = fm.two_stage_loop(
+    uncoupled = olr.two_stage_loop(
         stages, chain.cc_pf * 1e-12, spec.cl,
         r_ohm=tuple(eq.compensation_resistor_ohm(chain.cc_pf * 1e-12, spec.cl,
                                                  chain.stages[1].gm) if r1 else 0.0

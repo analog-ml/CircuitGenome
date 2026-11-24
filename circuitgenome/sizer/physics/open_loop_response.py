@@ -1,4 +1,5 @@
-"""The full model: an amplifier's open loop solved from its nodal equations.
+"""The open-loop model: an amplifier's gain and phase at every frequency,
+solved from its nodal equations.
 
 The closed forms in :mod:`.equations` treat each extra pole as separate and
 real.  They miss what decides a multi-stage amplifier's stability: poles that
