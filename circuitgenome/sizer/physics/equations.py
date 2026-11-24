@@ -321,17 +321,25 @@ def phase_margin_three_stage_deg(
     gm1: float, gm2: float, gm3: float,
     cc1_f: float, cc2_f: float, cl_f: float,
 ) -> float:
-    """Phase margin in degrees for a nested-Miller (NMC) three-stage op-amp.
+    """Phase margin in degrees of a three-stage nested-Miller (NMC) op-amp.
 
-    PM ≈ 90° − arctan(ωt·Cc2/gm2) − arctan(ωt·CL/gm3)
-    where ωt = gm1/Cc1.
+    PM = 90° − arctan(ωt / ωp2) − arctan(ωt / ωp3),
+    with ωt = gm1/Cc1, ωp2 = gm2/Cc2, ωp3 = gm3/CL
 
-    Treats the two non-dominant poles as separate real poles at gm2/Cc2 and
-    gm3/CL.  They are really a pole pair, which can ring however healthy
-    this margin looks; NMC sizing guards that with a damping rule instead
-    (:func:`~.preprocess.compute_requirements`).  Reversed nested Miller,
-    whose pair can also sit in the right half plane, uses
+    Phase margin starts at 180°.  The first stage's output, slowed by the
+    outer Miller cap Cc1, is the main pole and, by the GBW, has used up 90°
+    of it.  Two more poles each take their own lag at ωt: the inner Miller
+    loop's (gm2/Cc2) and the output's (gm3/CL).
+
+    A rough sizing picture: the two poles are really a pair, which can ring
+    however healthy this number looks, and it ran 15–35° low in SPICE
+    (issues #208, #274).  The sizer splits the phase budget between the two
+    poles the same way to choose gm2 and gm3
+    (:func:`~.preprocess.compute_requirements`), but reports the full model,
+    :func:`nested_miller_loop`.  Reversed nested Miller uses
     :func:`phase_margin_rnmc_deg`.
+
+    Derivation: :doc:`/theory/three_stage_phase_margin`.
 
     :param gm1: Input-pair transconductance in A/V.
     :param gm2: Second-stage signal transistor gm in A/V.

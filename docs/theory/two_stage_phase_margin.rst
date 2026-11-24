@@ -229,5 +229,4 @@ Scope
   current mirror the second.  See :doc:`single_stage_phase_margin`.
 - **Three-stage op-amps** have two non-dominant poles that *can* form a
   ringing pair; see
-  :func:`~circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg`
-  and :doc:`rnmc_stability`.
+  :doc:`three_stage_phase_margin` and :doc:`rnmc_stability`.
