@@ -251,15 +251,14 @@ def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
 
     GBW = gain·gm1 / (2π·Cc)
 
-    ``gain`` is the gain after the integrating stage: a source follower's
-    ``gm/(gm + gmb + g_out)``, ~0.88 for a GF180 NMOS follower (issue #274).
-    Poles near crossover pull the real crossing lower; the multi-stage
-    metrics read it off the full model instead (:func:`two_stage_loop`).
+    This is where the loop gain falls to 1 when one capacitor sets the only
+    pole.  Other poles near it pull the real crossing lower; the full models
+    (e.g. :func:`two_stage_loop`) include that.
 
     :param gm1_a_v: Input-pair transconductance in A/V.
-    :param cc_f: Compensation capacitor in F.
-    :param gain: Gain between the Miller output and the amplifier output,
-        ``1.0`` without an output buffer.
+    :param cc_f: Compensation capacitor in F (``CL`` for a single-stage OTA).
+    :param gain: Gain of the output buffer, e.g. ~0.88 for an NMOS source
+        follower on GF180; ``1.0`` without a buffer.
     """
     return gain * gm1_a_v / (2.0 * math.pi * cc_f)
 
@@ -297,15 +296,12 @@ def phase_margin_two_stage_deg(
 
     PM = 90° − arctan(gm1·CL / (gm2·Cc))
 
-    Phase margin starts at 180°.  The first stage's output, slowed by the
-    Miller cap Cc, is the main pole and, by the GBW, has used up 90° of it.
-    The output node is the second pole, at gm2/CL; at the GBW (gm1/Cc) it
-    takes another arctan(GBW / f_p2) = arctan(gm1·CL / (gm2·Cc)).
+    Phase margin starts at 180°.  The main pole, set by the Miller cap Cc,
+    has used up 90° by the GBW (gm1/Cc).  The output pole (gm2/CL) takes the
+    arctan term.
 
-    It reads 2–5° high: it leaves out Cc's right-half-plane zero and the
-    first-stage node capacitance (issue #274).  The sizer uses it to choose
-    gm2; the reported phase margin comes from the full model,
-    :func:`two_stage_loop`.
+    A sizing estimate, used to choose gm2.  It reads 2–5° high; the reported
+    phase margin comes from :func:`two_stage_loop`.
 
     Derivation: :doc:`/theory/two_stage_phase_margin`.
 
@@ -326,18 +322,14 @@ def phase_margin_three_stage_deg(
     PM = 90° − arctan(ωt / ωp2) − arctan(ωt / ωp3),
     with ωt = gm1/Cc1, ωp2 = gm2/Cc2, ωp3 = gm3/CL
 
-    Phase margin starts at 180°.  The first stage's output, slowed by the
-    outer Miller cap Cc1, is the main pole and, by the GBW, has used up 90°
-    of it.  Two more poles each take their own lag at ωt: the inner Miller
-    loop's (gm2/Cc2) and the output's (gm3/CL).
+    Phase margin starts at 180°.  The main pole, set by the outer Miller cap
+    Cc1, has used up 90° by the GBW (ωt).  The inner Miller loop's pole (ωp2)
+    and the output pole (ωp3) each take one arctan term.
 
-    A rough sizing picture: the two poles are really a pair, which can ring
-    however healthy this number looks, and it ran 15–35° low in SPICE
-    (issues #208, #274).  The sizer splits the phase budget between the two
-    poles the same way to choose gm2 and gm3
-    (:func:`~.preprocess.compute_requirements`), but reports the full model,
-    :func:`nested_miller_loop`.  Reversed nested Miller uses
-    :func:`phase_margin_rnmc_deg`.
+    A rough estimate: the last two poles can interact and ring, which it
+    cannot see, and it ran 15–35° pessimistic in SPICE.  The reported phase
+    margin comes from :func:`nested_miller_loop`.  For reversed nested Miller
+    use :func:`phase_margin_rnmc_deg`.
 
     Derivation: :doc:`/theory/three_stage_phase_margin`.
 
