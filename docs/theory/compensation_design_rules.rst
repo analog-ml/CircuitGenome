@@ -152,61 +152,62 @@ then we have
    a_2 = \frac{C_LC_{c1}C_{c2}\,K}{C_{c1}\,g_{m2}\,g_{m3}}
        = \frac{C_L\,C_{c2}\,K}{g_{m2}\,g_{m3}}
 
-Step 4 — Read the damping
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Dividing by :math:`A` left the bracket starting with 1, so it matches the
-standard form of a pole pair term by term:
+Any bouncing system (a spring, a car, this circuit)
+can be written with two numbers that have a meaning.  This is the *standard
+form* of a pole pair:
 
 .. math::
 
-   1 + a_1\,s + a_2\,s^2
-   \quad\leftrightarrow\quad
    1 + \frac{2\zeta}{\omega_n}\,s + \frac{1}{\omega_n^2}\,s^2
 
-The :math:`s^2` terms give :math:`\omega_n = 1/\sqrt{a_2}`, and the :math:`s`
-terms then give
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Symbol
+     - Question it answers
+   * - :math:`\omega_n`
+     - How *fast* does it bounce?
+   * - :math:`\zeta`
+     - How *bouncy* is it?  (The 2 makes :math:`\zeta = 1` the exact borderline
+       between bouncing and not bouncing.)
+
+Match it piece by piece.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 25 30
+
+   * - In front of
+     - Ours
+     - Standard form
+     - So
+   * - :math:`s^2`
+     - :math:`a_2`
+     - :math:`1/\omega_n^2`
+     - :math:`\omega_n = 1/\sqrt{a_2}`
+   * - :math:`s`
+     - :math:`a_1`
+     - :math:`2\zeta/\omega_n`
+     - :math:`\zeta = a_1\,\omega_n/2`
+
+Put the first result into the second:
 
 .. math::
 
    \zeta = \frac{a_1\,\omega_n}{2} = \frac{a_1}{2\sqrt{a_2}}
 
-:math:`\sqrt{a_2}` is always positive, so :math:`\zeta` takes the sign of
-:math:`a_1`, and the sign of :math:`a_1` is the tug-of-war:
+The pair is stable when :math:`\zeta` is positive.
+The bottom, :math:`2\sqrt{a_2}`, is always positive, so :math:`\zeta` takes the
+sign of :math:`a_1`.  In :math:`a_1` every symbol is positive, so only the
+subtraction in its bracket can make it negative:
 
 .. math::
 
-   \underbrace{(C_L+C_{c1})\,g_{m2}}_{\text{stage 2 adds damping}}
+   \underbrace{(C_L+C_{c1})\,g_{m2}}_{\text{stage 2 calms}}
    \;-\;
-   \underbrace{C_{c1}\,g_{m3}}_{\text{stage 3 takes it away}}
+   \underbrace{C_{c1}\,g_{m3}}_{\text{stage 3 stirs}}
 
-The two terms are the two loops of the sign table.  Multiplied by the
-:math:`C_{c2}` in front of the bracket in :math:`B`, the second is
-:math:`C_{c1}C_{c2}\,g_{m3}`: both capacitors and stage 3, but no
-:math:`g_{m2}`, because that loop bypasses stage 2.
-
-A positive difference means stable: the bounce dies out eventually.  How *well*
-it dies out is a second question, with a stricter answer (:math:`\zeta = 0.7`).
-
-With numbers
-~~~~~~~~~~~~
-
-With :math:`g_{m2}` = 0.4 mS, :math:`g_{m3}` = 1 mS, :math:`C_{c1}` = 2 pF,
-:math:`C_{c2}` = 1 pF, :math:`C_L` = 8 pF and no parasitic:
-
-.. code-block:: text
-
-   A  = 2 pF · 0.4 mS · 1 mS                        = 8.0e-19
-   B  = 1 pF · (10 pF · 0.4 mS − 2 pF · 1 mS)       = 2.0e-27
-   E  = 8 pF · 2 pF · 1 pF                          = 1.6e-35
-
-   a1 = B / A                                       = 2.5e-9
-   a2 = E / A                                       = 2.0e-17
-   ζ  = 2.5e-9 / (2 · √2.0e-17) = 2.5e-9 / 8.94e-9  = 0.28
-
-Stage 2 adds more damping than stage 3 takes away, so :math:`\zeta` is positive
-and the pair is stable.  But 0.28 is far from 0.7, so it rings.  Being stable is
-not enough, so section 2 asks for more.
 
 2. The second-stage floor: ``rnmc_min_gm2``
 -------------------------------------------
