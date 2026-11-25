@@ -212,7 +212,7 @@ subtraction in its bracket can make it negative:
 2. The second-stage floor: ``rnmc_min_gm2``
 -------------------------------------------
 
-Section 1 gives :math:`\zeta` for a known :math:`g_{m2}`.  This function runs
+In Section 1 we know how to calculate :math:`\zeta` for a known :math:`g_{m2}`.  This function runs
 it backwards: it sets :math:`\zeta` to ``zeta_target`` and solves for
 :math:`g_{m2}`.
 
@@ -259,7 +259,7 @@ textbook does:
 coefficients of the polynomial in :math:`s`.)  Since :math:`a > 0` and
 :math:`c < 0`, exactly one root is positive.  The result is its square.
 
-By hand
+Example
 ~~~~~~~
 
 With :math:`g_{m3}` = 1 mS, :math:`C_{c1}` = 2 pF, :math:`C_{c2}` = 1 pF,
@@ -274,44 +274,6 @@ With :math:`g_{m3}` = 1 mS, :math:`C_{c1}` = 2 pF, :math:`C_{c2}` = 1 pF,
    sqrt_gm2 = (2.504e-13 + 3.778e-13) / 20 pF         =  0.03141
    gm2      = 0.03141²                                =  0.987 mS
 
-Worked examples
-~~~~~~~~~~~~~~~
-
-The same circuit at other second-stage strengths.  Both :math:`\zeta` columns
-agree; the last column is
-:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`
-at :math:`g_{m1}` = 50 µS:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 14 16 18 16 36
-
-   * - :math:`g_{m2}`
-     - ζ (closed form)
-     - ζ (open-loop model)
-     - Phase margin
-     - Reading
-   * - 0.1 mS
-     - −0.28
-     - −0.28
-     - 0°
-     - Unstable: stage 3 takes away more damping than stage 2 adds.
-   * - 0.4 mS
-     - 0.28
-     - 0.28
-     - 82.7°
-     - Stable, but it rings, and the phase margin does not show it.
-   * - 0.987 mS
-     - **0.70**
-     - **0.70**
-     - 82.8°
-     - The floor: damped.
-
-With a parasitic :math:`C_2` = 0.5 pF, ``k`` grows to 1.81 and the floor rises
-to 1.51 mS.
-
-Where the sizer uses it
-~~~~~~~~~~~~~~~~~~~~~~~
 
 The floor is a starting point, not the final answer.
 :func:`~circuitgenome.sizer.physics.rnmc.design_rnmc` starts its
@@ -325,164 +287,134 @@ the full strategy.
 3. The nulling resistor: ``compensation_resistor_ohm``
 ------------------------------------------------------
 
-The previous section chose a stage's strength.  This one deals with a side
-effect of the capacitor itself.
+**Objective.**  Without a resistor, the compensation cap creates a
+right-half-plane zero.  Like an extra pole, it delays the signal and so reduces
+the phase margin.  This function finds the series resistor that moves the zero
+onto the output pole, so that the zero cancels the pole:
 
-The problem: a capacitor conducts both ways
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Poles, zeros and phase margin.**  Phase margin is a safety budget: how many
+more degrees of delay the loop can take, at the frequency where its gain falls
+to 1, before it reaches 180° and oscillates.  Every pole uses up some of that
+budget, because it delays the signal.  A zero can go either way:
 
-A compensation cap is there to carry the output *back* to the stage's input.
+.. list-table::
+   :header-rows: 1
+   :widths: 44 30 26
+
+   * -
+     - Delay
+     - Phase margin
+   * - pole
+     - adds delay
+     - costs
+   * - zero, left half plane (negative)
+     - removes delay
+     - **gives back**
+   * - zero, right half plane (positive)
+     - adds delay, like a pole
+     - **costs**
+
+**The problem:** A compensation cap is there to carry the output *back* to the stage's input.
 At high frequency it also carries the input *forward*, past the stage:
+
+We will need to come up with the derivation that solves the circuit for its zero and its poles, then sets the
+zero equal to the output pole.
+
+**The circuit.**  The first stage delivers a current :math:`i_{in}` into the
+gate node.  :math:`C_1` is the small parasitic there.  Output conductances are
+left out; they matter only at low frequency.
 
 .. code-block:: text
 
-        ┌──── Cc ─── R ────┐      forward path: not inverted
-        │                  │
-   vin ─●── ▷ gm_out ──────●── vout
-            (inverts)     ═╧═ C
+              ┌──── R ──── Cc ───┐
+              │                  │
+   i_in ──►──●vin ── ▷ gm_out ──●── vout
+              │                  │
+             ═╧═ C1             ═╧═ C
 
-The stage inverts and the shortcut does not, so the two fight.  Where they
-cancel exactly there is a **zero**, and without a resistor it costs phase
-(a *right-half-plane* zero).
-
-Where the zero lands
-~~~~~~~~~~~~~~~~~~~~
-
-At the zero the output does not move, so the cap branch must deliver exactly
-the current the transistor draws:
+**Merge R and Cc.**  In series, impedances add, so the branch has the
+admittance
 
 .. math::
 
-   g_{m,out}\,v_{in} = \frac{v_{in}}{R + 1/(sC_c)}
-   \quad\Rightarrow\quad
+   Y = \frac{1}{R + 1/(sC_c)} = \frac{sC_c}{1 + sRC_c}
+
+**Write Kirchhoff's current law** at :math:`v_{out}` and at :math:`v_{in}`:
+
+.. math::
+
+   \begin{aligned}
+   g_{m,out}\,v_{in} + (v_{out}-v_{in})\,Y + sC\,v_{out} &= 0 \\
+   sC_1\,v_{in} + (v_{in}-v_{out})\,Y &= i_{in}
+   \end{aligned}
+
+**Solve for the output.**  The first line gives
+
+.. math::
+
+   v_{in} = v_{out}\,\frac{sC + Y}{Y - g_{m,out}}
+
+Put that into the second line.  The two :math:`Y^2` terms cancel:
+
+.. math::
+
+   \frac{v_{out}}{i_{in}}
+   = \frac{Y - g_{m,out}}{(sC+Y)(sC_1+Y) - Y(Y-g_{m,out})}
+   = \frac{Y - g_{m,out}}{s^2CC_1 + Y\,[\,g_{m,out} + s(C+C_1)\,]}
+
+Multiply top and bottom by :math:`1 + sRC_c`, which turns :math:`Y` into
+:math:`sC_c`:
+
+.. math::
+
+   \frac{v_{out}}{i_{in}}
+   = \frac{sC_c\,(1 - g_{m,out}R) - g_{m,out}}
+          {s\,\bigl\{g_{m,out}C_c + s\,[\,CC_1 + C_c(C+C_1)\,]
+           + s^2\,RC_cCC_1\bigr\}}
+
+**Read the zero** off the top.  It is the one found above:
+
+.. math::
+
    z = \frac{g_{m,out}}{C_c\,(1 - g_{m,out}R)}
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 25 45
-
-   * - Resistor
-     - Zero
-     - Effect
-   * - :math:`R = 0`
-     - :math:`+g_{m,out}/C_c`
-     - right half plane: costs phase
-   * - :math:`R = 1/g_{m,out}`
-     - at infinity
-     - **nulled**: the shortcut is cancelled
-   * - :math:`R > 1/g_{m,out}`
-     - negative
-     - left half plane: gives phase back
-
-The rule
-~~~~~~~~
-
-The output node has a pole near :math:`-g_{m,out}/C`
-(:doc:`two_stage_phase_margin`, step 2).  Put the zero on top of it and the two
-cancel:
+**Read the output pole** off the bottom.  The lone :math:`s` in front is the
+dominant pole; with no output conductances it sits at 0.  The braces hold the
+others.  Set the small :math:`C_1` to 0 for now:
 
 .. math::
 
-   \frac{g_{m,out}}{C_c\,(1 - g_{m,out}R)} = -\frac{g_{m,out}}{C}
+   g_{m,out}C_c + s\,C_cC = 0
    \quad\Rightarrow\quad
-   R = \frac{C_c + C}{g_{m,out}\,C_c}
-     = \underbrace{\frac{1}{g_{m,out}}}_{\text{null the shortcut}}
-     + \underbrace{\frac{C}{g_{m,out}\,C_c}}_{\text{cancel the output pole}}
+   p = -\frac{g_{m,out}}{C}
 
-A two-stage example with :math:`g_{m1}` = 0.1 mS, :math:`g_{m,out}` = 1 mS,
-:math:`C_c` = 2 pF, :math:`C = C_L` = 8 pF and 0.1 pF on the first stage's
-output puts :math:`g_{m,out}/C` at 19.9 MHz.  Phase margins are from
-:func:`~circuitgenome.sizer.physics.open_loop_response.two_stage_loop`:
+**Set the zero equal to the pole** and solve for :math:`R`:
 
-.. list-table::
-   :header-rows: 1
-   :widths: 34 22 20 24
+.. math::
 
-   * - Resistor
-     - Zero
-     - Phase margin
-     - Reading
-   * - 0
-     - +79.6 MHz
-     - 63.0°
-     - the shortcut costs phase
-   * - 1 kΩ = :math:`1/g_{m,out}`
-     - none
-     - 68.4°
-     - shortcut nulled
-   * - 5 kΩ = :math:`(C_c+C_L)/(g_{m,out}C_c)`
-     - −19.9 MHz
-     - 88.6°
-     - output pole cancelled too
+   \begin{aligned}
+   \frac{g_{m,out}}{C_c\,(1 - g_{m,out}R)} &= -\frac{g_{m,out}}{C} \\
+   C_c\,(1 - g_{m,out}R) &= -C \\
+   g_{m,out}R &= 1 + \frac{C}{C_c} \\
+   R &= \frac{1}{g_{m,out}} + \frac{C}{g_{m,out}\,C_c}
+   \end{aligned}
 
-Which C to use
-~~~~~~~~~~~~~~
+**Put C1 back.**  With this :math:`R` the braces factor exactly, and so does
+the top:
 
-The formula is always the same; the caller chooses ``c_out_f``:
+.. math::
 
-.. list-table::
-   :header-rows: 1
-   :widths: 34 30 36
+   \frac{v_{out}}{i_{in}}
+   = \frac{-(g_{m,out} + sC)}
+          {s\,C_c\,(g_{m,out} + sC)\,(1 + sRC_1)}
+   = \frac{-1}{s\,C_c\,(1 + sRC_1)}
 
-   * - Amplifier
-     - ``c_out_f``
-     - Resistor
-   * - Two-stage and nested Miller
-     - :math:`C_L`
-     - :math:`(C_c+C_L)/(g_{m,out}C_c)`
-   * - RNMC, no output buffer
-     - 0
-     - :math:`1/g_{m,out}`
-   * - RNMC with an output buffer
-     - the buffer's gate capacitance
-     - just above :math:`1/g_{m,out}`
+The output pole sits exactly at :math:`-g_{m,out}/C` whatever :math:`C_1` is,
+and the zero removes it.  All :math:`C_1` leaves is one pole at
+:math:`-1/(RC_1)`.
 
-RNMC is different because the larger resistor backfires there:
-
-- **Behind a buffer** it added a pole inside the inner loop, and designs
-  oscillated (issue #262; :doc:`rnmc_buffered_oscillation` covers the related
-  bare-capacitor case).
-- **Without a buffer** it held the loop gain near 0 dB until it crossed again
-  with almost no phase left, and designs rang at about 28 MHz (issue #269).
-
-The section 2 circuit shows the second case.  It is sized at the 1.51 mS floor
-for :math:`C_2` = 0.5 pF, with :math:`g_{m1}` = 0.2 mS, a resistor in series
-with :math:`C_{c1}` only, and small losses added (0.1 pF at :math:`V_1`; output
-conductances 1, 10 and 10 µS):
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 14 20 36
-
-   * - Resistor in series with :math:`C_{c1}`
-     - ζ
-     - Phase margin
-     - Reading
-   * - 0
-     - 0.70
-     - 59.6°
-     - the section 2 design, as sized
-   * - 1 kΩ = :math:`1/g_{m3}`
-     - 0.51
-     - 64.8°
-     - more margin, some damping spent
-   * - 5 kΩ = :math:`(C_{c1}+C_L)/(g_{m3}C_{c1})`
-     - 0.30
-     - **3.9°**
-     - on the edge of oscillation
-
-The resistor is not free even at :math:`1/g_{m3}`, so
-:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc` scores every candidate
-with its resistors in place.
-
-Every caller passes the **last gain stage's** gm as ``gm_out``.  For RNMC's
-:math:`C_{c2}`, which wraps stage 2, the resistor is therefore
-:math:`1/g_{m3}` and not :math:`1/g_{m2}`, so its zero is nulled exactly only
-when the two are equal.  The open-loop model includes the actual resistors, so
-it sees the difference.
-
-What calls what
----------------
+Where these methods sit in the code
+-----------------------------------
 
 .. code-block:: text
 

@@ -8,6 +8,7 @@ pair at gm1 ≈ 169 µS after bias repair, the second stage at its minimum width
 with a right-half-plane response; raising gm2 to 0.72 mS alone left gain
 coming back above 0 dB after the phase passed −180°.
 """
+import math
 from dataclasses import replace
 
 import pytest
@@ -96,6 +97,12 @@ def test_docs_compensation_design_rules():
     for r, pm in ((0.0, 63.0), (null, 68.4), (cancel, 88.6)):
         assert olr.two_stage_loop(two_stage, cc1, cl, r_ohm=(r,))[1] == \
             pytest.approx(pm, abs=0.06)
+    left_over_hz = 1 / (2 * math.pi * cancel * 0.1e-12)
+    crossing_hz = 0.1e-3 / (2 * math.pi * cc1)
+    assert (left_over_hz, crossing_hz) == (pytest.approx(318e6, rel=1e-3),
+                                           pytest.approx(7.96e6, rel=1e-3))
+    assert 90 - math.degrees(math.atan(crossing_hz / left_over_hz)) == \
+        pytest.approx(88.6, abs=0.06)
     for r, zeta, pm in ((0.0, 0.70, 59.6), (null, 0.51, 64.8), (cancel, 0.30, 3.9)):
         assert score(0.2e-3, floor_c2, (0.1e-12, 0.5e-12, 0.0), (1e-6, 1e-5, 1e-5),
                      r) == (pytest.approx(zeta, abs=0.005), pytest.approx(pm, abs=0.06))
