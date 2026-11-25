@@ -108,9 +108,12 @@ phase margin is read at the 0 dB crossing and cannot see a pair resonating
 above it.
 _Avoid_: Damping factor (in prose — same quantity), stability margin.
 
-**Full model**:
-The RNMC open loop solved from its nodal equations — parasitics, stage output
-conductances, the third-stage mirror and an output buffer included — as opposed
-to the **closed forms** derived from the simplified quadratic. The full model
-decides; the closed forms explain and seed the search.
-_Avoid_: Exact model, numerical model, SPICE model (SPICE gives *measured metrics*).
+**Open-loop model**:
+A multi-stage amplifier's open-loop response (two-stage Miller, nested Miller
+or RNMC) solved from its nodal equations — parasitics, stage output
+conductances, current mirrors and an output buffer included — as opposed to
+the **closed forms**, the textbook formulas in `equations.py`. It lives in
+`open_loop_response.py`. The open-loop model decides; the closed forms explain
+and seed the search.
+_Avoid_: Full model (its old name: "full" next to what?), exact model,
+numerical model, SPICE model (SPICE gives *measured metrics*).

@@ -417,7 +417,7 @@ cc_f = <span class="tok-fn">max</span>(cc_min_f, <span class="tok-fn">min</span>
 ...      <span class="tok-com"># GBW → gm1, then Cc re-planned for that gm1</span>
 <span class="tok-kw">if</span> spec.cmrr_min_db <span class="tok-kw">and</span> cmrr_gm1:
     gm1_req = <span class="tok-fn">max</span>(gm1_req, cmrr_gm1)   <span class="tok-com"># keeps the GBW-planned Cc</span></code></pre>
-  <p>Why after? The closed-form floor re-plans Cc so that <code>gm1/(2π·Cc)</code> lands exactly on the GBW spec. The full model reads a little under that closed form, so a design with GBW to spare (6.5&nbsp;MHz against 1&nbsp;MHz on GF180) came back just short of the spec. Keeping its Cc lets GBW rise with gm1 instead, and the gm2/gm3 phase-margin rules that follow see the raised gm1.</p>
+  <p>Why after? The closed-form floor re-plans Cc so that <code>gm1/(2π·Cc)</code> lands exactly on the GBW spec. The open-loop model reads a little under that closed form, so a design with GBW to spare (6.5&nbsp;MHz against 1&nbsp;MHz on GF180) came back just short of the spec. Keeping its Cc lets GBW rise with gm1 instead, and the gm2/gm3 phase-margin rules that follow see the raised gm1.</p>
   <p><code>lift_nodal_cmrr()</code> finds that floor. It sizes the circuit with <code>cmrr_gm1 = 0</code>, exactly as without a target. If the CMRR it reports is short by Δ&nbsp;dB, it raises gm1 by <code>10^(Δ/20)</code> (capped at the widest single device and the weak-inversion ceiling) and sizes again, at most twice. A re-size is kept only if it reports a higher CMRR, keeps its bias, and loses no other spec or pushes one it already missed further short. A target still out of reach shows as a negative <code>cmrr_db</code> margin.</p>
 
   <figure class="fig">

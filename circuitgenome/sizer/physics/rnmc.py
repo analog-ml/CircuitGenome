@@ -2,7 +2,7 @@
 
 RNMC puts both compensation caps on the first-stage output: ``Cc1`` to the
 amplifier output and ``Cc2`` to the second-stage output.  That makes the two
-non-dominant poles a *pair* (see the RNMC section of
+non-dominant poles a *pair* (see the compensation design rules in
 :mod:`~circuitgenome.sizer.physics.equations`), not two separate real poles,
 and the pair is only in the left half plane while
 
@@ -11,9 +11,9 @@ and the pair is only in the left half plane while
 The generic three-stage requirements push gm3 to its ceiling and leave gm2 at
 whatever the second stage's minimum width gives, so an RNMC amplifier could be
 sized straight into the right half plane.  :func:`design_rnmc` picks
-``(gm2, Cc2, gm3)`` so the pair is damped to ``ζ ≈ 0.7`` and the full-model
-phase margin (:func:`~.equations.phase_margin_rnmc_deg`) meets the spec,
-trying the knobs in this order:
+``(gm2, Cc2, gm3)`` so the pair is damped to ``ζ ≈ 0.7`` and the open-loop
+model's phase margin (:func:`~.open_loop_response.phase_margin_rnmc_deg`)
+meets the spec, trying the knobs in this order:
 
 1. **raise gm2** — the second stage's signal device gets a larger gm
    requirement (up to its weak-inversion ceiling);
@@ -39,6 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import equations as eq
+from . import open_loop_response as olr
 from .device_model import SIGNAL
 
 #: ``compensation_scheme`` value (topology config) that selects this module.
@@ -69,7 +70,7 @@ class RnmcDesign:
     :param cc2_f: inner cap (first-stage output → second-stage output) in F.
     :param gm3: third-stage gm in A/V.
     :param zeta: damping of the non-dominant pole pair (negative = RHP).
-    :param pm_deg: full-model phase margin in degrees (worst over all 0 dB
+    :param pm_deg: the open-loop model's phase margin in degrees (worst over all 0 dB
         crossings, ``0.0`` when the open loop has RHP poles), or ``None``.
     :param met: ``True`` when ``zeta ≥ ZETA_TARGET`` and the PM target holds.
     """
@@ -101,9 +102,9 @@ def design_rnmc(
     (all Cc2 steps at the starting gm3 first, then each lower gm3), ``gm2``
     starts at the closed-form damping floor (:func:`~.equations.rnmc_min_gm2`;
     at its current value behind an output ``buffer``, where that formula's
-    load does not apply) and rises until the full-model damping
-    (:func:`~.equations.rnmc_pole_damping`) reaches ``ZETA_TARGET`` and the
-    full-model PM meets ``pm_min_deg`` (or is simply positive when there is
+    load does not apply) and rises until the open-loop model's damping
+    (:func:`~.open_loop_response.rnmc_pole_damping`) reaches ``ZETA_TARGET`` and the
+    open-loop model's PM meets ``pm_min_deg`` (or is simply positive when there is
     no PM spec).  The first choice meeting both wins.
 
     ``c1_f``/``c2_f`` are the parasitics on the first/second-stage outputs.
@@ -123,7 +124,7 @@ def design_rnmc(
     :param g: stage output conductances ``(g1, g2, g3)`` in A/V.
     :param buffer: ``(gm, cgs, g_out)`` of a source-follower output buffer
         between the third stage and ``CL`` (see
-        :func:`~.equations.phase_margin_rnmc_deg`), or ``None``.
+        :func:`~.open_loop_response.phase_margin_rnmc_deg`), or ``None``.
     :param c3_f: parasitic from the third-stage output to ground in F.
     :param comp_resistors: per half, whether its ``Cc1``/``Cc2`` branch has a
         series resistor (:attr:`~.stage_chain.StageChain.comp_resistors`).
@@ -144,12 +145,13 @@ def design_rnmc(
     c_out_f = buffer[1] if buffer else 0.0
 
     def score(gm2_: float, cc2_: float, gm3_: float) -> RnmcDesign:
-        kw = dict(c1_f=c1_at(gm2_), c2_f=c2_at(gm3_), g1=g[0], g2=g[1],
-                  g3=g[2], mirror_pole_hz=mirror_pole_hz, buffer=buffer,
-                  c3_f=c3_f)
+        stages = (olr.SmallSignalStage(gm1, g[0], c1_at(gm2_)),
+                  olr.SmallSignalStage(gm2_, g[1], c2_at(gm3_)),
+                  olr.SmallSignalStage(gm3_, g[2], c3_f))
         zeta, pm = worst_half(
-            gm1, gm2_, gm3_, cc1_f, cc2_, cl_f,
-            comp_resistances(comp_resistors, gm3_, cc1_f, cc2_, c_out_f), **kw)
+            stages, cc1_f, cc2_, cl_f,
+            comp_resistances(comp_resistors, gm3_, cc1_f, cc2_, c_out_f),
+            mirror_pole_hz=mirror_pole_hz, buffer=buffer)
         met = zeta >= ZETA_TARGET - 1e-9 and pm is not None and pm >= pm_target
         return RnmcDesign(gm2_, cc2_, gm3_, zeta, pm, met)
 
@@ -217,19 +219,20 @@ def comp_resistances(comp_resistors: tuple[tuple[bool, bool], ...], gm3: float,
                    for r1, r2 in comp_resistors})
 
 
-def worst_half(gm1: float, gm2: float, gm3: float, cc1_f: float, cc2_f: float,
+def worst_half(stages: tuple[olr.SmallSignalStage, ...], cc1_f: float, cc2_f: float,
                cl_f: float, pairs: list[tuple[float, float]],
                **kw) -> tuple[float, float | None]:
     """``(ζ, PM)`` of the least stable half: the lowest damping
-    (:func:`~.equations.rnmc_pole_damping`) and the lowest phase margin
-    (:func:`~.equations.phase_margin_rnmc_deg`, ``None`` when any half's
+    (:func:`~.open_loop_response.rnmc_pole_damping`) and the lowest phase margin
+    (:func:`~.open_loop_response.phase_margin_rnmc_deg`, ``None`` when any half's
     gain never reaches 0 dB) over the halves' compensation resistors
     ``pairs``.  An unstable half is enough to make the amplifier ring.
+    ``stages``, the caps and ``kw`` are as for those functions.
     """
-    zeta = min(eq.rnmc_pole_damping(gm1, gm2, gm3, cc1_f, cc2_f, cl_f,
-                                    comp_r=r, **kw) for r in pairs)
-    pms = [eq.phase_margin_rnmc_deg(gm1, gm2, gm3, cc1_f, cc2_f, cl_f,
-                                    comp_r=r, **kw) for r in pairs]
+    zeta = min(olr.rnmc_pole_damping(stages, cc1_f, cc2_f, cl_f, comp_r=r, **kw)
+               for r in pairs)
+    pms = [olr.phase_margin_rnmc_deg(stages, cc1_f, cc2_f, cl_f, comp_r=r, **kw)
+           for r in pairs]
     return zeta, (None if None in pms else min(pms))
 
 

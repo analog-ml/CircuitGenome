@@ -441,7 +441,7 @@ def compute_requirements(
         # A floor found on the sized circuit (lift_nodal_cmrr) raises gm1 on a
         # design whose Cc already meets GBW, so it keeps that Cc.  Re-planning
         # Cc for it, as above, would pin GBW onto the spec's closed form, which
-        # the full model reads under.  The gm2/gm3 rules below follow the
+        # the open-loop model reads under.  The gm2/gm3 rules below follow the
         # raised gm1.
         if spec.cmrr_min_db and cmrr_gm1:
             gm1_req = max(gm1_req, cmrr_gm1)
