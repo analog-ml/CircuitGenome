@@ -78,7 +78,7 @@ def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
     gm_out = s[-1].gm
 
     def r(flag: bool, c_f: float) -> float:
-        return eq.compensation_resistor_ohm(c_f, cl_f, gm_out) if flag and gm_out > 0 else 0.0
+        return eq.nulling_resistor_ohm(c_f, cl_f, gm_out) if flag and gm_out > 0 else 0.0
     halves = chain.comp_resistors or ((False, False),)
     if len(s) > 2:
         return olr.nested_miller_loop(

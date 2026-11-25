@@ -14,11 +14,11 @@ those questions:
    * - Function
      - Question it answers
      - Applies to
-   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`
+   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping`
      - What is the smallest :math:`g_{m2}` that stops the two extra poles from
        ringing?
      - RNMC, no output buffer
-   * - :func:`~circuitgenome.sizer.physics.equations.compensation_resistor_ohm`
+   * - :func:`~circuitgenome.sizer.physics.equations.nulling_resistor_ohm`
      - What resistor stops the signal sneaking forward through a compensation
        cap?
      - Every compensation branch that has a resistor
@@ -49,15 +49,15 @@ The standard RNMC toplogy has three stages, two compensation capacitors and a lo
 1. Two coupled poles: the closed forms
 --------------------------------------
 
-The rest of this section derives the damping :math:`\zeta`, in four steps:
+The rest of this section derives the damping :math:`\zeta`, in four moves:
 
 1. solve the circuit for its denominator;
 2. factor the denominator into the dominant pole and the pole pair;
 3. tidy the pair's two coefficients, :math:`a_1` and :math:`a_2`;
 4. read the damping :math:`\zeta` off them.
 
-Step 1 — Solve the circuit
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Solve the circuit
+~~~~~~~~~~~~~~~~~
 
 Write Kirchhoff's current law at each node, with each stage reduced to its gm.
 Output conductances and the parasitic at :math:`V_1` are left out:
@@ -209,8 +209,8 @@ subtraction in its bracket can make it negative:
    \underbrace{C_{c1}\,g_{m3}}_{\text{stage 3 stirs}}
 
 
-2. The second-stage floor: ``rnmc_min_gm2``
--------------------------------------------
+2. The second-stage floor: ``rnmc_min_gm2_for_damping``
+-------------------------------------------------------
 
 In Section 1 we know how to calculate :math:`\zeta` for a known :math:`g_{m2}`.  This function runs
 it backwards: it sets :math:`\zeta` to ``zeta_target`` and solves for
@@ -284,13 +284,13 @@ third stage no longer drives :math:`C_L`, so the formula does not apply and
 the search starts from the current :math:`g_{m2}`.  :ref:`rnmc-inner-pair` has
 the full strategy.
 
-3. The nulling resistor: ``compensation_resistor_ohm``
-------------------------------------------------------
+3. The nulling resistor: ``nulling_resistor_ohm``
+-------------------------------------------------
 
 **Objective.**  Without a resistor, the compensation cap creates a
 right-half-plane zero.  Like an extra pole, it delays the signal and so reduces
 the phase margin.  This function finds the series resistor that moves the zero
-onto the output pole, so that the zero cancels the pole:
+onto the output pole, so that the zero cancels the pole.
 
 **Poles, zeros and phase margin.**  Phase margin is a safety budget: how many
 more degrees of delay the loop can take, at the frequency where its gain falls
@@ -315,7 +315,7 @@ budget, because it delays the signal.  A zero can go either way:
      - **costs**
 
 **The problem:** A compensation cap is there to carry the output *back* to the stage's input.
-At high frequency it also carries the input *forward*, past the stage:
+At high frequency it also carries the input *forward*, past the stage.
 
 We will need to come up with the derivation that solves the circuit for its zero and its poles, then sets the
 zero equal to the output pole.
@@ -372,7 +372,7 @@ Multiply top and bottom by :math:`1 + sRC_c`, which turns :math:`Y` into
           {s\,\bigl\{g_{m,out}C_c + s\,[\,CC_1 + C_c(C+C_1)\,]
            + s^2\,RC_cCC_1\bigr\}}
 
-**Read the zero** off the top.  It is the one found above:
+**Read the zero** off the top:
 
 .. math::
 
@@ -419,15 +419,15 @@ Where these methods sit in the code
 .. code-block:: text
 
    design_rnmc()                         RNMC: choose gm2, Cc2, gm3
-   ├── rnmc_min_gm2()                    where the gm2 search starts
+   ├── rnmc_min_gm2_for_damping()        where the gm2 search starts
    └── comp_resistances()                the resistors of each half
-       └── compensation_resistor_ohm()
+       └── nulling_resistor_ohm()
 
    size_resistors()                      the resistors in the netlist
-   └── compensation_resistor_ohm()
+   └── nulling_resistor_ohm()
 
    metrics (two-stage and nested Miller) GBW and phase margin
-   └── compensation_resistor_ohm()
+   └── nulling_resistor_ohm()
 
 Sizing and metrics share one resistor formula, so the reported phase margin
 belongs to the resistor that is built.
@@ -435,10 +435,10 @@ belongs to the resistor that is built.
 Reference
 ---------
 
-.. autofunction:: circuitgenome.sizer.physics.equations.rnmc_min_gm2
+.. autofunction:: circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping
    :no-index:
 
-.. autofunction:: circuitgenome.sizer.physics.equations.compensation_resistor_ohm
+.. autofunction:: circuitgenome.sizer.physics.equations.nulling_resistor_ohm
    :no-index:
 
 .. autofunction:: circuitgenome.sizer.physics.rnmc.design_rnmc

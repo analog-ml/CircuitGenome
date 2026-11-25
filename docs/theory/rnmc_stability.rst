@@ -488,7 +488,7 @@ Two details then decide whether the pair is stable, and the model has both
   inner loop crosses over.  A resistor of about :math:`1/g_m` in series
   cancels it.  The model adds the resistor each branch actually has, sized by
   the same rule as the netlist's
-  (:func:`~circuitgenome.sizer.physics.equations.compensation_resistor_ohm`).
+  (:func:`~circuitgenome.sizer.physics.equations.nulling_resistor_ohm`).
 
 On #266's gf180 design #7210 (bare caps, :math:`g_{m3} \approx 1.05\,g_{m2}`),
 with the values SPICE's ``.op`` measures:
@@ -554,7 +554,7 @@ does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code
    * - Function
      - Computes
      - Sees mirror, buffer, conductances?
-   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`
+   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping`
      - the closed-form :math:`\zeta` solved for the smallest :math:`g_{m2}`
        reaching a target — where the sizer's :math:`g_{m2}` search starts
      - no
