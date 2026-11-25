@@ -24,7 +24,7 @@ frequency** :math:`\omega_t`.  Why one pole lags by
 :math:`\arctan(\omega/\omega_p)` is derived from an RC low-pass in
 :doc:`single_stage_phase_margin`, steps 1–2.
 
-So the page needs just two numbers, in two steps:
+So we need to find just two numbers, in two steps:
 
 1. **Find** :math:`\omega_t` — where the gain falls to 1.
 2. **Find** :math:`\omega_{p2}` — where the second pole sits.
