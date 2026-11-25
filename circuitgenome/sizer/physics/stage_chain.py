@@ -450,26 +450,19 @@ def _single_ended_output_net(load_devs: list[Device], signal_nets: frozenset[str
 
 def _mirror_pole_hz(load_devs: list[Device], mosfets: list[Device],
                    model, sizing) -> float | None:
-    """Current-mirror node pole in Hz, or ``None`` when there is none.
+    """Current-mirror node pole in Hz: ``gm / (2π·ΣCgs)``.
 
     The mirror's reference device (:func:`~.preprocess._mirror_reference`)
-    pins its gate node at ``1/gm``; the capacitance that node drives is the
-    gate capacitance of every device it gates -- itself and the mirror devices
-    copying it -- so the pole sits at ``gm/(2π·ΣCgs)``.  This is the first
-    non-dominant pole of a load-compensated single-stage OTA (issue #221).
-    A wide-swing mirror closes its diode through a cascode rather than a
-    ``g == d`` device, but the node and its ``1/gm`` are the same (issue #241).
+    gives its gate node a resistance of ``1/gm``.  ``ΣCgs`` adds up every
+    sized device gated by that node, the reference included.
 
-    ``None`` when the load has no mirror, when the reference device is
-    unsized, or when the technology supplies no ``cox`` for ``Cgs`` -- each a
-    case where the pole genuinely cannot be placed, and the caller withholds
-    phase margin rather than inventing one.
+    Returns ``None`` when the pole cannot be placed: the load has no mirror
+    (e.g. resistors), the reference device is unsized, or the technology gives
+    no ``cox``.  A single-stage OTA then reports no phase margin, on purpose:
+    with only one pole the formula would give 90° for every sizing and pass
+    any spec (issue #228).
 
-    **Resistor loads** fall in that hole, deliberately (issue #228): they have
-    no internal node at all.  In this model such a stage is genuinely
-    single-pole, so the phase margin would be exactly 90° for *every* sizing --
-    a statement about the model, not about the design, and one that would pass
-    any ``phase_margin_min_deg`` a spec could set.
+    Derivation: :doc:`/theory/single_stage_phase_margin`.
     """
     ref = _mirror_reference(load_devs)
     if ref is None:

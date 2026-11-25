@@ -242,44 +242,59 @@ def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
 
     GBW = gain·gm1 / (2π·Cc)
 
-    Poles near the crossing pull the real GBW lower; the multi-stage metrics
-    read it off the open-loop model instead
-    (:func:`~.open_loop_response.two_stage_loop`).
+    This is where the loop gain falls to 1 when one capacitor sets the only
+    pole.  Other poles near it pull the real crossing lower; the open-loop
+    model (e.g. :func:`~.open_loop_response.two_stage_loop`) includes that.
 
     :param gm1_a_v: Input-pair transconductance in A/V.
-    :param cc_f: Compensation cap in F.
-    :param gain: Gain from the Miller output to the amplifier output: ``1.0``
-        without an output buffer, ~0.88 behind a GF180 NMOS follower (#274).
+    :param cc_f: Compensation cap in F (``CL`` for a single-stage OTA).
+    :param gain: Gain of the output buffer, e.g. ~0.88 for an NMOS source
+        follower on GF180; ``1.0`` without a buffer.
     """
     return gain * gm1_a_v / (2.0 * math.pi * cc_f)
 
 
 def phase_margin_single_stage_deg(gbw_hz: float, mirror_pole_hz: float) -> float:
-    """Phase margin in degrees of a single-stage OTA compensated by its load.
+    """Phase margin in degrees of a single-stage OTA (the load cap is the
+    compensation).
 
-    PM ≈ 90° − arctan(GBW / f_mirror)
+    PM = 90° − arctan(GBW / f_mirror)
 
-    The load ``CL`` sets the main pole, which alone gives 90°.  The current
-    mirror's node adds the next pole and takes the margin below 90°; it
-    matters only when GBW gets close to it.  (In a two-stage amp the roles
-    swap, see :func:`phase_margin_two_stage_deg`.)
+    Phase margin starts at 180°.  The output node is the main pole and, by the
+    GBW, has used up 90° of it.  The current-mirror node is the next pole; at
+    the GBW it takes another arctan(GBW / f_mirror).  A mirror pole far above
+    the GBW leaves PM near 90°; a GBW equal to f_mirror leaves 45°.
 
-    :param gbw_hz: Gain-bandwidth product in Hz (``gm1/(2π·CL)``).
-    :param mirror_pole_hz: Pole of the current-mirror node in Hz.
+    Derivation: :doc:`/theory/single_stage_phase_margin`.
+
+    :param gbw_hz: Unity-gain bandwidth in Hz (``gm1/(2π·CL)``).
+    :param mirror_pole_hz: Current-mirror node pole in Hz,
+        ``1/(2π·R_mirror·C_mirror)``.
     """
-    return 90.0 - math.degrees(math.atan(gbw_hz / mirror_pole_hz))
+    # The output (main) pole has used up 90° of the 180° by the GBW.
+    remaining_phase_deg = 180.0 - 90.0
+
+    # The current-mirror pole's extra phase lag at the GBW.
+    phase_lag_deg = math.degrees(math.atan(gbw_hz / mirror_pole_hz))
+
+    return remaining_phase_deg - phase_lag_deg
 
 
 def phase_margin_two_stage_deg(
     gm1: float, gm2: float, cc_f: float, cl_f: float
 ) -> float:
-    """Phase margin in degrees of a two-stage Miller op-amp, textbook form.
+    """Phase margin in degrees of a two-stage Miller op-amp.
 
-    PM ≈ 90° − arctan(gm1·CL / (gm2·Cc))
+    PM = 90° − arctan(gm1·CL / (gm2·Cc))
 
-    The Miller cap sets the main pole; the output, at ``gm2/CL``, sets the
-    next one.  The mirror pole is ignored.  The sizer plans with this; the
-    reported margin comes from :func:`~.open_loop_response.two_stage_loop`.
+    Phase margin starts at 180°.  The main pole, set by the Miller cap Cc,
+    has used up 90° by the GBW (gm1/Cc).  The output pole (gm2/CL) takes the
+    arctan term.
+
+    A sizing estimate, used to choose gm2.  It reads 2–5° high; the reported
+    phase margin comes from :func:`~.open_loop_response.two_stage_loop`.
+
+    Derivation: :doc:`/theory/two_stage_phase_margin`.
 
     :param gm1: Input-pair transconductance in A/V.
     :param gm2: Second-stage transconductance in A/V.
@@ -293,15 +308,22 @@ def phase_margin_three_stage_deg(
     gm1: float, gm2: float, gm3: float,
     cc1_f: float, cc2_f: float, cl_f: float,
 ) -> float:
-    """Phase margin in degrees of a nested-Miller (NMC) three-stage op-amp,
-    textbook form.
+    """Phase margin in degrees of a three-stage nested-Miller (NMC) op-amp.
 
-    PM ≈ 90° − arctan(ωt·Cc2/gm2) − arctan(ωt·CL/gm3),  ωt = gm1/Cc1
+    PM = 90° − arctan(ωt / ωp2) − arctan(ωt / ωp3),
+    with ωt = gm1/Cc1, ωp2 = gm2/Cc2, ωp3 = gm3/CL
 
-    Treats the two extra poles, at ``gm2/Cc2`` and ``gm3/CL``, as separate.
-    They really form a pair that can ring, so the reported margin comes from
-    :func:`~.open_loop_response.nested_miller_loop` (and, for reversed nested Miller,
-    :func:`~.open_loop_response.phase_margin_rnmc_deg`).
+    Phase margin starts at 180°.  The main pole, set by the outer Miller cap
+    Cc1, has used up 90° by the GBW (ωt).  The inner Miller loop's pole (ωp2)
+    and the output pole (ωp3) each take one arctan term.
+
+    A rough estimate: the last two poles can interact and ring, which it
+    cannot see, and it ran 15–35° pessimistic in SPICE.  The reported phase
+    margin comes from :func:`~.open_loop_response.nested_miller_loop`.  For
+    reversed nested Miller use
+    :func:`~.open_loop_response.phase_margin_rnmc_deg`.
+
+    Derivation: :doc:`/theory/three_stage_phase_margin`.
 
     :param gm1: Input-pair transconductance in A/V.
     :param gm2: Second-stage transconductance in A/V.

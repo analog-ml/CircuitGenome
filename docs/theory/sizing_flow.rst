@@ -432,6 +432,7 @@ frequency upward relative to :math:`g_{m2}`, degrading PM.  Sizing
 post-rounding value — ensures PM is satisfied on the integer grid.
 
 Implementing function: :func:`~circuitgenome.sizer.physics.equations.phase_margin_two_stage_deg`
+(derived step by step in :doc:`two_stage_phase_margin`)
 
 The closed form leaves out the bare Miller cap's right-half-plane zero at
 :math:`g_{m2}/C_c` and the first-stage node's capacitance, which cost a
@@ -969,7 +970,8 @@ With two non-dominant poles, the phase margin is:
        - \arctan\!\left(\frac{\omega_t \cdot C_L}{g_{m3}}\right)
 
 where :math:`\omega_t = g_{m1}/C_{c1}` is the unity-gain frequency
-(implemented in :func:`~circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg`).
+(implemented in :func:`~circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg`,
+derived step by step in :doc:`three_stage_phase_margin`).
 It sizes the circuit; the reported margin comes off the full nested-Miller
 model (:func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`),
 where this estimate ran 15–35° pessimistic in SPICE (issue #274).
