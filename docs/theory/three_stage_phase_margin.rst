@@ -141,8 +141,8 @@ Worked examples
 
 Both rows use :math:`g_{m1}` = 100 µA/V, :math:`C_{c1}` = 2 pF
 (:math:`f_t` = 7.96 MHz), :math:`C_{c2}` = 0.5 pF and :math:`C_L` = 10 pF.
-"Full model" is
-:func:`~circuitgenome.sizer.physics.equations.nested_miller_loop` with ideal
+"Open-loop model" is
+:func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop` with ideal
 stages (no parasitic capacitance), which treats the poles as the pair they
 are:
 
@@ -156,7 +156,7 @@ are:
      - Lags
      - PM (formula)
      - ζ
-     - PM (full model)
+     - PM (open-loop model)
      - Reading
    * - 93.3 µA/V
      - 1866 µA/V
@@ -188,13 +188,13 @@ What the formula leaves out
 - **Parasitics, an output buffer, and the compensation resistors' zeros.**
   In SPICE the formula ran 15–35° pessimistic (issue #274).  So the sizer
   reports the phase margin from
-  :func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`, which
+  :func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`, which
   includes them.
 - **Reversed nested Miller (RNMC).**  There both caps start at ``n1``, and
   the pair can even sit in the right half plane.  This formula is the wrong
   one for it.  On the RNMC fixture in ``tests/test_rnmc.py`` it reads 58.2°
-  while the full RNMC model reads 0° (unstable).  RNMC uses
-  :func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`, see
+  while the open-loop model reads 0° (unstable).  RNMC uses
+  :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`, see
   :doc:`rnmc_stability`.
 
 Reference
@@ -203,7 +203,7 @@ Reference
 .. autofunction:: circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg
    :no-index:
 
-.. autofunction:: circuitgenome.sizer.physics.equations.nested_miller_loop
+.. autofunction:: circuitgenome.sizer.physics.open_loop_response.nested_miller_loop
    :no-index:
 
 Scope

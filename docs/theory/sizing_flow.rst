@@ -308,11 +308,11 @@ magnitude first crosses 0 dB) is :math:`g_{m1}/(2\pi C_c)`.  GBW is
 essentially proportional to :math:`g_{m1}` at a fixed :math:`C_c`.
 
 The predicted GBW metric (`Post-sizing performance metrics`_) reads the
-crossing off the full small-signal model, where the output pole pulls it
+crossing off the open-loop model, where the output pole pulls it
 ~10–15 % under :math:`g_{m1}/(2\pi C_c)` and a source-follower output stage
 by its gain below 1 (issue #274).  This step sizes against the plain formula;
 once the circuit is sized, a two-stage re-plan raises :math:`g_{m1}` to the
-least the full model needs (see `Full-model re-plan (two-stage)`_).
+least the open-loop model needs (see `Open-loop-model re-plan (two-stage)`_).
 
 **Why after SR:** The GBW equation can be satisfied by any
 (:math:`g_{m1}`, :math:`C_c`) pair on the line :math:`g_{m1} = 2\pi \cdot
@@ -553,11 +553,11 @@ Objective and symmetry
 
 ----
 
-Full-model re-plan (two-stage)
-------------------------------
+Open-loop-model re-plan (two-stage)
+-----------------------------------
 
 The requirements above come from closed forms.  Once the circuit is sized, a
-two-stage amplifier is re-planned against the full model the metrics read
+two-stage amplifier is re-planned against the open-loop model the metrics read
 (:func:`~circuitgenome.sizer.physics.metrics.two_stage_replan`, issue #274):
 
 1. :math:`g_{m1}` rises to the least that meets the GBW spec at the 0 dB
@@ -605,7 +605,7 @@ CMRR from 121 to 82 dB.
    stays where GBW and stability put it, and the phase-margin and gain rules
    for :math:`g_{m2}`/:math:`g_{m3}` follow the raised value.  Re-planning
    :math:`C_c` for it, as Step 3 does for the closed form, would pin GBW onto
-   the spec's closed form, which the full model reads under: on GF180 that
+   the spec's closed form, which the open-loop model reads under: on GF180 that
    took designs from 6.5 MHz to just under a 1 MHz spec.
 3. The re-size is kept only if it reports a higher CMRR without losing its
    bias, losing another spec it met, or pushing one it already missed
@@ -622,7 +622,9 @@ Post-sizing performance metrics
 
 After the solver returns W/L values, :func:`~circuitgenome.sizer.physics.metrics._evaluate_metrics`
 computes all performance metrics and their margins against spec.  The
-implementing function for each is in :mod:`circuitgenome.sizer.physics.equations`.
+implementing function for each is in :mod:`circuitgenome.sizer.physics.equations`
+(closed forms) or :mod:`circuitgenome.sizer.physics.open_loop_response` (the
+open-loop model).
 These are **analytical (model-based) estimates**; the gm/Id pipeline computes the
 same table from LUT-accurate small-signal parameters.  For PTM / foundry-PDK techs
 the CLI does not display these numbers — it reports **ngspice-measured** metrics
@@ -641,7 +643,7 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
      - :func:`~circuitgenome.sizer.physics.equations.open_loop_gain_db`
      - actual − spec
    * - GBW
-     - The first 0 dB crossing of the amplifier's full small-signal model:
+     - The first 0 dB crossing of the amplifier's open-loop model:
        the half circuit's nodal equations, with the node parasitics, the
        compensation branch's series resistor, a non-inverting stage's mirror
        and an output follower (its gain
@@ -651,19 +653,19 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
        give the current it feeds back into each first-stage node per volt of
        output common mode, and its pole.  :math:`g_{m1}/(2\pi C_c)` without
        a model
-     - :func:`~circuitgenome.sizer.physics.equations.two_stage_loop`,
-       :func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`,
-       :func:`~circuitgenome.sizer.physics.equations.unity_gain_bw_rnmc_hz`
+     - :func:`~circuitgenome.sizer.physics.open_loop_response.two_stage_loop`,
+       :func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`,
+       :func:`~circuitgenome.sizer.physics.open_loop_response.unity_gain_bw_rnmc_hz`
      - actual − spec
    * - Phase margin
-     - The worst margin over every 0 dB crossing of the same full model,
+     - The worst margin over every 0 dB crossing of the same open-loop model,
        and over every return of the gain to within 0.5 dB of 0 dB after the
        first crossing -- a resonance the model cannot tell from a crossing
        (the closed form :math:`90° - \arctan(g_{m1}\,C_L\,/\,(g_{m2}\,C_c))`
        sizes the circuit, not the metric)
-     - :func:`~circuitgenome.sizer.physics.equations.two_stage_loop`,
-       :func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`,
-       :func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`
+     - :func:`~circuitgenome.sizer.physics.open_loop_response.two_stage_loop`,
+       :func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`,
+       :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`
      - actual − spec
    * - Slew rate
      - :math:`SR = \min\big(k\,I_{tail}/C_c,\; I_2/(C_L + C_c)\big)` --
@@ -971,7 +973,7 @@ where :math:`\omega_t = g_{m1}/C_{c1}` is the unity-gain frequency
 (implemented in :func:`~circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg`,
 derived step by step in :doc:`three_stage_phase_margin`).
 It sizes the circuit; the reported margin comes off the full nested-Miller
-model (:func:`~circuitgenome.sizer.physics.equations.nested_miller_loop`),
+model (:func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`),
 where this estimate ran 15–35° pessimistic in SPICE (issue #274).
 
 For a target :math:`\text{PM}_{\min}`, the sizer **splits the phase budget
@@ -1120,8 +1122,8 @@ formula cannot see the problem.  For RNMC the sizer instead
 
 1. **raises** :math:`g_{m2}` from the damping floor :math:`\zeta \ge 0.7`
    (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`)
-   until the full model's poles are damped to 0.7
-   (:func:`~circuitgenome.sizer.physics.equations.rnmc_pole_damping`) and the
+   until the open-loop model's poles are damped to 0.7
+   (:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`) and the
    phase-margin spec holds, up to the second stage's weak-inversion ceiling
    (behind an output buffer the gm/Id pipeline builds a raised second stage
    wider than one PDK device from parallel fingers, so the gm it plans with is
@@ -1135,7 +1137,7 @@ When no choice meets both :math:`\zeta \ge 0.7` and the PM spec, the PM spec
 best-damped choice that meets it, else the highest-PM one; an advisory is
 emitted either way.  The phase
 margin itself comes from the full transfer function evaluated on a frequency
-sweep (:func:`~circuitgenome.sizer.physics.equations.phase_margin_rnmc_deg`),
+sweep (:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`),
 including the stage-output parasitics, the third stage's mirror pole, each
 compensation branch's series resistor and — on the ``*_buffered_*`` templates
 — the source-follower output buffer and the drains on the third stage's output

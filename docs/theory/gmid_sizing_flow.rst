@@ -78,7 +78,7 @@ Flow at a glance
       │             a. geometry (LUT→W/L, sym, mirror)   (geometry.py)  ◄── core
       │             b. DC bias check + tail repair       (bias.py)
       │                RNMC only: inner-loop re-plan, re-size a–b  (rnmc_refine.py)
-      │                two-stage: full-model GBW/PM re-plan, re-size a–b  (two_stage_refine.py)
+      │                two-stage: open-loop GBW/PM re-plan, re-size a–b  (two_stage_refine.py)
       │             c. non-load resistors                (resistors.py) ─► MetricModifiers
       └─ Phase 5  Evaluate         (evaluate.py)  ─► metrics/margins
                     cascode-aware rout, analytical gain/GBW/PM
@@ -491,7 +491,7 @@ error — treat a Phase-4b warning as "reject, and do not trust the metrics".
    that breaks the stage-interface bias is undone).  See
    :ref:`the RNMC section of the analytical flow <rnmc-inner-pair>`.
 
-   **Two-stage templates** get the same treatment against the full model the
+   **Two-stage templates** get the same treatment against the open-loop model the
    metrics read (issue #274):
    :func:`~circuitgenome.sizer.gmid.two_stage_refine.refine_two_stage_plan`
    raises ``gm1`` to the least that meets GBW at the real 0 dB crossing, then

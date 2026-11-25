@@ -145,7 +145,7 @@ def _size_planned(
             hold_gm2 = True
             continue
         plan, (sizing, size_warnings, bias_feasible) = refined, resized
-    # Two-stage: raise gm1/gm2 to the full-model GBW and phase margin's need
+    # Two-stage: raise gm1/gm2 to what the open-loop model's GBW and phase margin need
     # (a second pass settles what the first moved), unless a re-size breaks a
     # sound bias (the second stage's gate sets the first-stage output level).
     for _ in range(_TWO_STAGE_PASSES):
