@@ -417,7 +417,7 @@ def psrr_db_approx(gm2: float, gd_bias: float) -> float:
 # with C2 the parasitic on the second-stage output (mostly the third stage's
 # wide gate).  Matching 1 + a1·s + a2·s² to 1 + (2ζ/ωn)·s + s²/ωn² gives the
 # pair's damping ζ = a1/(2·√a2), positive (stable) only while
-# gm3 < gm2·(1 + CL/Cc1).  docs/theory/rnmc_stability.rst derives it.
+# gm3 < gm2·(1 + CL/Cc1).  docs/theory/compensation_design_rules.rst derives ζ.
 
 
 def compensation_resistor_ohm(cc_f: float, c_out_f: float, gm_out: float) -> float:
@@ -438,16 +438,19 @@ def compensation_resistor_ohm(cc_f: float, c_out_f: float, gm_out: float) -> flo
 
 
 def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
-                 c2_f: float = 0.0, zeta: float = 0.7) -> float:
+                 c2_f: float = 0.0, zeta_target: float = 0.7) -> float:
     """Smallest second-stage gm in A/V that damps the RNMC pole pair to
-    ``zeta``.
+    ``zeta_target``.
 
-    Solves ``ζ = a1/(2·√a2) ≥ zeta`` (see the comment above) for gm2.  With
-    ``v = √gm2`` it is the quadratic::
+    Solves ``ζ = a1/(2·√a2) = zeta_target`` (see the comment above) for gm2.
+    It is a quadratic in ``√gm2``::
 
-        (CL+Cc1)·v² − b·v − Cc1·gm3 ≥ 0,   b = 2ζ·Cc1·√(CL·K·gm3/Cc2)
+        a·(√gm2)² + b·√gm2 + c = 0
+        a = CL + Cc1
+        b = −2·zeta_target·Cc1·√(CL·K·gm3/Cc2)
+        c = −Cc1·gm3
 
-    whose positive root is the answer.  A quick seed: it ignores output
+    whose positive root, squared, is the answer.  A quick seed: it ignores output
     conductances, the first-stage parasitic, a third-stage mirror and an
     output buffer, which :func:`~.open_loop_response.rnmc_pole_damping` includes.
 
@@ -456,11 +459,12 @@ def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
     :param cc2_f: Inner cap, first-stage output → second-stage output, in F.
     :param cl_f: Load capacitance in F.
     :param c2_f: Parasitic on the second-stage output in F.
-    :param zeta: Target damping; ``0.7`` is the Butterworth placement (no
+    :param zeta_target: Target damping; ``0.7`` is the Butterworth placement (no
         resonance peak).
     """
     k = 1.0 + c2_f * (1.0 / cc2_f + 1.0 / cc1_f + 1.0 / cl_f)
-    b = 2.0 * zeta * cc1_f * math.sqrt(cl_f * k * gm3 / cc2_f)
     a = cl_f + cc1_f
-    v = (b + math.sqrt(b * b + 4.0 * a * cc1_f * gm3)) / (2.0 * a)
-    return v * v
+    b = -2.0 * zeta_target * cc1_f * math.sqrt(cl_f * k * gm3 / cc2_f)
+    c = -cc1_f * gm3
+    sqrt_gm2 = (-b + math.sqrt(b * b - 4.0 * a * c)) / (2.0 * a)
+    return sqrt_gm2 ** 2

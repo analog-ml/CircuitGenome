@@ -985,7 +985,7 @@ def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
     assert gm2_new > gm2_old
     assert gm3_new < gm2_new * (1 + spec.cl / cc1)       # pole pair stable
     # ...and damped past ζ = 0.5 (the closed form's gm2 floor for it).
-    assert gm2_new > eq.rnmc_min_gm2(gm3_new, cc1, cc2_new, spec.cl, zeta=0.5)
+    assert gm2_new > eq.rnmc_min_gm2(gm3_new, cc1, cc2_new, spec.cl, zeta_target=0.5)
 
 
 # --- FD NMC ---

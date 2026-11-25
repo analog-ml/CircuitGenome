@@ -1107,8 +1107,8 @@ stage gains, the denominator
 
 with :math:`K = 1 + C_2\,(1/C_{c2} + 1/C_{c1} + 1/C_L)`.  The two non-dominant
 poles are the roots of :math:`1 + a_1 s + a_2 s^2`: a pair, damped by
-:math:`\zeta = a_1 / (2\sqrt{a_2})`.  They sit in the left half plane only
-while :math:`a_1 > 0`:
+:math:`\zeta = a_1 / (2\sqrt{a_2})`.  (:doc:`compensation_design_rules` derives these step by step.)  They sit in the
+left half plane only while :math:`a_1 > 0`:
 
 .. math::
 

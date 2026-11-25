@@ -544,7 +544,8 @@ and :math:`\zeta > 0` exactly when :math:`a_1 > 0`, i.e. the stability
 condition :math:`g_{m3} < g_{m2}(1 + C_L/C_{c1})`.  On the bare loop (no
 mirror, buffer or output conductances) the open-loop model reproduces both — it
 flips sign at that boundary and reads :math:`\zeta = 0.7` where the closed form
-does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code:
+does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code
+(:doc:`compensation_design_rules` derives it):
 
 .. list-table::
    :header-rows: 1

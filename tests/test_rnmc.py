@@ -55,7 +55,7 @@ def test_stability_boundary_is_one_plus_cl_over_cc1():
 
 def test_min_gm2_hits_the_damping_target_exactly():
     """The closed form agrees with the open-loop model on the bare loop."""
-    gm2 = eq.rnmc_min_gm2(GM3, CC1, CC2, CL, C2, zeta=0.7)
+    gm2 = eq.rnmc_min_gm2(GM3, CC1, CC2, CL, C2, zeta_target=0.7)
     assert damping(gm2, GM3, C2) == pytest.approx(0.7, abs=1e-6)
     # Damping needs more than bare stability.
     assert gm2 > GM3 * CC1 / (CL + CC1)
@@ -65,6 +65,40 @@ def test_second_stage_output_parasitic_raises_the_gm2_floor():
     """The third stage's input gate on the Cc2 node slows the inner pair."""
     assert (eq.rnmc_min_gm2(GM3, CC1, CC2, CL, C2)
             > eq.rnmc_min_gm2(GM3, CC1, CC2, CL, 0.0))
+
+
+def test_docs_compensation_design_rules():
+    """The numbers in ``docs/theory/compensation_design_rules.rst``."""
+    gm3, caps = 1e-3, (2e-12, 1e-12, 8e-12)
+    cc1, _cc2, cl = caps
+
+    def score(gm1, gm2, c=(0.0, 0.0, 0.0), g=(0.0, 0.0, 0.0), r1=0.0):
+        stages = loop(gm1, gm2, gm3, c, g)
+        return (olr.rnmc_pole_damping(stages, *caps, comp_r=(r1, 0.0)),
+                olr.phase_margin_rnmc_deg(stages, *caps, comp_r=(r1, 0.0)))
+
+    # Section 2: the gm2 floor.
+    floor = eq.rnmc_min_gm2(gm3, *caps)
+    floor_c2 = eq.rnmc_min_gm2(gm3, *caps, c2_f=0.5e-12)
+    assert floor == pytest.approx(0.987e-3, rel=1e-3)
+    assert floor_c2 == pytest.approx(1.51e-3, rel=1e-3)
+    for gm2, zeta, pm in ((0.1e-3, -0.28, 0.0), (0.4e-3, 0.28, 82.7),
+                          (floor, 0.70, 82.8)):
+        assert score(50e-6, gm2) == (pytest.approx(zeta, abs=0.005),
+                                     pytest.approx(pm, abs=0.06))
+
+    # Section 3: the nulling resistor, two-stage then RNMC.
+    null = eq.compensation_resistor_ohm(cc1, 0.0, gm3)
+    cancel = eq.compensation_resistor_ohm(cc1, cl, gm3)
+    assert (null, cancel) == (pytest.approx(1e3), pytest.approx(5e3))
+    two_stage = (olr.SmallSignalStage(0.1e-3, 0.0, 0.1e-12),
+                 olr.SmallSignalStage(gm3, 0.0, 0.0))
+    for r, pm in ((0.0, 63.0), (null, 68.4), (cancel, 88.6)):
+        assert olr.two_stage_loop(two_stage, cc1, cl, r_ohm=(r,))[1] == \
+            pytest.approx(pm, abs=0.06)
+    for r, zeta, pm in ((0.0, 0.70, 59.6), (null, 0.51, 64.8), (cancel, 0.30, 3.9)):
+        assert score(0.2e-3, floor_c2, (0.1e-12, 0.5e-12, 0.0), (1e-6, 1e-5, 1e-5),
+                     r) == (pytest.approx(zeta, abs=0.005), pytest.approx(pm, abs=0.06))
 
 
 # --------------------------------------------------------------------------- #
