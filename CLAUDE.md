@@ -22,7 +22,8 @@ Before implementing:
 - No abstractions for single-use code.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+- Give every method a descriptive name and a short, plain-language docstring that documents each parameter (`:param name:`) and the return value (`:returns:`).
+- Keep the code easy to read: define each fact or rule in one place (a single source of truth) where possible, and give variables meaningful names.
 
 **Explaination**
 - Explain any issues, problems, or decisions that arise during coding in layman's terms.
