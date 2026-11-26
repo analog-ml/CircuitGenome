@@ -1,5 +1,5 @@
-Compensation Design Rules: the RNMC gm2 Floor and the Nulling Resistor
-======================================================================
+Compensation Design Rules: RNMC Damping and the Nulling Resistor
+================================================================
 
 *How strong must the second stage of a reversed-nested-Miller (RNMC) op-amp
 be, and what resistor goes in series with a compensation capacitor?*
@@ -46,8 +46,8 @@ The standard RNMC toplogy has three stages, two compensation capacitors and a lo
                                 ═╧═ C2          ═╧═ CL
                            (parasitic)        (load)
 
-1. Two coupled poles: the closed forms
---------------------------------------
+1. The RNMC pole pair and its damping
+-------------------------------------
 
 The rest of this section derives the damping :math:`\zeta`, in four moves:
 
