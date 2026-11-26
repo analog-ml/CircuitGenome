@@ -14,7 +14,7 @@ from dataclasses import replace
 from . import equations as eq
 from . import open_loop_response as olr
 from ..models import SizingSpec
-from .rnmc import RNMC, comp_resistances, worst_half
+from .rnmc import RNMC, comp_resistances, half_responses
 from .stage_chain import StageChain
 
 
@@ -30,66 +30,60 @@ def _loop_stages(chain: StageChain, gm1_loop: float,
                  for gm, st, c in zip(gms, s, caps))
 
 
-def _rnmc_model(chain: StageChain, gm1_loop: float, cc_f: float, cc2_f: float
-                ) -> tuple[tuple[olr.SmallSignalStage, ...], list[tuple[float, float]], dict]:
-    """The RNMC open-loop model's stages, per-half compensation resistors, and the
-    keyword arguments every half shares (third-stage mirror, output buffer)."""
-    buffer = chain.output_buffer
-    pairs = comp_resistances(chain.comp_resistors, chain.stages[2].gm, cc_f, cc2_f,
-                             buffer[1] if buffer else 0.0)
-    kw = dict(mirror_pole_hz=chain.third_stage_mirror_pole_hz, buffer=buffer)
-    return _loop_stages(chain, gm1_loop, 3), pairs, kw
+def _lowest(values: list[float | None]) -> float | None:
+    """The lowest of ``values``, or ``None`` when any of them is ``None``."""
+    return None if None in values else min(values)
 
 
-def _rnmc_phase_margin(chain: StageChain, gm1_loop: float, cc_f: float,
-                       cc2_f: float, cl_f: float) -> float | None:
-    """RNMC phase margin from the open-loop model
-    (:func:`~.open_loop_response.phase_margin_rnmc_deg`), on the worse half
-    when the halves' compensation differs (:func:`~.rnmc.worst_half`)."""
-    stages, pairs, kw = _rnmc_model(chain, gm1_loop, cc_f, cc2_f)
-    _, pm = worst_half(stages, cc_f, cc2_f, cl_f, pairs, **kw)
-    return pm
+def _open_loop(chain: StageChain, gm1_loop: float, cc_f: float,
+               cc2_f: float | None, cl_f: float) -> tuple[float | None, float | None]:
+    """``(GBW, PM)`` of a compensated chain from its open-loop model
+    (:class:`~.open_loop_response.OpenLoopResponse`).
 
+    Two-stage and nested Miller: one half single-ended, both halves of a
+    fully-differential chain with its CMFB coupling them
+    (``chain.cmfb_coupling``).  Each series resistor is the one
+    ``size_resistors`` sizes for these schemes, ``(Cc + CL)/(gm_out·Cc)``
+    against the last gain stage's gm, which puts its zero on the output pole.
 
-def _rnmc_gbw(chain: StageChain, gm1_loop: float, cc_f: float,
-              cc2_f: float, cl_f: float) -> float | None:
-    """RNMC GBW from the open-loop model
-    (:func:`~.open_loop_response.unity_gain_bw_rnmc_hz`), the lower of the
-    halves'; ``None`` when a half never reaches 0 dB."""
-    stages, pairs, kw = _rnmc_model(chain, gm1_loop, cc_f, cc2_f)
-    gbws = [olr.unity_gain_bw_rnmc_hz(stages, cc_f, cc2_f, cl_f, comp_r=r, **kw)
-            for r in pairs]
-    return None if None in gbws else min(gbws)
+    Reversed nested Miller: each half on its own with the resistors
+    :func:`~.rnmc.comp_resistances` gives it, and the lower GBW and phase
+    margin of the halves (:func:`~.rnmc.half_responses`).
 
-
-def _miller_loop(chain: StageChain, gm1_loop: float, cc_f: float,
-                 cc2_f: float | None, cl_f: float) -> tuple[float | None, float | None]:
-    """``(GBW, PM)`` of a two-stage or nested-Miller chain from its open-loop model
-    (:func:`~.open_loop_response.two_stage_loop`,
-    :func:`~.open_loop_response.nested_miller_loop`):
-    one half single-ended, both halves of a fully-differential chain with its
-    CMFB coupling them (``chain.cmfb_coupling``).
-
-    Each series resistor is the one ``size_resistors`` sizes for these
-    schemes, ``(Cc + CL)/(gm_out·Cc)`` against the last gain stage's gm, which
-    puts its zero on the output pole.
+    :param chain: The stage chain; a three-stage one when ``cc2_f`` is given.
+    :param gm1_loop: The input pair's transconductance as the loop sees it,
+        in A/V.
+    :param cc_f: Outer compensation cap in F.
+    :param cc2_f: Inner compensation cap in F, ``None`` on a two-stage chain.
+    :param cl_f: Load capacitance in F.
+    :returns: ``(GBW in Hz, phase margin in °)``; either is ``None`` when the
+        gain never reaches 0 dB.
     """
     s = chain.stages
+    buffer = chain.output_buffer
+    if len(s) > 2 and chain.compensation_scheme == RNMC:
+        pairs = comp_resistances(chain.comp_resistors, s[2].gm, cc_f, cc2_f,
+                                 buffer[1] if buffer else 0.0)
+        halves = half_responses(_loop_stages(chain, gm1_loop, 3), cc_f, cc2_f, cl_f,
+                                pairs, mirror_pole_hz=chain.third_stage_mirror_pole_hz,
+                                buffer=buffer)
+        return (_lowest([h.gbw_hz for h in halves]),
+                _lowest([h.phase_margin_deg for h in halves]))
     gm_out = s[-1].gm
 
     def r(flag: bool, c_f: float) -> float:
         return eq.nulling_resistor_ohm(c_f, cl_f, gm_out) if flag and gm_out > 0 else 0.0
-    halves = chain.comp_resistors or ((False, False),)
     if len(s) > 2:
-        return olr.nested_miller_loop(
-            _loop_stages(chain, gm1_loop, 3), cc_f, cc2_f, cl_f,
-            mirror_pole_hz=chain.second_stage_mirror_pole_hz,
-            buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
-            comp_r=tuple((r(r1, cc_f), r(r2, cc2_f)) for r1, r2 in halves))
-    return olr.two_stage_loop(
-        _loop_stages(chain, gm1_loop, 2), cc_f, cl_f,
-        buffer=chain.output_buffer, cmfb=chain.cmfb_coupling,
-        r_ohm=tuple(r(r1, cc_f) for r1, _r2 in halves))
+        scheme, caps_f = olr.NESTED_MILLER, (cc_f, cc2_f)
+        mirror_pole_hz = chain.second_stage_mirror_pole_hz
+    else:
+        scheme, caps_f, mirror_pole_hz = olr.TWO_STAGE_MILLER, (cc_f,), None
+    loop = olr.OpenLoopResponse(
+        scheme, _loop_stages(chain, gm1_loop, len(caps_f) + 1), caps_f, cl_f,
+        mirror_pole_hz=mirror_pole_hz, buffer=buffer, cmfb=chain.cmfb_coupling,
+        comp_r=tuple(tuple(r(flag, c_f) for flag, c_f in zip(flags, caps_f))
+                     for flags in chain.comp_resistors or ((False, False),)))
+    return loop.gbw_hz, loop.phase_margin_deg
 
 
 #: How far the two-stage re-plan aims past each spec -- degrees of phase
@@ -104,7 +98,7 @@ def two_stage_replan(chain: StageChain, spec: SizingSpec,
                      gm2_max: float) -> tuple[float | None, float | None]:
     """``(gm1, gm2)`` in A/V a two-stage chain needs to meet its GBW and
     phase-margin specs in the open-loop model
-    (:func:`~.open_loop_response.two_stage_loop`).
+    (:class:`~.open_loop_response.OpenLoopResponse`).
 
     The requirement side sizes both from closed forms -- ``gm1/(2π·Cc)`` and
     ``90° − arctan(gm1·CL/(gm2·Cc))`` -- which leave out the output pole's
@@ -131,7 +125,7 @@ def two_stage_replan(chain: StageChain, spec: SizingSpec,
         caps[0] = c1_at(gm2)
         trial = replace(chain, stages=(replace(s[0], gm=gm1), replace(s[1], gm=gm2)),
                         node_caps_f=tuple(caps))
-        gbw, pm = _miller_loop(trial, chain.k_fs * gm1, cc_f, None, spec.cl)
+        gbw, pm = _open_loop(trial, chain.k_fs * gm1, cc_f, None, spec.cl)
         return (gbw or 0.0), (-math.inf if pm is None else pm)
 
     def least(lo: float, hi: float, ok: Callable[[float], bool]) -> float | None:
@@ -264,13 +258,9 @@ def evaluate_metrics(
             gm2 = stages[1].gm
             gbw = pm = None
             if len(stages) > 2 and gm2 > 0 and stages[2].gm > 0 and cc2_f:
-                if chain.compensation_scheme == RNMC:
-                    pm = _rnmc_phase_margin(chain, gm1_loop, cc_f, cc2_f, spec.cl)
-                    gbw = _rnmc_gbw(chain, gm1_loop, cc_f, cc2_f, spec.cl)
-                else:
-                    gbw, pm = _miller_loop(chain, gm1_loop, cc_f, cc2_f, spec.cl)
+                gbw, pm = _open_loop(chain, gm1_loop, cc_f, cc2_f, spec.cl)
             elif len(stages) == 2 and gm2 > 0:
-                gbw, pm = _miller_loop(chain, gm1_loop, cc_f, None, spec.cl)
+                gbw, pm = _open_loop(chain, gm1_loop, cc_f, None, spec.cl)
             elif gm2 > 0:   # a three-stage chain with no Cc2 or no third stage
                 pm = eq.phase_margin_two_stage_deg(gm1_loop, gm2, cc_f, spec.cl)
             _record("gbw_hz", gbw or eq.unity_gain_bw(gm1_loop, cc_f, gain=fol_gain),

@@ -202,8 +202,8 @@ class StageChain:
         metric is withheld rather than reported optimistically (issue #148).
     :param compensation_scheme: the template's three-stage compensation;
         ``"reversed_nested_miller"`` selects the RNMC open-loop model
-        (:func:`~.open_loop_response.phase_margin_rnmc_deg`), any other the
-        nested-Miller one (:func:`~.open_loop_response.nested_miller_loop`).
+        (:data:`~.open_loop_response.REVERSED_NESTED_MILLER`), any other the
+        nested-Miller one (:data:`~.open_loop_response.NESTED_MILLER`).
     :param node_caps_f: capacitance in F on each gain stage's output node,
         input pair first -- two entries on a two-stage chain, three on a
         three-stage one.  The inner entries are the gates of every device

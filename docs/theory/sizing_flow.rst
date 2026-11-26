@@ -653,9 +653,7 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
        give the current it feeds back into each first-stage node per volt of
        output common mode, and its pole.  :math:`g_{m1}/(2\pi C_c)` without
        a model
-     - :func:`~circuitgenome.sizer.physics.open_loop_response.two_stage_loop`,
-       :func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`,
-       :func:`~circuitgenome.sizer.physics.open_loop_response.unity_gain_bw_rnmc_hz`
+     - :attr:`OpenLoopResponse.gbw_hz <circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.gbw_hz>`
      - actual − spec
    * - Phase margin
      - The worst margin over every 0 dB crossing of the same open-loop model,
@@ -663,9 +661,7 @@ instead (see `Feasibility verdict and SPICE metrics (PTM / foundry PDKs)`_).
        first crossing -- a resonance the model cannot tell from a crossing
        (the closed form :math:`90° - \arctan(g_{m1}\,C_L\,/\,(g_{m2}\,C_c))`
        sizes the circuit, not the metric)
-     - :func:`~circuitgenome.sizer.physics.open_loop_response.two_stage_loop`,
-       :func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`,
-       :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`
+     - :attr:`OpenLoopResponse.phase_margin_deg <circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.phase_margin_deg>`
      - actual − spec
    * - Slew rate
      - :math:`SR = \min\big(k\,I_{tail}/C_c,\; I_2/(C_L + C_c)\big)` --
@@ -973,7 +969,7 @@ where :math:`\omega_t = g_{m1}/C_{c1}` is the unity-gain frequency
 (implemented in :func:`~circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg`,
 derived step by step in :doc:`three_stage_phase_margin`).
 It sizes the circuit; the reported margin comes off the full nested-Miller
-model (:func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`),
+model (:data:`~circuitgenome.sizer.physics.open_loop_response.NESTED_MILLER`),
 where this estimate ran 15–35° pessimistic in SPICE (issue #274).
 
 For a target :math:`\text{PM}_{\min}`, the sizer **splits the phase budget
@@ -1123,7 +1119,7 @@ formula cannot see the problem.  For RNMC the sizer instead
 1. **raises** :math:`g_{m2}` from the damping floor :math:`\zeta \ge 0.7`
    (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping`)
    until the open-loop model's poles are damped to 0.7
-   (:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`) and the
+   (:attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.damping`) and the
    phase-margin spec holds, up to the second stage's weak-inversion ceiling
    (behind an output buffer the gm/Id pipeline builds a raised second stage
    wider than one PDK device from parallel fingers, so the gm it plans with is
@@ -1137,7 +1133,7 @@ When no choice meets both :math:`\zeta \ge 0.7` and the PM spec, the PM spec
 best-damped choice that meets it, else the highest-PM one; an advisory is
 emitted either way.  The phase
 margin itself comes from the full transfer function evaluated on a frequency
-sweep (:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`),
+sweep (:attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.phase_margin_deg`),
 including the stage-output parasitics, the third stage's mirror pole, each
 compensation branch's series resistor and — on the ``*_buffered_*`` templates
 — the source-follower output buffer and the drains on the third stage's output

@@ -244,7 +244,7 @@ def unity_gain_bw(gm1_a_v: float, cc_f: float, *, gain: float = 1.0) -> float:
 
     This is where the loop gain falls to 1 when one capacitor sets the only
     pole.  Other poles near it pull the real crossing lower; the open-loop
-    model (e.g. :func:`~.open_loop_response.two_stage_loop`) includes that.
+    model (:class:`~.open_loop_response.OpenLoopResponse`) includes that.
 
     :param gm1_a_v: Input-pair transconductance in A/V.
     :param cc_f: Compensation cap in F (``CL`` for a single-stage OTA).
@@ -292,7 +292,7 @@ def phase_margin_two_stage_deg(
     arctan term.
 
     A sizing estimate, used to choose gm2.  It reads 2–5° high; the reported
-    phase margin comes from :func:`~.open_loop_response.two_stage_loop`.
+    phase margin comes from :class:`~.open_loop_response.OpenLoopResponse`.
 
     Derivation: :doc:`/theory/two_stage_phase_margin`.
 
@@ -319,9 +319,8 @@ def phase_margin_three_stage_deg(
 
     A rough estimate: the last two poles can interact and ring, which it
     cannot see, and it ran 15–35° pessimistic in SPICE.  The reported phase
-    margin comes from :func:`~.open_loop_response.nested_miller_loop`.  For
-    reversed nested Miller use
-    :func:`~.open_loop_response.phase_margin_rnmc_deg`.
+    margin comes from :class:`~.open_loop_response.OpenLoopResponse`, for
+    nested Miller and reversed nested Miller alike.
 
     Derivation: :doc:`/theory/three_stage_phase_margin`.
 
@@ -463,7 +462,7 @@ def rnmc_min_gm2_for_damping(gm3: float, cc1_f: float, cc2_f: float,
     :func:`~.rnmc.design_rnmc`, not a final size: it checks damping only, and
     ignores output conductances, the first-stage parasitic, a third-stage
     mirror and an output buffer, which
-    :func:`~.open_loop_response.rnmc_pole_damping` includes.
+    :attr:`~.open_loop_response.OpenLoopResponse.damping` includes.
 
     :param gm3: Third-stage transconductance in A/V.
     :param cc1_f: Outer cap, first-stage output → output, in F.

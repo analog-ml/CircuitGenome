@@ -130,11 +130,11 @@ Av   = gm * rout = 1000 V/V = 60 dB</code></pre>
     <tr><td>Capacitance limits small-signal speed</td><td><span class="eq">\(f_{\mathrm{GBW}} = A_f\,\frac{g_{m1}}{2\pi C_c}\)</span><pre><code>def unity_gain_bw(gm1_a_v, cc_f, *, gain=1.0):
     return gain * gm1_a_v / (2.0 * pi * cc_f)</code></pre>Single-pole GBW; <code>gain</code> is an output follower's <code>gm/(gm + gmb + gds)</code>.</td></tr>
     <tr><td>The real loop crosses lower</td><td><span class="eq">\(\left(G + sC\right)v = b,\quad |A(j\omega_c)| = 1\)</span><pre><code># open_loop_response.py
-def two_stage_loop(stages, cc_f, cl_f, *, buffer, r_ohm, cmfb):
-    # stages = (SmallSignalStage(gm1, g1, c1),
-    #           SmallSignalStage(gm2, g2, c2))
-    ...
-    return _loop_gbw_pm(G, C, b, out, gm1 / cc_f)   # (GBW, PM)</code></pre>GBW and phase margin from the open-loop model, in <code>open_loop_response.py</code>: the half circuit's nodal equations swept in frequency, so the output pole, the Miller cap's right-half-plane zero, a nulling resistor and a follower all count (issue #274). Each gain stage is one <code>SmallSignalStage(gm, g, c)</code>: its strength, its leak and the capacitance on its output. <code>nested_miller_loop</code> does the same for three stages.</td></tr>
+# stages = (SmallSignalStage(gm1, g1, c1),
+#           SmallSignalStage(gm2, g2, c2))
+loop = OpenLoopResponse(TWO_STAGE_MILLER, stages, (cc_f,), cl_f,
+                        buffer=buffer, comp_r=comp_r, cmfb=cmfb)
+loop.gbw_hz, loop.phase_margin_deg              # (GBW, PM)</code></pre>GBW and phase margin from the open-loop model, in <code>open_loop_response.py</code>: the half circuit's nodal equations swept in frequency, so the output pole, the Miller cap's right-half-plane zero, a nulling resistor and a follower all count (issue #274). Each gain stage is one <code>SmallSignalStage(gm, g, c)</code>: its strength, its leak and the capacitance on its output. The <code>NESTED_MILLER</code> and <code>REVERSED_NESTED_MILLER</code> rows do the same for three stages.</td></tr>
     <tr><td>Current limits large-signal speed</td><td><span class="eq">\(\mathrm{SR} = \frac{I}{C}\)</span> (per node)<pre><code>def slew_rate_vps(current_a, cap_f):
     return current_a / cap_f</code></pre>Slew rate of one node; the amplifier slews at its slowest current-limited node.</td></tr>
     <tr><td>Feedback needs phase margin</td><td><span class="eq">\(\mathrm{PM}_{\mathrm{2-stage}} \approx 90^\circ - \tan^{-1}\left(\frac{g_{m1}C_L}{g_{m2}C_c}\right)\)</span><pre><code>def phase_margin_two_stage_deg(gm1, gm2, cc_f, cl_f):
@@ -144,9 +144,9 @@ def two_stage_loop(stages, cc_f, cl_f, *, buffer, r_ohm, cmfb):
     sqrt_gm2 = (-b + sqrt(b * b - 4.0 * a * c)) / (2.0 * a)
     return sqrt_gm2 ** 2</code></pre>Returns the minimum second-stage <code>gm</code> for the target <code>ζ</code>.</td></tr>
     <tr><td>Measure RNMC damping and stability</td><td><span class="eq">\(\zeta_{\mathrm{RNMC}} = \min_{p\in\mathrm{non\text{-}dominant}}\left(-\frac{\operatorname{Re}(p)}{|p|}\right)\)</span><pre><code># open_loop_response.py
-def rnmc_pole_damping(stages, cc1_f, cc2_f, cl_f, *,
-                      mirror_pole_hz, buffer, comp_r):
-    return min(-pole.real / abs(pole) for pole in non_dominant)</code></pre>Solves the RNMC open-loop model (<code>open_loop_response.py</code>) — parasitics, third-stage mirror, output buffer and any compensation-branch series resistors — and returns its worst non-dominant <code>ζ</code>; <code>phase_margin_rnmc_deg()</code> uses the same model for the worst phase margin.</td></tr>
+loop = OpenLoopResponse(REVERSED_NESTED_MILLER, stages, (cc1_f, cc2_f), cl_f,
+                        mirror_pole_hz=..., buffer=..., comp_r=...)
+loop.damping    # min(-pole.real / abs(pole) for pole in non_dominant)</code></pre>Solves the RNMC open-loop model (<code>open_loop_response.py</code>) — parasitics, third-stage mirror, output buffer and any compensation-branch series resistors — and returns its worst non-dominant <code>ζ</code>; <code>loop.phase_margin_deg</code> reads the worst phase margin off the same model.</td></tr>
     <tr><td>Power is voltage times current</td><td><span class="eq">\(\displaystyle P_Q = (V_{DD}-V_{SS})\sum_i |I_i|\)</span><pre><code>def quiescent_power(vdd, vss, currents):
     return (vdd - vss) * sum(abs(i) for i in currents)</code></pre>Computes idle supply power.</td></tr>
   </tbody></table>
