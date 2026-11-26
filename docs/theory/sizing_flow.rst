@@ -1107,8 +1107,8 @@ stage gains, the denominator
 
 with :math:`K = 1 + C_2\,(1/C_{c2} + 1/C_{c1} + 1/C_L)`.  The two non-dominant
 poles are the roots of :math:`1 + a_1 s + a_2 s^2`: a pair, damped by
-:math:`\zeta = a_1 / (2\sqrt{a_2})`.  They sit in the left half plane only
-while :math:`a_1 > 0`:
+:math:`\zeta = a_1 / (2\sqrt{a_2})`.  (:doc:`compensation_design_rules` derives these step by step.)  They sit in the
+left half plane only while :math:`a_1 > 0`:
 
 .. math::
 
@@ -1121,7 +1121,7 @@ formula cannot see the problem.  For RNMC the sizer instead
 (:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`):
 
 1. **raises** :math:`g_{m2}` from the damping floor :math:`\zeta \ge 0.7`
-   (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`)
+   (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping`)
    until the open-loop model's poles are damped to 0.7
    (:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`) and the
    phase-margin spec holds, up to the second stage's weak-inversion ceiling

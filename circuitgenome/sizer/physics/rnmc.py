@@ -100,7 +100,8 @@ def design_rnmc(
     Starts from the given operating point and never lowers ``gm2`` or
     ``Cc2``, nor raises ``gm3``.  For each ``(Cc2, gm3)`` in preference order
     (all Cc2 steps at the starting gm3 first, then each lower gm3), ``gm2``
-    starts at the closed-form damping floor (:func:`~.equations.rnmc_min_gm2`;
+    starts at the closed-form damping floor
+    (:func:`~.equations.rnmc_min_gm2_for_damping`;
     at its current value behind an output ``buffer``, where that formula's
     load does not apply) and rises until the open-loop model's damping
     (:func:`~.open_loop_response.rnmc_pole_damping`) reaches ``ZETA_TARGET`` and the
@@ -129,7 +130,7 @@ def design_rnmc(
     :param comp_resistors: per half, whether its ``Cc1``/``Cc2`` branch has a
         series resistor (:attr:`~.stage_chain.StageChain.comp_resistors`).
         Each candidate is scored with the resistors
-        :func:`~.equations.compensation_resistor_ohm` would give it, on its
+        :func:`~.equations.nulling_resistor_ohm` would give it, on its
         worse half.
     """
     pm_target = pm_min_deg if pm_min_deg is not None else 0.0
@@ -175,8 +176,8 @@ def design_rnmc(
     for gm3_ in gm3_ladder:
         for cc2_ in cc2_ladder:
             floor = (0.0 if buffer else
-                     eq.rnmc_min_gm2(gm3_, cc1_f, cc2_, cl_f, c2_at(gm3_),
-                                     ZETA_TARGET))
+                     eq.rnmc_min_gm2_for_damping(gm3_, cc1_f, cc2_, cl_f,
+                                                 c2_at(gm3_), ZETA_TARGET))
             gm2_ = max(gm2, floor)
             if gm2_ > gm2_max:
                 tried.append(score(gm2_max, cc2_, gm3_))
@@ -205,7 +206,7 @@ def comp_resistances(comp_resistors: tuple[tuple[bool, bool], ...], gm3: float,
     """The distinct ``(R1, R2)`` in Ω, in series with ``(Cc1, Cc2)``, of an
     RNMC amplifier's halves.
 
-    Each resistor is the one :func:`~.equations.compensation_resistor_ohm`
+    Each resistor is the one :func:`~.equations.nulling_resistor_ohm`
     sizes against the third stage's gm and ``c_out_f`` (the buffer's gate, or
     ``0`` without one: ``1/gm3``, as ``size_resistors`` sizes it for RNMC); a
     bare cap gets ``0.0``.  No halves (``comp_resistors`` empty)
@@ -214,7 +215,7 @@ def comp_resistances(comp_resistors: tuple[tuple[bool, bool], ...], gm3: float,
     if not comp_resistors or gm3 <= 0:
         return [(0.0, 0.0)]
     def r(cc_f: float) -> float:
-        return eq.compensation_resistor_ohm(cc_f, c_out_f, gm3)
+        return eq.nulling_resistor_ohm(cc_f, c_out_f, gm3)
     return sorted({(r(cc1_f) if r1 else 0.0, r(cc2_f) if r2 else 0.0)
                    for r1, r2 in comp_resistors})
 

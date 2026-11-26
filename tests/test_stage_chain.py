@@ -170,7 +170,7 @@ def test_the_cmfb_couples_mismatched_halves_only():
     ones are pulled from their average toward the halves' harmonic mean,
     still above the worse half."""
     args = ((S(1e-3, 1e-6), S(14e-3, 2e-6)), 2e-12, 20e-12)
-    r = eq.compensation_resistor_ohm(2e-12, 20e-12, 14e-3)
+    r = eq.nulling_resistor_ohm(2e-12, 20e-12, 14e-3)
     strong = (10e-3, None)
     assert olr.two_stage_loop(*args, r_ohm=(0.0, 0.0), cmfb=strong) == \
         pytest.approx(olr.two_stage_loop(*args))

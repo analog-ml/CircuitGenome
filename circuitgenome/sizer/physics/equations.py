@@ -417,50 +417,66 @@ def psrr_db_approx(gm2: float, gd_bias: float) -> float:
 # with C2 the parasitic on the second-stage output (mostly the third stage's
 # wide gate).  Matching 1 + a1·s + a2·s² to 1 + (2ζ/ωn)·s + s²/ωn² gives the
 # pair's damping ζ = a1/(2·√a2), positive (stable) only while
-# gm3 < gm2·(1 + CL/Cc1).  docs/theory/rnmc_stability.rst derives it.
+# gm3 < gm2·(1 + CL/Cc1).  docs/theory/compensation_design_rules.rst derives ζ.
 
 
-def compensation_resistor_ohm(cc_f: float, c_out_f: float, gm_out: float) -> float:
-    """Resistor in Ω to put in series with a compensation cap.
+def nulling_resistor_ohm(cc_f: float, c_out_f: float, gm_out: float) -> float:
+    """Resistor in series with a compensation cap that moves the cap's zero
+    onto the output pole.
 
-    R = (Cc + C) / (gm_out·Cc)
+    Without it the zero is in the right half plane and costs phase margin.
+    Setting zero = pole and solving for R (#108)::
 
-    This places the branch's zero on the output pole of the stage it wraps,
-    so the two cancel (#108).
+        gm_out / (Cc·(1 − gm_out·R)) = −gm_out / C
+        R = (Cc + C) / (gm_out·Cc) = 1/gm_out + C/(gm_out·Cc)
 
-    :param cc_f: The branch's compensation cap in F.
-    :param c_out_f: Load on the wrapped stage's output in F: ``CL``, except in
-        RNMC, where it is the output buffer's gate (#262) or ``0`` without a
-        buffer (#269), giving ``R ≈ 1/gm_out``.
-    :param gm_out: Transconductance of the wrapped stage in A/V.
+    ``1/gm_out`` removes the zero; the rest moves it onto the pole.
+
+    :param cc_f: Compensation cap in F.
+    :param c_out_f: Capacitance C that sets the output pole, in F: ``CL``,
+        except in RNMC, where it is the output buffer's gate (#262) or ``0``
+        without a buffer (#269), which only removes the zero.
+    :param gm_out: Transconductance of the last gain stage in A/V.  RNMC's
+        inner cap wraps the second stage but uses this gm too, so its zero is
+        removed exactly only when ``gm2 = gm3``.
+    :returns: Series resistance R in Ω.
     """
     return (cc_f + c_out_f) / (gm_out * cc_f)
 
 
-def rnmc_min_gm2(gm3: float, cc1_f: float, cc2_f: float, cl_f: float,
-                 c2_f: float = 0.0, zeta: float = 0.7) -> float:
-    """Smallest second-stage gm in A/V that damps the RNMC pole pair to
-    ``zeta``.
+def rnmc_min_gm2_for_damping(gm3: float, cc1_f: float, cc2_f: float,
+                             cl_f: float, c2_f: float = 0.0,
+                             zeta_target: float = 0.7) -> float:
+    """Smallest second-stage gm that damps the RNMC pole pair to
+    ``zeta_target``.
 
-    Solves ``ζ = a1/(2·√a2) ≥ zeta`` (see the comment above) for gm2.  With
-    ``v = √gm2`` it is the quadratic::
+    A smaller gm2 rings more; a low enough one is unstable.  Solves
+    ``ζ = a1/(2·√a2) = zeta_target`` (see the comment above) for gm2, a
+    quadratic in ``√gm2``::
 
-        (CL+Cc1)·v² − b·v − Cc1·gm3 ≥ 0,   b = 2ζ·Cc1·√(CL·K·gm3/Cc2)
+        a·(√gm2)² + b·√gm2 + c = 0
+        a = CL + Cc1
+        b = −2·zeta_target·Cc1·√(CL·K·gm3/Cc2)
+        c = −Cc1·gm3
 
-    whose positive root is the answer.  A quick seed: it ignores output
-    conductances, the first-stage parasitic, a third-stage mirror and an
-    output buffer, which :func:`~.open_loop_response.rnmc_pole_damping` includes.
+    The answer is the positive root, squared.  It is a starting point for
+    :func:`~.rnmc.design_rnmc`, not a final size: it checks damping only, and
+    ignores output conductances, the first-stage parasitic, a third-stage
+    mirror and an output buffer, which
+    :func:`~.open_loop_response.rnmc_pole_damping` includes.
 
     :param gm3: Third-stage transconductance in A/V.
     :param cc1_f: Outer cap, first-stage output → output, in F.
     :param cc2_f: Inner cap, first-stage output → second-stage output, in F.
     :param cl_f: Load capacitance in F.
     :param c2_f: Parasitic on the second-stage output in F.
-    :param zeta: Target damping; ``0.7`` is the Butterworth placement (no
-        resonance peak).
+    :param zeta_target: Target damping; ``0.7`` is the Butterworth placement
+        (no resonance peak).
+    :returns: Smallest second-stage transconductance gm2 in A/V.
     """
     k = 1.0 + c2_f * (1.0 / cc2_f + 1.0 / cc1_f + 1.0 / cl_f)
-    b = 2.0 * zeta * cc1_f * math.sqrt(cl_f * k * gm3 / cc2_f)
     a = cl_f + cc1_f
-    v = (b + math.sqrt(b * b + 4.0 * a * cc1_f * gm3)) / (2.0 * a)
-    return v * v
+    b = -2.0 * zeta_target * cc1_f * math.sqrt(cl_f * k * gm3 / cc2_f)
+    c = -cc1_f * gm3
+    sqrt_gm2 = (-b + math.sqrt(b * b - 4.0 * a * c)) / (2.0 * a)
+    return sqrt_gm2 ** 2

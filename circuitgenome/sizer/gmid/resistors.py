@@ -170,7 +170,7 @@ def size_resistors(
                 c_out = _output_buffer_cgs(blocks, sizing, model) or 0.0
             for name, rs in comp_slots:
                 slot_cc_f = (cc2_pf if "comp2" in name and cc2_pf else cc_pf) * 1e-12
-                r_val = eq.compensation_resistor_ohm(slot_cc_f, c_out, gm_out)
+                r_val = eq.nulling_resistor_ohm(slot_cc_f, c_out, gm_out)
                 for r in rs:
                     out[r.ref] = r_val
 

@@ -488,7 +488,7 @@ Two details then decide whether the pair is stable, and the model has both
   inner loop crosses over.  A resistor of about :math:`1/g_m` in series
   cancels it.  The model adds the resistor each branch actually has, sized by
   the same rule as the netlist's
-  (:func:`~circuitgenome.sizer.physics.equations.compensation_resistor_ohm`).
+  (:func:`~circuitgenome.sizer.physics.equations.nulling_resistor_ohm`).
 
 On #266's gf180 design #7210 (bare caps, :math:`g_{m3} \approx 1.05\,g_{m2}`),
 with the values SPICE's ``.op`` measures:
@@ -544,7 +544,8 @@ and :math:`\zeta > 0` exactly when :math:`a_1 > 0`, i.e. the stability
 condition :math:`g_{m3} < g_{m2}(1 + C_L/C_{c1})`.  On the bare loop (no
 mirror, buffer or output conductances) the open-loop model reproduces both — it
 flips sign at that boundary and reads :math:`\zeta = 0.7` where the closed form
-does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code:
+does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code
+(:doc:`compensation_design_rules` derives it):
 
 .. list-table::
    :header-rows: 1
@@ -553,7 +554,7 @@ does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code:
    * - Function
      - Computes
      - Sees mirror, buffer, conductances?
-   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2`
+   * - :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping`
      - the closed-form :math:`\zeta` solved for the smallest :math:`g_{m2}`
        reaching a target — where the sizer's :math:`g_{m2}` search starts
      - no

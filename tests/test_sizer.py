@@ -985,7 +985,8 @@ def test_rnmc_requirements_damp_the_inner_pole_pair(three_stage_rnmc_se_fbr):
     assert gm2_new > gm2_old
     assert gm3_new < gm2_new * (1 + spec.cl / cc1)       # pole pair stable
     # ...and damped past ζ = 0.5 (the closed form's gm2 floor for it).
-    assert gm2_new > eq.rnmc_min_gm2(gm3_new, cc1, cc2_new, spec.cl, zeta=0.5)
+    assert gm2_new > eq.rnmc_min_gm2_for_damping(gm3_new, cc1, cc2_new, spec.cl,
+                                                   zeta_target=0.5)
 
 
 # --- FD NMC ---
@@ -1699,8 +1700,8 @@ def test_fd_cmfb_couples_mismatched_compensation_halves():
                                   chain.node_caps_f[1]))
     uncoupled = olr.two_stage_loop(
         stages, chain.cc_pf * 1e-12, spec.cl,
-        r_ohm=tuple(eq.compensation_resistor_ohm(chain.cc_pf * 1e-12, spec.cl,
-                                                 chain.stages[1].gm) if r1 else 0.0
+        r_ohm=tuple(eq.nulling_resistor_ohm(chain.cc_pf * 1e-12, spec.cl,
+                                            chain.stages[1].gm) if r1 else 0.0
                     for r1, _r2 in chain.comp_resistors))[1]
     assert pm < uncoupled - 3
 
