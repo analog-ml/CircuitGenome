@@ -8,8 +8,8 @@ A three-stage amplifier can pass the usual phase-margin check and still ring,
 or even oscillate.  For every RNMC design it sizes, the sizer therefore
 computes two numbers — the **phase margin** and the **damping** :math:`\zeta`
 of a *pole pair* — with
-:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg` and
-:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`.  The sizing
+:attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.phase_margin_deg` and
+:attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.damping`.  The sizing
 strategy that uses them
 (:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`) is described in
 :ref:`rnmc-inner-pair`.
@@ -331,9 +331,9 @@ Multiplying out row 2 gives back the :math:`V_2` equation:
 :math:`(g_{m2} - sC_{c2})V_1 + (g_2 + s(c_2 + C_{c2}))V_2 = 0`.
 
 Splitting off :math:`s` lets the same two tables serve every frequency, and
-gives the poles directly (Step 4).  In the code each physical part is one line;
-two helpers write its numbers into the right cells, so the builder reads like
-the schematic:
+gives the poles directly (Step 4).  In the code each physical part is one call
+to a helper that writes its numbers into the right cells.  For this circuit
+the calls amount to:
 
 .. code-block:: python
 
@@ -342,6 +342,13 @@ the schematic:
    vccs(V2, V1, gm2)      # stage 2: current gm2·V1 drawn out of V2
    vccs(V3, V2, -gm3)     # stage 3: current gm3·V2 pushed into V3
    cap(V3, None, cl_f)    # CL to ground
+
+They are not written out once per compensation scheme.  A scheme is one
+:class:`~circuitgenome.sizer.physics.open_loop_response.CompensationScheme`
+row saying which stages invert and which two stage outputs each cap joins
+(:data:`~circuitgenome.sizer.physics.open_loop_response.REVERSED_NESTED_MILLER`
+here: stage 2 inverts, stage 3 does not, and the caps run 1 → 3 and 1 → 2),
+and one builder makes the calls for any row.
 
 **Mirror.** A third-stage current mirror delays gm3 by a pole at
 :math:`\omega_m`.  It becomes one extra node :math:`V_m` with
@@ -397,7 +404,7 @@ below :math:`10^{-12}` of the fastest one.
 Step 5 — Read ζ off the poles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping` drops the
+:attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.damping` drops the
 dominant (smallest) pole and reports the **worst** :math:`\zeta` among the
 rest; a real pole counts as :math:`\zeta = 1`:
 
@@ -416,7 +423,7 @@ Two properties of the ``-p.real / abs(p)`` form matter here:
 
 - **The sign comes for free.**  A right-half-plane pole has a positive real
   part, so it gives :math:`\zeta < 0` — that is how
-  :func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping` reports an
+  :attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.damping` reports an
   unstable pair, with no separate check.
 - **Real poles read as 1.**  A real pole gives :math:`-p/|p| = 1`, so an
   *overdamped* pair (true :math:`\zeta > 1`, two real roots) reads 1, not its
@@ -426,7 +433,7 @@ Two properties of the ``-p.real / abs(p)`` form matter here:
 Step 6 — Sweep the frequency for the phase margin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg` solves
+:attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.phase_margin_deg` solves
 the system at 4000 log-spaced frequencies, from two decades below the lowest
 pole to two decades above the highest — one batched call:
 
@@ -558,10 +565,10 @@ does — and ``tests/test_rnmc.py`` checks it.  Only one closed form is code
      - the closed-form :math:`\zeta` solved for the smallest :math:`g_{m2}`
        reaching a target — where the sizer's :math:`g_{m2}` search starts
      - no
-   * - :func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`
+   * - :attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.damping`
      - :math:`\zeta` from the open-loop model's poles (Steps 1–5)
      - **yes**
-   * - :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`
+   * - :attr:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse.phase_margin_deg`
      - phase margin from the open-loop model's sweep (Steps 1–4, 6)
      - **yes**
 

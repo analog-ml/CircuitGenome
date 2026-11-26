@@ -205,7 +205,7 @@ It leaves out:
 Together they cost a design sized to this formula 2–5° (issue #274).  So for
 a two-stage op-amp the sizer reports the phase margin read off the
 open-loop model,
-:func:`~circuitgenome.sizer.physics.open_loop_response.two_stage_loop`, and its
+:class:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse`, and its
 post-sizing re-plan raises :math:`g_{m2}` to win those degrees back.  The
 closed form still sets the first :math:`g_{m2}`, and is the fallback metric
 for a three-stage chain that has no second Miller capacitor.

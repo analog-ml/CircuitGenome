@@ -1698,11 +1698,11 @@ def test_fd_cmfb_couples_mismatched_compensation_halves():
     stages = (olr.SmallSignalStage(gm1, 1 / chain.stages[0].rout, chain.node_caps_f[0]),
               olr.SmallSignalStage(chain.stages[1].gm, 1 / chain.stages[1].rout,
                                   chain.node_caps_f[1]))
-    uncoupled = olr.two_stage_loop(
-        stages, chain.cc_pf * 1e-12, spec.cl,
-        r_ohm=tuple(eq.nulling_resistor_ohm(chain.cc_pf * 1e-12, spec.cl,
-                                            chain.stages[1].gm) if r1 else 0.0
-                    for r1, _r2 in chain.comp_resistors))[1]
+    uncoupled = olr.OpenLoopResponse(
+        olr.TWO_STAGE_MILLER, stages, (chain.cc_pf * 1e-12,), spec.cl,
+        comp_r=tuple((eq.nulling_resistor_ohm(chain.cc_pf * 1e-12, spec.cl,
+                                              chain.stages[1].gm) if r1 else 0.0,)
+                     for r1, _r2 in chain.comp_resistors)).phase_margin_deg
     assert pm < uncoupled - 3
 
 

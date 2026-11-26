@@ -142,7 +142,8 @@ Worked examples
 Both rows use :math:`g_{m1}` = 100 µA/V, :math:`C_{c1}` = 2 pF
 (:math:`f_t` = 7.96 MHz), :math:`C_{c2}` = 0.5 pF and :math:`C_L` = 10 pF.
 "Open-loop model" is
-:func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop` with ideal
+:class:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse`, wired as
+:data:`~circuitgenome.sizer.physics.open_loop_response.NESTED_MILLER`, with ideal
 stages (no parasitic capacitance), which treats the poles as the pair they
 are:
 
@@ -178,7 +179,7 @@ are:
      - Both PMs look excellent, but ζ = 0.08 rings: the #208 failure.
 
 These numbers are illustrative.  They were computed with this function, the
-:math:`\zeta` formula above and ``nested_miller_loop``, not taken from a
+:math:`\zeta` formula above and ``OpenLoopResponse``, not taken from a
 captured run.
 
 What the formula leaves out
@@ -188,13 +189,13 @@ What the formula leaves out
 - **Parasitics, an output buffer, and the compensation resistors' zeros.**
   In SPICE the formula ran 15–35° pessimistic (issue #274).  So the sizer
   reports the phase margin from
-  :func:`~circuitgenome.sizer.physics.open_loop_response.nested_miller_loop`, which
+  :class:`~circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse`, which
   includes them.
 - **Reversed nested Miller (RNMC).**  There both caps start at ``n1``, and
   the pair can even sit in the right half plane.  This formula is the wrong
   one for it.  On the RNMC fixture in ``tests/test_rnmc.py`` it reads 58.2°
-  while the open-loop model reads 0° (unstable).  RNMC uses
-  :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg`, see
+  while the open-loop model reads 0° (unstable).  RNMC is wired as
+  :data:`~circuitgenome.sizer.physics.open_loop_response.REVERSED_NESTED_MILLER`, see
   :doc:`rnmc_stability`.
 
 Reference
@@ -203,7 +204,8 @@ Reference
 .. autofunction:: circuitgenome.sizer.physics.equations.phase_margin_three_stage_deg
    :no-index:
 
-.. autofunction:: circuitgenome.sizer.physics.open_loop_response.nested_miller_loop
+.. autoclass:: circuitgenome.sizer.physics.open_loop_response.OpenLoopResponse
+   :members: gbw_hz, phase_margin_deg, damping
    :no-index:
 
 Scope

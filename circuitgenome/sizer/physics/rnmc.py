@@ -12,7 +12,8 @@ The generic three-stage requirements push gm3 to its ceiling and leave gm2 at
 whatever the second stage's minimum width gives, so an RNMC amplifier could be
 sized straight into the right half plane.  :func:`design_rnmc` picks
 ``(gm2, Cc2, gm3)`` so the pair is damped to ``ζ ≈ 0.7`` and the open-loop
-model's phase margin (:func:`~.open_loop_response.phase_margin_rnmc_deg`)
+model's phase margin
+(:attr:`~.open_loop_response.OpenLoopResponse.phase_margin_deg`)
 meets the spec, trying the knobs in this order:
 
 1. **raise gm2** — the second stage's signal device gets a larger gm
@@ -104,7 +105,7 @@ def design_rnmc(
     (:func:`~.equations.rnmc_min_gm2_for_damping`;
     at its current value behind an output ``buffer``, where that formula's
     load does not apply) and rises until the open-loop model's damping
-    (:func:`~.open_loop_response.rnmc_pole_damping`) reaches ``ZETA_TARGET`` and the
+    (:attr:`~.open_loop_response.OpenLoopResponse.damping`) reaches ``ZETA_TARGET`` and the
     open-loop model's PM meets ``pm_min_deg`` (or is simply positive when there is
     no PM spec).  The first choice meeting both wins.
 
@@ -125,7 +126,7 @@ def design_rnmc(
     :param g: stage output conductances ``(g1, g2, g3)`` in A/V.
     :param buffer: ``(gm, cgs, g_out)`` of a source-follower output buffer
         between the third stage and ``CL`` (see
-        :func:`~.open_loop_response.phase_margin_rnmc_deg`), or ``None``.
+        :class:`~.open_loop_response.OpenLoopResponse`), or ``None``.
     :param c3_f: parasitic from the third-stage output to ground in F.
     :param comp_resistors: per half, whether its ``Cc1``/``Cc2`` branch has a
         series resistor (:attr:`~.stage_chain.StageChain.comp_resistors`).
@@ -220,21 +221,41 @@ def comp_resistances(comp_resistors: tuple[tuple[bool, bool], ...], gm3: float,
                    for r1, r2 in comp_resistors})
 
 
+def half_responses(stages: tuple[olr.SmallSignalStage, ...], cc1_f: float, cc2_f: float,
+                   cl_f: float, pairs: list[tuple[float, float]],
+                   **kw) -> list[olr.OpenLoopResponse]:
+    """The RNMC open-loop response of each half, solved on its own.
+
+    :param stages: The input pair, the inverting second stage and the
+        non-inverting third stage.
+    :param cc1_f: Outer cap, first-stage output → third-stage output, in F.
+    :param cc2_f: Inner cap, first-stage output → second-stage output, in F.
+    :param cl_f: Load capacitance in F.
+    :param pairs: Each half's ``(R1, R2)`` in Ω in series with ``Cc1`` and
+        ``Cc2`` (:func:`comp_resistances`).
+    :param kw: ``mirror_pole_hz`` and ``buffer``, as for
+        :class:`~.open_loop_response.OpenLoopResponse`.
+    :returns: One response per entry in ``pairs``.
+    """
+    return [olr.OpenLoopResponse(olr.REVERSED_NESTED_MILLER, stages, (cc1_f, cc2_f),
+                                 cl_f, comp_r=(r,), **kw)
+            for r in pairs]
+
+
 def worst_half(stages: tuple[olr.SmallSignalStage, ...], cc1_f: float, cc2_f: float,
                cl_f: float, pairs: list[tuple[float, float]],
                **kw) -> tuple[float, float | None]:
     """``(ζ, PM)`` of the least stable half: the lowest damping
-    (:func:`~.open_loop_response.rnmc_pole_damping`) and the lowest phase margin
-    (:func:`~.open_loop_response.phase_margin_rnmc_deg`, ``None`` when any half's
-    gain never reaches 0 dB) over the halves' compensation resistors
-    ``pairs``.  An unstable half is enough to make the amplifier ring.
-    ``stages``, the caps and ``kw`` are as for those functions.
+    (:attr:`~.open_loop_response.OpenLoopResponse.damping`) and the lowest
+    phase margin
+    (:attr:`~.open_loop_response.OpenLoopResponse.phase_margin_deg`, ``None``
+    when any half's gain never reaches 0 dB) over the halves' compensation
+    resistors ``pairs``.  An unstable half is enough to make the amplifier
+    ring.  Parameters as for :func:`half_responses`.
     """
-    zeta = min(olr.rnmc_pole_damping(stages, cc1_f, cc2_f, cl_f, comp_r=r, **kw)
-               for r in pairs)
-    pms = [olr.phase_margin_rnmc_deg(stages, cc1_f, cc2_f, cl_f, comp_r=r, **kw)
-           for r in pairs]
-    return zeta, (None if None in pms else min(pms))
+    halves = half_responses(stages, cc1_f, cc2_f, cl_f, pairs, **kw)
+    pms = [h.phase_margin_deg for h in halves]
+    return min(h.damping for h in halves), (None if None in pms else min(pms))
 
 
 def signal_cgs_estimate(model, dtype: str, gm: float, ids: float, tech) -> float:

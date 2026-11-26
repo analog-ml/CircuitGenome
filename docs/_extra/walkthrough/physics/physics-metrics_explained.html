@@ -181,8 +181,8 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
   <pre class="code"><code>cc_f = (chain.cc_pf * <span class="tok-num">1e-12</span>) <span class="tok-kw">if</span> chain.cc_pf <span class="tok-kw">else</span> <span class="tok-kw">None</span>
 <span class="tok-kw">if</span> cc_f <span class="tok-kw">and</span> <span class="tok-fn">len</span>(stages) &gt; <span class="tok-num">1</span> <span class="tok-kw">and</span> gm1 &gt; <span class="tok-num">0</span>:
     gm1_loop = k_fs * gm1                     <span class="tok-com"># gm into the Miller loop</span>
-    <span class="tok-com"># two-stage / nested Miller: GBW and PM off the open-loop model</span>
-    gbw, pm = <span class="tok-fn">_miller_loop</span>(chain, gm1_loop, cc_f, cc2_f, spec.cl)</code></pre>
+    <span class="tok-com"># GBW and PM off the open-loop model</span>
+    gbw, pm = <span class="tok-fn">_open_loop</span>(chain, gm1_loop, cc_f, cc2_f, spec.cl)</code></pre>
 
   <h3>GBW — the gain-bandwidth product</h3>
   <div class="eq-center"><span class="boxed-eq">GBW&nbsp;=&nbsp;g<sub>m1</sub>&nbsp;/&nbsp;(2π&nbsp;·&nbsp;C<sub>c</sub>)</span></div>
@@ -191,7 +191,7 @@ gain_db = 20 · log10(10 000) = 80.0 dB</code></pre>
   <p>Traced: <code>gm1_loop = 1 × 1 mA/V = 1e-3</code>, <code>Cc = 1 pF = 1e-12 F</code>:</p>
   <pre class="code"><code>GBW = 1e-3 / (2π × 1e-12) = 1e-3 / 6.283e-12 ≈ 1.59e8 Hz = 159 MHz</code></pre>
 
-  <p>That is the textbook value, and the right intuition: GBW grows with <code>gm1</code> and shrinks with <code>Cc</code>. The reported number is read more carefully (issue #274). <code>_miller_loop</code> writes the half circuit's nodal equations &mdash; each stage's <code>gm</code> and output conductance, the gate capacitance on each node (<code>chain.node_caps_f</code>, read at the device's inversion level), the compensation branch's series resistor (<code>chain.comp_resistors</code>) and any output follower (<code>chain.output_buffer</code>) &mdash; sweeps them in frequency, and takes the first 0 dB crossing. Two things pull that crossing under <code>gm1/(2π·Cc)</code>: the second pole below, which lowers the gain near crossover, and a follower output stage, which passes only <code>gm/(gm + gmb + gds)</code> &asymp; 0.88 of its input on gf180. For the running example the open-loop model crosses at <strong>146 MHz</strong>, not 159.</p>
+  <p>That is the textbook value, and the right intuition: GBW grows with <code>gm1</code> and shrinks with <code>Cc</code>. The reported number is read more carefully (issue #274). <code>_open_loop</code> writes the half circuit's nodal equations &mdash; each stage's <code>gm</code> and output conductance, the gate capacitance on each node (<code>chain.node_caps_f</code>, read at the device's inversion level), the compensation branch's series resistor (<code>chain.comp_resistors</code>) and any output follower (<code>chain.output_buffer</code>) &mdash; sweeps them in frequency, and takes the first 0 dB crossing. Two things pull that crossing under <code>gm1/(2π·Cc)</code>: the second pole below, which lowers the gain near crossover, and a follower output stage, which passes only <code>gm/(gm + gmb + gds)</code> &asymp; 0.88 of its input on gf180. For the running example the open-loop model crosses at <strong>146 MHz</strong>, not 159.</p>
 
   <h3>Phase margin — how much stability is left</h3>
   <p>Every pole adds phase <em>lag</em>. If the total lag reaches 180° while the gain is still above 1, the negative feedback becomes positive and the amplifier oscillates. <strong>Phase margin</strong> is the leftover angle to that 180° cliff at the unity-gain frequency:</p>

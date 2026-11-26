@@ -8,16 +8,18 @@ and pole.  This module writes the amplifier's small-signal half circuit as
 matrices, ``(G + s·C)·v = b``, and reads GBW, phase margin and pole damping
 off the solution numerically.  :doc:`/theory/rnmc_stability` walks through it.
 
-Three compensation schemes are covered: two-stage Miller
-(:func:`two_stage_loop`), nested Miller (:func:`nested_miller_loop`) and
-reversed nested Miller (``rnmc_*``).  Each describes its gain stages with
-:class:`SmallSignalStage` records.
+:class:`OpenLoopResponse` solves any amplifier a :class:`CompensationScheme`
+row describes.  Three rows are defined: two-stage Miller
+(:data:`TWO_STAGE_MILLER`), nested Miller (:data:`NESTED_MILLER`) and reversed
+nested Miller (:data:`REVERSED_NESTED_MILLER`).  Another scheme built from
+gain stages and caps between their outputs is one more row.
 
 Units are SI: A/V, F, Ω, Hz; angular frequencies in rad/s.
 """
 from __future__ import annotations
 
 import math
+from functools import cached_property
 from typing import NamedTuple
 
 import numpy as np
@@ -61,7 +63,8 @@ class Buffer(NamedTuple):
 
 
 class CompensationScheme(NamedTuple):
-    """How a compensation scheme wires the gain stages and the caps.
+    """How a compensation scheme wires the gain stages and the caps, and how
+    its phase margin is read.
 
     Stages are numbered from ``0``, the input pair, which always inverts.
 
@@ -70,193 +73,176 @@ class CompensationScheme(NamedTuple):
         mirror when the amplifier has one.
     :param cap_nodes: ``(from, to)`` stage numbers of each compensation cap,
         outer cap first: the cap runs from one stage's output to the other's.
+    :param near_crossings_count: Whether the phase margin also counts every
+        *near*-crossing: a stretch where the gain, after dropping more than
+        ``_NEAR_CROSSING_DB`` under 0 dB past the first crossing, climbs back
+        within it.
+    :param unstable_needs_crossing: How a loop with a right-half-plane pole
+        reads when its gain never reaches 0 dB: no phase margin (``True``),
+        or 0° like any other unstable loop (``False``).
     """
 
     inverting: tuple[bool, ...]
     cap_nodes: tuple[tuple[int, int], ...]
+    near_crossings_count: bool
+    unstable_needs_crossing: bool
 
 
-#: One Miller cap around the inverting second stage.
-TWO_STAGE_MILLER = CompensationScheme(inverting=(True,), cap_nodes=((0, 1),))
-#: Both caps end on the output; the second stage does not invert.
-NESTED_MILLER = CompensationScheme(inverting=(False, True), cap_nodes=((0, 2), (1, 2)))
-#: Both caps start at the first-stage output; the third stage does not invert.
-REVERSED_NESTED_MILLER = CompensationScheme(inverting=(True, False),
-                                            cap_nodes=((0, 2), (0, 1)))
+#: One Miller cap around the inverting second stage.  The closed forms
+#: (``gm1/(2π·Cc)``, :func:`~.equations.phase_margin_two_stage_deg`) miss the
+#: output pole pulling the crossing down (~14 % at 55°), the series
+#: resistor's zero cancelling that pole, and an output follower's gain and
+#: pole (#274).
+TWO_STAGE_MILLER = CompensationScheme(
+    inverting=(True,), cap_nodes=((0, 1),),
+    near_crossings_count=True, unstable_needs_crossing=True)
+
+#: Nested Miller (NMC): both caps end on the third stage's output, ``Cc1``
+#: from the first-stage output and ``Cc2`` from the second's; the second
+#: stage does not invert.  :func:`~.equations.phase_margin_three_stage_deg`
+#: ran 15–35° pessimistic against SPICE: behind a buffer the third stage
+#: drives only the follower's gate, and the series resistors' zeros move both
+#: extra poles (#274).
+NESTED_MILLER = CompensationScheme(
+    inverting=(False, True), cap_nodes=((0, 2), (1, 2)),
+    near_crossings_count=True, unstable_needs_crossing=True)
+
+#: Reversed nested Miller (RNMC): both caps start at the first-stage output,
+#: ``Cc1`` to the third stage's output and ``Cc2`` to the second's; the third
+#: stage does not invert.  That couples the two extra poles into a pair that
+#: can ring, and the pair and a buffer's gain below 1 pull the GBW under
+#: ``gm1/(2π·Cc1)``, by ~20 % on a buffered design (#274).  A resistor
+#: ``≈ 1/gm`` in series with ``Cc2`` cancels the zero a bare ``Cc2`` makes
+#: near ``gm2/Cc2`` (#266).
+REVERSED_NESTED_MILLER = CompensationScheme(
+    inverting=(True, False), cap_nodes=((0, 2), (0, 1)),
+    near_crossings_count=False, unstable_needs_crossing=False)
 
 
 # ---------------------------------------------------------------------------
-# Loop results
+# The open-loop response
 # ---------------------------------------------------------------------------
 
-def two_stage_loop(
-    stages: tuple[SmallSignalStage, SmallSignalStage],
-    cc_f: float, cl_f: float,
-    *, buffer: Buffer | None = None,
-    r_ohm: tuple[float, ...] = (0.0,),
-    cmfb: tuple[float, float | None] | None = None,
-) -> tuple[float | None, float | None]:
-    """GBW and phase margin of a two-stage Miller amplifier.
+class OpenLoopResponse:
+    """An amplifier's open loop, solved from its nodal equations.
 
-    The closed forms (``gm1/(2π·Cc)``,
-    :func:`~.equations.phase_margin_two_stage_deg`) miss the output pole
-    pulling the crossing down (~14 % at 55°), the series resistor's zero
-    cancelling that pole, and an output follower's gain and pole (#274).
+    Build it once, then read :attr:`gbw_hz`, :attr:`phase_margin_deg` and
+    :attr:`damping` off it.  The frequency sweep runs only when a reading
+    first needs it, so a search that reads the damping of an unstable
+    candidate does not pay for it.
 
-    :param stages: The input pair and the inverting second stage.  The first
-        stage's ``gm`` is the one the loop sees.
-    :param cc_f: Miller cap, first-stage output → second-stage output, in F.
+    One entry in ``comp_r`` builds a single-ended amplifier.  Two build the
+    ``(p, n)`` halves of a fully-differential one, driven by ``±gm1/2`` and
+    read as the difference of their outputs.  Matched halves give exactly
+    the single half's response.  When their compensation differs, they are
+    coupled through the output common mode, which the CMFB feeds back into
+    each first-stage node (#274); without a CMFB they stay independent.
+
+    :param scheme: The :class:`CompensationScheme` the amplifier is wired as.
+    :param stages: The gain stages, input pair first: one more than
+        ``scheme.inverting`` has entries.  The first stage's ``gm`` is the
+        one the loop sees.
+    :param caps_f: Each compensation cap in F, in ``scheme.cap_nodes`` order
+        (outer cap first).
     :param cl_f: Load capacitance in F, on the buffer's output when there is
         one.
+    :param mirror_pole_hz: Pole in Hz of the non-inverting stage's current
+        mirror, or ``None`` when it has none.
     :param buffer: The output buffer, or ``None``.
-    :param r_ohm: Resistor in series with ``Cc`` in Ω (``0.0`` for a bare
-        cap), one per half: one entry single-ended, ``(p, n)`` fully
-        differential, whose halves can differ.
+    :param comp_r: Per half, the resistor in Ω in series with each cap
+        (``0.0`` for a bare cap), in ``scheme.cap_nodes`` order.  ``None`` is
+        one half of bare caps.
     :param cmfb: ``(gm_c, pole_hz)`` of a fully-differential amplifier's
         common-mode feedback: the current it injects into each first-stage
         node per volt of output common mode, in A/V, and its pole in Hz
         (``None``: no pole).  ``None`` without a CMFB.
-    :returns: ``(GBW in Hz, phase margin in °)``.  Both ``None`` when the gain
-        never reaches 0 dB; the margin is ``0.0`` with a right-half-plane pole.
     """
-    stages = _floored(stages)
-    gm1 = stages[0].gm
 
-    def half(net, drive, r):
-        return _half_circuit(net, drive, TWO_STAGE_MILLER, stages, (cc_f,), cl_f,
-                             None, buffer, (r,))
-    return _loop_gbw_pm(*_miller_network(half, gm1, r_ohm, cmfb), gm1 / cc_f)
+    def __init__(
+        self,
+        scheme: CompensationScheme,
+        stages: tuple[SmallSignalStage, ...],
+        caps_f: tuple[float, ...],
+        cl_f: float,
+        *, mirror_pole_hz: float | None = None,
+        buffer: Buffer | None = None,
+        comp_r: tuple[tuple[float, ...], ...] | None = None,
+        cmfb: tuple[float, float | None] | None = None,
+    ):
+        stages = _floored(stages)
+        self._scheme = scheme
+        self._G, self._C, self._b, self._out = _amplifier_network(
+            scheme, stages, caps_f, cl_f, mirror_pole_hz, buffer,
+            comp_r or ((0.0,) * len(caps_f),), cmfb)
+        self._poles = _poles(self._G, self._C)
+        self._nominal_crossover = stages[0].gm / caps_f[0]
 
+    @cached_property
+    def _sweep_points(self):
+        """The gain and phase sweep (:func:`_sweep`), run once."""
+        return _sweep(self._G, self._C, self._b, self._out, self._poles,
+                      self._nominal_crossover)
 
-def nested_miller_loop(
-    stages: tuple[SmallSignalStage, SmallSignalStage, SmallSignalStage],
-    cc1_f: float, cc2_f: float, cl_f: float,
-    *, mirror_pole_hz: float | None = None,
-    buffer: Buffer | None = None,
-    comp_r: tuple[tuple[float, float], ...] = ((0.0, 0.0),),
-    cmfb: tuple[float, float | None] | None = None,
-) -> tuple[float | None, float | None]:
-    """GBW and phase margin of a nested-Miller (NMC) three-stage amplifier.
+    @cached_property
+    def _zero_db_crossings(self) -> list[tuple[float, float]]:
+        """Every 0 dB crossing (:func:`_crossings`), found once."""
+        return _crossings(self._G, self._C, self._b, self._out, self._sweep_points)
 
-    :func:`~.equations.phase_margin_three_stage_deg` ran 15–35° pessimistic
-    against SPICE: behind a buffer the third stage drives only the
-    follower's gate, and the series resistors' zeros move both extra poles
-    (#274).
+    @property
+    def gbw_hz(self) -> float | None:
+        """GBW in Hz: the first 0 dB crossing, the one the AC bench reports.
 
-    :param stages: The input pair, the non-inverting second stage and the
-        inverting third stage.
-    :param cc1_f: Outer cap, first-stage output → third-stage output, in F.
-    :param cc2_f: Inner cap, second-stage output → third-stage output, in F.
-    :param cl_f: Load capacitance in F, on the buffer's output when there is
-        one.
-    :param mirror_pole_hz: Pole of the second stage's current mirror in Hz, or
-        ``None`` when it has none.
-    :param buffer: The output buffer, or ``None``.
-    :param comp_r: ``(R1, R2)`` in Ω in series with ``Cc1`` and ``Cc2``, one
-        pair per half (as ``r_ohm`` in :func:`two_stage_loop`).
-    :param cmfb: Common-mode feedback, as in :func:`two_stage_loop`.
-    :returns: ``(GBW in Hz, phase margin in °)``, as :func:`two_stage_loop`.
-    """
-    stages = _floored(stages)
-    gm1 = stages[0].gm
+        :returns: ``None`` when the gain never reaches 0 dB.
+        """
+        crossings = self._zero_db_crossings
+        return crossings[0][0] / (2.0 * math.pi) if crossings else None
 
-    def half(net, drive, r):
-        return _half_circuit(net, drive, NESTED_MILLER, stages, (cc1_f, cc2_f), cl_f,
-                             mirror_pole_hz, buffer, r)
-    return _loop_gbw_pm(*_miller_network(half, gm1, comp_r, cmfb), gm1 / cc1_f)
+    @property
+    def phase_margin_deg(self) -> float | None:
+        """Phase margin in degrees, the worst over every 0 dB crossing.
 
+        PM = min over every 0 dB crossing of (180° + ∠A(jω))
 
-def rnmc_pole_damping(
-    stages: tuple[SmallSignalStage, SmallSignalStage, SmallSignalStage],
-    cc1_f: float, cc2_f: float, cl_f: float,
-    *, mirror_pole_hz: float | None = None,
-    buffer: Buffer | None = None,
-    comp_r: tuple[float, float] = (0.0, 0.0),
-) -> float:
-    """How well damped an RNMC loop's poles are: the worst damping ``ζ``.
+        The worst crossing counts: a lightly damped pole pair can lift the
+        gain back above 0 dB after the phase has passed −180°, which gives a
+        negative margin.  A scheme whose ``near_crossings_count`` is set
+        counts its near-crossings too.
 
-    ζ = −Re(p) / \\|p\\|  (the cosine of a pole's angle from the negative
-    real axis)
+        :returns: ``0.0`` with a right-half-plane pole
+            (:func:`_has_rhp_pole`); ``None`` when the gain never reaches
+            0 dB.  ``scheme.unstable_needs_crossing`` says which of the two
+            a loop that is both reads.
+        """
+        unstable = _has_rhp_pole(self._poles)
+        if unstable and not self._scheme.unstable_needs_crossing:
+            return 0.0
+        crossings = self._zero_db_crossings
+        if not crossings:
+            return None
+        if unstable:
+            return 0.0
+        margins = [pm for _w, pm in crossings]
+        if self._scheme.near_crossings_count:
+            margins += _near_crossing_margins(self._sweep_points, crossings[0][0])
+        return min(margins)
 
-    ``1`` is a real pole, ``0`` a pole pair that rings forever, below ``0``
-    unstable.  The dominant (slowest) pole is skipped.  The sizer aims for
-    ``0.7``, the Butterworth placement (no resonance peak).
+    @property
+    def damping(self) -> float:
+        """How well damped the loop's poles are: the worst damping ``ζ``.
 
-    Parameters as for :func:`phase_margin_rnmc_deg`.
+        ζ = −Re(p) / \\|p\\|  (the cosine of a pole's angle from the negative
+        real axis)
 
-    :returns: The lowest ``ζ`` over the non-dominant poles; negative when any
-        is in the right half plane.
-    """
-    G, C, _, _ = _rnmc_network(stages, cc1_f, cc2_f, cl_f, mirror_pole_hz,
-                               buffer, comp_r)
-    non_dominant = sorted(_poles(G, C), key=abs)[1:]
-    return float(min((-p.real / abs(p) for p in non_dominant if abs(p) > 0),
-                     default=1.0))
+        ``1`` is a real pole, ``0`` a pole pair that rings forever, below ``0``
+        unstable.  The dominant (slowest) pole is skipped.  The sizer aims an
+        RNMC loop at ``0.7``, the Butterworth placement (no resonance peak).
 
-
-def phase_margin_rnmc_deg(
-    stages: tuple[SmallSignalStage, SmallSignalStage, SmallSignalStage],
-    cc1_f: float, cc2_f: float, cl_f: float,
-    *, mirror_pole_hz: float | None = None,
-    buffer: Buffer | None = None,
-    comp_r: tuple[float, float] = (0.0, 0.0),
-) -> float | None:
-    """Phase margin in degrees of a reversed-nested-Miller (RNMC) amplifier.
-
-    PM = min over every 0 dB crossing of (180° + ∠A(jω))
-
-    RNMC hangs both caps off the first-stage output, which couples the two
-    extra poles into a pair that can ring.  The worst crossing counts: a
-    lightly damped pair can lift the gain back above 0 dB after the phase
-    has passed −180°, which gives a negative margin.
-
-    :param stages: The input pair, the inverting second stage and the
-        non-inverting third stage.
-    :param cc1_f: Outer cap, first-stage output → third-stage output, in F.
-    :param cc2_f: Inner cap, first-stage output → second-stage output, in F.
-    :param cl_f: Load capacitance in F, on the buffer's output when there is
-        one.
-    :param mirror_pole_hz: Pole of the third stage's current mirror in Hz, or
-        ``None`` when it has none.
-    :param buffer: The output buffer, or ``None``.
-    :param comp_r: ``(R1, R2)`` in Ω in series with ``Cc1`` and ``Cc2``
-        (``0.0`` for a bare cap).  ``R2 ≈ 1/gm`` cancels the zero a bare
-        ``Cc2`` makes near ``gm2/Cc2`` (#266).
-    :returns: ``0.0`` with a right-half-plane pole (:func:`_has_rhp_pole`);
-        ``None`` when the gain never reaches 0 dB.
-    """
-    G, C, b, out = _rnmc_network(stages, cc1_f, cc2_f, cl_f, mirror_pole_hz,
-                                 buffer, comp_r)
-    poles = _poles(G, C)
-    if _has_rhp_pole(poles):
-        return 0.0
-    crossings = _crossings(G, C, b, out, poles, stages[0].gm / cc1_f)
-    if not crossings:
-        return None
-    return min(pm for _w, pm in crossings)
-
-
-def unity_gain_bw_rnmc_hz(
-    stages: tuple[SmallSignalStage, SmallSignalStage, SmallSignalStage],
-    cc1_f: float, cc2_f: float, cl_f: float,
-    *, mirror_pole_hz: float | None = None,
-    buffer: Buffer | None = None,
-    comp_r: tuple[float, float] = (0.0, 0.0),
-) -> float | None:
-    """GBW in Hz of an RNMC amplifier: its first 0 dB crossing.
-
-    The pole pair near crossover and a buffer's gain below 1 both pull it
-    under ``gm1/(2π·Cc1)``, by ~20 % on a buffered design (#274).  The first
-    crossing is the one the AC bench reports.
-
-    Parameters as for :func:`phase_margin_rnmc_deg`.
-
-    :returns: ``None`` when the gain never reaches 0 dB.
-    """
-    G, C, b, out = _rnmc_network(stages, cc1_f, cc2_f, cl_f, mirror_pole_hz,
-                                 buffer, comp_r)
-    crossings = _crossings(G, C, b, out, _poles(G, C), stages[0].gm / cc1_f)
-    return crossings[0][0] / (2.0 * math.pi) if crossings else None
+        :returns: The lowest ``ζ`` over the non-dominant poles; negative when
+            any is in the right half plane.
+        """
+        non_dominant = sorted(self._poles, key=abs)[1:]
+        return float(min((-p.real / abs(p) for p in non_dominant if abs(p) > 0),
+                         default=1.0))
 
 
 # ---------------------------------------------------------------------------
@@ -401,29 +387,27 @@ def _half_circuit(net, drive, scheme, stages, caps_f, cl_f, mirror_pole_hz,
     return nodes[0], net.load(nodes[-1], cl_f, buffer)
 
 
-def _miller_network(half, gm1, halves, cmfb):
-    """Nodal equations of a two-stage or nested-Miller amplifier (``Vin = 1``).
+def _amplifier_network(scheme, stages, caps_f, cl_f, mirror_pole_hz, buffer,
+                       comp_r, cmfb):
+    """Nodal equations of an amplifier wired as ``scheme`` (``Vin = 1``).
 
-    One entry in ``halves`` builds a single-ended amplifier.  Two build the
-    ``(p, n)`` halves of a fully-differential one, driven by ``±gm1/2`` and
-    read as the difference of their outputs.  Matched halves give exactly
-    the single half's response.  When their compensation differs, they are
-    coupled through the output common mode, which the CMFB feeds back into
-    each first-stage node (#274); without a CMFB they stay independent.
+    ``stages`` are floored; every parameter is as for
+    :class:`OpenLoopResponse`, whose docstring also says how one or two
+    halves in ``comp_r`` are built and coupled.
 
-    :param half: ``half(net, drive, half_args)``, adds one half circuit and
-        returns ``(first-stage node, node carrying CL)``.
-    :param gm1: The input pair's transconductance in A/V.
-    :param halves: Each half's ``half_args`` (its compensation resistors).
-    :param cmfb: ``(gm_c, pole_hz)`` as in :func:`two_stage_loop`, or ``None``.
     :returns: ``(G, C, b, out)``; ``out`` is the output node, or the ``(p, n)``
         pair of nodes.
     """
     net = _Network()
-    if len(halves) == 1:
-        _v1, out = half(net, gm1, halves[0])
+    gm1 = stages[0].gm
+
+    def half(drive, r):
+        return _half_circuit(net, drive, scheme, stages, caps_f, cl_f,
+                             mirror_pole_hz, buffer, r)
+    if len(comp_r) == 1:
+        _v1, out = half(gm1, comp_r[0])
         return (*net.matrices(), out)
-    (v1p, op), (v1n, on) = half(net, gm1 / 2.0, halves[0]), half(net, -gm1 / 2.0, halves[1])
+    (v1p, op), (v1n, on) = half(gm1 / 2.0, comp_r[0]), half(-gm1 / 2.0, comp_r[1])
     if cmfb:
         gm_c, pole_hz = cmfb
         m = net.node()
@@ -435,24 +419,6 @@ def _miller_network(half, gm1, halves, cmfb):
         net.vccs(v1p, m, -gm_c)
         net.vccs(v1n, m, -gm_c)
     return (*net.matrices(), (op, on))
-
-
-def _rnmc_network(stages, cc1_f, cc2_f, cl_f, mirror_pole_hz, buffer, comp_r):
-    """Nodal equations of the RNMC half circuit (``Vin = 1``).
-
-    Both Miller caps hang off the first-stage output: ``Cc1`` to the third
-    stage's output, ``Cc2`` to the second's, each through its series
-    resistor in ``comp_r`` when non-zero.  The second stage inverts; the
-    third does not, and passes through its current mirror when it has one.
-    Parameters as for :func:`phase_margin_rnmc_deg`.
-
-    :returns: ``(G, C, b, out)``; ``out`` is the node carrying ``CL``.
-    """
-    stages = _floored(stages)
-    net = _Network()
-    _v1, out = _half_circuit(net, stages[0].gm, REVERSED_NESTED_MILLER, stages,
-                             (cc1_f, cc2_f), cl_f, mirror_pole_hz, buffer, comp_r)
-    return (*net.matrices(), out)
 
 
 # ---------------------------------------------------------------------------
@@ -513,19 +479,20 @@ def _sweep(G, C, b, out, poles, w_t):
     return w, 20.0 * np.log10(np.abs(a)), np.degrees(np.unwrap(np.angle(a)))
 
 
-def _crossings(G, C, b, out, poles, w_t) -> list[tuple[float, float]]:
+def _crossings(G, C, b, out, sweep) -> list[tuple[float, float]]:
     """Every 0 dB crossing of the open loop, in order of frequency.
 
-    Each crossing is found between two sweep points (:func:`_sweep`) and
-    refined by three false-position steps, so it does not depend on the
-    sweep's grid.  The phase is read at the refined point.
+    Each crossing is found between two points of ``sweep`` (what
+    :func:`_sweep` returns) and refined by three false-position steps, so it
+    does not depend on the sweep's grid.  The phase is read at the refined
+    point.
 
     :returns: ``(ω in rad/s, phase margin in °)`` per crossing.
     """
     def gain(lw):
         return _open_loop_gain(G, C, b, out, np.array([10.0 ** lw]))[0]
 
-    w, mag_db, phase = _sweep(G, C, b, out, poles, w_t)
+    w, mag_db, phase = sweep
     found = []
     for i in np.nonzero(np.diff(np.sign(mag_db)))[0]:
         x0, x1 = math.log10(w[i]), math.log10(w[i + 1])
@@ -552,28 +519,16 @@ def _crossings(G, C, b, out, poles, w_t) -> list[tuple[float, float]]:
 _NEAR_CROSSING_DB = 0.5
 
 
-def _loop_gbw_pm(G, C, b, out, w_t) -> tuple[float | None, float | None]:
-    """GBW and phase margin of an open loop, for the two Miller schemes.
+def _near_crossing_margins(sweep, first_crossing) -> list[float]:
+    """Phase margin in ° at every sweep point of a near-crossing: a stretch
+    where the gain, after dropping more than ``_NEAR_CROSSING_DB`` under 0 dB
+    past the first crossing, climbs back within it.
 
-    GBW is the first 0 dB crossing.  The margin is the worst over every
-    crossing and every *near*-crossing: a stretch where the gain, after
-    dropping more than ``_NEAR_CROSSING_DB`` under 0 dB past the first
-    crossing, climbs back within it.
-
-    :param w_t: Nominal crossover in rad/s, to place the sweep.
-    :returns: ``(GBW in Hz, phase margin in °)``; both ``None`` when the gain
-        never reaches 0 dB; the margin is ``0.0`` with a right-half-plane pole.
+    :param sweep: What :func:`_sweep` returns.
+    :param first_crossing: The first 0 dB crossing in rad/s.
     """
-    poles = _poles(G, C)
-    crossings = _crossings(G, C, b, out, poles, w_t)
-    if not crossings:
-        return None, None
-    if _has_rhp_pole(poles):
-        return crossings[0][0] / (2.0 * math.pi), 0.0
-    pms = [p for _w, p in crossings]
-    w, mag_db, phase = _sweep(G, C, b, out, poles, w_t)
-    past = w > crossings[0][0]
+    w, mag_db, phase = sweep
+    past = w > first_crossing
     dipped = np.cumsum(past & (mag_db < -_NEAR_CROSSING_DB)) > 0
     near = dipped & (mag_db >= -_NEAR_CROSSING_DB) & (mag_db < 0.0)
-    pms += [float(180.0 + p) for p in phase[near]]
-    return crossings[0][0] / (2.0 * math.pi), min(pms)
+    return [float(180.0 + p) for p in phase[near]]
