@@ -60,6 +60,31 @@ class Buffer(NamedTuple):
     g: float
 
 
+class CompensationScheme(NamedTuple):
+    """How a compensation scheme wires the gain stages and the caps.
+
+    Stages are numbered from ``0``, the input pair, which always inverts.
+
+    :param inverting: Whether each later stage inverts, second stage first.
+        A non-inverting stage is the one that passes through a current
+        mirror when the amplifier has one.
+    :param cap_nodes: ``(from, to)`` stage numbers of each compensation cap,
+        outer cap first: the cap runs from one stage's output to the other's.
+    """
+
+    inverting: tuple[bool, ...]
+    cap_nodes: tuple[tuple[int, int], ...]
+
+
+#: One Miller cap around the inverting second stage.
+TWO_STAGE_MILLER = CompensationScheme(inverting=(True,), cap_nodes=((0, 1),))
+#: Both caps end on the output; the second stage does not invert.
+NESTED_MILLER = CompensationScheme(inverting=(False, True), cap_nodes=((0, 2), (1, 2)))
+#: Both caps start at the first-stage output; the third stage does not invert.
+REVERSED_NESTED_MILLER = CompensationScheme(inverting=(True, False),
+                                            cap_nodes=((0, 2), (0, 1)))
+
+
 # ---------------------------------------------------------------------------
 # Loop results
 # ---------------------------------------------------------------------------
@@ -98,7 +123,8 @@ def two_stage_loop(
     gm1 = stages[0].gm
 
     def half(net, drive, r):
-        return _two_stage_half(net, drive, stages, cc_f, cl_f, buffer, r)
+        return _half_circuit(net, drive, TWO_STAGE_MILLER, stages, (cc_f,), cl_f,
+                             None, buffer, (r,))
     return _loop_gbw_pm(*_miller_network(half, gm1, r_ohm, cmfb), gm1 / cc_f)
 
 
@@ -135,8 +161,8 @@ def nested_miller_loop(
     gm1 = stages[0].gm
 
     def half(net, drive, r):
-        return _nmc_half(net, drive, stages, cc1_f, cc2_f, cl_f,
-                         mirror_pole_hz, buffer, *r)
+        return _half_circuit(net, drive, NESTED_MILLER, stages, (cc1_f, cc2_f), cl_f,
+                             mirror_pole_hz, buffer, r)
     return _loop_gbw_pm(*_miller_network(half, gm1, comp_r, cmfb), gm1 / cc1_f)
 
 
@@ -346,43 +372,33 @@ def _floored(stages):
     return tuple(SmallSignalStage(s.gm, max(s.g, 1e-9 * s.gm), s.c) for s in stages)
 
 
-def _two_stage_half(net, drive, stages, cc_f, cl_f, buffer, r_ohm):
-    """Add one two-stage Miller half circuit to ``net``.
+def _half_circuit(net, drive, scheme, stages, caps_f, cl_f, mirror_pole_hz,
+                  buffer, comp_r):
+    """Add one half circuit to ``net``, wired as ``scheme`` describes.
 
+    :param net: The :class:`_Network` to add to.
     :param drive: The input pair's transconductance for this half in A/V
         (signed; half of ``gm1`` per side when fully differential).
-    :param stages: Floored ``(first, second)`` stages; the first's ``gm`` is
+    :param scheme: The :class:`CompensationScheme` to wire.
+    :param stages: Floored stages, input pair first; the first's ``gm`` is
         replaced by ``drive``.
-    :param r_ohm: Resistor in series with ``Cc`` in Ω, ``0.0`` for none.
+    :param caps_f: Each compensation cap in F, in ``scheme.cap_nodes`` order.
+    :param cl_f: Load capacitance in F.
+    :param mirror_pole_hz: Pole in Hz of the non-inverting stage's current
+        mirror, or ``None`` when it has none.
+    :param buffer: The output :class:`Buffer`, or ``None``.
+    :param comp_r: Resistor in Ω in series with each cap (``0.0`` for a bare
+        cap), in ``scheme.cap_nodes`` order.
     :returns: ``(first-stage node, node carrying CL)``.
     """
-    s1, s2 = stages
-    v1 = net.input_stage(drive, s1.g, s1.c)
-    v2 = net.stage(v1, s2.gm, s2.g, s2.c)
-    net.branch(v1, v2, cc_f, r_ohm)
-    return v1, net.load(v2, cl_f, buffer)
-
-
-def _nmc_half(net, drive, stages, cc1_f, cc2_f, cl_f, mirror_pole_hz, buffer,
-              r1_ohm, r2_ohm):
-    """Add one nested-Miller half circuit to ``net``: a non-inverting second
-    stage (through its mirror when it has one) and an inverting third, with
-    ``Cc1`` from the first-stage output and ``Cc2`` from the second's, both to
-    the third stage's output.
-
-    ``drive`` as in :func:`_two_stage_half`; the rest as in
-    :func:`nested_miller_loop`.
-
-    :returns: ``(first-stage node, node carrying CL)``.
-    """
-    s1, s2, s3 = stages
-    v1 = net.input_stage(drive, s1.g, s1.c)
-    v2 = net.stage(v1, s2.gm, s2.g, s2.c, inverting=False,
-                   mirror_pole_hz=mirror_pole_hz)
-    v3 = net.stage(v2, s3.gm, s3.g, s3.c)
-    net.branch(v1, v3, cc1_f, r1_ohm)
-    net.branch(v2, v3, cc2_f, r2_ohm)
-    return v1, net.load(v3, cl_f, buffer)
+    first, *later = stages
+    nodes = [net.input_stage(drive, first.g, first.c)]
+    for s, inverting in zip(later, scheme.inverting):
+        nodes.append(net.stage(nodes[-1], s.gm, s.g, s.c, inverting=inverting,
+                               mirror_pole_hz=None if inverting else mirror_pole_hz))
+    for (start, end), c_f, r_ohm in zip(scheme.cap_nodes, caps_f, comp_r):
+        net.branch(nodes[start], nodes[end], c_f, r_ohm)
+    return nodes[0], net.load(nodes[-1], cl_f, buffer)
 
 
 def _miller_network(half, gm1, halves, cmfb):
@@ -432,15 +448,10 @@ def _rnmc_network(stages, cc1_f, cc2_f, cl_f, mirror_pole_hz, buffer, comp_r):
 
     :returns: ``(G, C, b, out)``; ``out`` is the node carrying ``CL``.
     """
-    s1, s2, s3 = _floored(stages)
-    r1_ohm, r2_ohm = comp_r
+    stages = _floored(stages)
     net = _Network()
-    v1 = net.input_stage(s1.gm, s1.g, s1.c)
-    v2 = net.stage(v1, s2.gm, s2.g, s2.c)
-    v3 = net.stage(v2, s3.gm, s3.g, s3.c, inverting=False, mirror_pole_hz=mirror_pole_hz)
-    net.branch(v1, v3, cc1_f, r1_ohm)
-    net.branch(v1, v2, cc2_f, r2_ohm)
-    out = net.load(v3, cl_f, buffer)
+    _v1, out = _half_circuit(net, stages[0].gm, REVERSED_NESTED_MILLER, stages,
+                             (cc1_f, cc2_f), cl_f, mirror_pole_hz, buffer, comp_r)
     return (*net.matrices(), out)
 
 
