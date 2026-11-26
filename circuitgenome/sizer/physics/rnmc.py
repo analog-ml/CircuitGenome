@@ -10,10 +10,11 @@ and the pair is only in the left half plane while
 
 The generic three-stage requirements push gm3 to its ceiling and leave gm2 at
 whatever the second stage's minimum width gives, so an RNMC amplifier could be
-sized straight into the right half plane.  :func:`design_rnmc` picks
-``(gm2, Cc2, gm3)`` so the pair is damped to ``ζ ≈ 0.7`` and the open-loop
-model's phase margin (:func:`~.open_loop_response.phase_margin_rnmc_deg`)
-meets the spec, trying the knobs in this order:
+sized straight into the right half plane.  :func:`find_stable_rnmc_design`
+picks ``(gm2, Cc2, gm3)`` so the pair is damped to ``ζ ≈ 0.7`` and the
+open-loop model's phase margin
+(:func:`~.open_loop_response.phase_margin_rnmc_deg`) meets the spec, trying
+the knobs in this order:
 
 1. **raise gm2** — the second stage's signal device gets a larger gm
    requirement (up to its weak-inversion ceiling);
@@ -82,85 +83,99 @@ class RnmcDesign:
     met: bool
 
 
-def design_rnmc(
-    gm1: float, gm2: float, gm3: float, *,
-    cc1_f: float, cc2_f: float, cl_f: float,
+@dataclass(frozen=True)
+class RnmcLoop:
+    """The RNMC amplifier a search starts from.
+
+    :param stages: the input pair, second stage and third stage, each with
+        its starting gm, output conductance and output-node parasitic.
+    :param cc1_f: outer cap (first-stage output → amplifier output) in F.
+    :param cc2_f: starting inner cap (first-stage output → second-stage
+        output) in F.
+    :param cl_f: load capacitance in F.
+    :param mirror_pole_hz: pole of the third stage's current mirror in Hz, or
+        ``None`` when it has none.
+    :param buffer: the source-follower output buffer between the third stage
+        and ``CL``, or ``None``.
+    :param comp_resistors: per half of the amplifier, whether its ``Cc1`` and
+        ``Cc2`` branches have a series resistor
+        (:attr:`~.stage_chain.StageChain.comp_resistors`).
+    :param c1_of_gm2: first-stage output parasitic in F for a given gm2 (a
+        larger gm2 widens the second stage's gate there).  ``None`` keeps it
+        at ``stages[0].c``.
+    :param c2_of_gm3: second-stage output parasitic in F for a given gm3 (the
+        third stage's gate).  ``None`` scales ``stages[1].c`` in proportion
+        to gm3.
+    """
+    stages: tuple[olr.SmallSignalStage, olr.SmallSignalStage, olr.SmallSignalStage]
+    cc1_f: float
+    cc2_f: float
+    cl_f: float
+    mirror_pole_hz: float | None = None
+    buffer: olr.Buffer | None = None
+    comp_resistors: tuple[tuple[bool, bool], ...] = ()
+    c1_of_gm2: Callable[[float], float] | None = None
+    c2_of_gm3: Callable[[float], float] | None = None
+
+
+def find_stable_rnmc_design(
+    loop: RnmcLoop, *,
     gm2_max: float, gm3_min: float = 0.0,
     pm_min_deg: float | None = None,
-    c1_f: float | Callable[[float], float] = 0.0,
-    c2_f: float | Callable[[float], float] = 0.0,
-    g: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    mirror_pole_hz: float | None = None,
-    buffer: tuple[float, float, float] | None = None,
-    c3_f: float = 0.0,
-    comp_resistors: tuple[tuple[bool, bool], ...] = (),
 ) -> RnmcDesign:
-    """Choose ``(gm2, Cc2, gm3)`` for a damped, phase-margin-meeting RNMC loop.
+    """Find the ``gm2``, ``Cc2`` and ``gm3`` that make an RNMC loop stable.
 
-    Starts from the given operating point and never lowers ``gm2`` or
-    ``Cc2``, nor raises ``gm3``.  For each ``(Cc2, gm3)`` in preference order
-    (all Cc2 steps at the starting gm3 first, then each lower gm3), ``gm2``
-    starts at the closed-form damping floor
-    (:func:`~.equations.rnmc_min_gm2_for_damping`;
-    at its current value behind an output ``buffer``, where that formula's
-    load does not apply) and rises until the open-loop model's damping
-    (:func:`~.open_loop_response.rnmc_pole_damping`) reaches ``ZETA_TARGET`` and the
-    open-loop model's PM meets ``pm_min_deg`` (or is simply positive when there is
-    no PM spec).  The first choice meeting both wins.
+    Stable means the inner pole pair is damped to ``ZETA_TARGET`` and the
+    phase margin meets the spec.  The search changes as little as it can: it
+    raises ``gm2`` first, then ``Cc2`` (up to ``Cc1``), and lowers ``gm3``
+    only as a last resort, because that costs DC gain.  A loop that is
+    already stable comes back unchanged.
 
-    ``c1_f``/``c2_f`` are the parasitics on the first/second-stage outputs.
-    Each is a function of the gm of the device whose gate dominates it (gm2
-    widens the second stage's input gate on the first-stage output, gm3 the
-    third stage's on the second-stage output), or a float: ``c1_f`` then
-    stays fixed and ``c2_f`` — its value at the *starting* gm3 — scales in
-    proportion to gm3.  When nothing meets both targets (``met=False``) the
-    phase-margin spec, which SPICE verifies, comes before the damping
-    heuristic, among choices damped to at least ``ZETA_FLOOR``: the
-    best-damped one that meets the PM target, else the one with the highest
-    PM; failing even ``ZETA_FLOOR``, the best-damped one.
+    When nothing meets both targets, the result has ``met=False`` and is the
+    best try: among those damped to at least ``ZETA_FLOOR``, the best-damped
+    one that meets the phase margin, else the one with the highest phase
+    margin; failing even that, the best-damped one.
 
-    :param gm1: loop transconductance of the first stage in A/V.
-    :param gm2_max: second-stage gm ceiling in A/V.
-    :param gm3_min: lowest gm3 the third stage can be sized to in A/V.
-    :param g: stage output conductances ``(g1, g2, g3)`` in A/V.
-    :param buffer: ``(gm, cgs, g_out)`` of a source-follower output buffer
-        between the third stage and ``CL`` (see
-        :func:`~.open_loop_response.phase_margin_rnmc_deg`), or ``None``.
-    :param c3_f: parasitic from the third-stage output to ground in F.
-    :param comp_resistors: per half, whether its ``Cc1``/``Cc2`` branch has a
-        series resistor (:attr:`~.stage_chain.StageChain.comp_resistors`).
-        Each candidate is scored with the resistors
-        :func:`~.equations.nulling_resistor_ohm` would give it, on its
-        worse half.
+    :param loop: the amplifier to start from.
+    :param gm2_max: highest gm the second stage can reach, in A/V.
+    :param gm3_min: lowest gm the third stage can be sized to, in A/V.
+    :param pm_min_deg: phase-margin spec in degrees; ``None`` asks only for a
+        positive margin.
+    :returns: the chosen design and how it scores.
     """
     pm_target = pm_min_deg if pm_min_deg is not None else 0.0
+    first, second, third = loop.stages
+    gm2_start, gm3_start = second.gm, third.gm
+    cc1_f, cl_f = loop.cc1_f, loop.cl_f
 
-    def c1_at(gm2_: float) -> float:
-        return c1_f(gm2_) if callable(c1_f) else c1_f
+    def c1_at(gm2: float) -> float:
+        return loop.c1_of_gm2(gm2) if loop.c1_of_gm2 else first.c
 
-    def c2_at(gm3_: float) -> float:
-        if callable(c2_f):
-            return c2_f(gm3_)
-        return c2_f * gm3_ / gm3 if gm3 > 0 else c2_f
+    def c2_at(gm3: float) -> float:
+        if loop.c2_of_gm3:
+            return loop.c2_of_gm3(gm3)
+        return second.c * gm3 / gm3_start if gm3_start > 0 else second.c
 
-    c_out_f = buffer[1] if buffer else 0.0
+    c_out_f = loop.buffer[1] if loop.buffer else 0.0
 
-    def score(gm2_: float, cc2_: float, gm3_: float) -> RnmcDesign:
-        stages = (olr.SmallSignalStage(gm1, g[0], c1_at(gm2_)),
-                  olr.SmallSignalStage(gm2_, g[1], c2_at(gm3_)),
-                  olr.SmallSignalStage(gm3_, g[2], c3_f))
+    def score(gm2: float, cc2_f: float, gm3: float) -> RnmcDesign:
+        # Each candidate is scored on its worse half, with the series
+        # resistors the sizer would give it.
+        stages = (first._replace(c=c1_at(gm2)),
+                  second._replace(gm=gm2, c=c2_at(gm3)),
+                  third._replace(gm=gm3))
         zeta, pm = worst_half(
-            stages, cc1_f, cc2_, cl_f,
-            comp_resistances(comp_resistors, gm3_, cc1_f, cc2_, c_out_f),
-            mirror_pole_hz=mirror_pole_hz, buffer=buffer)
+            stages, cc1_f, cc2_f, cl_f,
+            comp_resistances(loop.comp_resistors, gm3, cc1_f, cc2_f, c_out_f),
+            mirror_pole_hz=loop.mirror_pole_hz, buffer=loop.buffer)
         met = zeta >= ZETA_TARGET - 1e-9 and pm is not None and pm >= pm_target
-        return RnmcDesign(gm2_, cc2_, gm3_, zeta, pm, met)
+        return RnmcDesign(gm2, cc2_f, gm3, zeta, pm, met)
 
-    start = score(gm2, cc2_f, gm3)
+    start = score(gm2_start, loop.cc2_f, gm3_start)
     if start.met:
         return start
 
-    gm3_ladder = [gm3]
+    gm3_ladder = [gm3_start]
     while (len(gm3_ladder) <= _GM3_MAX_STEPS
            and gm3_ladder[-1] * _GM3_STEP >= gm3_min):
         gm3_ladder.append(gm3_ladder[-1] * _GM3_STEP)
@@ -168,29 +183,34 @@ def design_rnmc(
         gm3_ladder.append(gm3_min)
     cc2_ladder = []
     for k in _CC2_STEPS:
-        c = min(cc2_f * k, cc1_f)
+        c = min(loop.cc2_f * k, cc1_f)
         if c not in cc2_ladder:
             cc2_ladder.append(c)
 
     tried = [start]
-    for gm3_ in gm3_ladder:
-        for cc2_ in cc2_ladder:
-            floor = (0.0 if buffer else
-                     eq.rnmc_min_gm2_for_damping(gm3_, cc1_f, cc2_, cl_f,
-                                                 c2_at(gm3_), ZETA_TARGET))
-            gm2_ = max(gm2, floor)
-            if gm2_ > gm2_max:
-                tried.append(score(gm2_max, cc2_, gm3_))
+    for gm3 in gm3_ladder:
+        for cc2_f in cc2_ladder:
+            # gm2 starts at the closed-form damping floor.  Behind an output
+            # buffer the third stage no longer drives CL, so that formula does
+            # not apply and gm2 starts from its current value.
+            floor = (0.0 if loop.buffer else
+                     eq.rnmc_min_gm2_for_damping(gm3, cc1_f, cc2_f, cl_f,
+                                                 c2_at(gm3), ZETA_TARGET))
+            gm2 = max(gm2_start, floor)
+            if gm2 > gm2_max:
+                tried.append(score(gm2_max, cc2_f, gm3))
                 continue
             while True:
-                d = score(gm2_, cc2_, gm3_)
+                d = score(gm2, cc2_f, gm3)
                 tried.append(d)
                 if d.met:
                     return d
-                if gm2_ >= gm2_max:
+                if gm2 >= gm2_max:
                     break
-                gm2_ = min(gm2_ * _GM2_STEP, gm2_max)
+                gm2 = min(gm2 * _GM2_STEP, gm2_max)
 
+    # The phase-margin spec, which SPICE verifies, comes before the damping
+    # heuristic.
     usable = [d for d in tried if d.zeta >= ZETA_FLOOR and d.pm_deg is not None]
     meets_pm = [d for d in usable if d.pm_deg >= pm_target]
     if meets_pm:
@@ -260,7 +280,8 @@ def signal_cgs_estimate(model, dtype: str, gm: float, ids: float, tech) -> float
 
 def design_warnings(d: RnmcDesign, gm3_0: float,
                     pm_min_deg: float | None) -> list[str]:
-    """Plain-language advisories for what :func:`design_rnmc` had to change."""
+    """Plain-language advisories for what :func:`find_stable_rnmc_design`
+    had to change."""
     out: list[str] = []
     if d.gm3 < gm3_0 * (1 - 1e-9):
         out.append(

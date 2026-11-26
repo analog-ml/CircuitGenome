@@ -19,6 +19,7 @@ from circuitgenome.synthesizer.models import Device
 from . import equations as eq
 from . import rnmc
 from .rnmc import RNMC
+from .open_loop_response import SmallSignalStage
 from .device_model import CURRENT_SOURCE, SIGNAL, DeviceModel
 from ..models import SizingResult, SizingSpec, TechParams
 from .taxonomy import (
@@ -336,7 +337,7 @@ def compute_requirements(
       is sized for damping: ``gm3 ≥ _NMC_GM3_OVER_GM2·gm2`` and Cc2 for
       ``_NMC_INNER_ZETA`` — instead of the ``Cc2 = Cc1/4`` default.
     * ``"reversed_nested_miller"`` (RNMC) — gm2, Cc2 and gm3 are re-planned
-      with :func:`~.rnmc.design_rnmc` (raise gm2, then Cc2, then cap gm3) so
+      with :func:`~.rnmc.find_stable_rnmc_design` (raise gm2, then Cc2, then cap gm3) so
       the inner pole pair is damped and in the left half plane; its
       advisories join ``warnings``.  Only the square-law sizer asks for this:
       the gm/Id pipeline's geometry moves gm1 far from this estimate (bias
@@ -567,11 +568,15 @@ def compute_requirements(
         ts_sig = next((d for d in ts_devices if is_signal_device(d)), None)
         c2_f = (rnmc.signal_cgs_estimate(model, ts_sig.type, gm3_req, ids_3, tech)
                 if ts_sig is not None else 0.0)
-        g = tuple(1.0 / r if r < float("inf") else 0.0 for r in (rout1, rout2, rout3))
-        design = rnmc.design_rnmc(
-            gm1_loop, max(gm2_req, 1e-12), gm3_req, cc1_f=cc_f, cc2_f=cc2_f,
-            cl_f=spec.cl, gm2_max=gm2_ceil,
-            pm_min_deg=spec.phase_margin_min_deg, c2_f=c2_f, g=g)
+        g1, g2, g3 = (1.0 / r if r < float("inf") else 0.0
+                      for r in (rout1, rout2, rout3))
+        loop = rnmc.RnmcLoop(
+            stages=(SmallSignalStage(gm1_loop, g1),
+                    SmallSignalStage(max(gm2_req, 1e-12), g2, c2_f),
+                    SmallSignalStage(gm3_req, g3)),
+            cc1_f=cc_f, cc2_f=cc2_f, cl_f=spec.cl)
+        design = rnmc.find_stable_rnmc_design(
+            loop, gm2_max=gm2_ceil, pm_min_deg=spec.phase_margin_min_deg)
         gm_ceiling_warnings += rnmc.design_warnings(
             design, gm3_req, spec.phase_margin_min_deg)
         gm2_req, gm3_in_req = design.gm2, design.gm3

@@ -11,7 +11,7 @@ of a *pole pair* — with
 :func:`~circuitgenome.sizer.physics.open_loop_response.phase_margin_rnmc_deg` and
 :func:`~circuitgenome.sizer.physics.open_loop_response.rnmc_pole_damping`.  The sizing
 strategy that uses them
-(:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`) is described in
+(:func:`~circuitgenome.sizer.physics.rnmc.find_stable_rnmc_design`) is described in
 :ref:`rnmc-inner-pair`.
 
 The page builds up in order:

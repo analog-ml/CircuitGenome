@@ -1118,7 +1118,7 @@ left half plane only while :math:`a_1 > 0`:
 The NMC rules above violate this routinely: they push :math:`g_{m3}` to its
 ceiling for gain and leave :math:`g_{m2}` small, and the two-separate-poles PM
 formula cannot see the problem.  For RNMC the sizer instead
-(:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`):
+(:func:`~circuitgenome.sizer.physics.rnmc.find_stable_rnmc_design`):
 
 1. **raises** :math:`g_{m2}` from the damping floor :math:`\zeta \ge 0.7`
    (closed form, :func:`~circuitgenome.sizer.physics.equations.rnmc_min_gm2_for_damping`)

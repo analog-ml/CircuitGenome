@@ -176,9 +176,9 @@ gm is a *wider* device pushed toward weak inversion.  Two limits met here:
   inversion is :math:`g_m/I_D = 6`, so :math:`g_{m3}` cannot go below 0.60 mS.
 
 :math:`0.60 / 0.58 = 1.04`: just past the 1.03 limit of Section 6.  The RNMC
-search (:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc`) had asked for a
-:math:`g_{m2}` of 0.96 mS, but the capped device delivered 0.58 mS, and nothing
-noticed.
+search (:func:`~circuitgenome.sizer.physics.rnmc.find_stable_rnmc_design`)
+had asked for a :math:`g_{m2}` of 0.96 mS, but the capped device delivered
+0.58 mS, and nothing noticed.
 
 Each transistor also adds **parasitic capacitance** to the nodes it touches:
 its *gate* (:math:`C_{gs} \propto W L`), which the model counted, and its

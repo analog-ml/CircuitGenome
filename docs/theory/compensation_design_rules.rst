@@ -276,7 +276,7 @@ With :math:`g_{m3}` = 1 mS, :math:`C_{c1}` = 2 pF, :math:`C_{c2}` = 1 pF,
 
 
 The floor is a starting point, not the final answer.
-:func:`~circuitgenome.sizer.physics.rnmc.design_rnmc` starts its
+:func:`~circuitgenome.sizer.physics.rnmc.find_stable_rnmc_design` starts its
 :math:`g_{m2}` search there and raises :math:`g_{m2}` until the open-loop
 model, which includes everything left out here, reaches the same
 :math:`\zeta` and meets the phase-margin spec.  Behind an output buffer the
@@ -478,7 +478,7 @@ Where these methods sit in the code
 
 .. code-block:: text
 
-   design_rnmc()                         RNMC: choose gm2, Cc2, gm3
+   find_stable_rnmc_design()             RNMC: choose gm2, Cc2, gm3
    ├── rnmc_min_gm2_for_damping()        where the gm2 search starts
    └── comp_resistances()                the resistors of each half
        └── nulling_resistor_ohm()
@@ -501,7 +501,10 @@ Reference
 .. autofunction:: circuitgenome.sizer.physics.equations.nulling_resistor_ohm
    :no-index:
 
-.. autofunction:: circuitgenome.sizer.physics.rnmc.design_rnmc
+.. autofunction:: circuitgenome.sizer.physics.rnmc.find_stable_rnmc_design
+   :no-index:
+
+.. autoclass:: circuitgenome.sizer.physics.rnmc.RnmcLoop
    :no-index:
 
 Scope
