@@ -381,24 +381,51 @@ Multiply top and bottom by :math:`1 + sRC_c`, which turns :math:`Y` into
 **Make the zero cancel a pole.**  The lone :math:`s` in front of the bottom is
 the dominant pole; with no output conductances it sits at 0.  The braces hold
 the other poles.  A zero cancels a pole when the top and the bottom are both
-zero at the same :math:`s`, so put :math:`s = z` into the braces.  Write
-:math:`u = 1 - g_{m,out}R`, so that :math:`z = g_{m,out}/(C_cu)` and
-:math:`g_{m,out}R = 1 - u`, and multiply the braces by :math:`C_cu^2/g_{m,out}`:
+zero at the same :math:`s`, so the braces must be zero at :math:`s = z`:
 
-.. list-table::
-   :header-rows: 1
-   :widths: 45 55
+.. math::
 
-   * - Term in the braces
-     - After multiplying
-   * - :math:`g_{m,out}C_c`
-     - :math:`C_c^2u^2`
-   * - :math:`s\,[\,CC_1 + C_c(C+C_1)\,]`
-     - :math:`(CC_1 + C_cC + C_cC_1)\,u`
-   * - :math:`s^2\,RC_cCC_1`
-     - :math:`CC_1\,(1-u)`
+   g_{m,out}C_c + z\,[\,CC_1 + C_c(C+C_1)\,] + z^2\,RC_cCC_1 = 0
 
-Add them up.  The :math:`CC_1u` terms cancel, and what is left factors:
+To shorten the algebra, write :math:`u = 1 - g_{m,out}R`.  Then
+
+.. math::
+
+   z = \frac{g_{m,out}}{C_c\,u},
+   \qquad
+   g_{m,out}R = 1 - u
+
+Put :math:`z` in.  The last term needs care: square :math:`z`, cancel one
+:math:`C_c`, and replace :math:`g_{m,out}R` with :math:`1 - u`:
+
+.. math::
+
+   z^2\,RC_cCC_1
+   = \frac{g_{m,out}^2}{C_c^2u^2}\,RC_cCC_1
+   = \frac{g_{m,out}\,(g_{m,out}R)\,CC_1}{C_cu^2}
+   = \frac{g_{m,out}\,(1-u)\,CC_1}{C_cu^2}
+
+So the braces become:
+
+.. math::
+
+   g_{m,out}C_c
+   + \frac{g_{m,out}}{C_c\,u}\,[\,CC_1 + C_c(C+C_1)\,]
+   + \frac{g_{m,out}\,(1-u)\,CC_1}{C_c\,u^2} = 0
+
+Multiply every term by :math:`C_c\,u^2/g_{m,out}` to clear the fractions:
+
+.. math::
+
+   C_c^2u^2 + [\,CC_1 + C_c(C+C_1)\,]\,u + (1-u)\,CC_1 = 0
+
+Multiply out the last term.  The :math:`CC_1u` terms cancel:
+
+.. math::
+
+   C_c^2u^2 + \cancel{CC_1u} + C_c(C+C_1)\,u + CC_1 - \cancel{CC_1u} = 0
+
+What is left factors:
 
 .. math::
 
