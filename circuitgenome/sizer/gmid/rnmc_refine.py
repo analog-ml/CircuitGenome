@@ -9,10 +9,10 @@ gm1, so the loop crosses 0 dB at ~54 MHz instead of 2 MHz), and the gm/Id
 table puts a floor under every gm.  The inner pole pair sized on the estimates
 can then sit in the right half plane.
 
-:func:`refine_rnmc_plan` re-runs :func:`~..physics.rnmc.design_rnmc` on the
-sized circuit's real small-signal values and, when it asks for a different
-gm2/Cc2/gm3, returns a plan with the new requirements for the caller to
-re-size against.
+:func:`refine_rnmc_plan` re-runs
+:func:`~..physics.rnmc.find_stable_rnmc_design` on the sized circuit's real
+small-signal values and, when it asks for a different gm2/Cc2/gm3, returns a
+plan with the new requirements for the caller to re-size against.
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from circuitgenome.synthesizer.models import Device
 from ..models import SizingSpec, TransistorSizing
 from ..physics import rnmc
 from ..physics.device_model import SIGNAL, GmIdModel
+from ..physics.open_loop_response import SmallSignalStage
 from ..physics.stage_chain import build_stage_chain
 from ..physics.taxonomy import SECOND_STAGE_SLOTS, THIRD_STAGE_SLOTS, is_signal_device
 from .analyze import GmIdCircuitView
@@ -115,17 +116,20 @@ def refine_rnmc_plan(
     # needs it -- and allowing it there moved designs SPICE then rated worse
     # (#268).
     buffered = chain.output_buffer is not None
-    g = tuple(1.0 / st.rout if st.rout < float("inf") else 0.0 for st in stages[:3])
-    design = rnmc.design_rnmc(
-        gm1, gm2, gm3, cc1_f=cc1_f, cc2_f=cc2_f, cl_f=spec.cl,
-        gm2_max=gm2_max, gm3_min=min(gm3_min, gm3),
-        pm_min_deg=spec.phase_margin_min_deg,
-        c1_f=_node_cap_at(plan.model, *ss, chain.node_caps_f[0],
-                          capped=not buffered),
-        c2_f=_node_cap_at(plan.model, *ts, chain.node_caps_f[1]), g=g,
+    loop = rnmc.RnmcLoop(
+        stages=tuple(
+            SmallSignalStage(gm, 1.0 / st.rout if st.rout < float("inf") else 0.0,
+                             c_node)
+            for gm, st, c_node in zip((gm1, gm2, gm3), stages, chain.node_caps_f)),
+        cc1_f=cc1_f, cc2_f=cc2_f, cl_f=spec.cl,
         mirror_pole_hz=chain.third_stage_mirror_pole_hz,
-        buffer=chain.output_buffer, c3_f=chain.node_caps_f[2],
-        comp_resistors=chain.comp_resistors)
+        buffer=chain.output_buffer, comp_resistors=chain.comp_resistors,
+        c1_of_gm2=_node_cap_at(plan.model, *ss, chain.node_caps_f[0],
+                               capped=not buffered),
+        c2_of_gm3=_node_cap_at(plan.model, *ts, chain.node_caps_f[1]))
+    design = rnmc.find_stable_rnmc_design(
+        loop, gm2_max=gm2_max, gm3_min=min(gm3_min, gm3),
+        pm_min_deg=spec.phase_margin_min_deg)
 
     raise_gm2 = design.gm2 > gm2
     cap_gm3 = design.gm3 < gm3

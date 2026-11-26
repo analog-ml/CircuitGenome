@@ -201,12 +201,12 @@ def test_metrics_use_the_rnmc_model_for_rnmc_chains():
 
 
 # --------------------------------------------------------------------------- #
-# design_rnmc: raise gm2, then Cc2, cap gm3 last
+# find_stable_rnmc_design: raise gm2, then Cc2, cap gm3 last
 # --------------------------------------------------------------------------- #
 def test_design_raises_gm2_first():
     """With headroom on gm2, only gm2 moves — Cc2 and gm3 are untouched."""
-    d = rnmc.design_rnmc(20e-6, 0.23e-3, GM3, cc1_f=CC1, cc2_f=CC2, cl_f=CL,
-                         gm2_max=20e-3, pm_min_deg=60, c2_f=C2)
+    start = rnmc.RnmcLoop(loop(20e-6, 0.23e-3, GM3, c=(0.0, C2, 0.0)), *CAPS)
+    d = rnmc.find_stable_rnmc_design(start, gm2_max=20e-3, pm_min_deg=60)
     assert d.met
     assert d.gm2 > 0.23e-3
     assert d.cc2_f == CC2 and d.gm3 == GM3
@@ -214,16 +214,16 @@ def test_design_raises_gm2_first():
 
 
 def test_design_leaves_a_sound_design_alone():
-    d = rnmc.design_rnmc(20e-6, 10e-3, 1e-3, cc1_f=CC1, cc2_f=CC2, cl_f=CL,
-                         gm2_max=20e-3, pm_min_deg=60)
+    start = rnmc.RnmcLoop(loop(20e-6, 10e-3, 1e-3), *CAPS)
+    d = rnmc.find_stable_rnmc_design(start, gm2_max=20e-3, pm_min_deg=60)
     assert d.met and (d.gm2, d.cc2_f, d.gm3) == (10e-3, CC2, 1e-3)
 
 
 def test_design_caps_gm3_only_when_gm2_and_cc2_run_out():
     """The fixture: gm2 ceiling 0.9 mS cannot damp gm3 = 1.73 mS at any Cc2."""
-    d = rnmc.design_rnmc(GM1, 0.23e-3, GM3, cc1_f=CC1, cc2_f=CC2, cl_f=CL,
-                         gm2_max=0.9e-3, gm3_min=0.45e-3, pm_min_deg=60,
-                         c1_f=1e-15, c2_f=C2, g=G, mirror_pole_hz=840e6)
+    start = rnmc.RnmcLoop(loop(GM1, 0.23e-3, GM3, C_NODES, G), *CAPS, **MIRROR)
+    d = rnmc.find_stable_rnmc_design(start, gm2_max=0.9e-3, gm3_min=0.45e-3,
+                                     pm_min_deg=60)
     assert d.gm2 == pytest.approx(0.9e-3)
     assert d.gm3 < GM3
     assert d.zeta > 0
@@ -236,9 +236,10 @@ def test_design_scores_parasitics_at_the_chosen_gm():
     def c1(gm2):
         return 200e-15 * gm2 / 0.9e-3        # ~200 fF at the gm2 ceiling
 
-    d = rnmc.design_rnmc(GM1, 0.23e-3, GM3, cc1_f=CC1, cc2_f=CC2, cl_f=CL,
-                         gm2_max=0.9e-3, gm3_min=0.45e-3, pm_min_deg=60,
-                         c1_f=c1, c2_f=C2, g=G, mirror_pole_hz=840e6)
+    start = rnmc.RnmcLoop(loop(GM1, 0.23e-3, GM3, (0.0, C2, 0.0), G), *CAPS,
+                          **MIRROR, c1_of_gm2=c1)
+    d = rnmc.find_stable_rnmc_design(start, gm2_max=0.9e-3, gm3_min=0.45e-3,
+                                     pm_min_deg=60)
     expected = olr.phase_margin_rnmc_deg(
         loop(GM1, d.gm2, d.gm3, (c1(d.gm2), C2 * d.gm3 / GM3, 0.0), G),
         CC1, d.cc2_f, CL, mirror_pole_hz=840e6)

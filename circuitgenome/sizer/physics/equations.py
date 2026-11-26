@@ -460,7 +460,7 @@ def rnmc_min_gm2_for_damping(gm3: float, cc1_f: float, cc2_f: float,
         c = −Cc1·gm3
 
     The answer is the positive root, squared.  It is a starting point for
-    :func:`~.rnmc.design_rnmc`, not a final size: it checks damping only, and
+    :func:`~.rnmc.find_stable_rnmc_design`, not a final size: it checks damping only, and
     ignores output conductances, the first-stage parasitic, a third-stage
     mirror and an output buffer, which
     :func:`~.open_loop_response.rnmc_pole_damping` includes.
