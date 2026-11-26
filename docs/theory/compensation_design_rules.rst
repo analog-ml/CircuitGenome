@@ -378,29 +378,63 @@ Multiply top and bottom by :math:`1 + sRC_c`, which turns :math:`Y` into
 
    z = \frac{g_{m,out}}{C_c\,(1 - g_{m,out}R)}
 
-**Read the output pole** off the bottom.  The lone :math:`s` in front is the
-dominant pole; with no output conductances it sits at 0.  The braces hold the
-others.  Set the small :math:`C_1` to 0 for now:
+**Make the zero cancel a pole.**  The lone :math:`s` in front of the bottom is
+the dominant pole; with no output conductances it sits at 0.  The braces hold
+the other poles.  A zero cancels a pole when the top and the bottom are both
+zero at the same :math:`s`, so put :math:`s = z` into the braces.  Write
+:math:`u = 1 - g_{m,out}R`, so that :math:`z = g_{m,out}/(C_cu)` and
+:math:`g_{m,out}R = 1 - u`, and multiply the braces by :math:`C_cu^2/g_{m,out}`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Term in the braces
+     - After multiplying
+   * - :math:`g_{m,out}C_c`
+     - :math:`C_c^2u^2`
+   * - :math:`s\,[\,CC_1 + C_c(C+C_1)\,]`
+     - :math:`(CC_1 + C_cC + C_cC_1)\,u`
+   * - :math:`s^2\,RC_cCC_1`
+     - :math:`CC_1\,(1-u)`
+
+Add them up.  The :math:`CC_1u` terms cancel, and what is left factors:
 
 .. math::
 
-   g_{m,out}C_c + s\,C_cC = 0
-   \quad\Rightarrow\quad
-   p = -\frac{g_{m,out}}{C}
+   C_c^2u^2 + C_c(C+C_1)\,u + CC_1 = (C_cu + C)\,(C_cu + C_1) = 0
 
-**Set the zero equal to the pole** and solve for :math:`R`:
+So exactly two resistors put the zero on a pole.  Nothing was approximated:
+:math:`C_1` stays in.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 30 42
+
+   * - Condition
+     - :math:`R`
+     - Cancels
+   * - :math:`C_c\,(1 - g_{m,out}R) = -C`
+     - :math:`(C_c + C)/(g_{m,out}C_c)`
+     - the output pole, the slow one that costs phase margin
+   * - :math:`C_c\,(1 - g_{m,out}R) = -C_1`
+     - :math:`(C_c + C_1)/(g_{m,out}C_c)`
+     - the gate pole, which is fast and harmless
+
+**Pick the output pole** and solve for :math:`R`:
 
 .. math::
 
    \begin{aligned}
-   \frac{g_{m,out}}{C_c\,(1 - g_{m,out}R)} &= -\frac{g_{m,out}}{C} \\
    C_c\,(1 - g_{m,out}R) &= -C \\
    g_{m,out}R &= 1 + \frac{C}{C_c} \\
    R &= \frac{1}{g_{m,out}} + \frac{C}{g_{m,out}\,C_c}
    \end{aligned}
 
-**Put C1 back.**  With this :math:`R` the braces factor exactly, and so does
-the top:
+At this :math:`R` the zero sits at :math:`z = -g_{m,out}/C`.
+
+**Check.**  With this :math:`R` the top and the braces share the factor
+:math:`g_{m,out} + sC`, which cancels:
 
 .. math::
 
@@ -409,8 +443,7 @@ the top:
           {s\,C_c\,(g_{m,out} + sC)\,(1 + sRC_1)}
    = \frac{-1}{s\,C_c\,(1 + sRC_1)}
 
-The output pole sits exactly at :math:`-g_{m,out}/C` whatever :math:`C_1` is,
-and the zero removes it.  All :math:`C_1` leaves is one pole at
+The zero has removed the output pole.  All :math:`C_1` leaves is one pole at
 :math:`-1/(RC_1)`.
 
 Where these methods sit in the code
